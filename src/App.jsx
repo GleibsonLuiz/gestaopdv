@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Login from "./Login.jsx";
 import Clientes from "./Clientes.jsx";
 import Fornecedores from "./Fornecedores.jsx";
@@ -9,6 +9,7 @@ import Funcionarios from "./Funcionarios.jsx";
 import PDV from "./PDV.jsx";
 import Dashboard from "./Dashboard.jsx";
 import Projeto from "./Projeto.jsx";
+import TrocarSenhaModal from "./TrocarSenhaModal.jsx";
 import { getUser, getToken, clearSession, api } from "./lib/api.js";
 
 const C = {
@@ -21,6 +22,19 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [tela, setTela] = useState("pdv");
+  const [menuUsuario, setMenuUsuario] = useState(false);
+  const [trocarSenhaAberto, setTrocarSenhaAberto] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    function onClickFora(e) {
+      if (menuUsuario && menuRef.current && !menuRef.current.contains(e.target)) {
+        setMenuUsuario(false);
+      }
+    }
+    document.addEventListener("mousedown", onClickFora);
+    return () => document.removeEventListener("mousedown", onClickFora);
+  }, [menuUsuario]);
 
   useEffect(() => {
     let ativo = true;
@@ -96,17 +110,53 @@ export default function App() {
           <NavBtn ativo={tela === "projeto"} onClick={() => setTela("projeto")}>📋 Projeto</NavBtn>
         </nav>
 
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ color: C.white, fontSize: 13, fontWeight: 600 }}>{user.nome}</div>
-            <div style={{ color: C.muted, fontSize: 11 }}>{user.role}</div>
-          </div>
-          <button onClick={sair} style={{
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, position: "relative" }} ref={menuRef}>
+          <button onClick={() => setMenuUsuario(v => !v)} style={{
             background: C.card, border: `1px solid ${C.border}`, color: C.text,
-            borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+            borderRadius: 10, padding: "6px 12px", display: "flex", alignItems: "center", gap: 8,
+            cursor: "pointer",
           }}>
-            Sair
+            <div style={{
+              width: 30, height: 30, borderRadius: "50%",
+              background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+              color: C.white, display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 13, fontWeight: 800,
+            }}>
+              {(user.nome || "?").charAt(0).toUpperCase()}
+            </div>
+            <div style={{ textAlign: "left" }}>
+              <div style={{ color: C.white, fontSize: 13, fontWeight: 600, lineHeight: 1.1 }}>{user.nome}</div>
+              <div style={{ color: C.muted, fontSize: 11 }}>{user.role}</div>
+            </div>
+            <div style={{ color: C.muted, fontSize: 11, marginLeft: 4 }}>▾</div>
           </button>
+
+          {menuUsuario && (
+            <div style={{
+              position: "absolute", top: "calc(100% + 6px)", right: 0,
+              background: C.card, border: `1px solid ${C.border}`, borderRadius: 10,
+              minWidth: 200, boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+              zIndex: 50, overflow: "hidden",
+            }}>
+              <div style={{
+                padding: "10px 14px", borderBottom: `1px solid ${C.border}`,
+                color: C.muted, fontSize: 11,
+              }}>
+                Logado como
+                <div style={{ color: C.text, fontSize: 12, marginTop: 2, fontWeight: 600 }}>
+                  {user.email || user.nome}
+                </div>
+              </div>
+              <button onClick={() => { setMenuUsuario(false); setTrocarSenhaAberto(true); }} style={menuItem}>
+                🔐 Trocar senha
+              </button>
+              <button onClick={() => { setMenuUsuario(false); sair(); }} style={{
+                ...menuItem, color: "#ef4444",
+              }}>
+                ↩ Sair
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -167,9 +217,19 @@ export default function App() {
           </>
         )}
       </div>
+
+      {trocarSenhaAberto && (
+        <TrocarSenhaModal onFechar={() => setTrocarSenhaAberto(false)} />
+      )}
     </div>
   );
 }
+
+const menuItem = {
+  display: "block", width: "100%", textAlign: "left",
+  background: "transparent", border: "none", color: C.text,
+  padding: "10px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+};
 
 function NavBtn({ ativo, destaque, onClick, children }) {
   const bg = ativo

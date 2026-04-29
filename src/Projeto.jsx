@@ -21,8 +21,8 @@ const ETAPAS = [
 const STATUS_PROJETO = {
   1: "concluido", 2: "concluido", 3: "concluido", 4: "concluido",
   5: "concluido", 6: "concluido", 7: "concluido", 8: "concluido",
-  9: "concluido", 10: "concluido", 11: "concluido",
-  12: "pendente", 13: "pendente",
+  9: "concluido", 10: "concluido", 11: "concluido", 12: "concluido",
+  13: "pendente",
 };
 
 function defaultEtapas() {

@@ -6,6 +6,7 @@ import Produtos from "./Produtos.jsx";
 import Estoque from "./Estoque.jsx";
 import Compras from "./Compras.jsx";
 import Funcionarios from "./Funcionarios.jsx";
+import Financeiro from "./Financeiro.jsx";
 import PDV from "./PDV.jsx";
 import Dashboard from "./Dashboard.jsx";
 import Projeto from "./Projeto.jsx";
@@ -104,6 +105,7 @@ export default function App() {
           <NavBtn ativo={tela === "produtos"} onClick={() => setTela("produtos")}>📦 Produtos</NavBtn>
           <NavBtn ativo={tela === "estoque"} onClick={() => setTela("estoque")}>🗃️ Estoque</NavBtn>
           <NavBtn ativo={tela === "compras"} onClick={() => setTela("compras")}>🛍️ Compras</NavBtn>
+          <NavBtn ativo={tela === "financeiro"} onClick={() => setTela("financeiro")}>💰 Financeiro</NavBtn>
           {user.role === "ADMIN" && (
             <NavBtn ativo={tela === "funcionarios"} onClick={() => setTela("funcionarios")}>🧑‍💼 Funcionários</NavBtn>
           )}
@@ -202,6 +204,12 @@ export default function App() {
           <>
             <PageHeader titulo="Compras" subtitulo="Registro de compras (gera entrada de estoque automaticamente)" />
             <Compras user={user} />
+          </>
+        )}
+        {tela === "financeiro" && (
+          <>
+            <PageHeader titulo="Financeiro" subtitulo="Contas a pagar e a receber — fluxo de caixa do negócio" />
+            <Financeiro user={user} />
           </>
         )}
         {tela === "funcionarios" && user.role === "ADMIN" && (

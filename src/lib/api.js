@@ -169,4 +169,42 @@ export const api = {
   cancelarVenda: (id) => request(`/vendas/${id}/cancelar`, { method: "POST" }),
 
   obterDashboard: () => request("/dashboard/resumo"),
+
+  listarContasPagar: ({ search = "", status = "", fornecedorId = "", dataInicio = "", dataFim = "", vencidas = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (search) qs.set("search", search);
+    if (status) qs.set("status", status);
+    if (fornecedorId) qs.set("fornecedorId", fornecedorId);
+    if (dataInicio) qs.set("dataInicio", dataInicio);
+    if (dataFim) qs.set("dataFim", dataFim);
+    if (vencidas) qs.set("vencidas", vencidas);
+    const q = qs.toString();
+    return request(`/contas-pagar${q ? `?${q}` : ""}`);
+  },
+  obterContaPagar: (id) => request(`/contas-pagar/${id}`),
+  criarContaPagar: (data) => request("/contas-pagar", { method: "POST", body: data }),
+  atualizarContaPagar: (id, data) => request(`/contas-pagar/${id}`, { method: "PUT", body: data }),
+  pagarConta: (id, pagamento) => request(`/contas-pagar/${id}/pagar`, { method: "POST", body: { pagamento } }),
+  reabrirContaPagar: (id) => request(`/contas-pagar/${id}/reabrir`, { method: "POST" }),
+  cancelarContaPagar: (id) => request(`/contas-pagar/${id}/cancelar`, { method: "POST" }),
+  excluirContaPagar: (id) => request(`/contas-pagar/${id}`, { method: "DELETE" }),
+
+  listarContasReceber: ({ search = "", status = "", clienteId = "", dataInicio = "", dataFim = "", vencidas = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (search) qs.set("search", search);
+    if (status) qs.set("status", status);
+    if (clienteId) qs.set("clienteId", clienteId);
+    if (dataInicio) qs.set("dataInicio", dataInicio);
+    if (dataFim) qs.set("dataFim", dataFim);
+    if (vencidas) qs.set("vencidas", vencidas);
+    const q = qs.toString();
+    return request(`/contas-receber${q ? `?${q}` : ""}`);
+  },
+  obterContaReceber: (id) => request(`/contas-receber/${id}`),
+  criarContaReceber: (data) => request("/contas-receber", { method: "POST", body: data }),
+  atualizarContaReceber: (id, data) => request(`/contas-receber/${id}`, { method: "PUT", body: data }),
+  receberConta: (id, recebimento) => request(`/contas-receber/${id}/receber`, { method: "POST", body: { recebimento } }),
+  reabrirContaReceber: (id) => request(`/contas-receber/${id}/reabrir`, { method: "POST" }),
+  cancelarContaReceber: (id) => request(`/contas-receber/${id}/cancelar`, { method: "POST" }),
+  excluirContaReceber: (id) => request(`/contas-receber/${id}`, { method: "DELETE" }),
 };

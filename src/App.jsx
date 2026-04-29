@@ -11,6 +11,7 @@ import PDV from "./PDV.jsx";
 import Dashboard from "./Dashboard.jsx";
 import Projeto from "./Projeto.jsx";
 import TrocarSenhaModal from "./TrocarSenhaModal.jsx";
+import Alertas from "./Alertas.jsx";
 import { getUser, getToken, clearSession, api } from "./lib/api.js";
 
 const C = {
@@ -112,7 +113,9 @@ export default function App() {
           <NavBtn ativo={tela === "projeto"} onClick={() => setTela("projeto")}>📋 Projeto</NavBtn>
         </nav>
 
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, position: "relative" }} ref={menuRef}>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          <Alertas onNavegar={setTela} />
+          <div ref={menuRef} style={{ position: "relative" }}>
           <button onClick={() => setMenuUsuario(v => !v)} style={{
             background: C.card, border: `1px solid ${C.border}`, color: C.text,
             borderRadius: 10, padding: "6px 12px", display: "flex", alignItems: "center", gap: 8,
@@ -159,6 +162,7 @@ export default function App() {
               </button>
             </div>
           )}
+          </div>
         </div>
       </div>
 

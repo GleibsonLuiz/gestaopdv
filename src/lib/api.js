@@ -169,6 +169,7 @@ export const api = {
   cancelarVenda: (id) => request(`/vendas/${id}/cancelar`, { method: "POST" }),
 
   obterDashboard: () => request("/dashboard/resumo"),
+  obterAlertas: () => request("/alertas"),
 
   listarContasPagar: ({ search = "", status = "", fornecedorId = "", dataInicio = "", dataFim = "", vencidas = "" } = {}) => {
     const qs = new URLSearchParams();

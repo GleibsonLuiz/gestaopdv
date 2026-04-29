@@ -1,0 +1,478 @@
+### -------------------------------------------------------------
+### GestaoPRO — Testes de API
+### Como usar:
+###   1. Instale a extensao "REST Client" (autor: Huachao Mao) no VS Code
+###   2. Suba o backend:  cd backend && npm run dev
+###   3. Clique em "Send Request" acima de cada bloco abaixo
+###      (a resposta abre num painel ao lado)
+###   4. Apos o login, copie o "token" da resposta para a variavel @token
+### -------------------------------------------------------------
+
+@host = http://localhost:3333
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhYjNmYTM5Ny0zODdmLTRlNTEtOTA1Ny1mYzczNTAzYTAwMTkiLCJyb2xlIjoiQURNSU4iLCJpb21lIjoiUWRtaGRCI6MTc3NzQxMTg4OTIwOCwiZXhwIjoxNzc3NDk4Mjk4NjQ4fQ.-bIyJNEty_y5TrxXwOfp9w5JMu7YNdiEILGZ7rdSHsA
+
+### 1. Health check (publico)
+GET {{host}}/health
+
+### 2. Login do admin (publico) — copie o "token" da resposta para @token acima
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@gestaopro.local",
+  "senha": "admin123"
+}
+
+### 3. Login com senha errada (deve falhar com 401)
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@gestaopro.local",
+  "senha": "errada"
+}
+
+### 4. Quem sou eu (precisa de token)
+GET {{host}}/auth/me
+Authorization: Bearer {{token}}
+
+### -------------------------------------------------------------
+### CLIENTES
+### -------------------------------------------------------------
+
+### 5. Listar clientes
+GET {{host}}/clientes
+Authorization: Bearer {{token}}
+
+### 6. Listar so ativos
+GET {{host}}/clientes?ativo=true
+Authorization: Bearer {{token}}
+
+### 7. Buscar por nome/email/cpf
+GET {{host}}/clientes?search=silva
+Authorization: Bearer {{token}}
+
+### 8. Criar cliente
+POST {{host}}/clientes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "nome": "Joao da Silva",
+  "cpfCnpj": "111.222.333-44",
+  "email": "joao@example.com",
+  "telefone": "(11) 99999-0000",
+  "endereco": "Rua A, 123",
+  "cidade": "Sao Paulo",
+  "estado": "SP",
+  "cep": "01000-000"
+}
+
+### 9. Tentar criar com mesmo CPF (deve dar 409)
+POST {{host}}/clientes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "nome": "Outro qualquer",
+  "cpfCnpj": "111.222.333-44"
+}
+
+### 10. Criar sem nome (deve dar 400)
+POST {{host}}/clientes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "email": "semnome@example.com"
+}
+
+### 11. Buscar um cliente — substitua o ID pelo retornado em "Criar cliente"
+@clienteId = COLE_O_ID_AQUI
+
+GET {{host}}/clientes/{{clienteId}}
+Authorization: Bearer {{token}}
+
+### 12. Atualizar (so envie o que muda)
+PUT {{host}}/clientes/{{clienteId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "telefone": "(11) 88888-7777",
+  "cidade": "Campinas"
+}
+
+### 13. Soft-delete (marca ativo=false)
+DELETE {{host}}/clientes/{{clienteId}}
+Authorization: Bearer {{token}}
+
+### 14. Confirmar que ativo virou false
+GET {{host}}/clientes/{{clienteId}}
+Authorization: Bearer {{token}}
+
+### 15. Reativar
+PUT {{host}}/clientes/{{clienteId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "ativo": true
+}
+
+### -------------------------------------------------------------
+### FORNECEDORES
+### -------------------------------------------------------------
+
+### 16. Listar fornecedores
+GET {{host}}/fornecedores
+Authorization: Bearer {{token}}
+
+### 17. Listar so ativos
+GET {{host}}/fornecedores?ativo=true
+Authorization: Bearer {{token}}
+
+### 18. Buscar por nome/email/cnpj
+GET {{host}}/fornecedores?search=distribuidora
+Authorization: Bearer {{token}}
+
+### 19. Criar fornecedor
+POST {{host}}/fornecedores
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "nome": "Distribuidora ABC Ltda",
+  "cnpj": "12.345.678/0001-90",
+  "email": "contato@abc.com",
+  "telefone": "(11) 3000-0000",
+  "endereco": "Av. Brasil, 500",
+  "cidade": "Sao Paulo",
+  "estado": "SP",
+  "cep": "01100-000"
+}
+
+### 20. Tentar criar com mesmo CNPJ (deve dar 409)
+POST {{host}}/fornecedores
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "nome": "Outra empresa",
+  "cnpj": "12.345.678/0001-90"
+}
+
+### 21. Criar sem nome (deve dar 400)
+POST {{host}}/fornecedores
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "email": "semnome@example.com"
+}
+
+### 22. Buscar um fornecedor — substitua o ID pelo retornado em "Criar fornecedor"
+@fornecedorId = COLE_O_ID_AQUI
+
+GET {{host}}/fornecedores/{{fornecedorId}}
+Authorization: Bearer {{token}}
+
+### 23. Atualizar (so envie o que muda)
+PUT {{host}}/fornecedores/{{fornecedorId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "telefone": "(11) 4000-1111",
+  "cidade": "Campinas"
+}
+
+### 24. Soft-delete (marca ativo=false)
+DELETE {{host}}/fornecedores/{{fornecedorId}}
+Authorization: Bearer {{token}}
+
+### 25. Confirmar que ativo virou false
+GET {{host}}/fornecedores/{{fornecedorId}}
+Authorization: Bearer {{token}}
+
+### 26. Reativar
+PUT {{host}}/fornecedores/{{fornecedorId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "ativo": true
+}
+
+### -------------------------------------------------------------
+### CATEGORIAS
+### -------------------------------------------------------------
+
+### 27. Listar categorias
+GET {{host}}/categorias
+Authorization: Bearer {{token}}
+
+### 28. Criar categoria
+POST {{host}}/categorias
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "nome": "Bebidas"
+}
+
+### 29. Criar mais uma
+POST {{host}}/categorias
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "nome": "Limpeza"
+}
+
+### 30. Tentar duplicar (deve dar 409)
+POST {{host}}/categorias
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "nome": "Bebidas"
+}
+
+### 31. Atualizar categoria — substitua o ID
+@categoriaId = COLE_O_ID_AQUI
+
+PUT {{host}}/categorias/{{categoriaId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "nome": "Bebidas e Drinks"
+}
+
+### 32. Excluir categoria (so funciona se nao tiver produto vinculado)
+DELETE {{host}}/categorias/{{categoriaId}}
+Authorization: Bearer {{token}}
+
+### -------------------------------------------------------------
+### PRODUTOS
+### -------------------------------------------------------------
+
+### 33. Listar produtos
+GET {{host}}/produtos
+Authorization: Bearer {{token}}
+
+### 34. So ativos
+GET {{host}}/produtos?ativo=true
+Authorization: Bearer {{token}}
+
+### 35. Buscar por codigo/nome
+GET {{host}}/produtos?search=cola
+Authorization: Bearer {{token}}
+
+### 36. Filtrar por categoria
+GET {{host}}/produtos?categoriaId={{categoriaId}}
+Authorization: Bearer {{token}}
+
+### 37. So com estoque baixo (estoque <= estoqueMinimo)
+GET {{host}}/produtos?estoqueBaixo=true
+Authorization: Bearer {{token}}
+
+### 38. Criar produto (forneca categoriaId e fornecedorId reais)
+POST {{host}}/produtos
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "codigo": "PROD001",
+  "nome": "Coca-Cola 2L",
+  "descricao": "Refrigerante Coca-Cola garrafa PET 2L",
+  "precoVenda": 9.90,
+  "precoCusto": 6.50,
+  "estoque": 50,
+  "estoqueMinimo": 10,
+  "unidade": "UN",
+  "categoriaId": null,
+  "fornecedorId": null
+}
+
+### 39. Tentar criar com mesmo codigo (deve dar 409)
+POST {{host}}/produtos
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "codigo": "PROD001",
+  "nome": "Outro produto",
+  "precoVenda": 1.00
+}
+
+### 40. Criar sem precoVenda (deve dar 400)
+POST {{host}}/produtos
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "codigo": "PROD002",
+  "nome": "Sem preco"
+}
+
+### 41. Buscar um produto — substitua o ID
+@produtoId = COLE_O_ID_AQUI
+
+GET {{host}}/produtos/{{produtoId}}
+Authorization: Bearer {{token}}
+
+### 42. Atualizar produto
+PUT {{host}}/produtos/{{produtoId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "precoVenda": 11.50,
+  "estoque": 5
+}
+
+### 43. Soft-delete
+DELETE {{host}}/produtos/{{produtoId}}
+Authorization: Bearer {{token}}
+
+### 44. Reativar
+PUT {{host}}/produtos/{{produtoId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "ativo": true
+}
+
+### -------------------------------------------------------------
+### ESTOQUE — MOVIMENTACOES
+### -------------------------------------------------------------
+
+### 45. Listar todas as movimentacoes (mais recentes primeiro)
+GET {{host}}/estoque/movimentacoes
+Authorization: Bearer {{token}}
+
+### 46. So as de um produto
+GET {{host}}/estoque/movimentacoes?produtoId={{produtoId}}
+Authorization: Bearer {{token}}
+
+### 47. So entradas
+GET {{host}}/estoque/movimentacoes?tipo=ENTRADA
+Authorization: Bearer {{token}}
+
+### 48. ENTRADA: somar 20 ao estoque
+POST {{host}}/estoque/movimentacoes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "produtoId": "{{produtoId}}",
+  "tipo": "ENTRADA",
+  "quantidade": 20,
+  "motivo": "Nota fiscal 1234"
+}
+
+### 49. SAIDA: subtrair 5 do estoque
+POST {{host}}/estoque/movimentacoes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "produtoId": "{{produtoId}}",
+  "tipo": "SAIDA",
+  "quantidade": 5,
+  "motivo": "Quebra"
+}
+
+### 50. AJUSTE: definir estoque para 100 (valor absoluto, nao soma)
+POST {{host}}/estoque/movimentacoes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "produtoId": "{{produtoId}}",
+  "tipo": "AJUSTE",
+  "quantidade": 100,
+  "motivo": "Contagem fisica"
+}
+
+### 51. SAIDA maior que estoque (deve dar 400)
+POST {{host}}/estoque/movimentacoes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "produtoId": "{{produtoId}}",
+  "tipo": "SAIDA",
+  "quantidade": 99999
+}
+
+### 52. Tipo invalido (deve dar 400)
+POST {{host}}/estoque/movimentacoes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "produtoId": "{{produtoId}}",
+  "tipo": "XYZ",
+  "quantidade": 1
+}
+
+### -------------------------------------------------------------
+### COMPRAS
+### -------------------------------------------------------------
+
+### 53. Listar compras
+GET {{host}}/compras
+Authorization: Bearer {{token}}
+
+### 54. Filtrar por fornecedor
+GET {{host}}/compras?fornecedorId={{fornecedorId}}
+Authorization: Bearer {{token}}
+
+### 55. Filtrar por intervalo de datas
+GET {{host}}/compras?dataInicio=2026-01-01&dataFim=2026-12-31
+Authorization: Bearer {{token}}
+
+### 56. Criar compra (gera ENTRADA automatica no estoque)
+POST {{host}}/compras
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "fornecedorId": "{{fornecedorId}}",
+  "observacoes": "NF 5678",
+  "itens": [
+    { "produtoId": "{{produtoId}}", "quantidade": 30, "precoUnitario": 5.50 }
+  ]
+}
+
+### 57. Compra sem itens (deve dar 400)
+POST {{host}}/compras
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "fornecedorId": "{{fornecedorId}}",
+  "itens": []
+}
+
+### 58. Compra com fornecedor inexistente (deve dar 404)
+POST {{host}}/compras
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "fornecedorId": "00000000-0000-0000-0000-000000000000",
+  "itens": [
+    { "produtoId": "{{produtoId}}", "quantidade": 1, "precoUnitario": 1 }
+  ]
+}
+
+### 59. Ver detalhes de uma compra — substitua o ID
+@compraId = COLE_O_ID_AQUI
+
+GET {{host}}/compras/{{compraId}}
+Authorization: Bearer {{token}}

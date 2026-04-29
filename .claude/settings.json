@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx vite *)",
+      "Bash(node -e \"import\\('./src/server.js'\\).then\\(\\(\\)=>{setTimeout\\(\\(\\)=>process.exit\\(0\\),1500\\)}\\).catch\\(e=>{console.error\\(e\\);process.exit\\(1\\)}\\)\")",
+      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(64\\).toString\\('hex'\\)\\)\")"
+    ]
+  }
+}

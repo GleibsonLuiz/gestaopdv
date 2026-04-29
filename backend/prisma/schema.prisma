@@ -1,0 +1,273 @@
+// Schema do banco de dados - Gestao + PDV
+// Documentacao: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ ENUMS ============
+
+enum Role {
+  ADMIN
+  GERENTE
+  VENDEDOR
+}
+
+enum StatusVenda {
+  PENDENTE
+  CONCLUIDA
+  CANCELADA
+}
+
+enum StatusConta {
+  PENDENTE
+  PAGA
+  ATRASADA
+  CANCELADA
+}
+
+enum FormaPagamento {
+  DINHEIRO
+  CARTAO_CREDITO
+  CARTAO_DEBITO
+  PIX
+  BOLETO
+  CREDIARIO
+}
+
+enum TipoMovimentacao {
+  ENTRADA
+  SAIDA
+  AJUSTE
+}
+
+// ============ USUARIOS ============
+
+model User {
+  id        String   @id @default(uuid())
+  nome      String
+  email     String   @unique
+  senha     String
+  role      Role     @default(VENDEDOR)
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vendas        Venda[]
+  movimentacoes MovimentacaoEstoque[]
+
+  @@map("users")
+}
+
+// ============ CADASTROS ============
+
+model Cliente {
+  id          String   @id @default(uuid())
+  nome        String
+  cpfCnpj     String?  @unique
+  email       String?
+  telefone    String?
+  endereco    String?
+  cidade      String?
+  estado      String?
+  cep         String?
+  observacoes String?
+  ativo       Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  vendas        Venda[]
+  contasReceber ContaReceber[]
+
+  @@map("clientes")
+}
+
+model Fornecedor {
+  id        String   @id @default(uuid())
+  nome      String
+  cnpj      String?  @unique
+  email     String?
+  telefone  String?
+  endereco  String?
+  cidade    String?
+  estado    String?
+  cep       String?
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  produtos    Produto[]
+  compras     Compra[]
+  contasPagar ContaPagar[]
+
+  @@map("fornecedores")
+}
+
+model Categoria {
+  id        String   @id @default(uuid())
+  nome      String   @unique
+  createdAt DateTime @default(now())
+
+  produtos Produto[]
+
+  @@map("categorias")
+}
+
+// ============ PRODUTOS / ESTOQUE ============
+
+model Produto {
+  id            String   @id @default(uuid())
+  codigo        String   @unique
+  nome          String
+  descricao     String?
+  precoVenda    Decimal  @db.Decimal(10, 2)
+  precoCusto    Decimal? @db.Decimal(10, 2)
+  estoque       Int      @default(0)
+  estoqueMinimo Int      @default(0)
+  unidade       String   @default("UN")
+  ativo         Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  categoriaId String?
+  categoria   Categoria? @relation(fields: [categoriaId], references: [id])
+
+  fornecedorId String?
+  fornecedor   Fornecedor? @relation(fields: [fornecedorId], references: [id])
+
+  itensVenda    ItemVenda[]
+  itensCompra   ItemCompra[]
+  movimentacoes MovimentacaoEstoque[]
+
+  @@map("produtos")
+}
+
+// ============ VENDAS (PDV) ============
+
+model Venda {
+  id             String         @id @default(uuid())
+  numero         Int            @unique @default(autoincrement())
+  total          Decimal        @db.Decimal(10, 2)
+  desconto       Decimal        @default(0) @db.Decimal(10, 2)
+  formaPagamento FormaPagamento
+  status         StatusVenda    @default(CONCLUIDA)
+  observacoes    String?
+  createdAt      DateTime       @default(now())
+
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  itens ItemVenda[]
+
+  @@map("vendas")
+}
+
+model ItemVenda {
+  id            String  @id @default(uuid())
+  quantidade    Int
+  precoUnitario Decimal @db.Decimal(10, 2)
+  subtotal      Decimal @db.Decimal(10, 2)
+
+  vendaId String
+  venda   Venda  @relation(fields: [vendaId], references: [id], onDelete: Cascade)
+
+  produtoId String
+  produto   Produto @relation(fields: [produtoId], references: [id])
+
+  @@map("itens_venda")
+}
+
+// ============ COMPRAS ============
+
+model Compra {
+  id          String   @id @default(uuid())
+  numero      Int      @unique @default(autoincrement())
+  total       Decimal  @db.Decimal(10, 2)
+  observacoes String?
+  createdAt   DateTime @default(now())
+
+  fornecedorId String
+  fornecedor   Fornecedor @relation(fields: [fornecedorId], references: [id])
+
+  itens ItemCompra[]
+
+  @@map("compras")
+}
+
+model ItemCompra {
+  id            String  @id @default(uuid())
+  quantidade    Int
+  precoUnitario Decimal @db.Decimal(10, 2)
+  subtotal      Decimal @db.Decimal(10, 2)
+
+  compraId String
+  compra   Compra @relation(fields: [compraId], references: [id], onDelete: Cascade)
+
+  produtoId String
+  produto   Produto @relation(fields: [produtoId], references: [id])
+
+  @@map("itens_compra")
+}
+
+// ============ FINANCEIRO ============
+
+model MovimentacaoEstoque {
+  id            String           @id @default(uuid())
+  tipo          TipoMovimentacao
+  quantidade    Int
+  estoqueAntes  Int
+  estoqueDepois Int
+  motivo        String?
+  createdAt     DateTime         @default(now())
+
+  produtoId String
+  produto   Produto @relation(fields: [produtoId], references: [id])
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([produtoId, createdAt])
+  @@map("movimentacoes_estoque")
+}
+
+model ContaPagar {
+  id          String      @id @default(uuid())
+  descricao   String
+  valor       Decimal     @db.Decimal(10, 2)
+  vencimento  DateTime
+  pagamento   DateTime?
+  status      StatusConta @default(PENDENTE)
+  observacoes String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  fornecedorId String?
+  fornecedor   Fornecedor? @relation(fields: [fornecedorId], references: [id])
+
+  @@map("contas_pagar")
+}
+
+model ContaReceber {
+  id          String      @id @default(uuid())
+  descricao   String
+  valor       Decimal     @db.Decimal(10, 2)
+  vencimento  DateTime
+  recebimento DateTime?
+  status      StatusConta @default(PENDENTE)
+  observacoes String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+
+  @@map("contas_receber")
+}

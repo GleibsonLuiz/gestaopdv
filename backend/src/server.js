@@ -11,6 +11,8 @@ import comprasRoutes from "./routes/compras.js";
 import funcionariosRoutes from "./routes/funcionarios.js";
 import vendasRoutes from "./routes/vendas.js";
 import dashboardRoutes from "./routes/dashboard.js";
+import contasPagarRoutes from "./routes/contas-pagar.js";
+import contasReceberRoutes from "./routes/contas-receber.js";
 
 dotenv.config();
 
@@ -42,6 +44,8 @@ app.use("/compras", comprasRoutes);
 app.use("/funcionarios", funcionariosRoutes);
 app.use("/vendas", vendasRoutes);
 app.use("/dashboard", dashboardRoutes);
+app.use("/contas-pagar", contasPagarRoutes);
+app.use("/contas-receber", contasReceberRoutes);
 
 app.use((err, req, res, _next) => {
   console.error(err);

@@ -56,7 +56,7 @@ d:/gestao-pdv/
 | 8 | Cadastro de Funcionários | ✅ Concluído | CRUD sobre `User`, role-aware, com proteções |
 | 9 | Compras | ✅ Concluído (ver lacuna abaixo) | Transacional, gera ENTRADA automática |
 | 10 | PDV — Ponto de Venda | ⏳ Pendente | Núcleo do sistema, próxima etapa sugerida |
-| 11 | Financeiro | ⏳ Pendente | ContaPagar/ContaReceber (modelos prontos) |
+| 11 | Financeiro | ✅ Concluído | ContaPagar/ContaReceber: CRUD + pagar/receber/reabrir/cancelar + KPIs |
 | 12 | Notificações e Alertas | ⏳ Pendente | Estoque baixo + contas a vencer |
 | 13 | Relatórios + Exportação PDF | ⏳ Pendente | — |
 
@@ -112,6 +112,53 @@ Não existe rota/UI para **cancelar/excluir** uma compra. Hoje, se uma compra é
 ---
 
 ## Histórico de sessões
+
+### Sessão — 2026-04-29 (Etapa 11 — Financeiro)
+
+**Etapa 11 implementada:** UI completa de Contas a Pagar e Contas a Receber.
+
+Arquivos criados:
+- `backend/src/controllers/contaPagarController.js` — CRUD + ações:
+  - `GET /contas-pagar` com filtros: `search`, `status`, `fornecedorId`, `dataInicio`, `dataFim`, `vencidas=true`
+  - `GET /:id`, `POST`, `PUT /:id` (apenas se PENDENTE/ATRASADA)
+  - `POST /:id/pagar` — status → PAGA, set `pagamento` (default = agora)
+  - `POST /:id/reabrir` — volta de PAGA para PENDENTE/ATRASADA conforme vencimento
+  - `POST /:id/cancelar` — status → CANCELADA
+  - `DELETE /:id` (ADMIN only)
+- `backend/src/controllers/contaReceberController.js` — espelho do anterior, mas com `cliente` e `recebimento`. Endpoint de quitação chama-se `/:id/receber`.
+- `backend/src/routes/contas-pagar.js`, `backend/src/routes/contas-receber.js` — `authRequired` global, mutações com `requireRole("ADMIN","GERENTE")`, DELETE com `requireRole("ADMIN")`.
+- `src/Financeiro.jsx` — página única com:
+  - Pill-tabs "📤 A Pagar" / "📥 A Receber" no topo
+  - 4 cards KPI por aba: Pendentes, Atrasadas, Vencendo em 7 dias, Pagas/Recebidas
+  - Filtros: busca, status, fornecedor/cliente, checkbox "Apenas vencidas", botão "Limpar"
+  - Lista com badge de status colorido, dias para vencer ou dias atrasada, botões contextuais (Pagar/Receber, Editar, Reabrir, Cancelar)
+  - `ContaModal` (criar/editar) — descrição, valor, vencimento, fornecedor/cliente opcional, observações
+  - `PagarReceberModal` — confirmação com data ajustável (default = hoje)
+  - `statusEfetivo()`: se PENDENTE com vencimento no passado, exibe badge ATRASADA mesmo sem mutar o DB
+
+Arquivos modificados:
+- `backend/src/server.js` — registra `/contas-pagar` e `/contas-receber`.
+- `src/lib/api.js` — adiciona 14 métodos (listar/obter/criar/atualizar/pagar|receber/reabrir/cancelar/excluir × 2 entidades).
+- `src/App.jsx` — NavBtn "💰 Financeiro" (entre Compras e Funcionários, visível para todos).
+
+**Validado via curl:**
+```
+GET /contas-pagar             → 200, 20 contas
+GET /contas-receber           → 200, 20 contas
+GET /contas-pagar?vencidas=true → 6 atrasadas (bate com seed)
+GET /contas-pagar?status=PAGA → 6 pagas (bate com seed)
+POST /contas-pagar (descricao, valor=129.90, venc=2026-05-15) → 201 PENDENTE
+PUT /:id (valor=149.90)        → 200
+POST /:id/pagar                → 200 PAGA, pagamento=now
+PUT /:id em conta paga         → 409 "Conta paga ou cancelada nao pode ser editada"
+POST /:id/reabrir              → 200 volta para PENDENTE (pagamento=null)
+POST /:id/cancelar             → 200 CANCELADA
+POST /:id/pagar em cancelada   → 409 "Conta cancelada nao pode ser paga"
+DELETE /:id (ADMIN)            → 204
+POST com valor=0               → 400 "Valor deve ser maior que zero"
+POST /contas-receber/:id/receber → 200 PAGA (recebimento=now)
+POST /contas-receber/:id/reabrir → 200 PENDENTE (recebimento=null)
+```
 
 ### Sessão — 2026-04-29 (Etapa 2 — extensões de auth)
 
@@ -245,16 +292,15 @@ GET /funcionarios → 20 registros
 
 ## Onde paramos
 
-**Etapa 3 (Dashboard) concluída.** Já temos 9 etapas implementadas (1, 2, 3, 4, 5, 6, 7, 8, 9, 10 — também o PDV está implementado conforme `src/PDV.jsx`). Faltam: Financeiro (11), Notificações (12), Relatórios (13).
+**Etapa 11 (Financeiro) concluída.** 11 de 13 etapas implementadas (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11). Faltam: Notificações (12), Relatórios (13).
 
 ### Próxima decisão (a ser tomada)
 
 - **(a)** Implementar cancelamento de compra (~30 linhas) e fechar Etapa 9 sem lacuna.
-- **(b)** **Etapa 11 — Financeiro** — UI para ContasPagar/Receber (modelos prontos, dados já populados, dashboard já mostra totais pendentes).
-- **(c)** **Etapa 12 — Notificações/alertas** — leve: estoque baixo + contas a vencer (dashboard já apura estes números).
-- **(d)** **Etapa 13 — Relatórios + PDF** — exportação de vendas/compras/contas.
+- **(b)** **Etapa 12 — Notificações e Alertas** — central de notificações para estoque baixo e contas vencidas/a vencer (dashboard já apura estes números, falta um sino no header com contador e drawer de alertas).
+- **(c)** **Etapa 13 — Relatórios + Exportação PDF** — relatórios de vendas, compras, fluxo de caixa por período, com export PDF.
 
-Recomendação: **(b) Financeiro** — fecha o ciclo do dinheiro (já temos Compras gerando saída e Vendas gerando entrada; Financeiro permite acompanhar de fato as contas).
+Recomendação: **(b) Notificações** — leve, reaproveita as queries do dashboard, fecha o loop de alertas que o usuário já sente falta (atrasos passam despercebidos sem aviso). Depois, fechar com (c) Relatórios.
 
 ### Como retomar
 

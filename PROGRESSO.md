@@ -57,7 +57,7 @@ d:/gestao-pdv/
 | 9 | Compras | ✅ Concluído (ver lacuna abaixo) | Transacional, gera ENTRADA automática |
 | 10 | PDV — Ponto de Venda | ⏳ Pendente | Núcleo do sistema, próxima etapa sugerida |
 | 11 | Financeiro | ✅ Concluído | ContaPagar/ContaReceber: CRUD + pagar/receber/reabrir/cancelar + KPIs |
-| 12 | Notificações e Alertas | ⏳ Pendente | Estoque baixo + contas a vencer |
+| 12 | Notificações e Alertas | ✅ Concluído | Sino no header + drawer com alertas (estoque + contas), polling 60s |
 | 13 | Relatórios + Exportação PDF | ⏳ Pendente | — |
 
 ### Lacuna conhecida na Etapa 9 (Compras)
@@ -112,6 +112,43 @@ Não existe rota/UI para **cancelar/excluir** uma compra. Hoje, se uma compra é
 ---
 
 ## Histórico de sessões
+
+### Sessão — 2026-04-29 (Etapa 12 — Notificações e Alertas)
+
+**Etapa 12 implementada:** central de alertas com sino no header.
+
+Arquivos criados:
+- `backend/src/controllers/alertasController.js` — `GET /alertas` agrega em paralelo:
+  - Produtos ativos com `estoque <= estoqueMinimo` (severidade ALTA se estoque=0 ou < mínimo)
+  - Contas a pagar PENDENTE/ATRASADA com vencimento ≤ hoje+7d (ALTA se atrasada, MEDIA se próxima)
+  - Contas a receber PENDENTE/ATRASADA com vencimento ≤ hoje+7d (ALTA se atrasada, BAIXA se próxima)
+  - Resposta unificada com `id` estável por alerta, `tipo`, `severidade`, `titulo`, `descricao`, `complemento`, `valor`, `data`, `link` ("estoque" | "financeiro-pagar" | "financeiro-receber")
+  - Bloco `contagem` por severidade e por tipo
+- `backend/src/routes/alertas.js` — rota com `authRequired` (qualquer perfil acessa)
+- `src/Alertas.jsx` — componente do sino + drawer:
+  - Badge colorido (vermelho se há ALTA, amarelo se MEDIA, azul se só BAIXA)
+  - Drawer 380×70vh com cabeçalho, agrupamento por tipo, footer com timestamp
+  - Polling de 60s
+  - Click-fora e ESC fecham
+  - Cada item é clicável → `onNavegar(tela)` muda a tela do app (estoque/financeiro)
+  - "Descartar" individual (×) e "✓ Tudo" (marca todos como lidos)
+  - "↺ N" restaura descartados; auto-limpeza dos descartados quando o alerta sai do servidor (estoque reposto, conta paga)
+  - Persistência dos descartados em `localStorage` (`gestao_alertas_descartados`)
+
+Arquivos modificados:
+- `backend/src/server.js` — registra `/alertas`
+- `src/lib/api.js` — adiciona `obterAlertas()`
+- `src/App.jsx` — coloca `<Alertas onNavegar={setTela}>` à direita do header (ao lado do dropdown do usuário)
+
+**Validado via curl:**
+```
+GET /alertas → 200
+  total: 17
+  alta:13, media:3, baixa:1
+  estoqueBaixo:4, contasPagarAtrasadas:6, contasPagarProximas:2,
+  contasReceberAtrasadas:4, contasReceberProximas:1
+```
+Numeros batem com o seed (4 estoque baixo, 6 contas a pagar atrasadas, 4 a receber atrasadas).
 
 ### Sessão — 2026-04-29 (Etapa 11 — Financeiro)
 
@@ -292,15 +329,14 @@ GET /funcionarios → 20 registros
 
 ## Onde paramos
 
-**Etapa 11 (Financeiro) concluída.** 11 de 13 etapas implementadas (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11). Faltam: Notificações (12), Relatórios (13).
+**Etapa 12 (Notificações) concluída.** 12 de 13 etapas implementadas (1–12). Falta apenas a Etapa 13 — Relatórios + Exportação PDF.
 
 ### Próxima decisão (a ser tomada)
 
 - **(a)** Implementar cancelamento de compra (~30 linhas) e fechar Etapa 9 sem lacuna.
-- **(b)** **Etapa 12 — Notificações e Alertas** — central de notificações para estoque baixo e contas vencidas/a vencer (dashboard já apura estes números, falta um sino no header com contador e drawer de alertas).
-- **(c)** **Etapa 13 — Relatórios + Exportação PDF** — relatórios de vendas, compras, fluxo de caixa por período, com export PDF.
+- **(b)** **Etapa 13 — Relatórios + Exportação PDF** — última etapa do projeto. Relatórios de vendas, compras, fluxo de caixa por período + export PDF.
 
-Recomendação: **(b) Notificações** — leve, reaproveita as queries do dashboard, fecha o loop de alertas que o usuário já sente falta (atrasos passam despercebidos sem aviso). Depois, fechar com (c) Relatórios.
+Recomendação: **(b) Etapa 13** — fecha o projeto. Após isso, restará só polir lacunas (cancelar compra, melhorias de UX). Stack para PDF: `pdfkit` ou `pdf-lib` no backend, ou `jsPDF` no frontend (mais simples, sem dependência server).
 
 ### Como retomar
 

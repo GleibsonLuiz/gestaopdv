@@ -71,6 +71,8 @@ async function request(path, { method = "GET", body, auth = true } = {}) {
 export const api = {
   login: (email, senha) => request("/auth/login", { method: "POST", body: { email, senha }, auth: false }),
   me: () => request("/auth/me"),
+  trocarSenha: (senhaAtual, senhaNova) =>
+    request("/auth/senha", { method: "PUT", body: { senhaAtual, senhaNova } }),
 
   listarClientes: ({ search = "", ativo = "" } = {}) => {
     const qs = new URLSearchParams();

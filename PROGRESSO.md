@@ -47,7 +47,7 @@ d:/gestao-pdv/
 | # | Etapa | Status | Notas |
 |---|-------|--------|-------|
 | 1 | Estrutura base + banco | ✅ Concluído | schema.prisma com todos os modelos |
-| 2 | Autenticação + Controle de acesso | ✅ Concluído | JWT, bcrypt, middleware de roles |
+| 2 | Autenticação + Controle de acesso | ✅ Concluído | JWT, bcrypt, middleware de roles, **trocar senha**, **rate limit** |
 | 3 | Dashboard | ✅ Concluído | KPIs + gráfico semanal + top produtos/vendedores + estoque baixo + financeiro |
 | 4 | Cadastro de Clientes | ✅ Concluído | CRUD + soft-delete |
 | 5 | Cadastro de Fornecedores | ✅ Concluído | CRUD + soft-delete |
@@ -112,6 +112,33 @@ Não existe rota/UI para **cancelar/excluir** uma compra. Hoje, se uma compra é
 ---
 
 ## Histórico de sessões
+
+### Sessão — 2026-04-29 (Etapa 2 — extensões de auth)
+
+**Etapa 2 ampliada:** trocar senha, rate limit e remoção de credenciais hardcoded.
+
+Arquivos criados:
+- `backend/src/middlewares/rateLimitLogin.js` — rate limit em memória (sem dependência externa) para `POST /auth/login`. Janela deslizante: máx **10 tentativas / 15 min** por IP. Estourou → bloqueio de 15 min com HTTP 429 e header `Retry-After`. Login bem-sucedido limpa o histórico do IP.
+- `src/TrocarSenhaModal.jsx` — modal com 3 campos (atual, nova, confirmar), validação client-side (mín 6 chars, nova ≠ atual, confirmar ===  nova), feedback de sucesso e auto-fecha em 1.5s.
+
+Arquivos modificados:
+- `backend/src/controllers/authController.js` — nova função `trocarSenha`: valida senha atual via `bcrypt.compare`, exige nova ≥ 6 chars e diferente da atual, persiste hash via `bcrypt.hash(_, 10)`.
+- `backend/src/routes/auth.js` — aplica `rateLimitLogin` em `POST /login`; adiciona `PUT /senha` (com `authRequired`).
+- `src/lib/api.js` — adiciona `trocarSenha(senhaAtual, senhaNova)`.
+- `src/Login.jsx` — **remove credenciais hardcoded** (`admin@gestaopro.local`/`admin123`) — campos iniciam vazios.
+- `src/App.jsx` — header com avatar/inicial + dropdown de usuário (Trocar senha / Sair). Click-fora fecha o menu. Renderiza `<TrocarSenhaModal>` quando aberto.
+
+**Validado via curl:**
+```
+PUT /auth/senha (senha atual errada)        → 401  "Senha atual incorreta"
+PUT /auth/senha (nova com 3 chars)          → 400  "A nova senha deve ter pelo menos 6 caracteres"
+PUT /auth/senha (válida admin123→admin456)  → 200  { ok: true }
+POST /auth/login com senha antiga           → 401  "Credenciais invalidas"
+POST /auth/login com nova senha             → 200  { token, user }
+PUT /auth/senha (revertida admin456→admin123)→ 200  { ok: true }
+POST /auth/login x11 com email inexistente: tentativas 1-10 → 401, 11ª → 429
+  body: "Muitas tentativas de login. Tente novamente em 900 segundos."
+```
 
 ### Sessão — 2026-04-29 (Dashboard)
 

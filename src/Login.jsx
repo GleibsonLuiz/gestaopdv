@@ -8,8 +8,8 @@ const C = {
 };
 
 export default function Login({ onSuccess }) {
-  const [email, setEmail] = useState("admin@gestaopro.local");
-  const [senha, setSenha] = useState("admin123");
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(false);
 

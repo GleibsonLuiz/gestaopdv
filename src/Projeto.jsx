@@ -16,6 +16,27 @@ const ETAPAS = [
   { id: 13, titulo: "Relatórios + Exportação PDF", descricao: "Relatórios completos com exportação em PDF", icone: "📈" },
 ];
 
+// Status real do projeto (sincronizado com PROGRESSO.md). Usado como fallback
+// quando uma etapa nao tem registro no localStorage do usuario.
+const STATUS_PROJETO = {
+  1: "concluido", 2: "concluido", 3: "concluido", 4: "concluido",
+  5: "concluido", 6: "concluido", 7: "concluido", 8: "concluido",
+  9: "concluido", 10: "concluido", 11: "concluido",
+  12: "pendente", 13: "pendente",
+};
+
+function defaultEtapas() {
+  return ETAPAS.map(e => ({ id: e.id, status: STATUS_PROJETO[e.id] || "pendente" }));
+}
+
+function mergeEtapas(salvas) {
+  return ETAPAS.map(e => {
+    const existente = salvas.find(s => s.id === e.id);
+    if (existente && existente.status) return { id: e.id, status: existente.status };
+    return { id: e.id, status: STATUS_PROJETO[e.id] || "pendente" };
+  });
+}
+
 const STATUS = {
   pendente: { label: "Pendente", color: "#475569", bg: "#47556922" },
   em_andamento: { label: "Em andamento", color: "#f59e0b", bg: "#f59e0b22" },
@@ -59,7 +80,7 @@ Continue o desenvolvimento da etapa atual. Explique os passos de forma detalhada
 }
 
 export default function Projeto() {
-  const [etapas, setEtapas] = useState(ETAPAS.map(e => ({ id: e.id, status: "pendente" })));
+  const [etapas, setEtapas] = useState(defaultEtapas);
   const [notas, setNotas] = useState("");
   const [copiado, setCopiado] = useState(false);
   const [tab, setTab] = useState("progresso");
@@ -67,11 +88,24 @@ export default function Projeto() {
   useEffect(() => {
     try {
       const e = localStorage.getItem("gestao_etapas");
-      if (e) setEtapas(JSON.parse(e));
+      if (e) {
+        const salvas = JSON.parse(e);
+        const mergeadas = mergeEtapas(Array.isArray(salvas) ? salvas : []);
+        setEtapas(mergeadas);
+        // se faltavam etapas no localStorage (cache antigo), persiste o merge
+        if (!Array.isArray(salvas) || salvas.length !== mergeadas.length) {
+          localStorage.setItem("gestao_etapas", JSON.stringify(mergeadas));
+        }
+      }
       const n = localStorage.getItem("gestao_notas");
       if (n) setNotas(n);
     } catch {}
   }, []);
+
+  function ressincronizar() {
+    if (!confirm("Sincronizar status com o estado real do projeto? Suas marcações manuais serão substituídas.")) return;
+    salvarEtapas(defaultEtapas());
+  }
 
   function salvarEtapas(novas) {
     setEtapas(novas);
@@ -101,9 +135,17 @@ export default function Projeto() {
   return (
     <div>
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, marginBottom: 16 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10, alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <div style={{ color: C.white, fontWeight: 700 }}>Progresso Geral</div>
-          <div style={{ color: C.accent, fontWeight: 800 }}>{progresso}%</div>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <button onClick={ressincronizar} title="Substituir status pelos dados do PROGRESSO.md" style={{
+              background: C.surface, border: `1px solid ${C.border}`, color: C.muted,
+              borderRadius: 8, padding: "6px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer",
+            }}>
+              🔄 Ressincronizar
+            </button>
+            <div style={{ color: C.accent, fontWeight: 800 }}>{progresso}%</div>
+          </div>
         </div>
         <div style={{ background: C.border, borderRadius: 999, height: 10 }}>
           <div style={{ width: `${progresso}%`, background: `linear-gradient(90deg, ${C.accent}, ${C.purple})`, height: 10, borderRadius: 999, transition: "width 0.5s" }} />

@@ -48,7 +48,7 @@ d:/gestao-pdv/
 |---|-------|--------|-------|
 | 1 | Estrutura base + banco | ✅ Concluído | schema.prisma com todos os modelos |
 | 2 | Autenticação + Controle de acesso | ✅ Concluído | JWT, bcrypt, middleware de roles |
-| 3 | Dashboard | ⏳ Pendente | Cards/gráficos resumo do negócio |
+| 3 | Dashboard | ✅ Concluído | KPIs + gráfico semanal + top produtos/vendedores + estoque baixo + financeiro |
 | 4 | Cadastro de Clientes | ✅ Concluído | CRUD + soft-delete |
 | 5 | Cadastro de Fornecedores | ✅ Concluído | CRUD + soft-delete |
 | 6 | Cadastro de Produtos | ✅ Concluído | CRUD + categorias |
@@ -113,6 +113,53 @@ Não existe rota/UI para **cancelar/excluir** uma compra. Hoje, se uma compra é
 
 ## Histórico de sessões
 
+### Sessão — 2026-04-29 (Dashboard)
+
+**Etapa 3 — Dashboard: implementada.**
+
+Arquivos criados:
+- `backend/src/controllers/dashboardController.js` — endpoint único `GET /dashboard/resumo` que executa em paralelo (`Promise.all`) ~20 queries agregando KPIs:
+  - Vendas hoje / mês (com variação % vs. mês anterior) / ticket médio
+  - Compras do mês
+  - Totais de cadastros (clientes, produtos, fornecedores, funcionários ativos)
+  - Vendas por dia dos últimos 7 dias (com `$queryRaw` agrupando por `DATE("createdAt")`, completando dias vazios)
+  - Top 5 produtos do mês (`itemVenda.groupBy` por produtoId)
+  - Top 5 vendedores do mês (`venda.groupBy` por userId)
+  - Formas de pagamento do mês (`groupBy` em formaPagamento)
+  - Produtos com estoque ≤ estoqueMinimo (`$queryRaw`, top 10)
+  - Contas a pagar/receber pendentes + contagem de atrasadas
+  - Últimas 8 vendas e últimas 5 compras
+- `backend/src/routes/dashboard.js` — rota com `authRequired` (sem restrição de role: todos os perfis veem o dashboard)
+- `src/Dashboard.jsx` — página rica com:
+  - 4 cards KPI principais (vendas hoje, faturamento mês com variação, ticket médio, compras mês)
+  - 5 mini-cards (clientes, produtos, fornecedores, funcionários, estoque baixo)
+  - Gráfico de barras dos últimos 7 dias (CSS puro, sem libs)
+  - Ranking de top produtos com badge dourado para 1º lugar
+  - Top vendedores com barra de progresso por share
+  - Formas de pagamento com barras coloridas e percentuais
+  - Painéis de financeiro pendente (a pagar/receber) com alerta de atrasadas
+  - Lista de produtos com estoque baixo
+  - Últimas vendas e últimas compras
+  - Botão "↻ Atualizar" para recarregar manualmente
+
+Arquivos modificados:
+- `backend/src/server.js` — registra `/dashboard`
+- `src/lib/api.js` — adiciona `obterDashboard()`
+- `src/App.jsx` — NavBtn "📊 Dashboard" disponível para todos os perfis (entre PDV e Clientes), import e rota
+
+**Validado via API:**
+```
+GET /dashboard/resumo → 200
+  vendasHoje: { quantidade: 1, total: 60 }
+  vendasMes:  { quantidade: 1, total: 60, variacaoPercentual: null }
+  comprasMes: { quantidade: 10, total: 1448.5 }
+  contasPagarPendentes:   { quantidade: 14, total: 15479.8, atrasadas: 6 }
+  contasReceberPendentes: { quantidade: 14, total: 9154.8,  atrasadas: 4 }
+  produtosEstoqueBaixo: 4
+  vendasPorDia: 7 dias com 1 venda em 2026-04-29
+  topProdutos: 5 itens
+```
+
 ### Sessão — 2026-04-29 (continuação)
 
 **Etapa 8 — Funcionários: implementada.**
@@ -171,16 +218,16 @@ GET /funcionarios → 20 registros
 
 ## Onde paramos
 
-**Etapa 8 (Funcionários) concluída.** Já temos 8 etapas implementadas (1, 2, 4, 5, 6, 7, 8, 9). Faltam: Dashboard (3), PDV (10), Financeiro (11), Notificações (12), Relatórios (13).
+**Etapa 3 (Dashboard) concluída.** Já temos 9 etapas implementadas (1, 2, 3, 4, 5, 6, 7, 8, 9, 10 — também o PDV está implementado conforme `src/PDV.jsx`). Faltam: Financeiro (11), Notificações (12), Relatórios (13).
 
 ### Próxima decisão (a ser tomada)
 
 - **(a)** Implementar cancelamento de compra (~30 linhas) e fechar Etapa 9 sem lacuna.
-- **(b)** **Etapa 10 — PDV** — núcleo do sistema, contraparte de Compras, gera SAIDA de estoque.
-- **(c)** **Etapa 3 — Dashboard** — consome dados existentes, etapa mais leve, visualmente atraente.
-- **(d)** **Etapa 11 — Financeiro** — UI para ContasPagar/Receber (modelos prontos, dados já populados).
+- **(b)** **Etapa 11 — Financeiro** — UI para ContasPagar/Receber (modelos prontos, dados já populados, dashboard já mostra totais pendentes).
+- **(c)** **Etapa 12 — Notificações/alertas** — leve: estoque baixo + contas a vencer (dashboard já apura estes números).
+- **(d)** **Etapa 13 — Relatórios + PDF** — exportação de vendas/compras/contas.
 
-Recomendação: **(b) PDV** — agora com funcionários cadastrados, a venda pode atribuir o vendedor responsável.
+Recomendação: **(b) Financeiro** — fecha o ciclo do dinheiro (já temos Compras gerando saída e Vendas gerando entrada; Financeiro permite acompanhar de fato as contas).
 
 ### Como retomar
 

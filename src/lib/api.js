@@ -165,4 +165,6 @@ export const api = {
   obterVenda: (id) => request(`/vendas/${id}`),
   criarVenda: (data) => request("/vendas", { method: "POST", body: data }),
   cancelarVenda: (id) => request(`/vendas/${id}/cancelar`, { method: "POST" }),
+
+  obterDashboard: () => request("/dashboard/resumo"),
 };

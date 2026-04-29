@@ -7,6 +7,7 @@ import Estoque from "./Estoque.jsx";
 import Compras from "./Compras.jsx";
 import Funcionarios from "./Funcionarios.jsx";
 import PDV from "./PDV.jsx";
+import Dashboard from "./Dashboard.jsx";
 import Projeto from "./Projeto.jsx";
 import { getUser, getToken, clearSession, api } from "./lib/api.js";
 
@@ -83,6 +84,7 @@ export default function App() {
 
         <nav style={{ display: "flex", gap: 6, marginLeft: 12, flexWrap: "wrap" }}>
           <NavBtn ativo={tela === "pdv"} destaque onClick={() => setTela("pdv")}>🛒 PDV</NavBtn>
+          <NavBtn ativo={tela === "dashboard"} onClick={() => setTela("dashboard")}>📊 Dashboard</NavBtn>
           <NavBtn ativo={tela === "clientes"} onClick={() => setTela("clientes")}>👥 Clientes</NavBtn>
           <NavBtn ativo={tela === "fornecedores"} onClick={() => setTela("fornecedores")}>🏭 Fornecedores</NavBtn>
           <NavBtn ativo={tela === "produtos"} onClick={() => setTela("produtos")}>📦 Produtos</NavBtn>
@@ -114,6 +116,12 @@ export default function App() {
           <>
             <PageHeader titulo="Ponto de Venda" subtitulo="Registro de vendas com baixa automática de estoque" />
             <PDV user={user} />
+          </>
+        )}
+        {tela === "dashboard" && (
+          <>
+            <PageHeader titulo="Dashboard" subtitulo="Visão geral do negócio — vendas, estoque e financeiro" />
+            <Dashboard user={user} />
           </>
         )}
         {tela === "clientes" && (

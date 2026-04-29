@@ -10,6 +10,7 @@ import estoqueRoutes from "./routes/estoque.js";
 import comprasRoutes from "./routes/compras.js";
 import funcionariosRoutes from "./routes/funcionarios.js";
 import vendasRoutes from "./routes/vendas.js";
+import dashboardRoutes from "./routes/dashboard.js";
 
 dotenv.config();
 
@@ -40,6 +41,7 @@ app.use("/estoque", estoqueRoutes);
 app.use("/compras", comprasRoutes);
 app.use("/funcionarios", funcionariosRoutes);
 app.use("/vendas", vendasRoutes);
+app.use("/dashboard", dashboardRoutes);
 
 app.use((err, req, res, _next) => {
   console.error(err);

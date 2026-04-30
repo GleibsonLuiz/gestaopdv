@@ -58,7 +58,7 @@ d:/gestao-pdv/
 | 10 | PDV — Ponto de Venda | ⏳ Pendente | Núcleo do sistema, próxima etapa sugerida |
 | 11 | Financeiro | ✅ Concluído | ContaPagar/ContaReceber: CRUD + pagar/receber/reabrir/cancelar + KPIs |
 | 12 | Notificações e Alertas | ✅ Concluído | Sino no header + drawer com alertas (estoque + contas), polling 60s |
-| 13 | Relatórios + Exportação PDF | ⏳ Pendente | — |
+| 13 | Relatórios + Exportação PDF | ✅ Concluído | 4 relatórios (vendas/compras/financeiro/estoque) com export PDF (jsPDF + autotable) |
 
 ### Lacuna conhecida na Etapa 9 (Compras)
 
@@ -112,6 +112,44 @@ Não existe rota/UI para **cancelar/excluir** uma compra. Hoje, se uma compra é
 ---
 
 ## Histórico de sessões
+
+### Sessão — 2026-04-30 (Etapa 13 — Relatórios + Exportação PDF) — **PROJETO COMPLETO**
+
+**Etapa 13 implementada:** 4 relatórios analíticos com export PDF.
+
+Arquivos criados:
+- `backend/src/controllers/relatoriosController.js` — 4 endpoints, cada um agrega em paralelo (`Promise.all`):
+  - `GET /relatorios/vendas` (filtros: dataInicio, dataFim, formaPagamento, clienteId, userId)
+    → resumo (totalVendas, faturamento, ticketMedio, descontoTotal), formasPagamento (groupBy), topProdutos (groupBy itemVenda + lookup), vendas detalhadas com itens
+  - `GET /relatorios/compras` (filtros: dataInicio, dataFim, fornecedorId)
+    → resumo (totalCompras, valorTotal, ticketMedio), topFornecedores, compras detalhadas
+  - `GET /relatorios/financeiro` (filtros: dataInicio, dataFim por vencimento, tipo=pagar|receber|ambos)
+    → resumo por status (PENDENTE/PAGA/ATRASADA/CANCELADA × pagar/receber), saldoPrevisto, fluxoCaixaRealizado, listas detalhadas
+  - `GET /relatorios/estoque` (filtros: categoriaId, fornecedorId, situacao=ok|baixo|zerado)
+    → resumo (totalProdutos, unidadesEmEstoque, valorEstoqueCusto, valorEstoqueVenda, margemEstimada), produtos com cálculo de valorEmEstoque
+- `backend/src/routes/relatorios.js` — `authRequired` global; sem restrição de role.
+- `src/Relatorios.jsx` — página com 4 abas (Vendas/Compras/Financeiro/Estoque), cada aba com:
+  - Filtros próprios (datas, selects de cliente/vendedor/forma pgto/fornecedor/categoria/situação/tipo)
+  - Botão "🔍 Gerar" e "📄 Exportar PDF"
+  - Cards de resumo (Resumo) com cor por indicador
+  - Tabelas de detalhamento (Tabela) com cabeçalhos, alinhamento por coluna e estado vazio
+  - Helper `criarPDF` aplica cabeçalho "GestãoPRO + título + gerado em" + autoTable para cada bloco
+
+Arquivos modificados:
+- `backend/src/server.js` — registra `/relatorios`
+- `src/lib/api.js` — adiciona 4 métodos `relatorioVendas/Compras/Financeiro/Estoque`
+- `src/App.jsx` — NavBtn "📑 Relatórios" (entre Financeiro e Funcionários, todos os perfis)
+- `src/Projeto.jsx` — STATUS_PROJETO[13] = "concluido"
+- `package.json` — adiciona `jspdf@^4.2.1` e `jspdf-autotable@^5.0.7`
+
+**Validado via API:**
+```
+GET /relatorios/vendas       → 200  resumo: 1 venda, R$60, ticket R$60
+GET /relatorios/compras      → 200  resumo: 21 compras, R$53.696, ticket R$2.557; topFornecedores: 10
+GET /relatorios/financeiro   → 200  pagar.PENDENTE 2/220.16; receber.PENDENTE 10/7914.80; saldoPrevisto 8934.64
+GET /relatorios/estoque      → 200  23 produtos, 2570 un., R$54.559 custo, R$98.588 venda, margem R$44.028
+GET /relatorios/estoque?situacao=baixo → 200  4 produtos com estoque baixo
+```
 
 ### Sessão — 2026-04-29 (Etapa 12 — Notificações e Alertas)
 
@@ -329,14 +367,21 @@ GET /funcionarios → 20 registros
 
 ## Onde paramos
 
-**Etapa 12 (Notificações) concluída.** 12 de 13 etapas implementadas (1–12). Falta apenas a Etapa 13 — Relatórios + Exportação PDF.
+**🎉 Projeto completo — 13 de 13 etapas implementadas.**
+
+Todas as etapas planejadas foram entregues. O sistema cobre cadastros (clientes, fornecedores, produtos, funcionários), operação (PDV, estoque, compras), financeiro (contas a pagar/receber), análise (dashboard, relatórios com export PDF) e infra-cross-cutting (autenticação com roles, troca de senha, rate limit, alertas).
+
+### Lacunas conhecidas (polimento opcional)
+
+- **Etapa 9 (Compras):** sem rota/UI para cancelar uma compra. Hoje o estorno é manual via SAIDA no Estoque.
+  - Sugestão: `DELETE /compras/:id` com estorno transacional (cria SAIDA com motivo `"CANCELAMENTO COMPRA #N"`).
+- **Etapa 13 (Relatórios):** sem filtro por cliente no relatório de vendas (campo aceito no backend, mas não exposto no UI).
 
 ### Próxima decisão (a ser tomada)
 
-- **(a)** Implementar cancelamento de compra (~30 linhas) e fechar Etapa 9 sem lacuna.
-- **(b)** **Etapa 13 — Relatórios + Exportação PDF** — última etapa do projeto. Relatórios de vendas, compras, fluxo de caixa por período + export PDF.
-
-Recomendação: **(b) Etapa 13** — fecha o projeto. Após isso, restará só polir lacunas (cancelar compra, melhorias de UX). Stack para PDF: `pdfkit` ou `pdf-lib` no backend, ou `jsPDF` no frontend (mais simples, sem dependência server).
+- **(a)** Fechar lacuna de cancelamento de compra (~30 linhas backend + botão no frontend).
+- **(b)** Polir UX (loading skeletons, melhor mobile, atalhos teclado no PDV).
+- **(c)** Encerrar o projeto.
 
 ### Como retomar
 
@@ -345,6 +390,6 @@ Recomendação: **(b) Etapa 13** — fecha o projeto. Após isso, restará só p
    cd backend && npm run dev    # porta 3333
    cd .. && npm run dev          # porta 5173/5174
    ```
-2. Abrir [http://localhost:5174/](http://localhost:5174/)
+2. Abrir [http://localhost:5173/](http://localhost:5173/)
 3. Login: `admin@gestaopro.local` / `admin123`
-4. Decidir qual das opções (a)/(b)/(c)/(d) acima seguir
+4. Para ver o tracker com 13/13 concluídas: ir em **Projeto** e clicar em **Ressincronizar** (caso o localStorage do navegador ainda tenha o estado antigo).

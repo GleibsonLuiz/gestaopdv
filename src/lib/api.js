@@ -171,6 +171,41 @@ export const api = {
   obterDashboard: () => request("/dashboard/resumo"),
   obterAlertas: () => request("/alertas"),
 
+  relatorioVendas: ({ dataInicio = "", dataFim = "", formaPagamento = "", clienteId = "", userId = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (dataInicio) qs.set("dataInicio", dataInicio);
+    if (dataFim) qs.set("dataFim", dataFim);
+    if (formaPagamento) qs.set("formaPagamento", formaPagamento);
+    if (clienteId) qs.set("clienteId", clienteId);
+    if (userId) qs.set("userId", userId);
+    const q = qs.toString();
+    return request(`/relatorios/vendas${q ? `?${q}` : ""}`);
+  },
+  relatorioCompras: ({ dataInicio = "", dataFim = "", fornecedorId = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (dataInicio) qs.set("dataInicio", dataInicio);
+    if (dataFim) qs.set("dataFim", dataFim);
+    if (fornecedorId) qs.set("fornecedorId", fornecedorId);
+    const q = qs.toString();
+    return request(`/relatorios/compras${q ? `?${q}` : ""}`);
+  },
+  relatorioFinanceiro: ({ dataInicio = "", dataFim = "", tipo = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (dataInicio) qs.set("dataInicio", dataInicio);
+    if (dataFim) qs.set("dataFim", dataFim);
+    if (tipo) qs.set("tipo", tipo);
+    const q = qs.toString();
+    return request(`/relatorios/financeiro${q ? `?${q}` : ""}`);
+  },
+  relatorioEstoque: ({ categoriaId = "", fornecedorId = "", situacao = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (categoriaId) qs.set("categoriaId", categoriaId);
+    if (fornecedorId) qs.set("fornecedorId", fornecedorId);
+    if (situacao) qs.set("situacao", situacao);
+    const q = qs.toString();
+    return request(`/relatorios/estoque${q ? `?${q}` : ""}`);
+  },
+
   listarContasPagar: ({ search = "", status = "", fornecedorId = "", dataInicio = "", dataFim = "", vencidas = "" } = {}) => {
     const qs = new URLSearchParams();
     if (search) qs.set("search", search);

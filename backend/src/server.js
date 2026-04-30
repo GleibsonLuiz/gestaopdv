@@ -14,6 +14,7 @@ import dashboardRoutes from "./routes/dashboard.js";
 import contasPagarRoutes from "./routes/contas-pagar.js";
 import contasReceberRoutes from "./routes/contas-receber.js";
 import alertasRoutes from "./routes/alertas.js";
+import relatoriosRoutes from "./routes/relatorios.js";
 
 dotenv.config();
 
@@ -48,6 +49,7 @@ app.use("/dashboard", dashboardRoutes);
 app.use("/contas-pagar", contasPagarRoutes);
 app.use("/contas-receber", contasReceberRoutes);
 app.use("/alertas", alertasRoutes);
+app.use("/relatorios", relatoriosRoutes);
 
 app.use((err, req, res, _next) => {
   console.error(err);

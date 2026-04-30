@@ -9,6 +9,7 @@ import Funcionarios from "./Funcionarios.jsx";
 import Financeiro from "./Financeiro.jsx";
 import PDV from "./PDV.jsx";
 import Dashboard from "./Dashboard.jsx";
+import Relatorios from "./Relatorios.jsx";
 import Projeto from "./Projeto.jsx";
 import TrocarSenhaModal from "./TrocarSenhaModal.jsx";
 import Alertas from "./Alertas.jsx";
@@ -107,6 +108,7 @@ export default function App() {
           <NavBtn ativo={tela === "estoque"} onClick={() => setTela("estoque")}>🗃️ Estoque</NavBtn>
           <NavBtn ativo={tela === "compras"} onClick={() => setTela("compras")}>🛍️ Compras</NavBtn>
           <NavBtn ativo={tela === "financeiro"} onClick={() => setTela("financeiro")}>💰 Financeiro</NavBtn>
+          <NavBtn ativo={tela === "relatorios"} onClick={() => setTela("relatorios")}>📑 Relatórios</NavBtn>
           {user.role === "ADMIN" && (
             <NavBtn ativo={tela === "funcionarios"} onClick={() => setTela("funcionarios")}>🧑‍💼 Funcionários</NavBtn>
           )}
@@ -214,6 +216,12 @@ export default function App() {
           <>
             <PageHeader titulo="Financeiro" subtitulo="Contas a pagar e a receber — fluxo de caixa do negócio" />
             <Financeiro user={user} />
+          </>
+        )}
+        {tela === "relatorios" && (
+          <>
+            <PageHeader titulo="Relatórios" subtitulo="Relatórios analíticos com exportação em PDF" />
+            <Relatorios user={user} />
           </>
         )}
         {tela === "funcionarios" && user.role === "ADMIN" && (

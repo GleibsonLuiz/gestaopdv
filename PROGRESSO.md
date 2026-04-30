@@ -127,6 +127,37 @@ Não existe rota/UI para **cancelar/excluir** uma compra. Hoje, se uma compra é
 
 ## Histórico de sessões
 
+### Sessão — 2026-04-30 (Financeiro UI: juros/multa/desconto + recorrência + anexos)
+
+Frontend do Financeiro consumindo recursos avançados que já existiam no backend (commits `5365f3c` e `288f701`).
+
+**`src/lib/api.js`:**
+- `pagarConta`/`receberConta` agora aceitam objeto completo `{ pagamento|recebimento, juros?, multa?, desconto? }` mantendo compatibilidade com chamadas antigas (string/Date)
+- Novos: `anexarContaPagar(id, file)`, `excluirAnexoContaPagar(id, anexoId)` e equivalentes para receber
+
+**`src/Financeiro.jsx`:**
+- **ContaModal** refatorado: campos separados de `valorBruto`, `juros`, `multa`, `desconto`, com cálculo de **valor líquido em tempo real** (memo). Bloco visual destacado em surface card
+- **Recorrência** (apenas em criação): switch entre `NENHUMA` / `PARCELADA` / `RECORRENTE`, com input de `parcelaTotal` (2-60). Mostra preview de "valor por parcela" e dicas contextuais (juros se aplicam à 1ª parcela em parceladas; recorrentes preservam o dia)
+- **PagarReceberModal** refatorado: botão "Ajustar juros / multa / desconto" expande os 3 campos. Recalcula líquido em tempo real e envia ao backend que valida e persiste
+- **AnexosModal** novo: dropzone clicável (PDF/JPG/PNG até 5 MB), lista com ícone por tipo, botão "Abrir" (target=_blank com `BASE_URL + url`), botão "Excluir" com confirmação. Erro do backend para tipo inválido cai amigável
+- **Lista de contas:** badges-mini coloridos por linha — `📋 1/3` (parcelada, roxo), `🔁 1/12` (recorrente, azul), `📎 N` (qtd de anexos, amarelo). Linha de detalhe extra quando há juros/multa/desconto: `Bruto R$ X + juros R$ Y - desc R$ Z`. Coluna de Ações com novo botão `📎` ao lado de Pagar/Editar/Cancelar
+
+**Validado via API (admin):**
+```
+POST /contas-pagar { valorBruto:900, tipoRecorrencia:"PARCELADA", parcelaTotal:3 }
+  → 201, parcelasGeradas:3, parcelas com vencimento 05/06/07-15
+POST /contas-pagar { valorBruto:100, juros:10, multa:5, desconto:2 }
+  → bruto:100, juros:10, multa:5, desc:2, liquido:113
+POST /contas-pagar/:id/anexos arquivo=teste.pdf
+  → 201, mime application/pdf, url /uploads/<uuid>.pdf
+POST /contas-pagar/:id/anexos arquivo=teste.txt
+  → 400 "Tipo de arquivo nao permitido (apenas PDF, JPG, PNG)"
+POST /contas-pagar/:id/pagar { pagamento, juros:20, multa:5, desconto:2 }
+  → status PAGA, juros recalculado para 20, liquido 123
+```
+
+**Lacuna conhecida:** quando uma conta é deletada (cascade remove `Anexo` no DB), o arquivo físico em `backend/uploads/` fica órfão. Solução futura: hook em `prisma.contaPagar.delete` que liste anexos e remova arquivos antes do delete.
+
 ### Sessão — 2026-04-30 (Sidebar + Sistema de permissões por módulo)
 
 **1. Sidebar fixa à esquerda** (`src/App.jsx`)
@@ -440,6 +471,8 @@ Todas as etapas planejadas foram entregues. O sistema cobre cadastros (clientes,
   - Sugestão: `DELETE /compras/:id` com estorno transacional (cria SAIDA com motivo `"CANCELAMENTO COMPRA #N"`).
 - **Etapa 13 (Relatórios):** sem filtro por cliente no relatório de vendas (campo aceito no backend, mas não exposto no UI).
 - **Permissões:** quando um vendedor sem `DASHBOARD` é redirecionado pelo `useEffect`, há um flicker breve (mostra a tela errada por ~1 frame). Fix opcional: usar `podeVer(tela)` direto na renderização para evitar render inicial.
+- **Anexos do Financeiro:** ao deletar uma conta (com `prisma.contaPagar.delete`), o cascade do DB remove o registro `Anexo` mas o arquivo físico em `backend/uploads/` fica órfão. Adicionar limpeza do disco antes do delete da conta.
+- **Recorrência:** alterar uma conta-mãe (1/N) não propaga para as filhas. Não há UI para "editar série" nem "cancelar todas as parcelas restantes" — cada parcela é tratada individualmente após a criação.
 
 ### Próxima decisão (a ser tomada)
 

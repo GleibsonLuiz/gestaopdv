@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api } from "./lib/api.js";
+import { api, BASE_URL } from "./lib/api.js";
 
 const C = {
   bg: "#0f1117", surface: "#1a1d27", card: "#21253a",
@@ -94,6 +94,7 @@ function ListaContas({ tipo, podeEditar }) {
   const [editando, setEditando] = useState(null);
   const [novoAberto, setNovoAberto] = useState(false);
   const [recebendoPagando, setRecebendoPagando] = useState(null);
+  const [anexandoEm, setAnexandoEm] = useState(null);
 
   const carregar = useCallback(async () => {
     setCarregando(true); setErro("");
@@ -159,10 +160,10 @@ function ListaContas({ tipo, podeEditar }) {
     };
   }, [contas]);
 
-  async function executarPagarReceber(conta, data) {
+  async function executarPagarReceber(conta, payload) {
     try {
-      if (ehPagar) await api.pagarConta(conta.id, data);
-      else await api.receberConta(conta.id, data);
+      if (ehPagar) await api.pagarConta(conta.id, payload);
+      else await api.receberConta(conta.id, payload);
       flash(ehPagar ? "Conta marcada como paga" : "Conta marcada como recebida");
       setRecebendoPagando(null);
       carregar();
@@ -287,7 +288,7 @@ function ListaContas({ tipo, podeEditar }) {
       {/* Lista */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
         <div style={{
-          display: "grid", gridTemplateColumns: "2fr 1.4fr 110px 120px 110px 200px",
+          display: "grid", gridTemplateColumns: "2fr 1.3fr 110px 130px 110px 260px",
           padding: "12px 16px", background: C.surface,
           borderBottom: `1px solid ${C.border}`, fontSize: 11, fontWeight: 700,
           color: C.muted, textTransform: "uppercase", letterSpacing: 0.5,
@@ -313,17 +314,47 @@ function ListaContas({ tipo, podeEditar }) {
           const entidade = ehPagar ? c.fornecedor : c.cliente;
           const ehFinalizada = c.status === "PAGA" || c.status === "CANCELADA";
 
+          const qtdAnexos = c.anexos?.length || 0;
+          const ehParcelada = c.tipoRecorrencia === "PARCELADA";
+          const ehRecorrente = c.tipoRecorrencia === "RECORRENTE";
+          const temAjuste = Number(c.juros) > 0 || Number(c.multa) > 0 || Number(c.desconto) > 0;
+
           return (
             <div key={c.id} style={{
-              display: "grid", gridTemplateColumns: "2fr 1.4fr 110px 120px 110px 200px",
+              display: "grid", gridTemplateColumns: "2fr 1.3fr 110px 130px 110px 260px",
               padding: "12px 16px", borderBottom: `1px solid ${C.border}`,
               alignItems: "center", fontSize: 13,
               opacity: c.status === "CANCELADA" ? 0.55 : 1,
             }}>
               <div>
-                <div style={{ color: C.white, fontWeight: 600 }}>{c.descricao}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <span style={{ color: C.white, fontWeight: 600 }}>{c.descricao}</span>
+                  {ehParcelada && (
+                    <span style={badgeMini(C.purple)}>
+                      📋 {c.parcelaAtual}/{c.parcelaTotal}
+                    </span>
+                  )}
+                  {ehRecorrente && (
+                    <span style={badgeMini(C.accent)}>
+                      🔁 {c.parcelaAtual}/{c.parcelaTotal}
+                    </span>
+                  )}
+                  {qtdAnexos > 0 && (
+                    <span style={badgeMini(C.yellow)} title={`${qtdAnexos} anexo${qtdAnexos > 1 ? "s" : ""}`}>
+                      📎 {qtdAnexos}
+                    </span>
+                  )}
+                </div>
                 {c.observacoes && (
                   <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>{c.observacoes}</div>
+                )}
+                {temAjuste && (
+                  <div style={{ color: C.muted, fontSize: 10, marginTop: 2 }}>
+                    Bruto {fmtBRL(c.valorBruto || c.valor)}
+                    {Number(c.juros) > 0 && ` + juros ${fmtBRL(c.juros)}`}
+                    {Number(c.multa) > 0 && ` + multa ${fmtBRL(c.multa)}`}
+                    {Number(c.desconto) > 0 && ` − desc ${fmtBRL(c.desconto)}`}
+                  </div>
                 )}
               </div>
               <div style={{ color: C.text, fontSize: 12 }}>
@@ -362,6 +393,9 @@ function ListaContas({ tipo, podeEditar }) {
                 }}>{info.label}</span>
               </div>
               <div style={{ display: "flex", gap: 4, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                <button onClick={() => setAnexandoEm(c)} style={btnAcao(C.yellow)}>
+                  📎 {qtdAnexos || ""}
+                </button>
                 {!ehFinalizada && podeEditar && (
                   <button onClick={() => setRecebendoPagando(c)} style={btnAcao(C.green)}>
                     {ehPagar ? "Pagar" : "Receber"}
@@ -420,7 +454,16 @@ function ListaContas({ tipo, podeEditar }) {
           tipo={tipo}
           conta={recebendoPagando}
           onCancelar={() => setRecebendoPagando(null)}
-          onConfirmar={(data) => executarPagarReceber(recebendoPagando, data)}
+          onConfirmar={(payload) => executarPagarReceber(recebendoPagando, payload)}
+        />
+      )}
+
+      {anexandoEm && (
+        <AnexosModal
+          tipo={tipo}
+          conta={anexandoEm}
+          podeEditar={podeEditar}
+          onFechar={() => { setAnexandoEm(null); carregar(); }}
         />
       )}
     </div>
@@ -452,7 +495,14 @@ function ContaModal({ tipo, conta, entidades, onCancelar, onSalvar }) {
   const ehPagar = tipo === "pagar";
   const editar = !!conta;
   const [descricao, setDescricao] = useState(conta?.descricao || "");
-  const [valor, setValor] = useState(conta?.valor != null ? String(conta.valor) : "");
+  // valorBruto: nova conta usa "valorBruto"; conta antiga (sem essa coluna preenchida) cai no `valor`.
+  const [valorBruto, setValorBruto] = useState(
+    conta?.valorBruto != null ? String(conta.valorBruto)
+    : conta?.valor != null ? String(conta.valor) : ""
+  );
+  const [juros, setJuros] = useState(conta?.juros ? String(conta.juros) : "");
+  const [multa, setMulta] = useState(conta?.multa ? String(conta.multa) : "");
+  const [desconto, setDesconto] = useState(conta?.desconto ? String(conta.desconto) : "");
   const [vencimento, setVencimento] = useState(
     conta?.vencimento ? new Date(conta.vencimento).toISOString().slice(0, 10) : ""
   );
@@ -460,25 +510,59 @@ function ContaModal({ tipo, conta, entidades, onCancelar, onSalvar }) {
     (ehPagar ? conta?.fornecedorId : conta?.clienteId) || ""
   );
   const [observacoes, setObservacoes] = useState(conta?.observacoes || "");
+  // Recorrência só aparece em criação — alterar tipo de conta existente exigiria
+  // mexer em todo o grupoRecorrenciaId.
+  const [tipoRecorrencia, setTipoRecorrencia] = useState("NENHUMA");
+  const [parcelaTotal, setParcelaTotal] = useState("3");
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
+
+  const liquido = useMemo(() => {
+    const vb = parseFloat(String(valorBruto).replace(",", ".")) || 0;
+    const j  = parseFloat(String(juros).replace(",", ".")) || 0;
+    const m  = parseFloat(String(multa).replace(",", ".")) || 0;
+    const d  = parseFloat(String(desconto).replace(",", ".")) || 0;
+    return vb + j + m - d;
+  }, [valorBruto, juros, multa, desconto]);
+
+  const valorParcela = useMemo(() => {
+    if (tipoRecorrencia === "NENHUMA") return null;
+    const total = parseInt(parcelaTotal, 10);
+    const vb = parseFloat(String(valorBruto).replace(",", ".")) || 0;
+    if (!total || total < 2 || vb <= 0) return null;
+    if (tipoRecorrencia === "PARCELADA") return vb / total;
+    return vb; // recorrente repete o mesmo valor
+  }, [tipoRecorrencia, parcelaTotal, valorBruto]);
 
   async function salvar(e) {
     e.preventDefault();
     setErro("");
     if (!descricao.trim()) { setErro("Descrição é obrigatória"); return; }
-    const v = parseFloat(String(valor).replace(",", "."));
-    if (!Number.isFinite(v) || v <= 0) { setErro("Valor deve ser maior que zero"); return; }
+    const vb = parseFloat(String(valorBruto).replace(",", "."));
+    if (!Number.isFinite(vb) || vb <= 0) { setErro("Valor bruto deve ser maior que zero"); return; }
     if (!vencimento) { setErro("Vencimento é obrigatório"); return; }
+    if (liquido <= 0) { setErro("Valor líquido (bruto + juros + multa - desconto) deve ser maior que zero"); return; }
 
     const payload = {
       descricao,
-      valor: v,
+      valorBruto: vb,
+      juros: parseFloat(String(juros).replace(",", ".")) || 0,
+      multa: parseFloat(String(multa).replace(",", ".")) || 0,
+      desconto: parseFloat(String(desconto).replace(",", ".")) || 0,
       vencimento,
       observacoes: observacoes || null,
     };
     if (ehPagar) payload.fornecedorId = entidadeId || null;
     else payload.clienteId = entidadeId || null;
+
+    if (!editar && tipoRecorrencia !== "NENHUMA") {
+      payload.tipoRecorrencia = tipoRecorrencia;
+      const total = parseInt(parcelaTotal, 10);
+      if (!total || total < 2 || total > 60) {
+        setErro("Número de parcelas deve estar entre 2 e 60"); return;
+      }
+      payload.parcelaTotal = total;
+    }
 
     setSalvando(true);
     try {
@@ -499,7 +583,7 @@ function ContaModal({ tipo, conta, entidades, onCancelar, onSalvar }) {
 
   return (
     <div onClick={() => !salvando && onCancelar()} style={modalOverlay}>
-      <form onSubmit={salvar} onClick={e => e.stopPropagation()} style={modalCard}>
+      <form onSubmit={salvar} onClick={e => e.stopPropagation()} style={{ ...modalCard, maxWidth: 560 }}>
         <div style={modalHeader}>
           <div>
             <div style={{ color: C.white, fontWeight: 700, fontSize: 18 }}>
@@ -518,14 +602,48 @@ function ContaModal({ tipo, conta, entidades, onCancelar, onSalvar }) {
         </Campo>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <Campo label="Valor *">
-            <input type="number" step="0.01" min="0.01" value={valor}
-              onChange={e => setValor(e.target.value)} required style={inputStyle} placeholder="0,00" />
+          <Campo label="Valor bruto *">
+            <input type="number" step="0.01" min="0.01" value={valorBruto}
+              onChange={e => setValorBruto(e.target.value)} required style={inputStyle} placeholder="0,00" />
           </Campo>
           <Campo label="Vencimento *">
             <input type="date" value={vencimento}
               onChange={e => setVencimento(e.target.value)} required style={inputStyle} />
           </Campo>
+        </div>
+
+        <div style={{
+          background: C.surface, border: `1px solid ${C.border}`,
+          borderRadius: 10, padding: "12px 14px", marginBottom: 12,
+        }}>
+          <div style={{
+            color: C.muted, fontSize: 11, fontWeight: 700, marginBottom: 10,
+            textTransform: "uppercase", letterSpacing: 0.5,
+          }}>Juros, multa e desconto (opcionais)</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+            <Campo label="💸 Juros">
+              <input type="number" step="0.01" min="0" value={juros}
+                onChange={e => setJuros(e.target.value)} style={inputStyle} placeholder="0,00" />
+            </Campo>
+            <Campo label="⚠ Multa">
+              <input type="number" step="0.01" min="0" value={multa}
+                onChange={e => setMulta(e.target.value)} style={inputStyle} placeholder="0,00" />
+            </Campo>
+            <Campo label="💰 Desconto">
+              <input type="number" step="0.01" min="0" value={desconto}
+                onChange={e => setDesconto(e.target.value)} style={inputStyle} placeholder="0,00" />
+            </Campo>
+          </div>
+          <div style={{
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            marginTop: 4, padding: "8px 12px", background: C.bg,
+            border: `1px solid ${C.border}`, borderRadius: 8,
+          }}>
+            <span style={{ color: C.muted, fontSize: 12, fontWeight: 600 }}>Valor líquido</span>
+            <span style={{ color: liquido > 0 ? C.green : C.red, fontWeight: 800, fontSize: 16 }}>
+              {fmtBRL(liquido)}
+            </span>
+          </div>
         </div>
 
         <Campo label={ehPagar ? "Fornecedor" : "Cliente"}>
@@ -534,6 +652,58 @@ function ContaModal({ tipo, conta, entidades, onCancelar, onSalvar }) {
             {entidades.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
           </select>
         </Campo>
+
+        {!editar && (
+          <div style={{
+            background: C.surface, border: `1px solid ${C.border}`,
+            borderRadius: 10, padding: "12px 14px", marginBottom: 12,
+          }}>
+            <div style={{
+              color: C.muted, fontSize: 11, fontWeight: 700, marginBottom: 10,
+              textTransform: "uppercase", letterSpacing: 0.5,
+            }}>🔁 Recorrência</div>
+            <div style={{ display: "flex", gap: 6, marginBottom: tipoRecorrencia === "NENHUMA" ? 0 : 10 }}>
+              <BtnRecorrencia ativa={tipoRecorrencia === "NENHUMA"} onClick={() => setTipoRecorrencia("NENHUMA")}>
+                Nenhuma
+              </BtnRecorrencia>
+              <BtnRecorrencia ativa={tipoRecorrencia === "PARCELADA"} onClick={() => setTipoRecorrencia("PARCELADA")}>
+                Parcelada
+              </BtnRecorrencia>
+              <BtnRecorrencia ativa={tipoRecorrencia === "RECORRENTE"} onClick={() => setTipoRecorrencia("RECORRENTE")}>
+                Recorrente (mensal)
+              </BtnRecorrencia>
+            </div>
+            {tipoRecorrencia !== "NENHUMA" && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, alignItems: "end" }}>
+                <Campo label={tipoRecorrencia === "PARCELADA" ? "Nº de parcelas" : "Repetir por (meses)"}>
+                  <input type="number" min="2" max="60" value={parcelaTotal}
+                    onChange={e => setParcelaTotal(e.target.value)} style={inputStyle} />
+                </Campo>
+                <div style={{
+                  background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8,
+                  padding: "9px 12px", fontSize: 12,
+                }}>
+                  <div style={{ color: C.muted, marginBottom: 2 }}>
+                    {tipoRecorrencia === "PARCELADA" ? "Cada parcela (bruto)" : "Cada mês (bruto)"}
+                  </div>
+                  <div style={{ color: C.accent, fontWeight: 800, fontSize: 14 }}>
+                    {valorParcela != null ? fmtBRL(valorParcela) : "—"}
+                  </div>
+                </div>
+              </div>
+            )}
+            {tipoRecorrencia === "PARCELADA" && (
+              <div style={{ color: C.muted, fontSize: 11, marginTop: 6 }}>
+                ℹ Juros, multa e desconto se aplicam apenas à 1ª parcela. Última parcela ajusta centavos do arredondamento.
+              </div>
+            )}
+            {tipoRecorrencia === "RECORRENTE" && (
+              <div style={{ color: C.muted, fontSize: 11, marginTop: 6 }}>
+                ℹ Cria N contas com mesmo valor, vencendo em meses subsequentes (preserva o dia).
+              </div>
+            )}
+          </div>
+        )}
 
         <Campo label="Observações">
           <textarea value={observacoes} onChange={e => setObservacoes(e.target.value)}
@@ -558,19 +728,54 @@ function ContaModal({ tipo, conta, entidades, onCancelar, onSalvar }) {
   );
 }
 
+function BtnRecorrencia({ ativa, onClick, children }) {
+  return (
+    <button type="button" onClick={onClick} style={{
+      flex: 1, padding: "8px 10px", borderRadius: 8,
+      background: ativa ? C.accent + "22" : C.bg,
+      border: `1px solid ${ativa ? C.accent + "88" : C.border}`,
+      color: ativa ? C.accent : C.muted,
+      fontWeight: ativa ? 700 : 600, fontSize: 12, cursor: "pointer",
+    }}>{children}</button>
+  );
+}
+
 function PagarReceberModal({ tipo, conta, onCancelar, onConfirmar }) {
   const ehPagar = tipo === "pagar";
   const [data, setData] = useState(new Date().toISOString().slice(0, 10));
+  const [ajustar, setAjustar] = useState(false);
+  const [juros, setJuros] = useState(conta.juros ? String(conta.juros) : "");
+  const [multa, setMulta] = useState(conta.multa ? String(conta.multa) : "");
+  const [desconto, setDesconto] = useState(conta.desconto ? String(conta.desconto) : "");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+
+  const valorBrutoOriginal = Number(conta.valorBruto || conta.valor || 0);
+
+  const liquido = useMemo(() => {
+    if (!ajustar) return Number(conta.valor) || 0;
+    const j = parseFloat(String(juros).replace(",", ".")) || 0;
+    const m = parseFloat(String(multa).replace(",", ".")) || 0;
+    const d = parseFloat(String(desconto).replace(",", ".")) || 0;
+    return valorBrutoOriginal + j + m - d;
+  }, [ajustar, juros, multa, desconto, valorBrutoOriginal, conta.valor]);
 
   async function confirmar(e) {
     e.preventDefault();
     setErro("");
     if (!data) { setErro("Informe a data"); return; }
+    if (ajustar && liquido <= 0) {
+      setErro("Valor líquido (bruto + juros + multa - desconto) deve ser maior que zero"); return;
+    }
     setSalvando(true);
     try {
-      await onConfirmar(data);
+      const payload = ehPagar ? { pagamento: data } : { recebimento: data };
+      if (ajustar) {
+        payload.juros = parseFloat(String(juros).replace(",", ".")) || 0;
+        payload.multa = parseFloat(String(multa).replace(",", ".")) || 0;
+        payload.desconto = parseFloat(String(desconto).replace(",", ".")) || 0;
+      }
+      await onConfirmar(payload);
     } catch (err) {
       setErro(err.message);
       setSalvando(false);
@@ -579,7 +784,7 @@ function PagarReceberModal({ tipo, conta, onCancelar, onConfirmar }) {
 
   return (
     <div onClick={() => !salvando && onCancelar()} style={modalOverlay}>
-      <form onSubmit={confirmar} onClick={e => e.stopPropagation()} style={{ ...modalCard, maxWidth: 380 }}>
+      <form onSubmit={confirmar} onClick={e => e.stopPropagation()} style={{ ...modalCard, maxWidth: 440 }}>
         <div style={modalHeader}>
           <div style={{ color: C.white, fontWeight: 700, fontSize: 18 }}>
             {ehPagar ? "💸 Pagar conta" : "💵 Receber conta"}
@@ -596,14 +801,46 @@ function PagarReceberModal({ tipo, conta, onCancelar, onConfirmar }) {
             Vencimento: {fmtData(conta.vencimento)}
           </div>
           <div style={{ color: ehPagar ? C.red : C.green, fontSize: 22, fontWeight: 800, marginTop: 6 }}>
-            {fmtBRL(conta.valor)}
+            {fmtBRL(liquido)}
           </div>
+          {ajustar && (
+            <div style={{ color: C.muted, fontSize: 11, marginTop: 4 }}>
+              Bruto: {fmtBRL(valorBrutoOriginal)}
+            </div>
+          )}
         </div>
 
         <Campo label={`Data do ${ehPagar ? "pagamento" : "recebimento"} *`}>
           <input type="date" value={data} onChange={e => setData(e.target.value)}
             required style={inputStyle} />
         </Campo>
+
+        <button type="button" onClick={() => setAjustar(v => !v)} style={{
+          width: "100%", marginBottom: ajustar ? 12 : 0, padding: "9px 12px",
+          background: ajustar ? C.accent + "22" : C.surface,
+          border: `1px solid ${ajustar ? C.accent + "55" : C.border}`,
+          color: ajustar ? C.accent : C.muted, borderRadius: 8,
+          fontSize: 12, fontWeight: 600, cursor: "pointer",
+        }}>
+          {ajustar ? "✓ " : "+ "}Ajustar juros / multa / desconto
+        </button>
+
+        {ajustar && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+            <Campo label="💸 Juros">
+              <input type="number" step="0.01" min="0" value={juros}
+                onChange={e => setJuros(e.target.value)} style={inputStyle} placeholder="0,00" />
+            </Campo>
+            <Campo label="⚠ Multa">
+              <input type="number" step="0.01" min="0" value={multa}
+                onChange={e => setMulta(e.target.value)} style={inputStyle} placeholder="0,00" />
+            </Campo>
+            <Campo label="💰 Desconto">
+              <input type="number" step="0.01" min="0" value={desconto}
+                onChange={e => setDesconto(e.target.value)} style={inputStyle} placeholder="0,00" />
+            </Campo>
+          </div>
+        )}
 
         {erro && (
           <div style={{
@@ -624,6 +861,141 @@ function PagarReceberModal({ tipo, conta, onCancelar, onConfirmar }) {
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function AnexosModal({ tipo, conta, podeEditar, onFechar }) {
+  const ehPagar = tipo === "pagar";
+  const [anexos, setAnexos] = useState(conta.anexos || []);
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  async function enviar(file) {
+    if (!file) return;
+    setErro(""); setEnviando(true);
+    try {
+      const novo = ehPagar
+        ? await api.anexarContaPagar(conta.id, file)
+        : await api.anexarContaReceber(conta.id, file);
+      setAnexos(prev => [...prev, novo]);
+    } catch (err) {
+      setErro(err.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function excluir(anexo) {
+    if (!confirm(`Excluir anexo "${anexo.nomeOriginal}"?`)) return;
+    setErro("");
+    try {
+      if (ehPagar) await api.excluirAnexoContaPagar(conta.id, anexo.id);
+      else await api.excluirAnexoContaReceber(conta.id, anexo.id);
+      setAnexos(prev => prev.filter(a => a.id !== anexo.id));
+    } catch (err) {
+      setErro(err.message);
+    }
+  }
+
+  function fmtTamanho(bytes) {
+    if (!bytes) return "—";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+  }
+
+  function iconeTipo(mime) {
+    if (mime === "application/pdf") return "📄";
+    if (mime?.startsWith("image/")) return "🖼";
+    return "📎";
+  }
+
+  return (
+    <div onClick={() => !enviando && onFechar()} style={modalOverlay}>
+      <div onClick={e => e.stopPropagation()} style={{ ...modalCard, maxWidth: 540 }}>
+        <div style={modalHeader}>
+          <div>
+            <div style={{ color: C.white, fontWeight: 700, fontSize: 18 }}>
+              📎 Anexos
+            </div>
+            <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>
+              {conta.descricao}
+            </div>
+          </div>
+          <button type="button" onClick={onFechar} disabled={enviando} style={btnFechar}>×</button>
+        </div>
+
+        {podeEditar && (
+          <label style={{
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            padding: "16px 14px", marginBottom: 14,
+            background: enviando ? C.surface : C.accent + "11",
+            border: `2px dashed ${enviando ? C.border : C.accent + "55"}`,
+            borderRadius: 10, cursor: enviando ? "wait" : "pointer",
+            color: enviando ? C.muted : C.accent, fontSize: 13, fontWeight: 600,
+          }}>
+            <input type="file" accept="application/pdf,image/jpeg,image/png"
+              disabled={enviando}
+              onChange={e => {
+                const f = e.target.files?.[0];
+                if (f) enviar(f);
+                e.target.value = "";
+              }}
+              style={{ display: "none" }} />
+            {enviando ? "⏳ Enviando..." : "📤 Selecionar arquivo (PDF, JPG, PNG até 5 MB)"}
+          </label>
+        )}
+
+        {erro && (
+          <div style={{
+            marginBottom: 12, padding: "10px 12px", borderRadius: 8,
+            background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red, fontSize: 13,
+          }}>{erro}</div>
+        )}
+
+        <div style={{
+          background: C.surface, border: `1px solid ${C.border}`,
+          borderRadius: 10, overflow: "hidden",
+        }}>
+          {anexos.length === 0 ? (
+            <div style={{ padding: 30, textAlign: "center", color: C.muted, fontSize: 13 }}>
+              Nenhum anexo nesta conta.
+            </div>
+          ) : anexos.map(a => (
+            <div key={a.id} style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: "10px 14px", borderBottom: `1px solid ${C.border}`,
+            }}>
+              <div style={{ fontSize: 22 }}>{iconeTipo(a.mimeType)}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <a href={`${BASE_URL}${a.url}`} target="_blank" rel="noreferrer" style={{
+                  color: C.text, fontWeight: 600, fontSize: 13,
+                  textDecoration: "none", display: "block",
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                }}>{a.nomeOriginal}</a>
+                <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>
+                  {fmtTamanho(a.tamanho)} · {fmtData(a.createdAt)}
+                </div>
+              </div>
+              <a href={`${BASE_URL}${a.url}`} target="_blank" rel="noreferrer" style={{
+                ...btnAcao(C.accent), textDecoration: "none",
+              }}>Abrir</a>
+              {podeEditar && (
+                <button type="button" onClick={() => excluir(a)} style={btnAcao(C.red)}>
+                  Excluir
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18 }}>
+          <button type="button" onClick={onFechar} disabled={enviando} style={btnSecundario}>
+            Fechar
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -682,5 +1054,14 @@ function btnAcao(cor) {
     background: cor + "22", border: `1px solid ${cor}55`, color: cor,
     borderRadius: 6, padding: "5px 10px", fontSize: 11, fontWeight: 600,
     cursor: "pointer", whiteSpace: "nowrap",
+  };
+}
+
+function badgeMini(cor) {
+  return {
+    display: "inline-flex", alignItems: "center", gap: 3,
+    padding: "1px 7px", borderRadius: 5,
+    background: cor + "22", border: `1px solid ${cor}55`, color: cor,
+    fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
   };
 }

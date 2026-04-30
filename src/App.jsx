@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { C } from "./lib/theme.js";
 import Login from "./Login.jsx";
 import Clientes from "./Clientes.jsx";
 import Fornecedores from "./Fornecedores.jsx";
@@ -13,15 +14,11 @@ import Relatorios from "./Relatorios.jsx";
 import Projeto from "./Projeto.jsx";
 import Sistema from "./Sistema.jsx";
 import TrocarSenhaModal from "./TrocarSenhaModal.jsx";
+import AparenciaModal from "./AparenciaModal.jsx";
 import Alertas from "./Alertas.jsx";
 import { getUser, getToken, clearSession, api } from "./lib/api.js";
 import { podeAcessar } from "./lib/permissoes.js";
 
-const C = {
-  bg: "#0f1117", surface: "#1a1d27", card: "#21253a",
-  border: "#2e3354", accent: "#4f8ef7", text: "#e2e8f0",
-  muted: "#64748b", white: "#ffffff", purple: "#7c3aed",
-};
 
 const SIDEBAR_W_EXPANDIDA = 240;
 const SIDEBAR_W_RECOLHIDA = 72;
@@ -73,6 +70,7 @@ export default function App() {
   const [tela, setTela] = useState("pdv");
   const [menuUsuario, setMenuUsuario] = useState(false);
   const [trocarSenhaAberto, setTrocarSenhaAberto] = useState(false);
+  const [aparenciaAberta, setAparenciaAberta] = useState(false);
   const [sidebarAberta, setSidebarAberta] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => lerPreferenciaSidebar());
   const menuRef = useRef(null);
@@ -332,6 +330,9 @@ export default function App() {
                   whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                 }}>{user.email || user.nome}</div>
               </div>
+              <button onClick={() => { setMenuUsuario(false); setAparenciaAberta(true); }} style={menuItem}>
+                🎨 Aparência
+              </button>
               <button onClick={() => { setMenuUsuario(false); setTrocarSenhaAberto(true); }} style={menuItem}>
                 🔐 Trocar senha
               </button>
@@ -459,6 +460,10 @@ export default function App() {
 
       {trocarSenhaAberto && (
         <TrocarSenhaModal onFechar={() => setTrocarSenhaAberto(false)} />
+      )}
+
+      {aparenciaAberta && (
+        <AparenciaModal onFechar={() => setAparenciaAberta(false)} />
       )}
     </div>
   );

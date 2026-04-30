@@ -1,12 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { C } from "./lib/theme.js";
 import { api } from "./lib/api.js";
 
-const C = {
-  bg: "#0f1117", surface: "#1a1d27", card: "#21253a",
-  border: "#2e3354", accent: "#4f8ef7", text: "#e2e8f0",
-  muted: "#64748b", white: "#ffffff", green: "#22c55e",
-  yellow: "#f59e0b", red: "#ef4444", purple: "#7c3aed",
-};
 
 const fmtBRL = (v) => {
   const n = Number(v);

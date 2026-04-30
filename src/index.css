@@ -3,6 +3,21 @@
   color-scheme: dark;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* Variaveis de tema (valores padrao = tema "azul"). Sao sobrescritas
+     em runtime por aplicarTema() em src/lib/theme.js. */
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --card: #21253a;
+  --border: #2e3354;
+  --accent: #4f8ef7;
+  --purple: #7c3aed;
+  --green: #22c55e;
+  --red: #ef4444;
+  --yellow: #f59e0b;
+  --text: #e2e8f0;
+  --muted: #64748b;
+  --white: #ffffff;
 }
 
 *, *::before, *::after {
@@ -13,5 +28,15 @@ html, body, #root {
   margin: 0;
   padding: 0;
   min-height: 100vh;
-  background: #0f1117;
+  background: var(--bg);
+  color: var(--text);
+  /* Fade suave ao trocar de tema. Aplica em qualquer elemento que herde
+     ou use as variaveis. */
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Transicao suave em superficies e bordas comuns. Mantem a UI estavel ao
+   alterar variaveis CSS via aplicarTema(). */
+button, input, select, textarea, aside, main, nav {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
 }

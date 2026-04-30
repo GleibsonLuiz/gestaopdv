@@ -1,14 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
+import { C } from "./lib/theme.js";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { api } from "./lib/api.js";
 
-const C = {
-  bg: "#0f1117", surface: "#1a1d27", card: "#21253a",
-  border: "#2e3354", accent: "#4f8ef7", purple: "#7c3aed",
-  green: "#22c55e", red: "#ef4444", yellow: "#f59e0b",
-  text: "#e2e8f0", muted: "#64748b", white: "#ffffff",
-};
 
 const fmtBRL = (v) => {
   const n = Number(v);

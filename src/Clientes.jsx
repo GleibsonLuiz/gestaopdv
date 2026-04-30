@@ -8,10 +8,69 @@ const C = {
   yellow: "#f59e0b", red: "#ef4444", purple: "#7c3aed",
 };
 
+const ESTADOS_BR = [
+  "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO",
+  "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR",
+  "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO",
+];
+
+function mascararCpfCnpj(valor) {
+  const d = (valor || "").replace(/\D/g, "").slice(0, 14);
+  if (d.length <= 11) {
+    if (d.length <= 3) return d;
+    if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
+    if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
+    return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+  }
+  if (d.length <= 5) return `${d.slice(0, 2)}.${d.slice(2)}`;
+  if (d.length <= 8) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`;
+  if (d.length <= 12) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8)}`;
+  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+}
+
+function mascararCep(valor) {
+  const d = (valor || "").replace(/\D/g, "").slice(0, 8);
+  if (d.length <= 5) return d;
+  return `${d.slice(0, 5)}-${d.slice(5)}`;
+}
+
+async function buscarCepViaCEP(cepMascarado) {
+  const d = cepMascarado.replace(/\D/g, "");
+  if (d.length !== 8) return null;
+  try {
+    const r = await fetch(`https://viacep.com.br/ws/${d}/json/`);
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (j.erro) return null;
+    return {
+      endereco: [j.logradouro, j.bairro].filter(Boolean).join(", "),
+      cidade: j.localidade || "",
+      estado: j.uf || "",
+    };
+  } catch {
+    return null;
+  }
+}
+
 const VAZIO = {
   nome: "", cpfCnpj: "", email: "", telefone: "",
-  endereco: "", cidade: "", estado: "", cep: "", observacoes: "",
+  endereco: "", numero: "", cidade: "", estado: "", cep: "", observacoes: "",
 };
+
+function dividirEnderecoNumero(enderecoCompleto) {
+  const valor = (enderecoCompleto || "").trim();
+  const m = valor.match(/^(.*),\s*([\dA-Za-z/-]+)\s*$/);
+  if (m) return { endereco: m[1].trim(), numero: m[2].trim() };
+  return { endereco: valor, numero: "" };
+}
+
+function juntarEnderecoNumero(endereco, numero) {
+  const e = (endereco || "").trim();
+  const n = (numero || "").trim();
+  if (!e) return n;
+  if (!n) return e;
+  return `${e}, ${n}`;
+}
 
 export default function Clientes({ user }) {
   const [clientes, setClientes] = useState([]);
@@ -25,6 +84,9 @@ export default function Clientes({ user }) {
   const [salvando, setSalvando] = useState(false);
   const [erroForm, setErroForm] = useState("");
   const [mensagem, setMensagem] = useState("");
+  const [buscandoCep, setBuscandoCep] = useState(false);
+  const [cepNaoEncontrado, setCepNaoEncontrado] = useState(false);
+  const [nomeInvalido, setNomeInvalido] = useState(false);
 
   const podeEditar = user.role === "ADMIN" || user.role === "GERENTE";
   const podeExcluir = user.role === "ADMIN";
@@ -56,40 +118,71 @@ export default function Clientes({ user }) {
     setEditando(null);
     setForm(VAZIO);
     setErroForm("");
+    setNomeInvalido(false);
+    setCepNaoEncontrado(false);
     setModalAberto(true);
   }
 
   function abrirEdicao(cliente) {
     setEditando(cliente);
+    const { endereco, numero } = dividirEnderecoNumero(cliente.endereco);
     setForm({
       nome: cliente.nome || "",
-      cpfCnpj: cliente.cpfCnpj || "",
+      cpfCnpj: mascararCpfCnpj(cliente.cpfCnpj || ""),
       email: cliente.email || "",
       telefone: cliente.telefone || "",
-      endereco: cliente.endereco || "",
+      endereco,
+      numero,
       cidade: cliente.cidade || "",
       estado: cliente.estado || "",
-      cep: cliente.cep || "",
+      cep: mascararCep(cliente.cep || ""),
       observacoes: cliente.observacoes || "",
     });
     setErroForm("");
+    setNomeInvalido(false);
+    setCepNaoEncontrado(false);
     setModalAberto(true);
+  }
+
+  async function aplicarCep(valor) {
+    const masked = mascararCep(valor);
+    setForm(prev => ({ ...prev, cep: masked }));
+    setCepNaoEncontrado(false);
+    const digitos = masked.replace(/\D/g, "");
+    if (digitos.length !== 8) return;
+    setBuscandoCep(true);
+    const dados = await buscarCepViaCEP(masked);
+    setBuscandoCep(false);
+    if (!dados) {
+      setCepNaoEncontrado(true);
+      return;
+    }
+    setForm(prev => ({
+      ...prev,
+      endereco: dados.endereco || prev.endereco,
+      cidade: dados.cidade || prev.cidade,
+      estado: dados.estado || prev.estado,
+    }));
   }
 
   async function salvar(e) {
     e.preventDefault();
     setErroForm("");
     if (!form.nome.trim()) {
+      setNomeInvalido(true);
       setErroForm("Nome é obrigatório");
       return;
     }
+    setNomeInvalido(false);
     setSalvando(true);
     try {
+      const { numero, ...resto } = form;
+      const payload = { ...resto, endereco: juntarEnderecoNumero(form.endereco, numero) };
       if (editando) {
-        await api.atualizarCliente(editando.id, form);
+        await api.atualizarCliente(editando.id, payload);
         flash("Cliente atualizado");
       } else {
-        await api.criarCliente(form);
+        await api.criarCliente(payload);
         flash("Cliente criado");
       }
       setModalAberto(false);
@@ -119,6 +212,53 @@ export default function Clientes({ user }) {
 
   return (
     <div>
+      <style>{`
+        .btn-cliente-primario {
+          background: linear-gradient(135deg, ${C.accent}, ${C.purple});
+          color: ${C.white};
+          border: none;
+          border-radius: 8px;
+          padding: 10px 22px;
+          font-weight: 700;
+          font-size: 13px;
+          cursor: pointer;
+          transition: filter 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .btn-cliente-primario:hover:not(:disabled) {
+          filter: brightness(1.15);
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px ${C.accent}55;
+        }
+        .btn-cliente-primario:active:not(:disabled) {
+          transform: translateY(0);
+          filter: brightness(0.95);
+        }
+        .btn-cliente-primario:disabled {
+          background: ${C.muted};
+          cursor: default;
+          opacity: 0.75;
+        }
+        .btn-cliente-secundario {
+          background: transparent;
+          border: 1px solid ${C.border};
+          color: ${C.muted};
+          border-radius: 8px;
+          padding: 10px 18px;
+          font-weight: 500;
+          font-size: 13px;
+          cursor: pointer;
+          transition: color 0.15s ease, border-color 0.15s ease;
+        }
+        .btn-cliente-secundario:hover:not(:disabled) {
+          color: ${C.text};
+          border-color: ${C.accent}88;
+        }
+        .btn-cliente-secundario:disabled {
+          opacity: 0.5;
+          cursor: default;
+        }
+      `}</style>
+
       {/* Toolbar */}
       <div style={{
         display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center",
@@ -253,30 +393,91 @@ export default function Clientes({ user }) {
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <Campo label="Nome *" col2>
-                <input value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })}
-                  required style={inputStyle} autoFocus />
+                <input
+                  value={form.nome}
+                  onChange={e => {
+                    setForm({ ...form, nome: e.target.value });
+                    if (nomeInvalido && e.target.value.trim()) setNomeInvalido(false);
+                  }}
+                  autoFocus
+                  style={{
+                    ...inputStyle,
+                    border: nomeInvalido ? `1px solid ${C.red}` : `1px solid ${C.border}`,
+                    boxShadow: nomeInvalido ? `0 0 0 2px ${C.red}33` : "none",
+                  }}
+                />
+                {nomeInvalido && (
+                  <div style={{ color: C.red, fontSize: 11, marginTop: 4, fontWeight: 600 }}>
+                    Informe o nome do cliente.
+                  </div>
+                )}
               </Campo>
               <Campo label="CPF/CNPJ">
-                <input value={form.cpfCnpj} onChange={e => setForm({ ...form, cpfCnpj: e.target.value })} style={inputStyle} />
+                <input
+                  value={form.cpfCnpj}
+                  onChange={e => setForm({ ...form, cpfCnpj: mascararCpfCnpj(e.target.value) })}
+                  placeholder="000.000.000-00"
+                  inputMode="numeric"
+                  style={inputStyle}
+                />
               </Campo>
               <Campo label="Telefone">
-                <input value={form.telefone} onChange={e => setForm({ ...form, telefone: e.target.value })} style={inputStyle} />
+                <input
+                  value={form.telefone}
+                  onChange={e => setForm({ ...form, telefone: e.target.value })}
+                  placeholder="(00) 00000-0000"
+                  style={inputStyle}
+                />
               </Campo>
               <Campo label="Email" col2>
                 <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} style={inputStyle} />
               </Campo>
+              <Campo label="CEP">
+                <input
+                  value={form.cep}
+                  onChange={e => aplicarCep(e.target.value)}
+                  onBlur={e => aplicarCep(e.target.value)}
+                  placeholder="00000-000"
+                  inputMode="numeric"
+                  style={inputStyle}
+                />
+                {buscandoCep && (
+                  <div style={{ color: C.muted, fontSize: 11, marginTop: 4 }}>
+                    Buscando endereço...
+                  </div>
+                )}
+                {cepNaoEncontrado && !buscandoCep && (
+                  <div style={{ color: C.yellow, fontSize: 11, marginTop: 4 }}>
+                    CEP não encontrado. Preencha manualmente.
+                  </div>
+                )}
+              </Campo>
+              <Campo label="Estado">
+                <select
+                  value={form.estado}
+                  onChange={e => setForm({ ...form, estado: e.target.value })}
+                  style={{ ...inputStyle, cursor: "pointer" }}
+                >
+                  <option value="">—</option>
+                  {ESTADOS_BR.map(uf => (
+                    <option key={uf} value={uf}>{uf}</option>
+                  ))}
+                </select>
+              </Campo>
               <Campo label="Endereço" col2>
                 <input value={form.endereco} onChange={e => setForm({ ...form, endereco: e.target.value })} style={inputStyle} />
               </Campo>
+              <Campo label="Número">
+                <input
+                  value={form.numero}
+                  onChange={e => setForm({ ...form, numero: e.target.value })}
+                  placeholder="123"
+                  inputMode="numeric"
+                  style={inputStyle}
+                />
+              </Campo>
               <Campo label="Cidade">
                 <input value={form.cidade} onChange={e => setForm({ ...form, cidade: e.target.value })} style={inputStyle} />
-              </Campo>
-              <Campo label="Estado">
-                <input value={form.estado} onChange={e => setForm({ ...form, estado: e.target.value.toUpperCase().slice(0, 2) })}
-                  maxLength={2} style={inputStyle} />
-              </Campo>
-              <Campo label="CEP" col2>
-                <input value={form.cep} onChange={e => setForm({ ...form, cep: e.target.value })} style={inputStyle} />
               </Campo>
               <Campo label="Observações" col2>
                 <textarea value={form.observacoes} onChange={e => setForm({ ...form, observacoes: e.target.value })}
@@ -294,18 +495,19 @@ export default function Clientes({ user }) {
             )}
 
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20 }}>
-              <button type="button" onClick={() => setModalAberto(false)} disabled={salvando} style={{
-                background: C.surface, border: `1px solid ${C.border}`, color: C.text,
-                borderRadius: 8, padding: "10px 18px", fontWeight: 600, fontSize: 13, cursor: "pointer",
-              }}>
+              <button
+                type="button"
+                onClick={() => setModalAberto(false)}
+                disabled={salvando}
+                className="btn-cliente-secundario"
+              >
                 Cancelar
               </button>
-              <button type="submit" disabled={salvando} style={{
-                background: salvando ? C.muted : `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-                color: C.white, border: "none", borderRadius: 8,
-                padding: "10px 22px", fontWeight: 700, fontSize: 13,
-                cursor: salvando ? "default" : "pointer",
-              }}>
+              <button
+                type="submit"
+                disabled={salvando}
+                className="btn-cliente-primario"
+              >
                 {salvando ? "Salvando..." : editando ? "Salvar alterações" : "Criar cliente"}
               </button>
             </div>

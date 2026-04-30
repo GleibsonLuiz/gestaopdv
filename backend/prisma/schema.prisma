@@ -46,6 +46,12 @@ enum TipoMovimentacao {
   AJUSTE
 }
 
+enum TipoRecorrencia {
+  NENHUMA
+  PARCELADA
+  RECORRENTE
+}
+
 // ============ USUARIOS ============
 
 model User {
@@ -243,16 +249,27 @@ model ContaPagar {
   id          String      @id @default(uuid())
   descricao   String
   valor       Decimal     @db.Decimal(10, 2)
+  valorBruto  Decimal     @default(0) @db.Decimal(10, 2)
+  juros       Decimal     @default(0) @db.Decimal(10, 2)
+  multa       Decimal     @default(0) @db.Decimal(10, 2)
+  desconto    Decimal     @default(0) @db.Decimal(10, 2)
   vencimento  DateTime
   pagamento   DateTime?
   status      StatusConta @default(PENDENTE)
   observacoes String?
+  tipoRecorrencia      TipoRecorrencia @default(NENHUMA)
+  grupoRecorrenciaId   String?
+  parcelaAtual         Int?
+  parcelaTotal         Int?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
   fornecedorId String?
   fornecedor   Fornecedor? @relation(fields: [fornecedorId], references: [id])
 
+  anexos Anexo[]
+
+  @@index([grupoRecorrenciaId])
   @@map("contas_pagar")
 }
 
@@ -260,15 +277,46 @@ model ContaReceber {
   id          String      @id @default(uuid())
   descricao   String
   valor       Decimal     @db.Decimal(10, 2)
+  valorBruto  Decimal     @default(0) @db.Decimal(10, 2)
+  juros       Decimal     @default(0) @db.Decimal(10, 2)
+  multa       Decimal     @default(0) @db.Decimal(10, 2)
+  desconto    Decimal     @default(0) @db.Decimal(10, 2)
   vencimento  DateTime
   recebimento DateTime?
   status      StatusConta @default(PENDENTE)
   observacoes String?
+  tipoRecorrencia      TipoRecorrencia @default(NENHUMA)
+  grupoRecorrenciaId   String?
+  parcelaAtual         Int?
+  parcelaTotal         Int?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
   clienteId String?
   cliente   Cliente? @relation(fields: [clienteId], references: [id])
 
+  anexos Anexo[]
+
+  @@index([grupoRecorrenciaId])
   @@map("contas_receber")
+}
+
+model Anexo {
+  id              String   @id @default(uuid())
+  nomeOriginal    String
+  nomeArmazenado  String
+  mimeType        String
+  tamanho         Int
+  url             String
+  createdAt       DateTime @default(now())
+
+  contaPagarId String?
+  contaPagar   ContaPagar? @relation(fields: [contaPagarId], references: [id], onDelete: Cascade)
+
+  contaReceberId String?
+  contaReceber   ContaReceber? @relation(fields: [contaReceberId], references: [id], onDelete: Cascade)
+
+  @@index([contaPagarId])
+  @@index([contaReceberId])
+  @@map("anexos")
 }

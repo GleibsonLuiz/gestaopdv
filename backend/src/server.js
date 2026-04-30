@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import path from "node:path";
 import authRoutes from "./routes/auth.js";
 import clientesRoutes from "./routes/clientes.js";
 import fornecedoresRoutes from "./routes/fornecedores.js";
@@ -23,6 +24,12 @@ const PORT = process.env.PORT || 3333;
 
 app.use(cors());
 app.use(express.json());
+
+// Anexos de contas (PDF/JPG/PNG) salvos em backend/uploads. Servidos como
+// arquivos estaticos. Token nao e exigido aqui — assume-se que conhecer a
+// URL randomica (UUID) ja restringe o acesso. Se precisar de download
+// autenticado, transformar em rota com authRequired e res.sendFile.
+app.use("/uploads", express.static(path.resolve("uploads")));
 
 app.get("/", (req, res) => {
   res.json({

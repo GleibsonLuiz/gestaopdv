@@ -113,6 +113,7 @@ export const api = {
   criarCliente: (data) => request("/clientes", { method: "POST", body: data }),
   atualizarCliente: (id, data) => request(`/clientes/${id}`, { method: "PUT", body: data }),
   excluirCliente: (id) => request(`/clientes/${id}`, { method: "DELETE" }),
+  excluirPermanenteCliente: (id) => request(`/clientes/${id}?permanente=true`, { method: "DELETE" }),
 
   listarFornecedores: ({ search = "", ativo = "" } = {}) => {
     const qs = new URLSearchParams();
@@ -125,6 +126,7 @@ export const api = {
   criarFornecedor: (data) => request("/fornecedores", { method: "POST", body: data }),
   atualizarFornecedor: (id, data) => request(`/fornecedores/${id}`, { method: "PUT", body: data }),
   excluirFornecedor: (id) => request(`/fornecedores/${id}`, { method: "DELETE" }),
+  excluirPermanenteFornecedor: (id) => request(`/fornecedores/${id}?permanente=true`, { method: "DELETE" }),
 
   listarCategorias: () => request("/categorias"),
   criarCategoria: (data) => request("/categorias", { method: "POST", body: data }),
@@ -145,6 +147,7 @@ export const api = {
   criarProduto: (data) => request("/produtos", { method: "POST", body: data }),
   atualizarProduto: (id, data) => request(`/produtos/${id}`, { method: "PUT", body: data }),
   excluirProduto: (id) => request(`/produtos/${id}`, { method: "DELETE" }),
+  excluirPermanenteProduto: (id) => request(`/produtos/${id}?permanente=true`, { method: "DELETE" }),
 
   listarMovimentacoes: ({ produtoId = "", tipo = "", limite = "" } = {}) => {
     const qs = new URLSearchParams();

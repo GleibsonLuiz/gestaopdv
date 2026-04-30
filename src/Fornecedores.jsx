@@ -116,6 +116,19 @@ export default function Fornecedores({ user }) {
     }
   }
 
+  async function excluirPermanente(fornecedor) {
+    if (!confirm(
+      `Tem certeza que deseja excluir "${fornecedor.nome}"?\n\nEsta acao nao pode ser desfeita.`
+    )) return;
+    try {
+      await api.excluirPermanenteFornecedor(fornecedor.id);
+      flash("Fornecedor excluido");
+      carregar();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
   return (
     <div>
       <div style={{
@@ -165,7 +178,7 @@ export default function Fornecedores({ user }) {
         background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden",
       }}>
         <div style={{
-          display: "grid", gridTemplateColumns: "2fr 1.2fr 1.5fr 1fr 100px 180px",
+          display: "grid", gridTemplateColumns: "2fr 1.2fr 1.5fr 1fr 100px 250px",
           padding: "12px 16px", background: C.surface,
           borderBottom: `1px solid ${C.border}`, fontSize: 12, fontWeight: 700,
           color: C.muted, textTransform: "uppercase", letterSpacing: 0.5,
@@ -184,7 +197,7 @@ export default function Fornecedores({ user }) {
           <div style={{ padding: 30, textAlign: "center", color: C.muted, fontSize: 13 }}>Nenhum fornecedor encontrado.</div>
         ) : fornecedores.map(f => (
           <div key={f.id} style={{
-            display: "grid", gridTemplateColumns: "2fr 1.2fr 1.5fr 1fr 100px 180px",
+            display: "grid", gridTemplateColumns: "2fr 1.2fr 1.5fr 1fr 100px 250px",
             padding: "12px 16px", borderBottom: `1px solid ${C.border}`,
             alignItems: "center", fontSize: 13,
             opacity: f.ativo ? 1 : 0.55,
@@ -206,8 +219,13 @@ export default function Fornecedores({ user }) {
                 <button onClick={() => abrirEdicao(f)} style={btnIcone(C.accent)}>Editar</button>
               )}
               {podeExcluir && (
-                <button onClick={() => alternarAtivo(f)} style={btnIcone(f.ativo ? C.red : C.green)}>
+                <button onClick={() => alternarAtivo(f)} style={btnIcone(f.ativo ? C.yellow : C.green)}>
                   {f.ativo ? "Inativar" : "Reativar"}
+                </button>
+              )}
+              {podeExcluir && (
+                <button onClick={() => excluirPermanente(f)} style={btnIconeSolido(C.red)} title="Excluir permanentemente">
+                  🗑 Excluir
                 </button>
               )}
             </div>
@@ -313,6 +331,14 @@ function btnIcone(cor) {
   return {
     background: cor + "22", border: `1px solid ${cor}55`, color: cor,
     borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 600,
+    cursor: "pointer",
+  };
+}
+
+function btnIconeSolido(cor) {
+  return {
+    background: cor, border: `1px solid ${cor}`, color: "#ffffff",
+    borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 700,
     cursor: "pointer",
   };
 }

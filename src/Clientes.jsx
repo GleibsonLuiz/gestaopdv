@@ -210,6 +210,19 @@ export default function Clientes({ user }) {
     }
   }
 
+  async function excluirPermanente(cliente) {
+    if (!confirm(
+      `Tem certeza que deseja excluir "${cliente.nome}"?\n\nEsta acao nao pode ser desfeita.`
+    )) return;
+    try {
+      await api.excluirPermanenteCliente(cliente.id);
+      flash("Cliente excluido");
+      carregar();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
   return (
     <div>
       <style>{`
@@ -312,7 +325,7 @@ export default function Clientes({ user }) {
         background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden",
       }}>
         <div style={{
-          display: "grid", gridTemplateColumns: "2fr 1.2fr 1.5fr 1fr 100px 180px",
+          display: "grid", gridTemplateColumns: "2fr 1.2fr 1.5fr 1fr 100px 250px",
           padding: "12px 16px", background: C.surface,
           borderBottom: `1px solid ${C.border}`, fontSize: 12, fontWeight: 700,
           color: C.muted, textTransform: "uppercase", letterSpacing: 0.5,
@@ -335,7 +348,7 @@ export default function Clientes({ user }) {
           </div>
         ) : clientes.map(c => (
           <div key={c.id} style={{
-            display: "grid", gridTemplateColumns: "2fr 1.2fr 1.5fr 1fr 100px 180px",
+            display: "grid", gridTemplateColumns: "2fr 1.2fr 1.5fr 1fr 100px 250px",
             padding: "12px 16px", borderBottom: `1px solid ${C.border}`,
             alignItems: "center", fontSize: 13,
             opacity: c.ativo ? 1 : 0.55,
@@ -361,8 +374,13 @@ export default function Clientes({ user }) {
                 </button>
               )}
               {podeExcluir && (
-                <button onClick={() => alternarAtivo(c)} style={btnIcone(c.ativo ? C.red : C.green)}>
+                <button onClick={() => alternarAtivo(c)} style={btnIcone(c.ativo ? C.yellow : C.green)}>
                   {c.ativo ? "Inativar" : "Reativar"}
+                </button>
+              )}
+              {podeExcluir && (
+                <button onClick={() => excluirPermanente(c)} style={btnIconeSolido(C.red)} title="Excluir permanentemente">
+                  🗑 Excluir
                 </button>
               )}
             </div>
@@ -539,6 +557,14 @@ function btnIcone(cor) {
   return {
     background: cor + "22", border: `1px solid ${cor}55`, color: cor,
     borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 600,
+    cursor: "pointer",
+  };
+}
+
+function btnIconeSolido(cor) {
+  return {
+    background: cor, border: `1px solid ${cor}`, color: "#ffffff",
+    borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 700,
     cursor: "pointer",
   };
 }

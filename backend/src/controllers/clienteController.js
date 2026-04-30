@@ -92,13 +92,22 @@ export async function atualizar(req, res, next) {
 
 export async function excluir(req, res, next) {
   try {
-    await prisma.cliente.update({
-      where: { id: req.params.id },
-      data: { ativo: false },
-    });
+    if (req.query.permanente === "true") {
+      await prisma.cliente.delete({ where: { id: req.params.id } });
+    } else {
+      await prisma.cliente.update({
+        where: { id: req.params.id },
+        data: { ativo: false },
+      });
+    }
     res.status(204).end();
   } catch (err) {
     if (err.code === "P2025") return res.status(404).json({ erro: "Cliente nao encontrado" });
+    if (err.code === "P2003") {
+      return res.status(409).json({
+        erro: "Cliente possui vendas ou contas vinculados. Inative em vez de excluir.",
+      });
+    }
     next(err);
   }
 }

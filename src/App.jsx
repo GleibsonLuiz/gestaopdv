@@ -23,31 +23,47 @@ const C = {
   muted: "#64748b", white: "#ffffff", purple: "#7c3aed",
 };
 
-const SIDEBAR_W = 240;
+const SIDEBAR_W_EXPANDIDA = 240;
+const SIDEBAR_W_RECOLHIDA = 72;
+const PREF_SIDEBAR_KEY = "gestao_sidebar_collapsed";
+
+// Helper de persistencia. Hoje grava em localStorage. Quando houver
+// PUT /auth/preferencias no backend, plugar aqui — manter localStorage como
+// cache local (escrita otimista) e disparar o request em paralelo.
+function salvarPreferenciaSidebar(collapsed) {
+  try { localStorage.setItem(PREF_SIDEBAR_KEY, collapsed ? "1" : "0"); } catch {}
+  // TODO(sync-db): quando o endpoint existir, descomentar:
+  // api.salvarPreferencia({ sidebarCollapsed: collapsed }).catch(() => {});
+}
+
+function lerPreferenciaSidebar() {
+  try { return localStorage.getItem(PREF_SIDEBAR_KEY) === "1"; } catch { return false; }
+}
 
 const ESTILO_RESPONSIVO = `
 .gp-sidebar {
-  position: fixed; top: 0; left: 0; height: 100vh; width: ${SIDEBAR_W}px;
+  position: fixed; top: 0; left: 0; height: 100vh;
   background: ${C.surface}; border-right: 1px solid ${C.border};
   display: flex; flex-direction: column; z-index: 60;
-  transition: transform 0.25s ease;
+  transition: transform 0.25s ease, width 0.25s ease;
 }
-.gp-content { margin-left: ${SIDEBAR_W}px; min-height: 100vh; }
+.gp-content { min-height: 100vh; transition: margin-left 0.25s ease; }
 .gp-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.55);
   z-index: 55; opacity: 0; pointer-events: none;
   transition: opacity 0.2s ease;
 }
 .gp-mobile-bar { display: none; }
-.gp-nav-section { flex: 1; overflow-y: auto; }
+.gp-nav-section { flex: 1; overflow-y: auto; overflow-x: hidden; }
 .gp-nav-section::-webkit-scrollbar { width: 6px; }
 .gp-nav-section::-webkit-scrollbar-thumb { background: ${C.border}; border-radius: 3px; }
 @media (max-width: 900px) {
-  .gp-sidebar { transform: translateX(-100%); box-shadow: 8px 0 30px rgba(0,0,0,0.5); }
+  .gp-sidebar { transform: translateX(-100%); box-shadow: 8px 0 30px rgba(0,0,0,0.5); width: 240px !important; }
   .gp-sidebar.open { transform: translateX(0); }
-  .gp-content { margin-left: 0; }
+  .gp-content { margin-left: 0 !important; }
   .gp-overlay.open { opacity: 1; pointer-events: auto; }
   .gp-mobile-bar { display: flex; }
+  .gp-toggle-desktop { display: none !important; }
 }
 `;
 
@@ -58,7 +74,22 @@ export default function App() {
   const [menuUsuario, setMenuUsuario] = useState(false);
   const [trocarSenhaAberto, setTrocarSenhaAberto] = useState(false);
   const [sidebarAberta, setSidebarAberta] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => lerPreferenciaSidebar());
   const menuRef = useRef(null);
+
+  function alternarColapso() {
+    setSidebarCollapsed((v) => {
+      const novo = !v;
+      salvarPreferenciaSidebar(novo);
+      return novo;
+    });
+  }
+
+  const sidebarLargura = sidebarCollapsed ? SIDEBAR_W_RECOLHIDA : SIDEBAR_W_EXPANDIDA;
+
+  // Wrappers para injetar collapsed em todos os itens da sidebar.
+  const Item = (props) => <NavItem {...props} collapsed={sidebarCollapsed} />;
+  const Secao = (props) => <SecaoLabel {...props} collapsed={sidebarCollapsed} />;
 
   useEffect(() => {
     function onClickFora(e) {
@@ -157,16 +188,24 @@ export default function App() {
       <style>{ESTILO_RESPONSIVO}</style>
 
       {/* Sidebar */}
-      <aside className={`gp-sidebar ${sidebarAberta ? "open" : ""}`}>
+      <aside
+        className={`gp-sidebar ${sidebarAberta ? "open" : ""}`}
+        style={{ width: sidebarLargura }}
+      >
         <div style={{
-          padding: "18px 18px 16px", borderBottom: `1px solid ${C.border}`,
-          display: "flex", alignItems: "center", gap: 10,
+          padding: sidebarCollapsed ? "18px 12px 16px" : "18px 18px 16px",
+          borderBottom: `1px solid ${C.border}`,
+          display: "flex", alignItems: "center",
+          gap: sidebarCollapsed ? 0 : 10,
+          justifyContent: sidebarCollapsed ? "center" : "flex-start",
         }}>
           <div style={{ fontSize: 24 }}>🏪</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ color: C.white, fontWeight: 800, fontSize: 16, lineHeight: 1.1 }}>GestãoPRO</div>
-            <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>Gestão + PDV</div>
-          </div>
+          {!sidebarCollapsed && (
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ color: C.white, fontWeight: 800, fontSize: 16, lineHeight: 1.1 }}>GestãoPRO</div>
+              <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>Gestão + PDV</div>
+            </div>
+          )}
           <button
             onClick={() => setSidebarAberta(false)}
             className="gp-mobile-bar"
@@ -178,47 +217,64 @@ export default function App() {
           >×</button>
         </div>
 
+        {/* Botao de toggle (so desktop) */}
+        <button
+          onClick={alternarColapso}
+          aria-label={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
+          title={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
+          style={{
+            display: "block", margin: sidebarCollapsed ? "10px auto 0" : "10px 12px 0 auto",
+            background: C.card, border: `1px solid ${C.border}`, color: C.muted,
+            borderRadius: 6, width: 28, height: 28, cursor: "pointer",
+            fontSize: 14, lineHeight: 1, padding: 0,
+            transition: "background 0.15s ease, color 0.15s ease",
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = C.accent + "22"; e.currentTarget.style.color = C.accent; }}
+          onMouseLeave={e => { e.currentTarget.style.background = C.card; e.currentTarget.style.color = C.muted; }}
+          className="gp-toggle-desktop"
+        >{sidebarCollapsed ? "›" : "‹"}</button>
+
         <nav className="gp-nav-section" style={{ padding: "12px 10px" }}>
           {podeAcessar(user, "PDV") && (
-            <NavItem icone="🛒" label="PDV" destaque ativo={tela === "pdv"} onClick={() => navegar("pdv")} />
+            <Item icone="🛒" label="PDV" destaque ativo={tela === "pdv"} onClick={() => navegar("pdv")} />
           )}
           {podeAcessar(user, "DASHBOARD") && (
-            <NavItem icone="📊" label="Dashboard" ativo={tela === "dashboard"} onClick={() => navegar("dashboard")} />
+            <Item icone="📊" label="Dashboard" ativo={tela === "dashboard"} onClick={() => navegar("dashboard")} />
           )}
           {(podeAcessar(user, "CLIENTES") || podeAcessar(user, "FORNECEDORES") || podeAcessar(user, "PRODUTOS")) && (
-            <SecaoLabel>Cadastros</SecaoLabel>
+            <Secao>Cadastros</Secao>
           )}
           {podeAcessar(user, "CLIENTES") && (
-            <NavItem icone="👥" label="Clientes" ativo={tela === "clientes"} onClick={() => navegar("clientes")} />
+            <Item icone="👥" label="Clientes" ativo={tela === "clientes"} onClick={() => navegar("clientes")} />
           )}
           {podeAcessar(user, "FORNECEDORES") && (
-            <NavItem icone="🏭" label="Fornecedores" ativo={tela === "fornecedores"} onClick={() => navegar("fornecedores")} />
+            <Item icone="🏭" label="Fornecedores" ativo={tela === "fornecedores"} onClick={() => navegar("fornecedores")} />
           )}
           {podeAcessar(user, "PRODUTOS") && (
-            <NavItem icone="📦" label="Produtos" ativo={tela === "produtos"} onClick={() => navegar("produtos")} />
+            <Item icone="📦" label="Produtos" ativo={tela === "produtos"} onClick={() => navegar("produtos")} />
           )}
           {(podeAcessar(user, "ESTOQUE") || podeAcessar(user, "COMPRAS") || podeAcessar(user, "FINANCEIRO") || podeAcessar(user, "RELATORIOS")) && (
-            <SecaoLabel>Operação</SecaoLabel>
+            <Secao>Operação</Secao>
           )}
           {podeAcessar(user, "ESTOQUE") && (
-            <NavItem icone="🗃️" label="Estoque" ativo={tela === "estoque"} onClick={() => navegar("estoque")} />
+            <Item icone="🗃️" label="Estoque" ativo={tela === "estoque"} onClick={() => navegar("estoque")} />
           )}
           {podeAcessar(user, "COMPRAS") && (
-            <NavItem icone="🛍️" label="Compras" ativo={tela === "compras"} onClick={() => navegar("compras")} />
+            <Item icone="🛍️" label="Compras" ativo={tela === "compras"} onClick={() => navegar("compras")} />
           )}
           {podeAcessar(user, "FINANCEIRO") && (
-            <NavItem icone="💰" label="Financeiro" ativo={tela === "financeiro"} onClick={() => navegar("financeiro")} />
+            <Item icone="💰" label="Financeiro" ativo={tela === "financeiro"} onClick={() => navegar("financeiro")} />
           )}
           {podeAcessar(user, "RELATORIOS") && (
-            <NavItem icone="📑" label="Relatórios" ativo={tela === "relatorios"} onClick={() => navegar("relatorios")} />
+            <Item icone="📑" label="Relatórios" ativo={tela === "relatorios"} onClick={() => navegar("relatorios")} />
           )}
-          <SecaoLabel>Sistema</SecaoLabel>
+          <Secao>Sistema</Secao>
           {user.role === "ADMIN" && (
-            <NavItem icone="🧑‍💼" label="Funcionários" ativo={tela === "funcionarios"} onClick={() => navegar("funcionarios")} />
+            <Item icone="🧑‍💼" label="Funcionários" ativo={tela === "funcionarios"} onClick={() => navegar("funcionarios")} />
           )}
-          <NavItem icone="📋" label="Projeto" ativo={tela === "projeto"} onClick={() => navegar("projeto")} />
+          <Item icone="📋" label="Projeto" ativo={tela === "projeto"} onClick={() => navegar("projeto")} />
           {user.role === "ADMIN" && (
-            <NavItem icone="🛡" label="Sistema" ativo={tela === "sistema"} onClick={() => navegar("sistema")} />
+            <Item icone="🛡" label="Sistema" ativo={tela === "sistema"} onClick={() => navegar("sistema")} />
           )}
         </nav>
 
@@ -226,11 +282,18 @@ export default function App() {
         <div ref={menuRef} style={{
           borderTop: `1px solid ${C.border}`, padding: 10, position: "relative",
         }}>
-          <button onClick={() => setMenuUsuario(v => !v)} style={{
-            background: C.card, border: `1px solid ${C.border}`, color: C.text,
-            borderRadius: 10, padding: "8px 10px", display: "flex", alignItems: "center",
-            gap: 10, cursor: "pointer", width: "100%",
-          }}>
+          <button
+            onClick={() => setMenuUsuario(v => !v)}
+            title={sidebarCollapsed ? `${user.nome} (${user.role})` : undefined}
+            style={{
+              background: C.card, border: `1px solid ${C.border}`, color: C.text,
+              borderRadius: 10,
+              padding: sidebarCollapsed ? "8px 0" : "8px 10px",
+              display: "flex", alignItems: "center",
+              justifyContent: sidebarCollapsed ? "center" : "flex-start",
+              gap: sidebarCollapsed ? 0 : 10, cursor: "pointer", width: "100%",
+            }}
+          >
             <div style={{
               width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
               background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
@@ -239,14 +302,18 @@ export default function App() {
             }}>
               {(user.nome || "?").charAt(0).toUpperCase()}
             </div>
-            <div style={{ textAlign: "left", flex: 1, minWidth: 0 }}>
-              <div style={{
-                color: C.white, fontSize: 13, fontWeight: 600, lineHeight: 1.1,
-                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-              }}>{user.nome}</div>
-              <div style={{ color: C.muted, fontSize: 11 }}>{user.role}</div>
-            </div>
-            <div style={{ color: C.muted, fontSize: 11 }}>▴</div>
+            {!sidebarCollapsed && (
+              <>
+                <div style={{ textAlign: "left", flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    color: C.white, fontSize: 13, fontWeight: 600, lineHeight: 1.1,
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                  }}>{user.nome}</div>
+                  <div style={{ color: C.muted, fontSize: 11 }}>{user.role}</div>
+                </div>
+                <div style={{ color: C.muted, fontSize: 11 }}>▴</div>
+              </>
+            )}
           </button>
 
           {menuUsuario && (
@@ -283,7 +350,7 @@ export default function App() {
       />
 
       {/* Conteúdo principal */}
-      <main className="gp-content">
+      <main className="gp-content" style={{ marginLeft: sidebarLargura }}>
         {/* Top bar (mobile + alertas) */}
         <div style={{
           background: C.surface, borderBottom: `1px solid ${C.border}`,
@@ -403,7 +470,7 @@ const menuItem = {
   padding: "10px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
 };
 
-function NavItem({ icone, label, ativo, destaque, onClick }) {
+function NavItem({ icone, label, ativo, destaque, collapsed, onClick }) {
   const bg = ativo
     ? (destaque ? `linear-gradient(135deg, ${C.accent}, ${C.purple})` : C.accent + "22")
     : "transparent";
@@ -415,25 +482,34 @@ function NavItem({ icone, label, ativo, destaque, onClick }) {
   return (
     <button
       onClick={onClick}
+      title={collapsed ? label : undefined}
       style={{
-        display: "flex", alignItems: "center", gap: 12, width: "100%",
-        padding: "10px 12px", borderRadius: 8, border: borda,
+        display: "flex", alignItems: "center",
+        gap: collapsed ? 0 : 12,
+        justifyContent: collapsed ? "center" : "flex-start",
+        width: "100%",
+        padding: collapsed ? "10px 0" : "10px 12px",
+        borderRadius: 8, border: borda,
         background: bg, color: corTexto,
         fontWeight: ativo || destaque ? 700 : 500, fontSize: 13,
         cursor: "pointer", marginBottom: 4, textAlign: "left",
         boxShadow: ativo && destaque ? "0 4px 12px rgba(79,142,247,0.25)" : "none",
         transition: "background 0.15s ease",
+        overflow: "hidden", whiteSpace: "nowrap",
       }}
       onMouseEnter={e => { if (!ativo) e.currentTarget.style.background = C.card; }}
       onMouseLeave={e => { if (!ativo) e.currentTarget.style.background = "transparent"; }}
     >
       <span style={{ fontSize: 16, width: 20, textAlign: "center" }}>{icone}</span>
-      <span style={{ flex: 1 }}>{label}</span>
+      {!collapsed && <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>}
     </button>
   );
 }
 
-function SecaoLabel({ children }) {
+function SecaoLabel({ children, collapsed }) {
+  if (collapsed) {
+    return <div style={{ height: 1, background: C.border, margin: "10px 12px 6px" }} />;
+  }
   return (
     <div style={{
       color: C.muted, fontSize: 10, fontWeight: 700,

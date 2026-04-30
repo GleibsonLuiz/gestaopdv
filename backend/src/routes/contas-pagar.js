@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authRequired, requireRole } from "../middlewares/auth.js";
+import { authRequired, requireRole, requirePermissao } from "../middlewares/auth.js";
 import {
   listar, obter, criar, atualizar, pagar, reabrir, cancelar, excluir,
 } from "../controllers/contaPagarController.js";
@@ -7,6 +7,7 @@ import {
 const router = Router();
 
 router.use(authRequired);
+router.use(requirePermissao("FINANCEIRO"));
 
 router.get("/", listar);
 router.get("/:id", obter);

@@ -14,6 +14,7 @@ import Projeto from "./Projeto.jsx";
 import TrocarSenhaModal from "./TrocarSenhaModal.jsx";
 import Alertas from "./Alertas.jsx";
 import { getUser, getToken, clearSession, api } from "./lib/api.js";
+import { podeAcessar } from "./lib/permissoes.js";
 
 const C = {
   bg: "#0f1117", surface: "#1a1d27", card: "#21253a",
@@ -21,12 +22,41 @@ const C = {
   muted: "#64748b", white: "#ffffff", purple: "#7c3aed",
 };
 
+const SIDEBAR_W = 240;
+
+const ESTILO_RESPONSIVO = `
+.gp-sidebar {
+  position: fixed; top: 0; left: 0; height: 100vh; width: ${SIDEBAR_W}px;
+  background: ${C.surface}; border-right: 1px solid ${C.border};
+  display: flex; flex-direction: column; z-index: 60;
+  transition: transform 0.25s ease;
+}
+.gp-content { margin-left: ${SIDEBAR_W}px; min-height: 100vh; }
+.gp-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+  z-index: 55; opacity: 0; pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.gp-mobile-bar { display: none; }
+.gp-nav-section { flex: 1; overflow-y: auto; }
+.gp-nav-section::-webkit-scrollbar { width: 6px; }
+.gp-nav-section::-webkit-scrollbar-thumb { background: ${C.border}; border-radius: 3px; }
+@media (max-width: 900px) {
+  .gp-sidebar { transform: translateX(-100%); box-shadow: 8px 0 30px rgba(0,0,0,0.5); }
+  .gp-sidebar.open { transform: translateX(0); }
+  .gp-content { margin-left: 0; }
+  .gp-overlay.open { opacity: 1; pointer-events: auto; }
+  .gp-mobile-bar { display: flex; }
+}
+`;
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [tela, setTela] = useState("pdv");
   const [menuUsuario, setMenuUsuario] = useState(false);
   const [trocarSenhaAberto, setTrocarSenhaAberto] = useState(false);
+  const [sidebarAberta, setSidebarAberta] = useState(false);
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -38,6 +68,12 @@ export default function App() {
     document.addEventListener("mousedown", onClickFora);
     return () => document.removeEventListener("mousedown", onClickFora);
   }, [menuUsuario]);
+
+  useEffect(() => {
+    function onKey(e) { if (e.key === "Escape") setSidebarAberta(false); }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   useEffect(() => {
     let ativo = true;
@@ -70,6 +106,36 @@ export default function App() {
     setUser(null);
   }
 
+  function navegar(t) {
+    setTela(t);
+    setSidebarAberta(false);
+  }
+
+  // Mapeia cada tela do app para o modulo de permissao correspondente.
+  // "projeto" e ferramenta interna, fica liberada.
+  const TELA_MODULO = {
+    pdv: "PDV", dashboard: "DASHBOARD", clientes: "CLIENTES",
+    fornecedores: "FORNECEDORES", produtos: "PRODUTOS", estoque: "ESTOQUE",
+    compras: "COMPRAS", financeiro: "FINANCEIRO", relatorios: "RELATORIOS",
+    funcionarios: "FUNCIONARIOS",
+  };
+
+  function podeVer(t) {
+    if (t === "projeto") return true;
+    return podeAcessar(user, TELA_MODULO[t]);
+  }
+
+  // Se o usuario abriu uma tela sem permissao (ex: cache), redireciona para a primeira disponivel.
+  useEffect(() => {
+    if (!user) return;
+    if (!podeVer(tela)) {
+      const primeira = ["pdv","dashboard","clientes","fornecedores","produtos",
+        "estoque","compras","financeiro","relatorios","funcionarios","projeto"].find(podeVer);
+      if (primeira && primeira !== tela) setTela(primeira);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, tela]);
+
   if (carregando) {
     return (
       <div style={{
@@ -86,157 +152,225 @@ export default function App() {
 
   return (
     <div style={{ background: C.bg, minHeight: "100vh", fontFamily: "'Segoe UI', sans-serif", color: C.text }}>
-      {/* Header */}
-      <div style={{
-        background: C.surface, borderBottom: `1px solid ${C.border}`,
-        padding: "14px 24px", display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontSize: 22 }}>🏪</div>
-          <div>
-            <div style={{ color: C.white, fontWeight: 800, fontSize: 16 }}>GestãoPRO</div>
-            <div style={{ color: C.muted, fontSize: 11 }}>Sistema de Gestão + PDV</div>
+      <style>{ESTILO_RESPONSIVO}</style>
+
+      {/* Sidebar */}
+      <aside className={`gp-sidebar ${sidebarAberta ? "open" : ""}`}>
+        <div style={{
+          padding: "18px 18px 16px", borderBottom: `1px solid ${C.border}`,
+          display: "flex", alignItems: "center", gap: 10,
+        }}>
+          <div style={{ fontSize: 24 }}>🏪</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ color: C.white, fontWeight: 800, fontSize: 16, lineHeight: 1.1 }}>GestãoPRO</div>
+            <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>Gestão + PDV</div>
           </div>
+          <button
+            onClick={() => setSidebarAberta(false)}
+            className="gp-mobile-bar"
+            aria-label="Fechar menu"
+            style={{
+              background: "transparent", border: "none", color: C.muted,
+              fontSize: 22, cursor: "pointer", padding: 4, lineHeight: 1,
+            }}
+          >×</button>
         </div>
 
-        <nav style={{ display: "flex", gap: 6, marginLeft: 12, flexWrap: "wrap" }}>
-          <NavBtn ativo={tela === "pdv"} destaque onClick={() => setTela("pdv")}>🛒 PDV</NavBtn>
-          <NavBtn ativo={tela === "dashboard"} onClick={() => setTela("dashboard")}>📊 Dashboard</NavBtn>
-          <NavBtn ativo={tela === "clientes"} onClick={() => setTela("clientes")}>👥 Clientes</NavBtn>
-          <NavBtn ativo={tela === "fornecedores"} onClick={() => setTela("fornecedores")}>🏭 Fornecedores</NavBtn>
-          <NavBtn ativo={tela === "produtos"} onClick={() => setTela("produtos")}>📦 Produtos</NavBtn>
-          <NavBtn ativo={tela === "estoque"} onClick={() => setTela("estoque")}>🗃️ Estoque</NavBtn>
-          <NavBtn ativo={tela === "compras"} onClick={() => setTela("compras")}>🛍️ Compras</NavBtn>
-          <NavBtn ativo={tela === "financeiro"} onClick={() => setTela("financeiro")}>💰 Financeiro</NavBtn>
-          <NavBtn ativo={tela === "relatorios"} onClick={() => setTela("relatorios")}>📑 Relatórios</NavBtn>
-          {user.role === "ADMIN" && (
-            <NavBtn ativo={tela === "funcionarios"} onClick={() => setTela("funcionarios")}>🧑‍💼 Funcionários</NavBtn>
+        <nav className="gp-nav-section" style={{ padding: "12px 10px" }}>
+          {podeAcessar(user, "PDV") && (
+            <NavItem icone="🛒" label="PDV" destaque ativo={tela === "pdv"} onClick={() => navegar("pdv")} />
           )}
-          <NavBtn ativo={tela === "projeto"} onClick={() => setTela("projeto")}>📋 Projeto</NavBtn>
+          {podeAcessar(user, "DASHBOARD") && (
+            <NavItem icone="📊" label="Dashboard" ativo={tela === "dashboard"} onClick={() => navegar("dashboard")} />
+          )}
+          {(podeAcessar(user, "CLIENTES") || podeAcessar(user, "FORNECEDORES") || podeAcessar(user, "PRODUTOS")) && (
+            <SecaoLabel>Cadastros</SecaoLabel>
+          )}
+          {podeAcessar(user, "CLIENTES") && (
+            <NavItem icone="👥" label="Clientes" ativo={tela === "clientes"} onClick={() => navegar("clientes")} />
+          )}
+          {podeAcessar(user, "FORNECEDORES") && (
+            <NavItem icone="🏭" label="Fornecedores" ativo={tela === "fornecedores"} onClick={() => navegar("fornecedores")} />
+          )}
+          {podeAcessar(user, "PRODUTOS") && (
+            <NavItem icone="📦" label="Produtos" ativo={tela === "produtos"} onClick={() => navegar("produtos")} />
+          )}
+          {(podeAcessar(user, "ESTOQUE") || podeAcessar(user, "COMPRAS") || podeAcessar(user, "FINANCEIRO") || podeAcessar(user, "RELATORIOS")) && (
+            <SecaoLabel>Operação</SecaoLabel>
+          )}
+          {podeAcessar(user, "ESTOQUE") && (
+            <NavItem icone="🗃️" label="Estoque" ativo={tela === "estoque"} onClick={() => navegar("estoque")} />
+          )}
+          {podeAcessar(user, "COMPRAS") && (
+            <NavItem icone="🛍️" label="Compras" ativo={tela === "compras"} onClick={() => navegar("compras")} />
+          )}
+          {podeAcessar(user, "FINANCEIRO") && (
+            <NavItem icone="💰" label="Financeiro" ativo={tela === "financeiro"} onClick={() => navegar("financeiro")} />
+          )}
+          {podeAcessar(user, "RELATORIOS") && (
+            <NavItem icone="📑" label="Relatórios" ativo={tela === "relatorios"} onClick={() => navegar("relatorios")} />
+          )}
+          <SecaoLabel>Sistema</SecaoLabel>
+          {user.role === "ADMIN" && (
+            <NavItem icone="🧑‍💼" label="Funcionários" ativo={tela === "funcionarios"} onClick={() => navegar("funcionarios")} />
+          )}
+          <NavItem icone="📋" label="Projeto" ativo={tela === "projeto"} onClick={() => navegar("projeto")} />
         </nav>
 
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-          <Alertas onNavegar={setTela} />
-          <div ref={menuRef} style={{ position: "relative" }}>
+        {/* Card de usuário no rodapé */}
+        <div ref={menuRef} style={{
+          borderTop: `1px solid ${C.border}`, padding: 10, position: "relative",
+        }}>
           <button onClick={() => setMenuUsuario(v => !v)} style={{
             background: C.card, border: `1px solid ${C.border}`, color: C.text,
-            borderRadius: 10, padding: "6px 12px", display: "flex", alignItems: "center", gap: 8,
-            cursor: "pointer",
+            borderRadius: 10, padding: "8px 10px", display: "flex", alignItems: "center",
+            gap: 10, cursor: "pointer", width: "100%",
           }}>
             <div style={{
-              width: 30, height: 30, borderRadius: "50%",
+              width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
               background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
               color: C.white, display: "flex", alignItems: "center", justifyContent: "center",
               fontSize: 13, fontWeight: 800,
             }}>
               {(user.nome || "?").charAt(0).toUpperCase()}
             </div>
-            <div style={{ textAlign: "left" }}>
-              <div style={{ color: C.white, fontSize: 13, fontWeight: 600, lineHeight: 1.1 }}>{user.nome}</div>
+            <div style={{ textAlign: "left", flex: 1, minWidth: 0 }}>
+              <div style={{
+                color: C.white, fontSize: 13, fontWeight: 600, lineHeight: 1.1,
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              }}>{user.nome}</div>
               <div style={{ color: C.muted, fontSize: 11 }}>{user.role}</div>
             </div>
-            <div style={{ color: C.muted, fontSize: 11, marginLeft: 4 }}>▾</div>
+            <div style={{ color: C.muted, fontSize: 11 }}>▴</div>
           </button>
 
           {menuUsuario && (
             <div style={{
-              position: "absolute", top: "calc(100% + 6px)", right: 0,
+              position: "absolute", bottom: "calc(100% + 4px)", left: 10, right: 10,
               background: C.card, border: `1px solid ${C.border}`, borderRadius: 10,
-              minWidth: 200, boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
-              zIndex: 50, overflow: "hidden",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.4)", zIndex: 70, overflow: "hidden",
             }}>
               <div style={{
                 padding: "10px 14px", borderBottom: `1px solid ${C.border}`,
                 color: C.muted, fontSize: 11,
               }}>
                 Logado como
-                <div style={{ color: C.text, fontSize: 12, marginTop: 2, fontWeight: 600 }}>
-                  {user.email || user.nome}
-                </div>
+                <div style={{
+                  color: C.text, fontSize: 12, marginTop: 2, fontWeight: 600,
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                }}>{user.email || user.nome}</div>
               </div>
               <button onClick={() => { setMenuUsuario(false); setTrocarSenhaAberto(true); }} style={menuItem}>
                 🔐 Trocar senha
               </button>
-              <button onClick={() => { setMenuUsuario(false); sair(); }} style={{
-                ...menuItem, color: "#ef4444",
-              }}>
-                ↩ Sair
+              <button onClick={() => { setMenuUsuario(false); sair(); }} style={{ ...menuItem, color: C.text }}>
+                <span style={{ color: "#ef4444" }}>↩ Sair</span>
               </button>
             </div>
           )}
-          </div>
         </div>
-      </div>
+      </aside>
 
-      {/* Conteúdo */}
-      <div style={{ padding: "24px" }}>
-        {tela === "pdv" && (
-          <>
-            <PageHeader titulo="Ponto de Venda" subtitulo="Registro de vendas com baixa automática de estoque" />
-            <PDV user={user} />
-          </>
-        )}
-        {tela === "dashboard" && (
-          <>
-            <PageHeader titulo="Dashboard" subtitulo="Visão geral do negócio — vendas, estoque e financeiro" />
-            <Dashboard user={user} />
-          </>
-        )}
-        {tela === "clientes" && (
-          <>
-            <PageHeader titulo="Clientes" subtitulo="Cadastro e gerenciamento de clientes" />
-            <Clientes user={user} />
-          </>
-        )}
-        {tela === "fornecedores" && (
-          <>
-            <PageHeader titulo="Fornecedores" subtitulo="Cadastro e gerenciamento de fornecedores" />
-            <Fornecedores user={user} />
-          </>
-        )}
-        {tela === "produtos" && (
-          <>
-            <PageHeader titulo="Produtos" subtitulo="Cadastro de produtos com preço, estoque e categorização" />
-            <Produtos user={user} />
-          </>
-        )}
-        {tela === "estoque" && (
-          <>
-            <PageHeader titulo="Controle de Estoque" subtitulo="Histórico e movimentações (entrada, saída, ajuste)" />
-            <Estoque user={user} />
-          </>
-        )}
-        {tela === "compras" && (
-          <>
-            <PageHeader titulo="Compras" subtitulo="Registro de compras (gera entrada de estoque automaticamente)" />
-            <Compras user={user} />
-          </>
-        )}
-        {tela === "financeiro" && (
-          <>
-            <PageHeader titulo="Financeiro" subtitulo="Contas a pagar e a receber — fluxo de caixa do negócio" />
-            <Financeiro user={user} />
-          </>
-        )}
-        {tela === "relatorios" && (
-          <>
-            <PageHeader titulo="Relatórios" subtitulo="Relatórios analíticos com exportação em PDF" />
-            <Relatorios user={user} />
-          </>
-        )}
-        {tela === "funcionarios" && user.role === "ADMIN" && (
-          <>
-            <PageHeader titulo="Funcionários" subtitulo="Cadastro de funcionários e controle de acesso (Admin/Gerente/Vendedor)" />
-            <Funcionarios user={user} />
-          </>
-        )}
-        {tela === "projeto" && (
-          <>
-            <PageHeader titulo="Rastreador do Projeto" subtitulo="Acompanhe o progresso das etapas" />
-            <Projeto />
-          </>
-        )}
-      </div>
+      {/* Overlay clicável (mobile) */}
+      <div
+        className={`gp-overlay ${sidebarAberta ? "open" : ""}`}
+        onClick={() => setSidebarAberta(false)}
+      />
+
+      {/* Conteúdo principal */}
+      <main className="gp-content">
+        {/* Top bar (mobile + alertas) */}
+        <div style={{
+          background: C.surface, borderBottom: `1px solid ${C.border}`,
+          padding: "10px 18px", display: "flex", alignItems: "center", gap: 12,
+          position: "sticky", top: 0, zIndex: 40,
+        }}>
+          <button
+            className="gp-mobile-bar"
+            onClick={() => setSidebarAberta(true)}
+            aria-label="Abrir menu"
+            style={{
+              background: C.card, border: `1px solid ${C.border}`, color: C.text,
+              borderRadius: 8, padding: "6px 10px", fontSize: 18, cursor: "pointer", lineHeight: 1,
+            }}
+          >☰</button>
+          <div style={{ flex: 1, color: C.muted, fontSize: 12 }}>
+            <span className="gp-mobile-bar" style={{ color: C.white, fontWeight: 700, fontSize: 14 }}>
+              GestãoPRO
+            </span>
+          </div>
+          <Alertas onNavegar={navegar} />
+        </div>
+
+        <div style={{ padding: "24px" }}>
+          {tela === "pdv" && (
+            <>
+              <PageHeader titulo="Ponto de Venda" subtitulo="Registro de vendas com baixa automática de estoque" />
+              <PDV user={user} />
+            </>
+          )}
+          {tela === "dashboard" && (
+            <>
+              <PageHeader titulo="Dashboard" subtitulo="Visão geral do negócio — vendas, estoque e financeiro" />
+              <Dashboard user={user} />
+            </>
+          )}
+          {tela === "clientes" && (
+            <>
+              <PageHeader titulo="Clientes" subtitulo="Cadastro e gerenciamento de clientes" />
+              <Clientes user={user} />
+            </>
+          )}
+          {tela === "fornecedores" && (
+            <>
+              <PageHeader titulo="Fornecedores" subtitulo="Cadastro e gerenciamento de fornecedores" />
+              <Fornecedores user={user} />
+            </>
+          )}
+          {tela === "produtos" && (
+            <>
+              <PageHeader titulo="Produtos" subtitulo="Cadastro de produtos com preço, estoque e categorização" />
+              <Produtos user={user} />
+            </>
+          )}
+          {tela === "estoque" && (
+            <>
+              <PageHeader titulo="Controle de Estoque" subtitulo="Histórico e movimentações (entrada, saída, ajuste)" />
+              <Estoque user={user} />
+            </>
+          )}
+          {tela === "compras" && (
+            <>
+              <PageHeader titulo="Compras" subtitulo="Registro de compras (gera entrada de estoque automaticamente)" />
+              <Compras user={user} />
+            </>
+          )}
+          {tela === "financeiro" && (
+            <>
+              <PageHeader titulo="Financeiro" subtitulo="Contas a pagar e a receber — fluxo de caixa do negócio" />
+              <Financeiro user={user} />
+            </>
+          )}
+          {tela === "relatorios" && (
+            <>
+              <PageHeader titulo="Relatórios" subtitulo="Relatórios analíticos com exportação em PDF" />
+              <Relatorios user={user} />
+            </>
+          )}
+          {tela === "funcionarios" && user.role === "ADMIN" && (
+            <>
+              <PageHeader titulo="Funcionários" subtitulo="Cadastro de funcionários e controle de acesso (Admin/Gerente/Vendedor)" />
+              <Funcionarios user={user} />
+            </>
+          )}
+          {tela === "projeto" && (
+            <>
+              <PageHeader titulo="Rastreador do Projeto" subtitulo="Acompanhe o progresso das etapas" />
+              <Projeto />
+            </>
+          )}
+        </div>
+      </main>
 
       {trocarSenhaAberto && (
         <TrocarSenhaModal onFechar={() => setTrocarSenhaAberto(false)} />
@@ -251,19 +385,45 @@ const menuItem = {
   padding: "10px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
 };
 
-function NavBtn({ ativo, destaque, onClick, children }) {
+function NavItem({ icone, label, ativo, destaque, onClick }) {
   const bg = ativo
-    ? (destaque ? `linear-gradient(135deg, ${C.accent}, ${C.purple})` : C.accent)
-    : (destaque ? C.surface : "transparent");
+    ? (destaque ? `linear-gradient(135deg, ${C.accent}, ${C.purple})` : C.accent + "22")
+    : "transparent";
+  const borda = !ativo && destaque ? `1px solid ${C.accent}55` : "none";
+  const corTexto = ativo
+    ? C.white
+    : (destaque ? C.accent : C.text);
+
   return (
-    <button onClick={onClick} style={{
-      padding: "8px 16px", borderRadius: 8, border: destaque && !ativo ? `1px solid ${C.accent}55` : "none",
-      cursor: "pointer", fontWeight: destaque ? 800 : 600, fontSize: 13,
-      background: bg,
-      color: ativo ? C.white : (destaque ? C.accent : C.muted),
+    <button
+      onClick={onClick}
+      style={{
+        display: "flex", alignItems: "center", gap: 12, width: "100%",
+        padding: "10px 12px", borderRadius: 8, border: borda,
+        background: bg, color: corTexto,
+        fontWeight: ativo || destaque ? 700 : 500, fontSize: 13,
+        cursor: "pointer", marginBottom: 4, textAlign: "left",
+        boxShadow: ativo && destaque ? "0 4px 12px rgba(79,142,247,0.25)" : "none",
+        transition: "background 0.15s ease",
+      }}
+      onMouseEnter={e => { if (!ativo) e.currentTarget.style.background = C.card; }}
+      onMouseLeave={e => { if (!ativo) e.currentTarget.style.background = "transparent"; }}
+    >
+      <span style={{ fontSize: 16, width: 20, textAlign: "center" }}>{icone}</span>
+      <span style={{ flex: 1 }}>{label}</span>
+    </button>
+  );
+}
+
+function SecaoLabel({ children }) {
+  return (
+    <div style={{
+      color: C.muted, fontSize: 10, fontWeight: 700,
+      textTransform: "uppercase", letterSpacing: 1,
+      padding: "12px 12px 6px",
     }}>
       {children}
-    </button>
+    </div>
   );
 }
 

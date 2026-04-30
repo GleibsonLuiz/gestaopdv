@@ -6,9 +6,9 @@ Arquivo de continuidade entre sessões. Sempre atualizar ao final de cada sessã
 
 ## Stack do projeto
 
-- **Frontend:** React 19 + Vite (sem Tailwind, estilos inline com paleta dark fixa)
+- **Frontend:** React 19 + Vite (sem Tailwind, estilos inline com paleta dark fixa). Layout com **sidebar fixa à esquerda** (240px, responsiva ≤900px com hamburger + overlay).
 - **Backend:** Node + Express + Prisma + PostgreSQL (Neon)
-- **Auth:** JWT, bcrypt, roles `ADMIN | GERENTE | VENDEDOR`
+- **Auth:** JWT, bcrypt, roles `ADMIN | GERENTE | VENDEDOR` + **permissões por módulo** (`User.permissoes String[]`) com middleware `requirePermissao(modulo)` em todas as rotas críticas.
 - **Login:** `admin@gestaopro.local` / `admin123`
 
 ## Estrutura de pastas
@@ -17,27 +17,32 @@ Arquivo de continuidade entre sessões. Sempre atualizar ao final de cada sessã
 d:/gestao-pdv/
 ├── backend/
 │   ├── prisma/
-│   │   ├── schema.prisma   ← modelos: User, Cliente, Fornecedor, Categoria,
-│   │   │                     Produto, Venda/ItemVenda, Compra/ItemCompra,
+│   │   ├── schema.prisma   ← modelos: User (com permissoes String[]),
+│   │   │                     Cliente, Fornecedor, Categoria, Produto,
+│   │   │                     Venda/ItemVenda, Compra/ItemCompra,
 │   │   │                     MovimentacaoEstoque, ContaPagar, ContaReceber
-│   │   └── seed.js         ← seed idempotente, 20 registros por módulo
+│   │   ├── migrations/     ← incl. 20260430114015_add_user_permissoes
+│   │   └── seed.js         ← seed idempotente, 20 registros por módulo,
+│   │                         popula User.permissoes via permissoesPadrao(role)
 │   └── src/
 │       ├── controllers/    ← auth, cliente, fornecedor, categoria, produto,
-│       │                     estoque, compra
-│       ├── routes/         ← rotas de cada controller
-│       ├── middlewares/    ← authRequired, requireRole
-│       ├── lib/prisma.js
+│       │                     estoque, compra, venda, dashboard, alertas,
+│       │                     contaPagar, contaReceber, funcionario, relatorios
+│       ├── routes/         ← rotas de cada controller (com requirePermissao)
+│       ├── middlewares/    ← authRequired, requireRole, requirePermissao,
+│       │                     rateLimitLogin
+│       ├── lib/prisma.js · lib/permissoes.js
 │       └── server.js       ← Express na porta 3333
 └── src/  (frontend)
-    ├── App.jsx             ← navegação e header
-    ├── Login.jsx
-    ├── Clientes.jsx
-    ├── Fornecedores.jsx
-    ├── Produtos.jsx
-    ├── Estoque.jsx + MovimentarEstoqueModal.jsx
-    ├── Compras.jsx
+    ├── App.jsx             ← sidebar fixa + roteamento de telas
+    ├── Login.jsx · TrocarSenhaModal.jsx
+    ├── Dashboard.jsx · PDV.jsx · Relatorios.jsx · Financeiro.jsx
+    ├── Clientes.jsx · Fornecedores.jsx · Produtos.jsx
+    ├── Estoque.jsx + MovimentarEstoqueModal.jsx · Compras.jsx
+    ├── Funcionarios.jsx    ← inclui modal com seção de Permissões (10 switches)
+    ├── Alertas.jsx         ← sino + drawer com polling 60s
     ├── Projeto.jsx         ← rastreador interno de etapas
-    └── lib/api.js          ← cliente HTTP
+    └── lib/api.js · lib/permissoes.js  ← MODULOS, podeAcessar, permissoesPadrao
 ```
 
 ---
@@ -55,7 +60,7 @@ d:/gestao-pdv/
 | 7 | Controle de Estoque | ✅ Concluído | ENTRADA/SAIDA/AJUSTE com histórico |
 | 8 | Cadastro de Funcionários | ✅ Concluído | CRUD sobre `User`, role-aware, com proteções |
 | 9 | Compras | ✅ Concluído (ver lacuna abaixo) | Transacional, gera ENTRADA automática |
-| 10 | PDV — Ponto de Venda | ⏳ Pendente | Núcleo do sistema, próxima etapa sugerida |
+| 10 | PDV — Ponto de Venda | ✅ Concluído | Tela de venda com carrinho, busca de produtos, baixa automática de estoque |
 | 11 | Financeiro | ✅ Concluído | ContaPagar/ContaReceber: CRUD + pagar/receber/reabrir/cancelar + KPIs |
 | 12 | Notificações e Alertas | ✅ Concluído | Sino no header + drawer com alertas (estoque + contas), polling 60s |
 | 13 | Relatórios + Exportação PDF | ✅ Concluído | 4 relatórios (vendas/compras/financeiro/estoque) com export PDF (jsPDF + autotable) |
@@ -71,18 +76,22 @@ Não existe rota/UI para **cancelar/excluir** uma compra. Hoje, se uma compra é
 ### Backend
 - Cada feature: `controller` + `route` + registro em `server.js`
 - Rota global usa `authRequired`; mutações usam `requireRole("ADMIN","GERENTE")`; DELETE usa `requireRole("ADMIN")`
+- **Permissões por módulo:** rotas de módulos finais (estoque, compras, contas-pagar, contas-receber, dashboard, relatorios, vendas, funcionarios) têm `router.use(requirePermissao("MODULO"))`. Cadastros (clientes, fornecedores, produtos, categorias) deixam GET livre (consumo cruzado) e protegem apenas as mutações
+- Quando criar nova feature, decidir: é um **módulo final** (router.use bloqueia tudo) ou um **cadastro consultado por outros** (GET livre, mutação protegida)?
 - Mensagens de erro em português **sem acentos** (ex: `"Codigo e obrigatorio"`)
 - Tratar códigos Prisma: `P2002` → 409 (conflito), `P2003` → 400 (FK), `P2025` → 404
 - Operações que mexem em estoque devem usar `prisma.$transaction`
 
 ### Frontend
-- Página em `src/<Nome>.jsx`, registrada em `App.jsx` como `<NavBtn>`
+- Página em `src/<Nome>.jsx`, registrada em `App.jsx` como `<NavItem>` na sidebar
+- Layout: **sidebar fixa à esquerda (240px)** com agrupamento por seção (Cadastros / Operação / Sistema). Em ≤900px, sidebar vira off-canvas com botão `☰` e overlay clicável (Esc também fecha)
 - Estilos inline com paleta `C` fixa:
   - `bg #0f1117` · `surface #1a1d27` · `card #21253a` · `border #2e3354`
   - `accent #4f8ef7` · `purple #7c3aed` · `green #22c55e` · `red #ef4444`
   - `yellow #f59e0b` · `text #e2e8f0` · `muted #64748b` · `white #ffffff`
 - Botões primários: gradient `accent → purple`
-- Permissões respeitadas no botão (`podeCriar = role === "ADMIN" || "GERENTE"`)
+- Permissões: ao adicionar nova tela, envolver o `NavItem` em `{podeAcessar(user, "MODULO") && <NavItem ... />}` e mapear a tela em `TELA_MODULO` no App.jsx (o `useEffect` redireciona se o usuário perde acesso à tela atual)
+- Botões CRUD ainda respeitam role (`podeCriar = role === "ADMIN" || "GERENTE"`)
 
 ### Dados de teste (seed)
 - **20 registros por módulo**, tema **papelaria**, sempre incluir financeiro
@@ -97,21 +106,75 @@ Não existe rota/UI para **cancelar/excluir** uma compra. Hoje, se uma compra é
 
 | Tabela | Total |
 |--------|-------|
-| users | 20 (1 ADMIN, 5 GERENTES, 14 VENDEDORES) |
+| users | 22 (1 ADMIN, 5 GERENTES, 16 VENDEDORES — 2 inativos vindos de testes manuais) |
 | categorias | 9 |
-| fornecedores | 24 |
+| fornecedores | 25 |
 | clientes | 23 |
 | produtos | 23 |
 | compras | 21 |
-| movimentacoes_estoque | 42 |
-| contas_pagar | 20 (6 atrasadas, 8 pendentes, 6 pagas) |
+| movimentacoes_estoque | 59 |
+| contas_pagar | 22 (PENDENTE 2, ATRASADA 0, PAGA 12, CANCELADA 8) |
 | contas_receber | 20 (4 atrasadas, 10 pendentes, 6 recebidas) |
 
 > Os totais acima de 20 vêm de testes manuais via `requests.http` antes do seed.
 
+**Coluna `users.permissoes`** (text[]) populada pelo seed:
+- ADMIN → todos os 10 módulos
+- GERENTE → 9 (todos exceto FUNCIONARIOS)
+- VENDEDOR → 3 (PDV, CLIENTES, PRODUTOS)
+
 ---
 
 ## Histórico de sessões
+
+### Sessão — 2026-04-30 (Sidebar + Sistema de permissões por módulo)
+
+**1. Sidebar fixa à esquerda** (`src/App.jsx`)
+
+Substitui a navegação superior por sidebar de 240px com agrupamento por seção (Cadastros / Operação / Sistema), card de usuário no rodapé com dropdown que abre para cima, e responsividade via `<style>` injetada com media query `@media (max-width: 900px)`:
+- Sidebar usa `transform: translateX(-100%)` por padrão em mobile e `.open` aplica `translateX(0)`
+- Botão `☰` na top bar abre; clique no overlay ou tecla `Esc` fecham
+- Conteúdo principal ganha `margin-left: 240px` em desktop e `0` em mobile
+- Estilos inline mantidos (paleta `C`), sem Tailwind
+
+**2. Sistema de permissões por módulo** (commits `61c6a75` e `1aed49a`)
+
+Banco:
+- Migração `20260430114015_add_user_permissoes` adiciona `User.permissoes String[] @default([])`
+- Seed atualizado para popular permissões padrão por role
+
+Source-of-truth:
+- `src/lib/permissoes.js` e `backend/src/lib/permissoes.js` — listas de 10 módulos (PDV, DASHBOARD, CLIENTES, FORNECEDORES, PRODUTOS, ESTOQUE, COMPRAS, FINANCEIRO, RELATORIOS, FUNCIONARIOS), com `podeAcessar`/`temPermissao`, `permissoesPadrao(role)` e `sanitizarPermissoes` (back). FUNCIONARIOS sempre restrito a ADMIN
+
+Backend:
+- Novo middleware `requirePermissao(modulo)` em `middlewares/auth.js` busca permissões frescas do banco a cada request (mudanças refletem sem relogin)
+- `funcionarioController.criar/atualizar` aceita `permissoes: string[]`, sanitiza e força array completo quando role = ADMIN
+- `/auth/login` e `/auth/me` retornam `permissoes` no body
+- Rotas: módulos finais (estoque, compras, contas-pagar, contas-receber, dashboard, relatorios, vendas, funcionarios) usam `router.use(requirePermissao(MODULO))`. Cadastros (clientes, fornecedores, produtos, categorias) deixam GET livre e protegem só mutações (PDV/Compras precisam consultar produtos/clientes/fornecedores)
+- Vazamento corrigido: `GET /funcionarios` antes respondia 200 para qualquer usuário autenticado, agora bloqueado pelo middleware
+
+Frontend (`src/Funcionarios.jsx`):
+- Modal de funcionário ganha seção "🔐 Permissões de Acesso" com 10 cards-switch (toggle visual com bolinha animada + paleta `C`)
+- Presets: "Padrão vendedor/gerente", "Marcar tudo", "Limpar"
+- Bloqueado visualmente quando role = ADMIN ("tem acesso a tudo automaticamente")
+- Card FUNCIONARIOS sempre `disabled` para non-ADMIN
+
+Frontend (`src/App.jsx`):
+- Cada `NavItem` da sidebar é renderizado condicionalmente via `podeAcessar(user, "MODULO")`
+- `useEffect` redireciona o usuário para a primeira tela disponível se ele estiver numa que perdeu acesso
+- Helper `TELA_MODULO` mapeia cada tela do app ao módulo de permissão
+
+**Validado via API (julia.costa@gestaopro.local — perms `[PDV, CLIENTES, PRODUTOS]`):**
+```
+GET  /vendas, /clientes, /produtos, /categorias, /fornecedores  → 200
+GET  /estoque, /compras, /contas-pagar, /contas-receber,
+     /dashboard, /relatorios, /funcionarios                     → 403
+POST /clientes (tem CLIENTES)                                   → 201
+POST /fornecedores (nao tem)                                    → 403
+ADMIN em todos                                                  → 200
+PUT /funcionarios/:id permissoes=["XPTO"] → sanitiza para [] (modulos invalidos descartados)
+PUT /funcionarios/:id role=ADMIN → permissoes viram lista completa (10 modulos)
+```
 
 ### Sessão — 2026-04-30 (Etapa 13 — Relatórios + Exportação PDF) — **PROJETO COMPLETO**
 
@@ -367,21 +430,23 @@ GET /funcionarios → 20 registros
 
 ## Onde paramos
 
-**🎉 Projeto completo — 13 de 13 etapas implementadas.**
+**🎉 Projeto completo — 13 de 13 etapas implementadas + sidebar moderna + sistema de permissões por módulo (defesa em profundidade).**
 
-Todas as etapas planejadas foram entregues. O sistema cobre cadastros (clientes, fornecedores, produtos, funcionários), operação (PDV, estoque, compras), financeiro (contas a pagar/receber), análise (dashboard, relatórios com export PDF) e infra-cross-cutting (autenticação com roles, troca de senha, rate limit, alertas).
+Todas as etapas planejadas foram entregues. O sistema cobre cadastros (clientes, fornecedores, produtos, funcionários), operação (PDV, estoque, compras), financeiro (contas a pagar/receber), análise (dashboard, relatórios com export PDF) e infra-cross-cutting (autenticação com roles, troca de senha, rate limit, alertas, **permissões por módulo com bloqueio real no backend**, sidebar responsiva).
 
 ### Lacunas conhecidas (polimento opcional)
 
 - **Etapa 9 (Compras):** sem rota/UI para cancelar uma compra. Hoje o estorno é manual via SAIDA no Estoque.
   - Sugestão: `DELETE /compras/:id` com estorno transacional (cria SAIDA com motivo `"CANCELAMENTO COMPRA #N"`).
 - **Etapa 13 (Relatórios):** sem filtro por cliente no relatório de vendas (campo aceito no backend, mas não exposto no UI).
+- **Permissões:** quando um vendedor sem `DASHBOARD` é redirecionado pelo `useEffect`, há um flicker breve (mostra a tela errada por ~1 frame). Fix opcional: usar `podeVer(tela)` direto na renderização para evitar render inicial.
 
 ### Próxima decisão (a ser tomada)
 
 - **(a)** Fechar lacuna de cancelamento de compra (~30 linhas backend + botão no frontend).
 - **(b)** Polir UX (loading skeletons, melhor mobile, atalhos teclado no PDV).
-- **(c)** Encerrar o projeto.
+- **(c)** Atalhos visuais para o admin enxergar de relance "que módulos cada funcionário tem" — ex: chip-cluster pequeno na linha da tabela.
+- **(d)** Encerrar o projeto.
 
 ### Como retomar
 

@@ -1,11 +1,7 @@
 import { useState } from "react";
+import { C } from "./lib/theme.js";
 import { api, setSession } from "./lib/api.js";
 
-const C = {
-  bg: "#0f1117", surface: "#1a1d27", card: "#21253a",
-  border: "#2e3354", accent: "#4f8ef7", text: "#e2e8f0",
-  muted: "#64748b", white: "#ffffff", red: "#ef4444", purple: "#7c3aed",
-};
 
 export default function Login({ onSuccess }) {
   const [email, setEmail] = useState("");

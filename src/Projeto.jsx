@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { C } from "./lib/theme.js";
 
 const ETAPAS = [
   { id: 1, titulo: "Estrutura Base + Banco de Dados", descricao: "Criar estrutura de pastas, configurar PostgreSQL com Prisma", icone: "🏗️" },
@@ -44,12 +45,6 @@ const STATUS = {
   concluido: { label: "Concluído", color: "#22c55e", bg: "#22c55e22" },
 };
 
-const C = {
-  bg: "#0f1117", surface: "#1a1d27", card: "#21253a",
-  border: "#2e3354", accent: "#4f8ef7", text: "#e2e8f0",
-  muted: "#64748b", white: "#ffffff", green: "#22c55e",
-  yellow: "#f59e0b", purple: "#7c3aed",
-};
 
 function gerarPrompt(etapas, notas) {
   const atual = etapas.find(e => e.status === "em_andamento") || etapas.find(e => e.status === "testando");

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { api } from "./lib/api.js";
+import { MODULOS, permissoesPadrao, IDS_MODULOS } from "./lib/permissoes.js";
 
 const C = {
   bg: "#0f1117", surface: "#1a1d27", card: "#21253a",
@@ -214,10 +215,31 @@ function FuncionarioModal({ funcionario, usuarioLogadoId, onCancelar, onSalvar }
   const [senha, setSenha] = useState("");
   const [role, setRole] = useState(funcionario?.role || "VENDEDOR");
   const [ativo, setAtivo] = useState(funcionario?.ativo ?? true);
+  const [permissoes, setPermissoes] = useState(() => {
+    if (funcionario?.permissoes && Array.isArray(funcionario.permissoes)) {
+      return new Set(funcionario.permissoes);
+    }
+    return new Set(permissoesPadrao(funcionario?.role || "VENDEDOR"));
+  });
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
 
   const ehVoce = funcionario?.id === usuarioLogadoId;
+  const ehAdminEscolhido = role === "ADMIN";
+
+  function alternarPermissao(id) {
+    setPermissoes(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function aplicarPreset(preset) {
+    if (preset === "todos") setPermissoes(new Set(IDS_MODULOS));
+    else if (preset === "nenhum") setPermissoes(new Set());
+    else setPermissoes(new Set(permissoesPadrao(role)));
+  }
 
   async function salvar(e) {
     e.preventDefault();
@@ -235,6 +257,7 @@ function FuncionarioModal({ funcionario, usuarioLogadoId, onCancelar, onSalvar }
         email: email.trim().toLowerCase(),
         role,
         ativo,
+        permissoes: ehAdminEscolhido ? IDS_MODULOS : Array.from(permissoes),
       };
       if (senha) payload.senha = senha;
 
@@ -305,6 +328,14 @@ function FuncionarioModal({ funcionario, usuarioLogadoId, onCancelar, onSalvar }
               )}
             </Campo>
           </div>
+
+          <PermissoesSecao
+            permissoes={permissoes}
+            ehAdmin={ehAdminEscolhido}
+            onToggle={alternarPermissao}
+            onPreset={aplicarPreset}
+            role={role}
+          />
         </div>
 
         {erro && (
@@ -333,6 +364,101 @@ function Campo({ label, children }) {
     </div>
   );
 }
+
+function PermissoesSecao({ permissoes, ehAdmin, onToggle, onPreset, role }) {
+  const total = MODULOS.length;
+  const marcadas = ehAdmin ? total : permissoes.size;
+
+  return (
+    <div style={{
+      marginTop: 6, padding: 14, borderRadius: 10,
+      background: C.surface, border: `1px solid ${C.border}`,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
+        <div>
+          <div style={{ color: C.white, fontSize: 13, fontWeight: 700 }}>
+            🔐 Permissões de Acesso
+          </div>
+          <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>
+            {ehAdmin
+              ? "Admin tem acesso a todos os módulos automaticamente."
+              : `${marcadas} de ${total} módulos liberados.`}
+          </div>
+        </div>
+        {!ehAdmin && (
+          <div style={{ display: "flex", gap: 6 }}>
+            <button type="button" onClick={() => onPreset("padrao")} style={btnPreset}>
+              Padrão {role === "GERENTE" ? "gerente" : "vendedor"}
+            </button>
+            <button type="button" onClick={() => onPreset("todos")} style={btnPreset}>
+              Marcar tudo
+            </button>
+            <button type="button" onClick={() => onPreset("nenhum")} style={btnPreset}>
+              Limpar
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div style={{
+        display: "grid", gap: 8,
+        gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+        opacity: ehAdmin ? 0.55 : 1,
+        pointerEvents: ehAdmin ? "none" : "auto",
+      }}>
+        {MODULOS.map(m => {
+          const ativa = ehAdmin || permissoes.has(m.id);
+          const bloqueada = m.id === "FUNCIONARIOS" && !ehAdmin;
+          return (
+            <button
+              type="button"
+              key={m.id}
+              onClick={() => !bloqueada && onToggle(m.id)}
+              disabled={bloqueada}
+              title={bloqueada ? "Funcionários é restrito a Admin" : ""}
+              style={{
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "8px 10px", borderRadius: 8, cursor: bloqueada ? "not-allowed" : "pointer",
+                background: ativa ? C.accent + "1a" : C.card,
+                border: `1px solid ${ativa ? C.accent + "66" : C.border}`,
+                color: bloqueada ? C.muted : (ativa ? C.white : C.text),
+                fontSize: 12, fontWeight: 600, textAlign: "left",
+                transition: "background 0.15s ease, border-color 0.15s ease",
+                opacity: bloqueada ? 0.5 : 1,
+              }}
+            >
+              <SwitchVisual ativa={ativa} />
+              <span style={{ fontSize: 14 }}>{m.icone}</span>
+              <span style={{ flex: 1 }}>{m.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SwitchVisual({ ativa }) {
+  return (
+    <span style={{
+      width: 30, height: 16, borderRadius: 999, position: "relative",
+      background: ativa ? C.accent : C.border,
+      transition: "background 0.15s ease", flexShrink: 0,
+    }}>
+      <span style={{
+        position: "absolute", top: 2, left: ativa ? 16 : 2,
+        width: 12, height: 12, borderRadius: "50%",
+        background: C.white, transition: "left 0.15s ease",
+      }} />
+    </span>
+  );
+}
+
+const btnPreset = {
+  background: C.card, border: `1px solid ${C.border}`, color: C.muted,
+  borderRadius: 6, padding: "5px 10px", fontSize: 11, fontWeight: 600,
+  cursor: "pointer",
+};
 
 const inputStyle = {
   width: "100%", background: C.surface, border: `1px solid ${C.border}`,

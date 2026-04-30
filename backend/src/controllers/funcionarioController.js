@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import prisma from "../lib/prisma.js";
+import { sanitizarPermissoes, permissoesPadrao, IDS_MODULOS } from "../lib/permissoes.js";
 
 const ROLES_VALIDAS = new Set(["ADMIN", "GERENTE", "VENDEDOR"]);
 
@@ -9,6 +10,7 @@ const SELECT_PUBLICO = {
   email: true,
   role: true,
   ativo: true,
+  permissoes: true,
   createdAt: true,
   updatedAt: true,
 };
@@ -67,6 +69,17 @@ export async function criar(req, res, next) {
 
     const senhaHash = await bcrypt.hash(senha, 10);
 
+    // ADMIN sempre recebe todos os modulos. Para outros, usa o que veio no body
+    // ou cai no padrao por role.
+    let permissoes;
+    if (role === "ADMIN") {
+      permissoes = [...IDS_MODULOS];
+    } else if (Array.isArray(req.body.permissoes)) {
+      permissoes = sanitizarPermissoes(req.body.permissoes);
+    } else {
+      permissoes = permissoesPadrao(role);
+    }
+
     const funcionario = await prisma.user.create({
       data: {
         nome,
@@ -74,6 +87,7 @@ export async function criar(req, res, next) {
         senha: senhaHash,
         role,
         ativo: req.body.ativo === undefined ? true : !!req.body.ativo,
+        permissoes,
       },
       select: SELECT_PUBLICO,
     });
@@ -123,6 +137,13 @@ export async function atualizar(req, res, next) {
       const senha = String(req.body.senha);
       if (senha.length < 6) return res.status(400).json({ erro: "Senha deve ter ao menos 6 caracteres" });
       data.senha = await bcrypt.hash(senha, 10);
+    }
+    if (req.body.permissoes !== undefined) {
+      data.permissoes = sanitizarPermissoes(req.body.permissoes);
+    }
+    // Se virou ADMIN, recebe todas as permissoes (defesa contra "trancar fora").
+    if (data.role === "ADMIN") {
+      data.permissoes = [...IDS_MODULOS];
     }
 
     // Se mudou role para nao-ADMIN ou desativou, garantir que ainda existe outro ADMIN ativo

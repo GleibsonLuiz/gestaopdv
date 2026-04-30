@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { permissoesPadrao, IDS_MODULOS } from "../src/lib/permissoes.js";
 
 const prisma = new PrismaClient();
 
@@ -9,12 +10,13 @@ async function seedAdmin() {
   const senhaHash = await bcrypt.hash("admin123", 10);
   return prisma.user.upsert({
     where: { email: "admin@gestaopro.local" },
-    update: { nome: "ADMINISTRADOR" },
+    update: { nome: "ADMINISTRADOR", permissoes: IDS_MODULOS },
     create: {
       nome: "ADMINISTRADOR",
       email: "admin@gestaopro.local",
       senha: senhaHash,
       role: "ADMIN",
+      permissoes: IDS_MODULOS,
     },
   });
 }
@@ -50,17 +52,20 @@ async function seedFuncionarios() {
 
   const result = [];
   for (const f of FUNCIONARIOS) {
+    const permissoes = permissoesPadrao(f.role);
     const funcionario = await prisma.user.upsert({
       where: { email: f.email },
       update: {
         nome: f.nome,
         role: f.role,
+        permissoes,
       },
       create: {
         nome: f.nome,
         email: f.email,
         senha: senhaHash,
         role: f.role,
+        permissoes,
       },
     });
     result.push(funcionario);

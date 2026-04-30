@@ -27,7 +27,10 @@ export async function login(req, res, next) {
 
     res.json({
       token,
-      user: { id: user.id, nome: user.nome, email: user.email, role: user.role },
+      user: {
+        id: user.id, nome: user.nome, email: user.email,
+        role: user.role, permissoes: user.permissoes,
+      },
     });
   } catch (err) {
     next(err);
@@ -38,7 +41,7 @@ export async function me(req, res, next) {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user.sub },
-      select: { id: true, nome: true, email: true, role: true, ativo: true },
+      select: { id: true, nome: true, email: true, role: true, ativo: true, permissoes: true },
     });
     if (!user) return res.status(404).json({ erro: "Usuario nao encontrado" });
     res.json(user);

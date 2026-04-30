@@ -298,4 +298,7 @@ export const api = {
   },
   excluirAnexoContaReceber: (id, anexoId) =>
     request(`/contas-receber/${id}/anexos/${anexoId}`, { method: "DELETE" }),
+
+  resetarSistema: (confirmacao) =>
+    request("/admin/reset", { method: "POST", body: { confirmacao } }),
 };

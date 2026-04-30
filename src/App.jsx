@@ -11,6 +11,7 @@ import PDV from "./PDV.jsx";
 import Dashboard from "./Dashboard.jsx";
 import Relatorios from "./Relatorios.jsx";
 import Projeto from "./Projeto.jsx";
+import Sistema from "./Sistema.jsx";
 import TrocarSenhaModal from "./TrocarSenhaModal.jsx";
 import Alertas from "./Alertas.jsx";
 import { getUser, getToken, clearSession, api } from "./lib/api.js";
@@ -122,6 +123,7 @@ export default function App() {
 
   function podeVer(t) {
     if (t === "projeto") return true;
+    if (t === "sistema") return user?.role === "ADMIN";
     return podeAcessar(user, TELA_MODULO[t]);
   }
 
@@ -130,7 +132,7 @@ export default function App() {
     if (!user) return;
     if (!podeVer(tela)) {
       const primeira = ["pdv","dashboard","clientes","fornecedores","produtos",
-        "estoque","compras","financeiro","relatorios","funcionarios","projeto"].find(podeVer);
+        "estoque","compras","financeiro","relatorios","funcionarios","projeto","sistema"].find(podeVer);
       if (primeira && primeira !== tela) setTela(primeira);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -215,6 +217,9 @@ export default function App() {
             <NavItem icone="🧑‍💼" label="Funcionários" ativo={tela === "funcionarios"} onClick={() => navegar("funcionarios")} />
           )}
           <NavItem icone="📋" label="Projeto" ativo={tela === "projeto"} onClick={() => navegar("projeto")} />
+          {user.role === "ADMIN" && (
+            <NavItem icone="🛡" label="Sistema" ativo={tela === "sistema"} onClick={() => navegar("sistema")} />
+          )}
         </nav>
 
         {/* Card de usuário no rodapé */}
@@ -367,6 +372,19 @@ export default function App() {
             <>
               <PageHeader titulo="Rastreador do Projeto" subtitulo="Acompanhe o progresso das etapas" />
               <Projeto />
+            </>
+          )}
+          {tela === "sistema" && user.role === "ADMIN" && (
+            <>
+              <PageHeader titulo="Sistema" subtitulo="Operações administrativas e zona de perigo" />
+              <Sistema
+                user={user}
+                onResetar={(resumo) => {
+                  const total = Object.values(resumo?.removidos || {}).reduce((a, b) => a + b, 0);
+                  alert(`✓ Sistema resetado com sucesso.\n\n${total} registros removidos em ${Object.keys(resumo?.removidos || {}).length} tabelas.\n\nRedirecionando para o Dashboard...`);
+                  navegar(podeAcessar(user, "DASHBOARD") ? "dashboard" : "pdv");
+                }}
+              />
             </>
           )}
         </div>

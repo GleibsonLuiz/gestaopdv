@@ -1,4 +1,4 @@
-const BASE_URL = "http://localhost:3333";
+export const BASE_URL = "http://localhost:3333";
 
 const TOKEN_KEY = "gestao_token";
 const USER_KEY = "gestao_user";
@@ -65,6 +65,34 @@ async function request(path, { method = "GET", body, auth = true } = {}) {
     throw err;
   }
 
+  return data;
+}
+
+// Upload multipart (anexos). Nao seta Content-Type — o browser monta o
+// boundary correto automaticamente quando recebe FormData.
+async function uploadForm(path, formData) {
+  const headers = {};
+  const token = getToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  let res;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, { method: "POST", headers, body: formData });
+  } catch {
+    throw new Error("Não foi possível conectar ao servidor.");
+  }
+  if (res.status === 401) {
+    clearSession();
+    window.dispatchEvent(new Event("auth:logout"));
+  }
+  let data = null;
+  const text = await res.text();
+  if (text) { try { data = JSON.parse(text); } catch { data = { erro: text }; } }
+  if (!res.ok) {
+    const err = new Error((data && (data.erro || data.message)) || `Erro ${res.status}`);
+    err.status = res.status; err.data = data;
+    throw err;
+  }
   return data;
 }
 

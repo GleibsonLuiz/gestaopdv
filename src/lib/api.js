@@ -248,10 +248,22 @@ export const api = {
   obterContaPagar: (id) => request(`/contas-pagar/${id}`),
   criarContaPagar: (data) => request("/contas-pagar", { method: "POST", body: data }),
   atualizarContaPagar: (id, data) => request(`/contas-pagar/${id}`, { method: "PUT", body: data }),
-  pagarConta: (id, pagamento) => request(`/contas-pagar/${id}/pagar`, { method: "POST", body: { pagamento } }),
+  pagarConta: (id, body) => {
+    const payload = typeof body === "string" || body instanceof Date
+      ? { pagamento: body }
+      : (body || {});
+    return request(`/contas-pagar/${id}/pagar`, { method: "POST", body: payload });
+  },
   reabrirContaPagar: (id) => request(`/contas-pagar/${id}/reabrir`, { method: "POST" }),
   cancelarContaPagar: (id) => request(`/contas-pagar/${id}/cancelar`, { method: "POST" }),
   excluirContaPagar: (id) => request(`/contas-pagar/${id}`, { method: "DELETE" }),
+  anexarContaPagar: (id, file) => {
+    const fd = new FormData();
+    fd.append("arquivo", file);
+    return uploadForm(`/contas-pagar/${id}/anexos`, fd);
+  },
+  excluirAnexoContaPagar: (id, anexoId) =>
+    request(`/contas-pagar/${id}/anexos/${anexoId}`, { method: "DELETE" }),
 
   listarContasReceber: ({ search = "", status = "", clienteId = "", dataInicio = "", dataFim = "", vencidas = "" } = {}) => {
     const qs = new URLSearchParams();
@@ -267,8 +279,20 @@ export const api = {
   obterContaReceber: (id) => request(`/contas-receber/${id}`),
   criarContaReceber: (data) => request("/contas-receber", { method: "POST", body: data }),
   atualizarContaReceber: (id, data) => request(`/contas-receber/${id}`, { method: "PUT", body: data }),
-  receberConta: (id, recebimento) => request(`/contas-receber/${id}/receber`, { method: "POST", body: { recebimento } }),
+  receberConta: (id, body) => {
+    const payload = typeof body === "string" || body instanceof Date
+      ? { recebimento: body }
+      : (body || {});
+    return request(`/contas-receber/${id}/receber`, { method: "POST", body: payload });
+  },
   reabrirContaReceber: (id) => request(`/contas-receber/${id}/reabrir`, { method: "POST" }),
   cancelarContaReceber: (id) => request(`/contas-receber/${id}/cancelar`, { method: "POST" }),
   excluirContaReceber: (id) => request(`/contas-receber/${id}`, { method: "DELETE" }),
+  anexarContaReceber: (id, file) => {
+    const fd = new FormData();
+    fd.append("arquivo", file);
+    return uploadForm(`/contas-receber/${id}/anexos`, fd);
+  },
+  excluirAnexoContaReceber: (id, anexoId) =>
+    request(`/contas-receber/${id}/anexos/${anexoId}`, { method: "DELETE" }),
 };

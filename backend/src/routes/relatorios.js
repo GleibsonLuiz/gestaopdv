@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authRequired } from "../middlewares/auth.js";
+import { authRequired, requirePermissao } from "../middlewares/auth.js";
 import {
   relatorioVendas,
   relatorioCompras,
@@ -10,6 +10,7 @@ import {
 const router = Router();
 
 router.use(authRequired);
+router.use(requirePermissao("RELATORIOS"));
 
 router.get("/vendas", relatorioVendas);
 router.get("/compras", relatorioCompras);

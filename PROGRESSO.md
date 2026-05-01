@@ -20,29 +20,35 @@ d:/gestao-pdv/
 │   │   ├── schema.prisma   ← modelos: User (com permissoes String[]),
 │   │   │                     Cliente, Fornecedor, Categoria, Produto,
 │   │   │                     Venda/ItemVenda, Compra/ItemCompra,
-│   │   │                     MovimentacaoEstoque, ContaPagar, ContaReceber
+│   │   │                     MovimentacaoEstoque, ContaPagar, ContaReceber,
+│   │   │                     Anexo (do financeiro)
 │   │   ├── migrations/     ← incl. 20260430114015_add_user_permissoes
 │   │   └── seed.js         ← seed idempotente, 20 registros por módulo,
 │   │                         popula User.permissoes via permissoesPadrao(role)
+│   ├── uploads/            ← anexos do financeiro (PDF/JPG/PNG até 5 MB)
 │   └── src/
 │       ├── controllers/    ← auth, cliente, fornecedor, categoria, produto,
 │       │                     estoque, compra, venda, dashboard, alertas,
-│       │                     contaPagar, contaReceber, funcionario, relatorios
+│       │                     contaPagar, contaReceber, funcionario, relatorios,
+│       │                     admin (reset total)
 │       ├── routes/         ← rotas de cada controller (com requirePermissao)
 │       ├── middlewares/    ← authRequired, requireRole, requirePermissao,
 │       │                     rateLimitLogin
 │       ├── lib/prisma.js · lib/permissoes.js
 │       └── server.js       ← Express na porta 3333
 └── src/  (frontend)
-    ├── App.jsx             ← sidebar fixa + roteamento de telas
-    ├── Login.jsx · TrocarSenhaModal.jsx
+    ├── App.jsx             ← sidebar retrátil (72↔240px) + temas + roteamento
+    ├── Login.jsx · TrocarSenhaModal.jsx · AparenciaModal.jsx
     ├── Dashboard.jsx · PDV.jsx · Relatorios.jsx · Financeiro.jsx
     ├── Clientes.jsx · Fornecedores.jsx · Produtos.jsx
     ├── Estoque.jsx + MovimentarEstoqueModal.jsx · Compras.jsx
     ├── Funcionarios.jsx    ← inclui modal com seção de Permissões (10 switches)
     ├── Alertas.jsx         ← sino + drawer com polling 60s
-    ├── Projeto.jsx         ← rastreador interno de etapas
-    └── lib/api.js · lib/permissoes.js  ← MODULOS, podeAcessar, permissoesPadrao
+    ├── Sistema.jsx         ← zona de perigo: Reset Total (apenas ADMIN)
+    ├── Projeto.jsx         ← rastreador de etapas + aba Extras (9 melhorias)
+    └── lib/api.js · lib/permissoes.js · lib/theme.js
+                            ← MODULOS, podeAcessar, permissoesPadrao,
+                              TEMAS (4 paletas), C, aplicarTema, salvarTema
 ```
 
 ---
@@ -126,6 +132,75 @@ Não existe rota/UI para **cancelar/excluir** uma compra. Hoje, se uma compra é
 ---
 
 ## Histórico de sessões
+
+### Sessão — 2026-04-30 (Onda pós-MVP: hard-delete + Sistema + sidebar retrátil + temas + aba Extras)
+
+Cinco commits em sequência transformando o MVP num produto polido. Ordem cronológica abaixo.
+
+**1. Hard-delete em cadastros** (commit `b9a009e`)
+
+Antes só havia "Inativar" (que o backend tratava como soft-delete `ativo=false`). Agora há duas operações distintas em fornecedor/cliente/produto:
+- `DELETE /:id` mantém soft-delete (ativo=false)
+- `DELETE /:id?permanente=true` → `prisma.delete()` real
+- `P2003` (FK) → 409 com mensagem amigável: orienta a inativar quando há vínculos
+- `api.js`: novos `excluirPermanenteFornecedor/Cliente/Produto`
+- UI: botão "Inativar" passa a ser amarelo; novo "Excluir" vermelho sólido ao lado, com `window.confirm`
+
+**2. Tela administrativa Sistema com Reset Total** (commit `580ebcb`)
+
+Nova área exclusiva para ADMIN — operação destrutiva de limpeza de dados operacionais.
+- `backend/src/controllers/adminController.js` + `routes/admin.js` — `POST /admin/reset` com `authRequired` + `requireRole("ADMIN")` + validação da palavra-chave `"CONFIRMAR_RESET"` no body (defesa em profundidade)
+- Limpeza em `prisma.$transaction` respeitando ordem reversa de FKs: itensVenda → vendas → itensCompra → compras → movimentações → anexos → contas → produtos → categorias → fornecedores → clientes
+- Apaga arquivos físicos em `backend/uploads/` após a transação (best-effort)
+- **Preserva users e suas permissões**
+- `src/Sistema.jsx`: zona de perigo com cards do que é apagado vs preservado; modal exige digitar exatamente `CONFIRMAR_RESET` para habilitar o botão (texto fica vermelho conforme digita certo)
+- Validado: sem token → 401; vendedor → 403; admin sem palavra → 400; admin com palavra errada → 400. Reset real não executado para preservar o banco de dev.
+
+**3. Mini sidebar retrátil** (commit `2b63a55`)
+
+Sidebar agora alterna entre **240px (expandida)** e **72px (recolhida)** com `transition: 0.25s ease` em `width` e `margin-left`.
+- Estado `sidebarCollapsed` hidratado de `localStorage` (chave `gestao_sidebar_collapsed`); `alternarColapso()` persiste
+- TODO claro para sync futura via `PUT /auth/preferencias` (endpoint ainda inexistente)
+- Botão chevron (`>`/`<`) só aparece desktop; mobile mantém comportamento off-canvas com hamburger
+- NavItem em modo collapsed: gap=0, esconde label, `title=label` vira tooltip
+- SecaoLabel em modo collapsed: vira separador horizontal sutil
+- Card de usuário no rodapé: só avatar quando recolhido
+
+**4. Sistema de temas via CSS variables** (commit `bef5aec`)
+
+Implementa seleção de tema sem reescrever a UI. A chave foi `C` já existir como interface estável — trocando o valor das vars CSS, todos os 17 componentes que usam `style={{ background: C.bg }}` se atualizam automaticamente.
+- `src/lib/theme.js`: `TEMAS` com 4 paletas (Azul Padrão, Esmeralda, Roxo, Alto Contraste); `C` exportado aponta para `var(--bg)`, `var(--accent)` etc.; `aplicarTema(id)` escreve no `document.documentElement.style`; `lerTemaSalvo`/`salvarTema` em `localStorage` (chave `gestao_tema`); `inicializarTema()` chamado no `main.jsx` antes do render para evitar flash
+- `src/index.css`: `:root` com `--bg`, `--surface`, `--card`, `--border`, `--accent`, `--purple`, `--green`, `--red`, `--yellow`, `--text`, `--muted`, `--white` + `transition 0.3s ease` global em background/border/color
+- `src/AparenciaModal.jsx`: grid de cards com preview da paleta de cada tema (5 bolinhas + bloco card + barra accent→purple pintados com as cores do PRÓPRIO tema). Card ativo ganha borda accent + badge "ATIVO"
+- Migração automática (script Node) de 17 arquivos JSX: removida definição local `const C = { ... }` e substituída por `import { C } from "./lib/theme.js"`
+- `App.jsx`: entrada "Aparência" no dropdown do usuário
+- Mesma TODO de sync com `/auth/preferencias`
+
+**5. Aba Extras no Projeto.jsx** (commit `5e02fb2`)
+
+A tela Projeto só mostrava as 13 etapas originais. Agora documenta também as melhorias incrementais entregues após o MVP.
+- Novo array `EXTRAS` com 9 itens (categorizados como "Recurso novo" ou "Aprofundamento"): Permissões por Módulo, Sidebar Retrátil, Sistema de Temas, Reset Total, Financeiro Avançado (juros/multa/desconto/recorrência/anexos), Hard-delete em cadastros, PDV (atalhos/troco/cupom), Clientes (máscaras/ViaCEP), Auth Robusta
+- Header do Progresso Geral ganha pill roxa "+9 melhorias entregues"
+- Nova aba "✨ Extras (9)" com banner roxo, cards verde-suaves com badge "Concluído" + 4 detalhes técnicos por item
+- `gerarPrompt()` corrigido: stack era "React + TailwindCSS" mas o projeto usa estilos inline com paleta C via CSS Variables. Agora reflete a realidade. Adicionada seção de melhorias entregues após o MVP e convenções (P2002/P2003/P2025, transações, `import C from lib/theme`, mensagens sem acentos)
+
+### Sessão — 2026-04-30 (Polimento UX: Clientes + PDV)
+
+Dois commits cobrindo melhorias de qualidade de vida em formulários e operação de venda.
+
+**1. Clientes — máscaras + ViaCEP + validação** (commit `6d12669`)
+
+- Máscaras de **telefone**, **CPF/CNPJ** e **CEP** no formulário de cliente
+- Integração com **ViaCEP**: ao digitar CEP completo, auto-preenche endereço/cidade/UF
+- Validação client-side antes de submit
+- Campo **número** separado do logradouro (compatível com endereços brasileiros)
+
+**2. PDV — atalhos + troco + modal pagamento + cupom** (commit `ba753d4`)
+
+- **Atalhos de teclado** para operação rápida no caixa
+- **Cálculo de troco em tempo real** conforme o operador digita o valor recebido
+- **Modal de pagamento** dedicado (substitui submit direto)
+- **Impressão de cupom** após fechamento da venda
 
 ### Sessão — 2026-04-30 (Financeiro UI: juros/multa/desconto + recorrência + anexos)
 
@@ -461,9 +536,11 @@ GET /funcionarios → 20 registros
 
 ## Onde paramos
 
-**🎉 Projeto completo — 13 de 13 etapas implementadas + sidebar moderna + sistema de permissões por módulo (defesa em profundidade).**
+**🎉 Projeto completo — 13 de 13 etapas + 9 melhorias pós-MVP entregues.**
 
-Todas as etapas planejadas foram entregues. O sistema cobre cadastros (clientes, fornecedores, produtos, funcionários), operação (PDV, estoque, compras), financeiro (contas a pagar/receber), análise (dashboard, relatórios com export PDF) e infra-cross-cutting (autenticação com roles, troca de senha, rate limit, alertas, **permissões por módulo com bloqueio real no backend**, sidebar responsiva).
+Todas as etapas planejadas foram entregues e, em 2026-04-30, o produto recebeu uma onda de polimento que adicionou: hard-delete em cadastros, tela administrativa **Sistema** com Reset Total, **mini sidebar retrátil** (72↔240px com persistência), **sistema de temas** (4 paletas via CSS vars + modal Aparência), **PDV com atalhos/troco/cupom**, **Clientes com máscaras + ViaCEP**, **financeiro avançado** (juros/multa/desconto/recorrência/anexos), **permissões por módulo com bloqueio no backend** e a aba **Extras** documentando tudo dentro do próprio app.
+
+Estado em 2026-05-01: **trabalho em pausa** — última sessão produtiva foi 2026-04-30 noite (commits `b9a009e` → `5e02fb2`). Working tree limpo, branch `main` sincronizada com `origin/main`.
 
 ### Lacunas conhecidas (polimento opcional)
 
@@ -473,13 +550,17 @@ Todas as etapas planejadas foram entregues. O sistema cobre cadastros (clientes,
 - **Permissões:** quando um vendedor sem `DASHBOARD` é redirecionado pelo `useEffect`, há um flicker breve (mostra a tela errada por ~1 frame). Fix opcional: usar `podeVer(tela)` direto na renderização para evitar render inicial.
 - **Anexos do Financeiro:** ao deletar uma conta (com `prisma.contaPagar.delete`), o cascade do DB remove o registro `Anexo` mas o arquivo físico em `backend/uploads/` fica órfão. Adicionar limpeza do disco antes do delete da conta.
 - **Recorrência:** alterar uma conta-mãe (1/N) não propaga para as filhas. Não há UI para "editar série" nem "cancelar todas as parcelas restantes" — cada parcela é tratada individualmente após a criação.
+- **Preferências de UI no servidor:** tema (`gestao_tema`) e estado da sidebar (`gestao_sidebar_collapsed`) vivem em `localStorage`. Os commits têm TODO explícito para sync via `PUT /auth/preferencias` — endpoint ainda **não existe**. Consequência: ao trocar de máquina/navegador, o usuário perde o tema e a sidebar volta expandida.
+- **Auditoria do Reset Total:** `POST /admin/reset` apaga arquivos físicos de `backend/uploads/` em best-effort, sem log estruturado de "quem executou, quando, quantos registros". Fácil de adicionar (um `console.log` ou tabela `AuditLog`).
 
 ### Próxima decisão (a ser tomada)
 
 - **(a)** Fechar lacuna de cancelamento de compra (~30 linhas backend + botão no frontend).
-- **(b)** Polir UX (loading skeletons, melhor mobile, atalhos teclado no PDV).
-- **(c)** Atalhos visuais para o admin enxergar de relance "que módulos cada funcionário tem" — ex: chip-cluster pequeno na linha da tabela.
-- **(d)** Encerrar o projeto.
+- **(b)** Implementar `PUT /auth/preferencias` (campo `User.preferencias Json?`) e migrar tema/sidebar do `localStorage` para a conta — destrava sync entre dispositivos.
+- **(c)** Filtro por cliente no relatório de vendas (UI já tem o select de clientes em outras telas; reaproveitar).
+- **(d)** Auditoria do Reset Total (log estruturado de execuções).
+- **(e)** Atalhos visuais para o admin enxergar de relance "que módulos cada funcionário tem" — ex: chip-cluster pequeno na linha da tabela.
+- **(f)** Encerrar o projeto.
 
 ### Como retomar
 

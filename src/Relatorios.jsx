@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { C } from "./lib/theme.js";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { api } from "./lib/api.js";
+import { api, BASE_URL } from "./lib/api.js";
+import { useConfiguracaoEmpresa, formatarEndereco, obterConfiguracaoCache } from "./HeaderRelatorio.jsx";
 
 
 const fmtBRL = (v) => {
@@ -95,9 +96,9 @@ function RelatorioVendas() {
     finally { setCarregando(false); }
   }, [dataInicio, dataFim, formaPagamento, userId]);
 
-  function exportar() {
+  async function exportar() {
     if (!dados) return;
-    const doc = criarPDF("Relatório de Vendas");
+    const doc = await criarPDF("Relatório de Vendas");
     addPeriodo(doc, dataInicio, dataFim);
 
     let y = doc.lastAutoTable?.finalY || 50;
@@ -266,9 +267,9 @@ function RelatorioCompras() {
     finally { setCarregando(false); }
   }, [dataInicio, dataFim, fornecedorId]);
 
-  function exportar() {
+  async function exportar() {
     if (!dados) return;
-    const doc = criarPDF("Relatório de Compras");
+    const doc = await criarPDF("Relatório de Compras");
     addPeriodo(doc, dataInicio, dataFim);
 
     autoTable(doc, {
@@ -385,9 +386,9 @@ function RelatorioFinanceiro() {
     finally { setCarregando(false); }
   }, [dataInicio, dataFim, tipo]);
 
-  function exportar() {
+  async function exportar() {
     if (!dados) return;
-    const doc = criarPDF("Relatório Financeiro");
+    const doc = await criarPDF("Relatório Financeiro");
     addPeriodo(doc, dataInicio, dataFim);
 
     autoTable(doc, {
@@ -551,9 +552,9 @@ function RelatorioEstoque() {
     finally { setCarregando(false); }
   }, [categoriaId, fornecedorId, situacao]);
 
-  function exportar() {
+  async function exportar() {
     if (!dados) return;
-    const doc = criarPDF("Relatório de Estoque");
+    const doc = await criarPDF("Relatório de Estoque");
     addLinha(doc, `Gerado em ${fmtDataHora(dados.geradoEm)}`);
 
     autoTable(doc, {
@@ -659,9 +660,9 @@ function RelatorioCaixas() {
     finally { setCarregando(false); }
   }, [dataInicio, dataFim]);
 
-  function exportar() {
+  async function exportar() {
     if (!dados) return;
-    const doc = criarPDF("Relatório de Caixas — DRE Diário");
+    const doc = await criarPDF("Relatório de Caixas — DRE Diário");
     addPeriodo(doc, dataInicio, dataFim);
     addLinha(doc, `Gerado em ${fmtDataHora(dados.geradoEm)}`);
 
@@ -926,21 +927,88 @@ const inputStyle = {
 };
 
 // ============ helpers PDF ============
+//
+// criarPDF agora e async — carrega a config da empresa do cache e desenha
+// um header completo (logo + razao social + CNPJ + endereco + contato).
+// Se a config nao foi carregada ainda, cai no header simples "GestãoPRO".
 
-function criarPDF(titulo) {
+async function criarPDF(titulo) {
   const doc = new jsPDF({ orientation: "p", unit: "mm", format: "a4" });
-  doc.setFontSize(16);
-  doc.setFont("helvetica", "bold");
-  doc.text("GestãoPRO", 14, 16);
+  const empresa = await obterConfiguracaoCache();
+
+  let yCursor = 16;
+  let xTexto = 14;
+
+  // Logo (quando ha — carrega via fetch + dataURL pra jsPDF.addImage).
+  if (empresa?.logotipo) {
+    try {
+      const dataUrl = await carregarImagemDataUrl(`${BASE_URL}${empresa.logotipo}`);
+      const ext = (empresa.logotipo.split(".").pop() || "png").toLowerCase();
+      const formato = ext === "jpg" || ext === "jpeg" ? "JPEG" : "PNG";
+      doc.addImage(dataUrl, formato, 14, 10, 22, 22);
+      xTexto = 40;
+    } catch {
+      // logo falhou — segue sem
+    }
+  }
+
+  if (empresa) {
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text(empresa.nomeFantasia || empresa.razaoSocial, xTexto, yCursor);
+
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 100, 100);
+    let yLinhas = yCursor + 5;
+    if (empresa.razaoSocial && empresa.razaoSocial !== empresa.nomeFantasia) {
+      doc.text(empresa.razaoSocial, xTexto, yLinhas); yLinhas += 4;
+    }
+    const linhaContato = [
+      empresa.cnpj && `CNPJ ${empresa.cnpj}`,
+      empresa.telefone && `Tel ${empresa.telefone}`,
+      empresa.email,
+    ].filter(Boolean).join(" · ");
+    if (linhaContato) { doc.text(linhaContato, xTexto, yLinhas); yLinhas += 4; }
+    const endereco = formatarEndereco(empresa);
+    if (endereco) { doc.text(endereco, xTexto, yLinhas); yLinhas += 4; }
+    doc.setTextColor(0, 0, 0);
+    yCursor = Math.max(yLinhas, 34);
+  } else {
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.text("GestãoPRO", 14, 16);
+    yCursor = 26;
+  }
+
+  // Linha separadora
+  doc.setDrawColor(200, 200, 200);
+  doc.line(14, yCursor, 196, yCursor);
+  yCursor += 6;
+
   doc.setFontSize(13);
+  doc.setFont("helvetica", "bold");
+  doc.text(titulo, 14, yCursor);
+  yCursor += 5;
+  doc.setFontSize(8);
   doc.setFont("helvetica", "normal");
-  doc.text(titulo, 14, 24);
-  doc.setFontSize(9);
   doc.setTextColor(120, 120, 120);
-  doc.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, 14, 30);
+  doc.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, 14, yCursor);
   doc.setTextColor(0, 0, 0);
-  doc.lastAutoTable = { finalY: 34 };
+  doc.lastAutoTable = { finalY: yCursor + 2 };
   return doc;
+}
+
+async function carregarImagemDataUrl(url) {
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error("imagem nao acessivel");
+  const blob = await resp.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 }
 
 function addPeriodo(doc, di, df) {

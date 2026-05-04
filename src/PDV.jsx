@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { C } from "./lib/theme.js";
 import { api, BASE_URL } from "./lib/api.js";
+import { useConfiguracaoEmpresa, formatarEndereco } from "./HeaderRelatorio.jsx";
+import { urlLogotipo } from "./Configuracoes.jsx";
 
 function urlImagem(imagem) {
   if (!imagem) return null;
@@ -980,6 +982,9 @@ const btnQtd = {
 function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar }) {
   const subtotalCupom = Number(venda.total) + Number(venda.desconto || 0);
   const mostrarRecebidoTroco = Number(valorRecebido) > 0;
+  const empresa = useConfiguracaoEmpresa();
+  const logoUrl = empresa ? urlLogotipo(empresa.logotipo) : null;
+  const enderecoCompleto = empresa ? formatarEndereco(empresa) : "";
 
   function imprimir() {
     window.print();
@@ -1104,8 +1109,32 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar }) {
 
       {/* Cupom oculto, visível apenas na impressão */}
       <div className="cupom-imprimivel" aria-hidden="true">
-        <div className="cupom-centro cupom-bold">GESTÃOPRO</div>
-        <div className="cupom-centro">CUPOM DE VENDA</div>
+        {logoUrl && (
+          <div className="cupom-centro" style={{ marginBottom: 4 }}>
+            <img src={logoUrl} alt="" style={{ maxHeight: 50, maxWidth: "70%", objectFit: "contain" }} />
+          </div>
+        )}
+        <div className="cupom-centro cupom-bold">
+          {empresa?.nomeFantasia || empresa?.razaoSocial || "GESTÃOPRO"}
+        </div>
+        {empresa?.nomeFantasia && empresa?.razaoSocial !== empresa?.nomeFantasia && (
+          <div className="cupom-centro" style={{ fontSize: 10 }}>{empresa.razaoSocial}</div>
+        )}
+        {empresa?.cnpj && (
+          <div className="cupom-centro" style={{ fontSize: 10 }}>CNPJ {empresa.cnpj}</div>
+        )}
+        {enderecoCompleto && (
+          <div className="cupom-centro" style={{ fontSize: 10 }}>{enderecoCompleto}</div>
+        )}
+        {(empresa?.telefone || empresa?.email) && (
+          <div className="cupom-centro" style={{ fontSize: 10 }}>
+            {empresa.telefone}
+            {empresa.telefone && empresa.email && " · "}
+            {empresa.email}
+          </div>
+        )}
+        <hr className="cupom-divisor" />
+        <div className="cupom-centro cupom-bold">CUPOM DE VENDA</div>
         <div className="cupom-centro" style={{ fontSize: 10 }}>** NÃO É DOCUMENTO FISCAL **</div>
         <hr className="cupom-divisor" />
         <div>Venda: <span className="cupom-bold">#{venda.numero}</span></div>

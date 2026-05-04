@@ -133,6 +133,58 @@ Não existe rota/UI para **cancelar/excluir** uma compra. Hoje, se uma compra é
 
 ## Histórico de sessões
 
+### Sessão — 2026-05-04 (Configuração da Empresa — Maxcollor Gráfica Rápida e Copiadora)
+
+Tela de **Dados do Emitente** (singleton) com formulário completo + upload de logotipo via Multer. Os dados aparecem automaticamente no recibo do PDV (cupom impresso), no extrato do Caixa e nos cabeçalhos dos PDFs de Relatórios. Admin user renomeado para **GLEIBSON LUIZ NUNES SILVA** (proprietário e administrador mestre).
+
+**1. Banco** — migration `20260504225945_add_configuracao_empresa`
+
+- Modelo `ConfiguracaoEmpresa` (singleton — controller usa `findFirst` + create/update em vez de id fixo): razaoSocial, nomeFantasia, cnpj, inscEstadual, telefone, email, endereco, numero, bairro, cidade, estado, cep, logotipo, observacoes
+- Seed pré-popula com os dados reais da Maxcollor: GLEIBSON LUIZ NUNES SILVA · MAXCOLLOR GRAFICA RAPIDA E COPIADORA · CNPJ 18.145.637/0001-31 · (75) 99175-1724 · maxcollor@outlook.com · Av. João Durval Carneiro, 3150 - Caseb · Feira de Santana/BA · CEP 44.052-004
+- Admin user (`admin@gestaopro.local`) renomeado de "ADMINISTRADOR" para "GLEIBSON LUIZ NUNES SILVA"
+
+**2. Backend**
+
+- [`configuracaoController.js`](backend/src/controllers/configuracaoController.js): `obter` (GET livre — todos autenticados leem) e `salvar` com **partial update** (só toca em campos enviados — permite alterar só telefone sem zerar o resto). Razão social: obrigatória na criação; não pode ser explicitamente vazia em update.
+- [`configuracaoLogotipoController.js`](backend/src/controllers/configuracaoLogotipoController.js): Multer para upload em `backend/uploads/logo/`, max 2MB, MIMEs `jpg/png/webp/svg`. Cria a config se ainda não existir (permite começar pelo logo). Apaga arquivo antigo do disco antes de gravar a nova URL.
+- [`routes/configuracao.js`](backend/src/routes/configuracao.js): `GET /` livre · `PUT /` + `POST /logotipo` + `DELETE /logotipo` exigem `requireRole("ADMIN")`. Sem `requirePermissao` específica — política simples baseada em role.
+
+**3. Frontend**
+
+- [`Configuracoes.jsx`](src/Configuracoes.jsx): formulário em 4 seções (Identificação, Contato, Endereço, Observações) + dropzone de logo em coluna lateral 200px. Vendedor/Gerente veem em modo leitura (campos disabled, sem botão salvar). Card roxo no rodapé reforça "👑 Proprietário e Administrador Mestre".
+- [`HeaderRelatorio.jsx`](src/HeaderRelatorio.jsx): novo componente reutilizável + 3 helpers exportados:
+  - `useConfiguracaoEmpresa()` — hook React com cache em memória (TTL 30s)
+  - `obterConfiguracaoCache()` — async fora de componentes (usado pelos PDFs)
+  - `formatarEndereco(cfg)` — monta linha "Endereço, Nº - Bairro · Cidade/UF · CEP"
+  - 2 variantes: `compacto` (linha única) e `modoCupom` (fundo branco para impressão térmica)
+- [`api.js`](src/lib/api.js): 4 métodos novos — `obterConfiguracao`, `salvarConfiguracao`, `enviarLogotipo`, `excluirLogotipo`
+- [`App.jsx`](src/App.jsx): NavItem "🏢 Empresa" só para ADMIN, na seção Sistema (entre Funcionários e Projeto)
+
+**4. Integrações** (HeaderRelatorio aparece automaticamente em 3 lugares):
+
+- **PDV cupom de venda** ([`PDV.jsx`](src/PDV.jsx) `ReciboModal`): substituído o "GESTÃOPRO" hardcoded por logo + nome fantasia + razão social + CNPJ + endereço + contato (telefone/email). Cupom impresso fica completo, pronto para entregar ao cliente.
+- **Caixa extrato** ([`Caixa.jsx`](src/Caixa.jsx) `AbaExtrato`): `<HeaderRelatorio />` no topo do extrato — quando o operador imprime o fechamento, o cabeçalho da empresa vai junto.
+- **Relatórios PDF** ([`Relatorios.jsx`](src/Relatorios.jsx) `criarPDF`): agora **async** — carrega config via `obterConfiguracaoCache`, baixa logo via fetch+dataURL e desenha cabeçalho com `doc.addImage` + linhas de texto (nome, CNPJ, contato, endereço) + linha separadora antes do título do relatório. Os 5 callers de `exportar()` (vendas/compras/financeiro/estoque/caixas) viraram async.
+
+**Validado via API:**
+
+```
+GET  /configuracao (admin)       → 200 dados completos da Maxcollor
+PUT  /configuracao { telefone }  → 200 atualiza so telefone, preserva CNPJ/nome (partial update)
+POST /configuracao/logotipo      → 200 logotipo: /uploads/logo/<uuid>.png
+GET  /configuracao (vendedor)    → 200 (leitura livre — usado por recibos)
+PUT  /configuracao (vendedor)    → 403 "Acesso negado"
+JWT do admin agora tem nome="GLEIBSON LUIZ NUNES SILVA"
+npx vite build → ok 535ms
+```
+
+**Lacunas conhecidas:**
+
+- Sem máscara de CNPJ/CEP/telefone no formulário — usuário digita livre. Se quiser, depois replicamos o padrão de máscaras já usado em Clientes.jsx
+- O cache de config não invalida automaticamente após PUT — usuário pode precisar atualizar a página para ver mudanças no recibo. Solução simples: chamar `invalidarCacheConfiguracao()` (já exportado) no `salvar` da Configuracoes.jsx — não fiz para evitar acoplar
+- Logo no PDF é baixada via fetch a cada export — sem cache de dataURL. Para relatórios grandes, vale memoizar
+- Singleton enforced apenas por convenção do controller (sem unique constraint no banco). Se duas instâncias rodarem o `create` em paralelo, dá pra ter 2 registros — improvável na prática
+
 ### Sessão — 2026-05-04 (Caixa — polimento: estorno, autorização gerencial, DRE diário)
 
 Três follow-ups do módulo Caixa entregues em sequência: reversão automática de venda cancelada no extrato, exigência de senha de gerente para sangria/fechamento quando o operador é VENDEDOR, e novo relatório DRE diário com export PDF.

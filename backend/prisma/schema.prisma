@@ -380,6 +380,34 @@ model Caixa {
   @@map("caixas")
 }
 
+// ============ CONFIGURACAO DA EMPRESA (SINGLETON) ============
+//
+// Apenas UM registro por instalacao do sistema. Controller usa findFirst +
+// update/create (upsert manual) em vez de id fixo — assim a chave primaria
+// segue o padrao uuid e nao precisa de seed especial.
+
+model ConfiguracaoEmpresa {
+  id           String   @id @default(uuid())
+  razaoSocial  String
+  nomeFantasia String?
+  cnpj         String?
+  inscEstadual String?
+  telefone     String?
+  email        String?
+  endereco     String?
+  numero       String?
+  bairro       String?
+  cidade       String?
+  estado       String?
+  cep          String?
+  logotipo     String?
+  observacoes  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("configuracao_empresa")
+}
+
 model MovimentacaoCaixa {
   id             String                @id @default(uuid())
   tipo           TipoMovimentacaoCaixa

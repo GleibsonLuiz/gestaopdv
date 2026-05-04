@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { C } from "./lib/theme.js";
 import { api } from "./lib/api.js";
+import HeaderRelatorio from "./HeaderRelatorio.jsx";
 
 const fmtBRL = (v) => {
   const n = Number(v);
@@ -320,6 +321,9 @@ function AbaExtrato({ caixaId }) {
 
   return (
     <div>
+      <div style={{ marginBottom: 12 }}>
+        <HeaderRelatorio />
+      </div>
       <div style={{
         background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
         padding: 14, marginBottom: 12, display: "flex", justifyContent: "space-between",

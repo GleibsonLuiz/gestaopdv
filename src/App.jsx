@@ -14,6 +14,7 @@ import Dashboard from "./Dashboard.jsx";
 import Relatorios from "./Relatorios.jsx";
 import Projeto from "./Projeto.jsx";
 import Sistema from "./Sistema.jsx";
+import Configuracoes from "./Configuracoes.jsx";
 import TrocarSenhaModal from "./TrocarSenhaModal.jsx";
 import AparenciaModal from "./AparenciaModal.jsx";
 import Alertas from "./Alertas.jsx";
@@ -153,7 +154,7 @@ export default function App() {
 
   function podeVer(t) {
     if (t === "projeto") return true;
-    if (t === "sistema") return user?.role === "ADMIN";
+    if (t === "sistema" || t === "empresa") return user?.role === "ADMIN";
     return podeAcessar(user, TELA_MODULO[t]);
   }
 
@@ -162,7 +163,7 @@ export default function App() {
     if (!user) return;
     if (!podeVer(tela)) {
       const primeira = ["pdv","dashboard","caixa","clientes","fornecedores","produtos",
-        "estoque","compras","financeiro","relatorios","funcionarios","projeto","sistema"].find(podeVer);
+        "estoque","compras","financeiro","relatorios","funcionarios","projeto","sistema","empresa"].find(podeVer);
       if (primeira && primeira !== tela) setTela(primeira);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -273,6 +274,9 @@ export default function App() {
           <Secao>Sistema</Secao>
           {user.role === "ADMIN" && (
             <Item icone="🧑‍💼" label="Funcionários" ativo={tela === "funcionarios"} onClick={() => navegar("funcionarios")} />
+          )}
+          {user.role === "ADMIN" && (
+            <Item icone="🏢" label="Empresa" ativo={tela === "empresa"} onClick={() => navegar("empresa")} />
           )}
           <Item icone="📋" label="Projeto" ativo={tela === "projeto"} onClick={() => navegar("projeto")} />
           {user.role === "ADMIN" && (
@@ -432,6 +436,12 @@ export default function App() {
             <>
               <PageHeader titulo="Caixa" subtitulo="Abertura, fechamento e extrato — controle do dinheiro físico no PDV" />
               <Caixa user={user} />
+            </>
+          )}
+          {tela === "empresa" && user.role === "ADMIN" && (
+            <>
+              <PageHeader titulo="Empresa" subtitulo="Dados do emitente exibidos em recibos, comprovantes e relatórios" />
+              <Configuracoes user={user} />
             </>
           )}
           {tela === "relatorios" && (

@@ -18,6 +18,7 @@ import alertasRoutes from "./routes/alertas.js";
 import relatoriosRoutes from "./routes/relatorios.js";
 import adminRoutes from "./routes/admin.js";
 import caixasRoutes from "./routes/caixas.js";
+import configuracaoRoutes from "./routes/configuracao.js";
 
 dotenv.config();
 
@@ -61,6 +62,7 @@ app.use("/alertas", alertasRoutes);
 app.use("/relatorios", relatoriosRoutes);
 app.use("/admin", adminRoutes);
 app.use("/caixas", caixasRoutes);
+app.use("/configuracao", configuracaoRoutes);
 
 app.use((err, req, res, _next) => {
   console.error(err);

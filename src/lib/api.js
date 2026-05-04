@@ -316,6 +316,16 @@ export const api = {
   resetarSistema: (confirmacao) =>
     request("/admin/reset", { method: "POST", body: { confirmacao } }),
 
+  // ==================== CONFIGURACAO DA EMPRESA ====================
+  obterConfiguracao: () => request("/configuracao"),
+  salvarConfiguracao: (dados) => request("/configuracao", { method: "PUT", body: dados }),
+  enviarLogotipo: (file) => {
+    const fd = new FormData();
+    fd.append("logotipo", file);
+    return uploadForm("/configuracao/logotipo", fd);
+  },
+  excluirLogotipo: () => request("/configuracao/logotipo", { method: "DELETE" }),
+
   // ==================== CAIXA ====================
   obterCaixaAtual: () => request("/caixas/atual"),
   sugerirTrocoCaixa: () => request("/caixas/sugestao-troco"),

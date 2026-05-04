@@ -10,15 +10,45 @@ async function seedAdmin() {
   const senhaHash = await bcrypt.hash("admin123", 10);
   return prisma.user.upsert({
     where: { email: "admin@gestaopro.local" },
-    update: { nome: "ADMINISTRADOR", permissoes: IDS_MODULOS },
+    update: { nome: "GLEIBSON LUIZ NUNES SILVA", permissoes: IDS_MODULOS },
     create: {
-      nome: "ADMINISTRADOR",
+      nome: "GLEIBSON LUIZ NUNES SILVA",
       email: "admin@gestaopro.local",
       senha: senhaHash,
       role: "ADMIN",
       permissoes: IDS_MODULOS,
     },
   });
+}
+
+// ==================== CONFIGURACAO DA EMPRESA ====================
+//
+// Singleton — so existe um registro. Cria se nao existir, atualiza dados
+// fixos (razao social, CNPJ, endereco) mas preserva edicoes do usuario
+// em campos opcionais (logotipo, observacoes, inscEstadual).
+
+async function seedConfiguracaoEmpresa() {
+  const dados = {
+    razaoSocial: "GLEIBSON LUIZ NUNES SILVA",
+    nomeFantasia: "MAXCOLLOR GRAFICA RAPIDA E COPIADORA",
+    cnpj: "18.145.637/0001-31",
+    telefone: "(75) 99175-1724",
+    email: "maxcollor@outlook.com",
+    endereco: "AV. JOAO DURVAL CARNEIRO",
+    numero: "3150",
+    bairro: "CASEB",
+    cidade: "FEIRA DE SANTANA",
+    estado: "BA",
+    cep: "44.052-004",
+  };
+  const existente = await prisma.configuracaoEmpresa.findFirst();
+  if (existente) {
+    return prisma.configuracaoEmpresa.update({
+      where: { id: existente.id },
+      data: dados,
+    });
+  }
+  return prisma.configuracaoEmpresa.create({ data: dados });
 }
 
 // ==================== FUNCIONÁRIOS (20) ====================
@@ -548,6 +578,9 @@ async function main() {
 
   console.log("→ Usuário admin");
   const admin = await seedAdmin();
+
+  console.log("→ Configuração da empresa (Maxcollor)");
+  await seedConfiguracaoEmpresa();
 
   console.log("→ Funcionários");
   const funcionarios = await seedFuncionarios();

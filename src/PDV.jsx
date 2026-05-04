@@ -1,6 +1,27 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { C } from "./lib/theme.js";
-import { api } from "./lib/api.js";
+import { api, BASE_URL } from "./lib/api.js";
+
+function urlImagem(imagem) {
+  if (!imagem) return null;
+  if (/^https?:\/\//i.test(imagem)) return imagem;
+  return `${BASE_URL}${imagem}`;
+}
+
+function FotoProduto({ url, nome, tamanho = 56 }) {
+  const src = urlImagem(url);
+  const estilo = {
+    width: tamanho, height: tamanho, borderRadius: 10, flexShrink: 0,
+    objectFit: "cover", border: `1px solid ${C.border}`, background: C.surface,
+  };
+  if (src) return <img src={src} alt={nome || ""} loading="lazy" style={estilo} />;
+  return (
+    <div style={{
+      ...estilo, display: "flex", alignItems: "center", justifyContent: "center",
+      color: C.muted, fontSize: tamanho * 0.42,
+    }}>📦</div>
+  );
+}
 
 
 const FORMAS = [
@@ -35,44 +56,6 @@ export default function PDV({ user }) {
   const [aba, setAba] = useState("nova");
   return (
     <div>
-      <style>{`
-        .pdv-card-produto {
-          transition: transform 0.06s ease, border-color 0.12s ease, box-shadow 0.12s ease;
-        }
-        .pdv-card-produto:hover {
-          border-color: ${C.accent}88 !important;
-          box-shadow: 0 4px 12px rgba(79,142,247,0.15);
-        }
-        .pdv-card-produto:active {
-          transform: scale(0.98);
-        }
-        .pdv-btn-add-qtd {
-          background: linear-gradient(135deg, ${C.accent}, ${C.purple});
-          color: ${C.white};
-          border: none;
-          border-radius: 6px;
-          padding: 5px 10px;
-          font-size: 11px;
-          font-weight: 800;
-          cursor: pointer;
-          transition: filter 0.12s ease;
-        }
-        .pdv-btn-add-qtd:hover { filter: brightness(1.15); }
-        .pdv-btn-add-qtd:active { filter: brightness(0.95); }
-        .pdv-stepper-btn {
-          background: ${C.card};
-          border: 1px solid ${C.border};
-          color: ${C.text};
-          border-radius: 4px;
-          width: 22px;
-          height: 22px;
-          font-size: 12px;
-          font-weight: 700;
-          cursor: pointer;
-          line-height: 1;
-        }
-        .pdv-stepper-btn:hover { border-color: ${C.accent}; color: ${C.white}; }
-      `}</style>
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
         <button onClick={() => setAba("nova")} style={tabBtn(aba === "nova")}>🛒 Nova Venda</button>
         <button onClick={() => setAba("historico")} style={tabBtn(aba === "historico")}>📜 Histórico de Vendas</button>
@@ -98,15 +81,28 @@ function NovaVenda({ user }) {
   const [erro, setErro] = useState("");
   const [reciboAberto, setReciboAberto] = useState(null);
   const [pagamentoAberto, setPagamentoAberto] = useState(false);
+  const [cancelarAberto, setCancelarAberto] = useState(false);
   const [valorRecebido, setValorRecebido] = useState("");
-  const [qtdPorCard, setQtdPorCard] = useState({});
+  const [destacado, setDestacado] = useState(null); // produtoId recém-adicionado (para flash)
   const buscaRef = useRef(null);
   const finalizarRef = useRef(null);
   const valorRecebidoRef = useRef(null);
 
+  const algumaModalAberta = pagamentoAberto || cancelarAberto || !!reciboAberto;
+
   const focarBusca = useCallback(() => {
     setTimeout(() => buscaRef.current?.focus(), 0);
   }, []);
+
+  function flashErro(msg) {
+    setErro(msg);
+    setTimeout(() => setErro(""), 2500);
+  }
+
+  function destacar(produtoId) {
+    setDestacado(produtoId);
+    setTimeout(() => setDestacado(prev => (prev === produtoId ? null : prev)), 800);
+  }
 
   useEffect(() => {
     api.listarProdutos({ ativo: "true" }).then(setProdutos).catch(() => {});
@@ -117,14 +113,18 @@ function NovaVenda({ user }) {
     buscaRef.current?.focus();
   }, []);
 
-  const produtosFiltrados = useMemo(() => {
+  // Sugestões aparecem só com texto digitado — vista limpa quando idle, focada
+  // em bipagem por scanner.
+  const sugestoes = useMemo(() => {
     const q = busca.trim().toLowerCase();
-    const ativos = produtos.filter(p => p.ativo && p.estoque > 0);
-    if (!q) return ativos.slice(0, 30);
-    return ativos.filter(p =>
-      p.codigo.toLowerCase().includes(q) ||
-      p.nome.toLowerCase().includes(q)
-    ).slice(0, 30);
+    if (!q) return [];
+    return produtos
+      .filter(p => p.ativo && p.estoque > 0)
+      .filter(p =>
+        p.codigo.toLowerCase().includes(q) ||
+        p.nome.toLowerCase().includes(q),
+      )
+      .slice(0, 8);
   }, [busca, produtos]);
 
   function adicionarProduto(p, qtd = 1) {
@@ -132,33 +132,54 @@ function NovaVenda({ user }) {
     setCarrinho(prev => {
       const idx = prev.findIndex(it => it.produtoId === p.id);
       if (idx >= 0) {
-        const novo = [...prev];
-        const qtdAtual = novo[idx].quantidade;
+        const qtdAtual = prev[idx].quantidade;
         if (qtdAtual + incremento > p.estoque) {
-          setErro(`Estoque insuficiente de "${p.nome}" (disponível: ${p.estoque}).`);
-          setTimeout(() => setErro(""), 2500);
+          flashErro(`Estoque insuficiente de "${p.nome}" (disponível: ${p.estoque}).`);
           return prev;
         }
-        novo[idx] = { ...novo[idx], quantidade: qtdAtual + incremento };
-        return novo;
+        // Move o item incrementado para o topo (UX típica de PDV).
+        const atualizado = { ...prev[idx], quantidade: qtdAtual + incremento };
+        const restante = prev.filter((_, i) => i !== idx);
+        return [atualizado, ...restante];
       }
       if (p.estoque < incremento) {
-        setErro(`Estoque insuficiente de "${p.nome}" (disponível: ${p.estoque}).`);
-        setTimeout(() => setErro(""), 2500);
+        flashErro(`Estoque insuficiente de "${p.nome}" (disponível: ${p.estoque}).`);
         return prev;
       }
-      return [...prev, {
+      const novoItem = {
         produtoId: p.id,
         codigo: p.codigo,
         nome: p.nome,
         unidade: p.unidade,
         estoque: p.estoque,
         precoUnitario: Number(p.precoVenda),
+        imagem: p.imagem || null,
         quantidade: incremento,
-      }];
+      };
+      return [novoItem, ...prev];
     });
-    setQtdPorCard(prev => ({ ...prev, [p.id]: 1 }));
+    destacar(p.id);
+    setBusca("");
     focarBusca();
+  }
+
+  // Bipagem: chamado ao pressionar Enter no campo de busca. Procura match exato
+  // por código primeiro (caso comum de scanner); em falta, cai para a primeira
+  // sugestão ativa filtrada — assim digitar parte do nome + Enter também funciona.
+  function biparOuConfirmar() {
+    const q = busca.trim();
+    if (!q) return;
+    const exato = produtos.find(p => p.ativo && p.codigo.toLowerCase() === q.toLowerCase());
+    if (exato) {
+      if (exato.estoque <= 0) { flashErro(`Sem estoque de "${exato.nome}".`); return; }
+      adicionarProduto(exato, 1);
+      return;
+    }
+    if (sugestoes.length > 0) {
+      adicionarProduto(sugestoes[0], 1);
+      return;
+    }
+    flashErro(`Nenhum produto encontrado para "${q}".`);
   }
 
   function alterarQuantidade(produtoId, delta) {
@@ -199,6 +220,7 @@ function NovaVenda({ user }) {
 
   function removerItem(produtoId) {
     setCarrinho(prev => prev.filter(it => it.produtoId !== produtoId));
+    focarBusca();
   }
 
   function limparCarrinho() {
@@ -209,7 +231,7 @@ function NovaVenda({ user }) {
     setForma("DINHEIRO");
     setErro("");
     setValorRecebido("");
-    setQtdPorCard({});
+    setBusca("");
     focarBusca();
   }
 
@@ -231,7 +253,11 @@ function NovaVenda({ user }) {
   const trocoFalta = Math.max(0, total - valorRecebidoNum);
   const mostrarTroco = forma === "DINHEIRO" && total > 0;
 
-  // Atalhos: F1-F6 forma de pagamento, End foca botão Finalizar
+  // Atalhos globais:
+  //   F1-F6   forma de pagamento
+  //   F8      abre modal "Cancelar Item"
+  //   F10     abre modal de pagamento (finalizar venda)
+  //   Esc     fecha modais auxiliares e refoca busca
   useEffect(() => {
     const FORMA_POR_TECLA = {
       F1: "DINHEIRO", F2: "PIX", F3: "CARTAO_DEBITO",
@@ -241,31 +267,56 @@ function NovaVenda({ user }) {
       if (FORMA_POR_TECLA[e.key]) {
         e.preventDefault();
         setForma(FORMA_POR_TECLA[e.key]);
-        if (FORMA_POR_TECLA[e.key] === "DINHEIRO") {
+        if (FORMA_POR_TECLA[e.key] === "DINHEIRO" && pagamentoAberto) {
           setTimeout(() => valorRecebidoRef.current?.focus(), 0);
         }
         return;
       }
-      if (e.key === "End") {
+      if (e.key === "F8") {
         e.preventDefault();
-        finalizarRef.current?.focus();
+        if (carrinhoRef.current.length === 0) {
+          flashErro("Carrinho vazio — nada para cancelar.");
+          return;
+        }
+        setCancelarAberto(true);
+        return;
+      }
+      if (e.key === "F10") {
+        e.preventDefault();
+        if (!pagamentoAbertoRef.current) abrirPagamentoRef.current?.();
+        return;
+      }
+      if (e.key === "Escape") {
+        if (cancelarAberto) {
+          setCancelarAberto(false);
+          focarBusca();
+        }
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [cancelarAberto, pagamentoAberto]);
+
+  // Refs vivas para handlers do listener global (evita re-bind a cada render).
+  const carrinhoRef = useRef(carrinho);
+  const pagamentoAbertoRef = useRef(pagamentoAberto);
+  const abrirPagamentoRef = useRef(null);
+  useEffect(() => { carrinhoRef.current = carrinho; }, [carrinho]);
+  useEffect(() => { pagamentoAbertoRef.current = pagamentoAberto; }, [pagamentoAberto]);
 
   function abrirPagamento() {
     setErro("");
-    if (carrinho.length === 0) { setErro("Adicione ao menos um item"); return; }
-    if (descontoNum > subtotal) { setErro("Desconto não pode ser maior que o subtotal"); return; }
+    if (carrinho.length === 0) { flashErro("Adicione ao menos um item"); return; }
+    if (descontoNum > subtotal) { flashErro("Desconto não pode ser maior que o subtotal"); return; }
     setPagamentoAberto(true);
     setTimeout(() => {
       if (forma === "DINHEIRO") valorRecebidoRef.current?.focus();
       else finalizarRef.current?.focus();
     }, 50);
   }
+  // Mantém a ref atualizada para o listener global.
+  useEffect(() => { abrirPagamentoRef.current = abrirPagamento; });
 
   async function confirmarPagamento() {
     setErro("");
@@ -304,228 +355,357 @@ function NovaVenda({ user }) {
   }
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 420px", gap: 16, alignItems: "start" }}>
-      {/* COLUNA ESQUERDA: BUSCA + GRID DE PRODUTOS */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
-        <input
-          ref={buscaRef}
-          placeholder="🔎 Buscar por código ou nome (clique no produto para adicionar)"
-          value={busca}
-          onChange={e => setBusca(e.target.value)}
-          style={{
-            width: "100%", boxSizing: "border-box",
-            background: C.surface, border: `1px solid ${C.border}`,
-            borderRadius: 8, padding: "12px 14px", color: C.text, fontSize: 14, outline: "none",
-            marginBottom: 12,
-          }}
-        />
-        {produtosFiltrados.length === 0 ? (
-          <div style={{ padding: 30, textAlign: "center", color: C.muted, fontSize: 13 }}>
-            {busca ? "Nenhum produto encontrado." : "Carregando produtos..."}
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <style>{`
+        @keyframes pdv-flash-novo {
+          0%   { background: ${C.green}33; transform: translateX(-2px); }
+          100% { background: transparent; transform: translateX(0); }
+        }
+        .pdv-item-novo { animation: pdv-flash-novo 0.7s ease-out; }
+        .pdv-sugestao:hover { background: ${C.accent}22 !important; }
+        .pdv-cancel-row:hover { background: ${C.red}22 !important; }
+      `}</style>
+
+      {/* BARRA DE BIPAGEM CENTRAL — autofocus permanente */}
+      <div style={{
+        position: "relative",
+        background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14,
+        boxShadow: "0 2px 12px rgba(0,0,0,0.2)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ fontSize: 24 }}>📡</div>
+          <input
+            ref={buscaRef}
+            placeholder="Bipe um produto ou digite código/nome — pressione Enter para adicionar"
+            value={busca}
+            onChange={e => setBusca(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === "Enter") { e.preventDefault(); biparOuConfirmar(); }
+              if (e.key === "Escape") { e.preventDefault(); setBusca(""); }
+            }}
+            onBlur={() => {
+              // Refoco automático em ~120ms — só aplica quando nenhuma modal
+              // está aberta (evita roubar foco de inputs do checkout/cancelar).
+              setTimeout(() => {
+                if (!algumaModalAberta && document.activeElement === document.body) {
+                  buscaRef.current?.focus();
+                }
+              }, 120);
+            }}
+            style={{
+              flex: 1, background: C.surface, border: `2px solid ${C.accent}55`,
+              borderRadius: 10, padding: "16px 18px",
+              color: C.white, fontSize: 18, fontWeight: 600, outline: "none",
+              letterSpacing: 0.5,
+            }}
+          />
+          <div style={{ color: C.muted, fontSize: 11, textAlign: "right", lineHeight: 1.4 }}>
+            <div><b style={{ color: C.text }}>F8</b> cancelar item</div>
+            <div><b style={{ color: C.green }}>F10</b> finalizar</div>
           </div>
-        ) : (
+        </div>
+
+        {/* Sugestões dropdown — só aparece quando há texto digitado */}
+        {sugestoes.length > 0 && (
           <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))",
-            gap: 10,
+            position: "absolute", left: 14, right: 14, top: "100%", marginTop: 4,
+            background: C.card, border: `1px solid ${C.accent}55`, borderRadius: 10,
+            zIndex: 5, overflow: "hidden",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
           }}>
-            {produtosFiltrados.map(p => {
-              const baixo = p.estoque <= p.estoqueMinimo;
-              const corSelo = baixo ? C.yellow : C.green;
-              const qtdCard = qtdPorCard[p.id] || 1;
-              const setQtd = (n) => setQtdPorCard(prev => ({
-                ...prev,
-                [p.id]: Math.min(p.estoque, Math.max(1, n)),
-              }));
-              return (
-                <div
-                  key={p.id}
-                  className="pdv-card-produto"
-                  onClick={() => adicionarProduto(p, qtdCard)}
-                  style={{
-                    textAlign: "left", cursor: "pointer", padding: 12,
-                    background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10,
-                    color: C.text, display: "flex", flexDirection: "column", gap: 6,
-                  }}
-                >
-                  <div style={{ color: C.muted, fontFamily: "monospace", fontSize: 11 }}>{p.codigo}</div>
-                  <div style={{ color: C.white, fontWeight: 600, fontSize: 13, minHeight: 36, lineHeight: 1.3 }}>
+            {sugestoes.map((p, idx) => (
+              <div
+                key={p.id}
+                className="pdv-sugestao"
+                onMouseDown={e => { e.preventDefault(); adicionarProduto(p, 1); }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 12,
+                  padding: "10px 14px", cursor: "pointer",
+                  borderTop: idx === 0 ? "none" : `1px solid ${C.border}`,
+                  transition: "background 0.1s ease",
+                }}
+              >
+                <FotoProduto url={p.imagem} nome={p.nome} tamanho={40} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: C.white, fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {p.nome}
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
-                    <div style={{ color: C.green, fontWeight: 800, fontSize: 14 }}>{fmtBRL(p.precoVenda)}</div>
-                    <div style={{
-                      fontSize: 11, fontWeight: 800, padding: "3px 8px", borderRadius: 6,
-                      background: corSelo + "33",
-                      color: corSelo,
-                      border: `1px solid ${corSelo}88`,
-                      letterSpacing: 0.3,
-                    }}>
-                      {p.estoque} {p.unidade}
-                    </div>
-                  </div>
-                  <div
-                    onClick={e => e.stopPropagation()}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 6,
-                      marginTop: 6, padding: 4,
-                      background: C.bg, borderRadius: 8, border: `1px solid ${C.border}`,
-                    }}
-                  >
-                    <button
-                      type="button"
-                      className="pdv-stepper-btn"
-                      onClick={() => setQtd(qtdCard - 1)}
-                      disabled={qtdCard <= 1}
-                    >−</button>
-                    <input
-                      type="number" min="1" max={p.estoque}
-                      value={qtdCard}
-                      onClick={e => e.stopPropagation()}
-                      onChange={e => setQtd(parseInt(e.target.value, 10) || 1)}
-                      style={{
-                        flex: 1, minWidth: 0, textAlign: "center",
-                        background: "transparent", border: "none",
-                        color: C.white, fontSize: 13, fontWeight: 700, outline: "none",
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="pdv-stepper-btn"
-                      onClick={() => setQtd(qtdCard + 1)}
-                      disabled={qtdCard >= p.estoque}
-                    >+</button>
-                    <button
-                      type="button"
-                      className="pdv-btn-add-qtd"
-                      onClick={() => adicionarProduto(p, qtdCard)}
-                    >
-                      + Add
-                    </button>
-                  </div>
+                  <div style={{ color: C.muted, fontFamily: "monospace", fontSize: 11 }}>{p.codigo} · {p.estoque} {p.unidade}</div>
                 </div>
-              );
-            })}
+                <div style={{ color: C.green, fontWeight: 700, fontSize: 14 }}>{fmtBRL(p.precoVenda)}</div>
+              </div>
+            ))}
           </div>
         )}
       </div>
 
-      {/* COLUNA DIREITA: CARRINHO + CHECKOUT */}
-      <div style={{
-        display: "flex", flexDirection: "column", gap: 12,
-        position: "sticky", top: 16,
-        maxHeight: "calc(100vh - 32px)", overflowY: "auto",
-      }}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 7fr) minmax(280px, 3fr)", gap: 14, alignItems: "start" }}>
+        {/* CESTINHA — 70% — fotos, novos no topo */}
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
           <div style={{
-            padding: "12px 16px", background: C.surface, borderBottom: `1px solid ${C.border}`,
+            padding: "14px 18px", background: C.surface, borderBottom: `1px solid ${C.border}`,
             display: "flex", justifyContent: "space-between", alignItems: "center",
           }}>
-            <div style={{ color: C.white, fontWeight: 700, fontSize: 14 }}>🛒 Carrinho ({carrinho.length})</div>
-            {carrinho.length > 0 && (
-              <button onClick={limparCarrinho} style={{
-                background: "transparent", border: "none", color: C.muted, fontSize: 12, cursor: "pointer",
-              }}>Limpar</button>
-            )}
-          </div>
-          <div style={{ maxHeight: 280, overflowY: "auto" }}>
-            {carrinho.length === 0 ? (
-              <div style={{ padding: 30, textAlign: "center", color: C.muted, fontSize: 13 }}>
-                Carrinho vazio.<br />Clique nos produtos à esquerda.
-              </div>
-            ) : carrinho.map(it => (
-              <div key={it.produtoId} style={{
-                padding: "10px 14px", borderBottom: `1px solid ${C.border}`,
-                display: "flex", flexDirection: "column", gap: 6,
-              }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ color: C.white, fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {it.nome}
-                    </div>
-                    <div style={{ color: C.muted, fontFamily: "monospace", fontSize: 10 }}>{it.codigo}</div>
-                  </div>
-                  <button onClick={() => removerItem(it.produtoId)} style={{
+            <div style={{ color: C.white, fontWeight: 700, fontSize: 16 }}>
+              🛒 Cestinha — {carrinho.length} {carrinho.length === 1 ? "item" : "itens"}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              {carrinho.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setCancelarAberto(true)}
+                  style={{
                     background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red,
-                    borderRadius: 6, padding: "2px 8px", fontSize: 12, cursor: "pointer",
-                  }}>×</button>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <button onClick={() => alterarQuantidade(it.produtoId, -1)} style={btnQtd}>−</button>
-                    <input
-                      type="number" min="1" max={it.estoque} value={it.quantidade}
-                      onChange={e => definirQuantidade(it.produtoId, e.target.value)}
-                      style={{
-                        width: 50, textAlign: "center",
-                        background: C.surface, border: `1px solid ${C.border}`,
-                        borderRadius: 6, padding: "4px 6px", color: C.text, fontSize: 13, outline: "none",
-                      }}
-                    />
-                    <button onClick={() => alterarQuantidade(it.produtoId, +1)} style={btnQtd}>+</button>
-                  </div>
-                  <div style={{ color: C.muted, fontSize: 11 }}>×</div>
-                  <input
-                    type="number" step="0.01" min="0" value={it.precoUnitario}
-                    onChange={e => alterarPreco(it.produtoId, e.target.value)}
-                    style={{
-                      width: 80, textAlign: "right",
-                      background: C.surface, border: `1px solid ${C.border}`,
-                      borderRadius: 6, padding: "4px 6px", color: C.text, fontSize: 12, outline: "none",
-                    }}
-                  />
-                  <div style={{ marginLeft: "auto", color: C.green, fontWeight: 700, fontSize: 14 }}>
-                    {fmtBRL(it.quantidade * it.precoUnitario)}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <Linha label="Subtotal" valor={fmtBRL(subtotal)} />
-            {descontoNum > 0 && (
-              <Linha label="Desconto" valor={`− ${fmtBRL(descontoNum)}`} cor={C.red} />
-            )}
-            <div style={{
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-              marginTop: 6, padding: "12px 14px",
-              background: C.surface, borderRadius: 8,
-              boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
-            }}>
-              <div style={{ color: C.muted, fontSize: 12, fontWeight: 700 }}>TOTAL</div>
-              <div style={{ color: C.green, fontSize: 24, fontWeight: 800 }}>{fmtBRL(total)}</div>
+                    borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                  title="F8"
+                >🗑 Cancelar item (F8)</button>
+              )}
+              {carrinho.length > 0 && (
+                <button onClick={limparCarrinho} style={{
+                  background: "transparent", border: `1px solid ${C.border}`, color: C.muted,
+                  borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer",
+                }}>Limpar tudo</button>
+              )}
             </div>
           </div>
 
-          {erro && !pagamentoAberto && (
+          {carrinho.length === 0 ? (
             <div style={{
-              padding: "8px 12px", borderRadius: 8,
-              background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red, fontSize: 12,
-            }}>{erro}</div>
-          )}
-
-          <button
-            onClick={abrirPagamento}
-            disabled={carrinho.length === 0}
-            style={{
-              background: carrinho.length === 0 ? C.surface : `linear-gradient(135deg, ${C.green}, #15803d)`,
-              color: C.white, border: "none", borderRadius: 10,
-              padding: "14px", fontWeight: 800, fontSize: 16,
-              cursor: carrinho.length === 0 ? "not-allowed" : "pointer",
-              opacity: carrinho.length === 0 ? 0.5 : 1,
-              boxShadow: carrinho.length === 0 ? "none" : `0 4px 14px ${C.green}55`,
+              padding: "60px 30px", textAlign: "center", color: C.muted, fontSize: 14,
+              display: "flex", flexDirection: "column", alignItems: "center", gap: 12,
             }}>
-            ✓ FINALIZAR VENDA — {fmtBRL(total)} <span style={{ fontSize: 10, opacity: 0.85, fontWeight: 700 }}>(End)</span>
-          </button>
+              <div style={{ fontSize: 48, opacity: 0.5 }}>🛒</div>
+              <div style={{ fontWeight: 600 }}>Cestinha vazia</div>
+              <div style={{ fontSize: 12 }}>Bipe um produto ou digite o código no campo acima.</div>
+            </div>
+          ) : (
+            <div style={{ maxHeight: "calc(100vh - 320px)", overflowY: "auto" }}>
+              {carrinho.map(it => (
+                <div
+                  key={it.produtoId}
+                  className={destacado === it.produtoId ? "pdv-item-novo" : ""}
+                  style={{
+                    display: "flex", gap: 14, alignItems: "center",
+                    padding: "14px 18px", borderBottom: `1px solid ${C.border}`,
+                  }}
+                >
+                  <FotoProduto url={it.imagem} nome={it.nome} tamanho={64} />
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ color: C.white, fontSize: 15, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {it.nome}
+                    </div>
+                    <div style={{ color: C.muted, fontFamily: "monospace", fontSize: 11, marginTop: 2 }}>
+                      {it.codigo}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <button onClick={() => alterarQuantidade(it.produtoId, -1)} style={btnQtd}>−</button>
+                        <input
+                          type="number" min="1" max={it.estoque} value={it.quantidade}
+                          onChange={e => definirQuantidade(it.produtoId, e.target.value)}
+                          style={{
+                            width: 54, textAlign: "center",
+                            background: C.surface, border: `1px solid ${C.border}`,
+                            borderRadius: 6, padding: "5px 6px", color: C.text, fontSize: 13, outline: "none",
+                          }}
+                        />
+                        <button onClick={() => alterarQuantidade(it.produtoId, +1)} style={btnQtd}>+</button>
+                      </div>
+                      <div style={{ color: C.muted, fontSize: 12 }}>×</div>
+                      <input
+                        type="number" step="0.01" min="0" value={it.precoUnitario}
+                        onChange={e => alterarPreco(it.produtoId, e.target.value)}
+                        style={{
+                          width: 96, textAlign: "right",
+                          background: C.surface, border: `1px solid ${C.border}`,
+                          borderRadius: 6, padding: "5px 8px", color: C.text, fontSize: 13, outline: "none",
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                    <div style={{ color: C.green, fontWeight: 800, fontSize: 18 }}>
+                      {fmtBRL(it.quantidade * it.precoUnitario)}
+                    </div>
+                    <button
+                      onClick={() => removerItem(it.produtoId)}
+                      title="Remover este item"
+                      style={{
+                        background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red,
+                        borderRadius: 6, padding: "4px 10px", fontSize: 12, cursor: "pointer", fontWeight: 700,
+                      }}
+                    >× Remover</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        <div style={{ color: C.muted, fontSize: 11, textAlign: "center" }}>
-          Vendedor: <span style={{ color: C.text, fontWeight: 600 }}>{user.nome}</span>
+        {/* PAINEL DIREITO — totais + botão Finalizar */}
+        <div style={{
+          display: "flex", flexDirection: "column", gap: 12,
+          position: "sticky", top: 14,
+          maxHeight: "calc(100vh - 32px)", overflowY: "auto",
+        }}>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <Linha label={`Itens (${carrinho.reduce((acc, it) => acc + it.quantidade, 0)})`} valor={fmtBRL(subtotal)} />
+              {descontoNum > 0 && (
+                <Linha label="Desconto" valor={`− ${fmtBRL(descontoNum)}`} cor={C.red} />
+              )}
+              <div style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                marginTop: 6, padding: "16px 16px",
+                background: C.surface, borderRadius: 10,
+                boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
+              }}>
+                <div style={{ color: C.muted, fontSize: 12, fontWeight: 700, letterSpacing: 0.4 }}>TOTAL</div>
+                <div style={{ color: C.green, fontSize: 28, fontWeight: 800 }}>{fmtBRL(total)}</div>
+              </div>
+            </div>
+
+            {erro && !algumaModalAberta && (
+              <div style={{
+                padding: "8px 12px", borderRadius: 8,
+                background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red, fontSize: 12,
+              }}>{erro}</div>
+            )}
+
+            <button
+              onClick={abrirPagamento}
+              disabled={carrinho.length === 0}
+              style={{
+                background: carrinho.length === 0 ? C.surface : `linear-gradient(135deg, ${C.green}, #15803d)`,
+                color: C.white, border: "none", borderRadius: 10,
+                padding: "16px", fontWeight: 800, fontSize: 16,
+                cursor: carrinho.length === 0 ? "not-allowed" : "pointer",
+                opacity: carrinho.length === 0 ? 0.5 : 1,
+                boxShadow: carrinho.length === 0 ? "none" : `0 4px 14px ${C.green}55`,
+                letterSpacing: 0.3,
+              }}>
+              ✓ FINALIZAR — {fmtBRL(total)}
+              <div style={{ fontSize: 10, marginTop: 2, opacity: 0.85, fontWeight: 700 }}>F10</div>
+            </button>
+          </div>
+
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
+            <div style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>
+              Atalhos
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 10px", fontSize: 12, color: C.muted }}>
+              <b style={{ color: C.text }}>Enter</b><span>adicionar produto bipado</span>
+              <b style={{ color: C.text }}>F1–F6</b><span>forma de pagamento</span>
+              <b style={{ color: C.red }}>F8</b><span>cancelar item</span>
+              <b style={{ color: C.green }}>F10</b><span>finalizar venda</span>
+              <b style={{ color: C.text }}>Esc</b><span>limpar busca / fechar</span>
+            </div>
+          </div>
+
+          <div style={{ color: C.muted, fontSize: 11, textAlign: "center" }}>
+            Vendedor: <span style={{ color: C.text, fontWeight: 600 }}>{user.nome}</span>
+          </div>
         </div>
       </div>
+
+      {/* MODAL CANCELAR ITEM (F8) — clique no produto para remover */}
+      {cancelarAberto && (
+        <div
+          onClick={() => { setCancelarAberto(false); focarBusca(); }}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 20, zIndex: 100,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: C.card, border: `1px solid ${C.red}55`, borderRadius: 14,
+              width: "100%", maxWidth: 560, maxHeight: "85vh", overflowY: "auto",
+              padding: 20,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <div>
+                <div style={{ color: C.white, fontWeight: 800, fontSize: 18 }}>🗑 Cancelar item</div>
+                <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>
+                  Clique no item para remover da venda atual.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setCancelarAberto(false); focarBusca(); }}
+                style={{
+                  background: "transparent", border: "none", color: C.muted,
+                  fontSize: 22, cursor: "pointer",
+                }}
+              >×</button>
+            </div>
+
+            {carrinho.length === 0 ? (
+              <div style={{ padding: 30, textAlign: "center", color: C.muted, fontSize: 13 }}>
+                Carrinho vazio.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {carrinho.map(it => (
+                  <button
+                    key={it.produtoId}
+                    type="button"
+                    className="pdv-cancel-row"
+                    onClick={() => {
+                      removerItem(it.produtoId);
+                      // Se foi o último item, fecha o modal automaticamente.
+                      if (carrinho.length === 1) setCancelarAberto(false);
+                      focarBusca();
+                    }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 12,
+                      padding: "10px 12px", background: C.surface,
+                      border: `1px solid ${C.border}`, borderRadius: 10,
+                      cursor: "pointer", textAlign: "left",
+                      transition: "background 0.12s ease",
+                    }}
+                  >
+                    <FotoProduto url={it.imagem} nome={it.nome} tamanho={48} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ color: C.white, fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {it.nome}
+                      </div>
+                      <div style={{ color: C.muted, fontSize: 11, fontFamily: "monospace" }}>
+                        {it.codigo} · {it.quantidade} × {fmtBRL(it.precoUnitario)}
+                      </div>
+                    </div>
+                    <div style={{ color: C.green, fontWeight: 700, fontSize: 14 }}>
+                      {fmtBRL(it.quantidade * it.precoUnitario)}
+                    </div>
+                    <div style={{
+                      background: C.red, color: C.white, fontSize: 12, fontWeight: 800,
+                      padding: "5px 10px", borderRadius: 6,
+                    }}>Remover</div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
+              <button
+                type="button"
+                onClick={() => { setCancelarAberto(false); focarBusca(); }}
+                style={{
+                  background: C.surface, border: `1px solid ${C.border}`, color: C.text,
+                  borderRadius: 8, padding: "10px 18px", fontWeight: 600, fontSize: 13, cursor: "pointer",
+                }}
+              >Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {pagamentoAberto && (
         <div
@@ -550,7 +730,7 @@ function NovaVenda({ user }) {
               </div>
               <button
                 type="button"
-                onClick={() => !salvando && setPagamentoAberto(false)}
+                onClick={() => { if (!salvando) { setPagamentoAberto(false); focarBusca(); } }}
                 style={{
                   background: "transparent", border: "none", color: C.muted,
                   fontSize: 22, cursor: salvando ? "default" : "pointer",
@@ -667,7 +847,7 @@ function NovaVenda({ user }) {
             <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
               <button
                 type="button"
-                onClick={() => !salvando && setPagamentoAberto(false)}
+                onClick={() => { if (!salvando) { setPagamentoAberto(false); focarBusca(); } }}
                 disabled={salvando}
                 style={{
                   flex: "0 0 auto",
@@ -703,7 +883,7 @@ function NovaVenda({ user }) {
           venda={reciboAberto.venda}
           valorRecebido={reciboAberto.valorRecebido}
           troco={reciboAberto.troco}
-          onFechar={() => setReciboAberto(null)}
+          onFechar={() => { setReciboAberto(null); focarBusca(); }}
         />
       )}
     </div>

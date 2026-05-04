@@ -148,6 +148,12 @@ export const api = {
   atualizarProduto: (id, data) => request(`/produtos/${id}`, { method: "PUT", body: data }),
   excluirProduto: (id) => request(`/produtos/${id}`, { method: "DELETE" }),
   excluirPermanenteProduto: (id) => request(`/produtos/${id}?permanente=true`, { method: "DELETE" }),
+  enviarImagemProduto: (id, file) => {
+    const fd = new FormData();
+    fd.append("imagem", file);
+    return uploadForm(`/produtos/${id}/imagem`, fd);
+  },
+  excluirImagemProduto: (id) => request(`/produtos/${id}/imagem`, { method: "DELETE" }),
 
   listarMovimentacoes: ({ produtoId = "", tipo = "", limite = "" } = {}) => {
     const qs = new URLSearchParams();

@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { C } from "./lib/theme.js";
-import { api } from "./lib/api.js";
+import { api, BASE_URL } from "./lib/api.js";
 import MovimentarEstoqueModal from "./MovimentarEstoqueModal.jsx";
 
 
@@ -10,6 +10,14 @@ const VAZIO = {
   estoque: "0", estoqueMinimo: "0", unidade: "UN",
   categoriaId: "", fornecedorId: "",
 };
+
+// Resolve url relativa do backend (/uploads/...) para URL absoluta consumivel
+// pelas tags <img>. Aceita tambem URLs absolutas (http/https) inalteradas.
+export function urlImagem(imagem) {
+  if (!imagem) return null;
+  if (/^https?:\/\//i.test(imagem)) return imagem;
+  return `${BASE_URL}${imagem}`;
+}
 
 const fmtBRL = (v) => {
   const n = Number(v);
@@ -38,6 +46,13 @@ export default function Produtos({ user }) {
 
   const [novaCategoria, setNovaCategoria] = useState("");
   const [modalEstoqueProduto, setModalEstoqueProduto] = useState(null);
+
+  // Upload de imagem: arquivo selecionado (File|null), preview local (objectURL
+  // ou URL ja persistida no backend) e flag "remover atual ao salvar".
+  const [imagemArquivo, setImagemArquivo] = useState(null);
+  const [imagemPreview, setImagemPreview] = useState(null);
+  const [removerImagem, setRemoverImagem] = useState(false);
+  const inputImagemRef = useRef(null);
 
   const podeEditar = user.role === "ADMIN" || user.role === "GERENTE";
   const podeExcluir = user.role === "ADMIN";
@@ -76,11 +91,19 @@ export default function Produtos({ user }) {
     setTimeout(() => setMensagem(""), 2500);
   }
 
+  function resetarImagem() {
+    setImagemArquivo(null);
+    setImagemPreview(null);
+    setRemoverImagem(false);
+    if (inputImagemRef.current) inputImagemRef.current.value = "";
+  }
+
   function abrirNovo() {
     setEditando(null);
     setForm(VAZIO);
     setErroForm("");
     setNovaCategoria("");
+    resetarImagem();
     setModalAberto(true);
   }
 
@@ -100,7 +123,43 @@ export default function Produtos({ user }) {
     });
     setErroForm("");
     setNovaCategoria("");
+    setImagemArquivo(null);
+    setImagemPreview(p.imagem ? urlImagem(p.imagem) : null);
+    setRemoverImagem(false);
+    if (inputImagemRef.current) inputImagemRef.current.value = "";
     setModalAberto(true);
+  }
+
+  function escolherImagem(file) {
+    if (!file) return;
+    if (!/^image\/(jpe?g|png|webp)$/i.test(file.type)) {
+      setErroForm("Apenas JPG, PNG ou WEBP.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setErroForm("Imagem maior que 2MB.");
+      return;
+    }
+    setErroForm("");
+    setImagemArquivo(file);
+    setRemoverImagem(false);
+    // Cria URL local para preview imediato (revogada quando substituida).
+    setImagemPreview(prev => {
+      if (prev && prev.startsWith("blob:")) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
+  }
+
+  function limparImagem() {
+    if (imagemPreview && imagemPreview.startsWith("blob:")) {
+      URL.revokeObjectURL(imagemPreview);
+    }
+    setImagemArquivo(null);
+    setImagemPreview(null);
+    if (inputImagemRef.current) inputImagemRef.current.value = "";
+    // Se estava editando um produto que ja tinha imagem, sinaliza remocao
+    // no salvar.
+    setRemoverImagem(!!editando?.imagem);
   }
 
   async function criarCategoriaInline() {
@@ -139,13 +198,26 @@ export default function Produtos({ user }) {
         categoriaId: form.categoriaId || null,
         fornecedorId: form.fornecedorId || null,
       };
-      if (editando) {
-        await api.atualizarProduto(editando.id, payload);
-        flash("Produto atualizado");
-      } else {
-        await api.criarProduto(payload);
-        flash("Produto criado");
+      const produtoSalvo = editando
+        ? await api.atualizarProduto(editando.id, payload)
+        : await api.criarProduto(payload);
+
+      // Imagem: enviar nova OU remover existente. Falha no upload nao reverte
+      // o produto criado/editado — exibe aviso e mantem o restante salvo.
+      try {
+        if (imagemArquivo) {
+          await api.enviarImagemProduto(produtoSalvo.id, imagemArquivo);
+        } else if (removerImagem && editando?.imagem) {
+          await api.excluirImagemProduto(produtoSalvo.id);
+        }
+      } catch (errImg) {
+        flash(`Produto salvo, mas a imagem falhou: ${errImg.message}`);
+        setModalAberto(false);
+        carregar();
+        return;
       }
+
+      flash(editando ? "Produto atualizado" : "Produto criado");
       setModalAberto(false);
       carregar();
     } catch (err) {
@@ -262,13 +334,16 @@ export default function Produtos({ user }) {
               alignItems: "center", fontSize: 13, opacity: p.ativo ? 1 : 0.55,
             }}>
               <div style={{ color: C.muted, fontFamily: "monospace", fontSize: 12 }}>{p.codigo}</div>
-              <div>
-                <div style={{ color: C.white, fontWeight: 600 }}>{p.nome}</div>
-                {p.descricao && (
-                  <div style={{ color: C.muted, fontSize: 11, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {p.descricao}
-                  </div>
-                )}
+              <div style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}>
+                <Miniatura url={p.imagem} nome={p.nome} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ color: C.white, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nome}</div>
+                  {p.descricao && (
+                    <div style={{ color: C.muted, fontSize: 11, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {p.descricao}
+                    </div>
+                  )}
+                </div>
               </div>
               <div style={{ fontSize: 12 }}>
                 <div style={{ color: C.text }}>{p.categoria?.nome || <span style={{ color: C.muted }}>—</span>}</div>
@@ -357,6 +432,14 @@ export default function Produtos({ user }) {
               <Campo label="Descrição" span={3}>
                 <textarea value={form.descricao} onChange={e => setForm({ ...form, descricao: e.target.value })}
                   rows={2} style={{ ...inputStyle, resize: "vertical", fontFamily: "inherit" }} />
+              </Campo>
+              <Campo label="Foto do produto" span={3}>
+                <DropzoneImagem
+                  preview={imagemPreview}
+                  onSelecionar={escolherImagem}
+                  onLimpar={limparImagem}
+                  inputRef={inputImagemRef}
+                />
               </Campo>
               <Campo label="Preço de Venda *">
                 <input type="number" step="0.01" min="0" value={form.precoVenda}
@@ -488,4 +571,103 @@ function alertStyle(cor) {
     marginBottom: 12, padding: "10px 14px", borderRadius: 8,
     background: cor + "22", border: `1px solid ${cor}55`, color: cor, fontSize: 13,
   };
+}
+
+function Miniatura({ url, nome }) {
+  const src = urlImagem(url);
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={nome || ""}
+        loading="lazy"
+        style={{
+          width: 40, height: 40, borderRadius: 8, objectFit: "cover",
+          border: `1px solid ${C.border}`, background: C.surface, flexShrink: 0,
+        }}
+      />
+    );
+  }
+  return (
+    <div style={{
+      width: 40, height: 40, borderRadius: 8, flexShrink: 0,
+      background: C.surface, border: `1px solid ${C.border}`,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      color: C.muted, fontSize: 18,
+    }}>📦</div>
+  );
+}
+
+function DropzoneImagem({ preview, onSelecionar, onLimpar, inputRef }) {
+  const [arrastando, setArrastando] = useState(false);
+
+  function aoArrastar(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    setArrastando(e.type === "dragenter" || e.type === "dragover");
+  }
+  function aoSoltar(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    setArrastando(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f) onSelecionar(f);
+  }
+
+  return (
+    <div style={{ display: "flex", gap: 12, alignItems: "stretch" }}>
+      <div
+        onDragEnter={aoArrastar}
+        onDragOver={aoArrastar}
+        onDragLeave={aoArrastar}
+        onDrop={aoSoltar}
+        onClick={() => inputRef.current?.click()}
+        style={{
+          flex: 1,
+          background: arrastando ? C.accent + "22" : C.surface,
+          border: `2px dashed ${arrastando ? C.accent : C.border}`,
+          borderRadius: 10, padding: "18px 14px",
+          textAlign: "center", cursor: "pointer", color: C.muted, fontSize: 13,
+          transition: "all 0.15s ease",
+        }}
+      >
+        <div style={{ fontSize: 28, marginBottom: 4 }}>🖼️</div>
+        <div style={{ color: C.text, fontWeight: 600 }}>
+          {preview ? "Trocar imagem" : "Clique ou arraste uma imagem"}
+        </div>
+        <div style={{ fontSize: 11, marginTop: 4 }}>JPG, PNG ou WEBP • máx 2 MB</div>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          onChange={e => onSelecionar(e.target.files?.[0])}
+          style={{ display: "none" }}
+        />
+      </div>
+      {preview && (
+        <div style={{ position: "relative", flexShrink: 0 }}>
+          <img
+            src={preview}
+            alt="Preview"
+            style={{
+              width: 120, height: 120, objectFit: "cover", borderRadius: 10,
+              border: `1px solid ${C.border}`, background: C.surface,
+            }}
+          />
+          <button
+            type="button"
+            onClick={onLimpar}
+            title="Remover imagem"
+            style={{
+              position: "absolute", top: -8, right: -8,
+              width: 26, height: 26, borderRadius: "50%",
+              background: C.red, border: `2px solid ${C.card}`, color: C.white,
+              fontSize: 14, fontWeight: 800, cursor: "pointer", lineHeight: 1,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
+            }}
+          >×</button>
+        </div>
+      )}
+    </div>
+  );
 }

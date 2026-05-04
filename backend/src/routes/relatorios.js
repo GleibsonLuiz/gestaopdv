@@ -5,6 +5,7 @@ import {
   relatorioCompras,
   relatorioFinanceiro,
   relatorioEstoque,
+  relatorioCaixas,
 } from "../controllers/relatoriosController.js";
 
 const router = Router();
@@ -16,5 +17,6 @@ router.get("/vendas", relatorioVendas);
 router.get("/compras", relatorioCompras);
 router.get("/financeiro", relatorioFinanceiro);
 router.get("/estoque", relatorioEstoque);
+router.get("/caixas", relatorioCaixas);
 
 export default router;

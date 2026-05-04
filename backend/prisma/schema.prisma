@@ -65,6 +65,7 @@ enum StatusCaixa {
 enum TipoMovimentacaoCaixa {
   ABERTURA
   VENDA
+  ESTORNO_VENDA
   SANGRIA
   SUPRIMENTO
   PAGAR_CONTA

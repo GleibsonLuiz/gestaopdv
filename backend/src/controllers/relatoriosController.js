@@ -409,3 +409,134 @@ export async function relatorioEstoque(req, res, next) {
     next(err);
   }
 }
+
+// ============ RELATORIO DE CAIXAS (DRE DIARIO) ============
+//
+// Lista caixas FECHADOS no periodo (default: tudo). Agrupa por dia para o
+// DRE resumido (entradas, saidas, quebras, sobras, vendas) e devolve a
+// tabela detalhada por caixa.
+//
+// Filtros: dataInicio, dataFim, userId. VENDEDOR sempre ve so o proprio.
+
+export async function relatorioCaixas(req, res, next) {
+  try {
+    const { dataInicio, dataFim, userId } = req.query;
+
+    const where = { status: "FECHADO" };
+    if (req.user.role === "VENDEDOR") where.userId = req.user.sub;
+    else if (userId) where.userId = userId;
+
+    if (dataInicio || dataFim) {
+      where.fechadoEm = {};
+      if (dataInicio) where.fechadoEm.gte = new Date(dataInicio);
+      if (dataFim) where.fechadoEm.lte = new Date(dataFim + "T23:59:59.999Z");
+    }
+
+    const caixas = await prisma.caixa.findMany({
+      where,
+      include: {
+        user: { select: { id: true, nome: true } },
+        _count: { select: { vendas: true, movimentacoes: true } },
+      },
+      orderBy: { fechadoEm: "asc" },
+    });
+
+    const ids = caixas.map(c => c.id);
+    const movs = ids.length === 0 ? [] : await prisma.movimentacaoCaixa.findMany({
+      where: { caixaId: { in: ids } },
+      select: { caixaId: true, tipo: true, valor: true, formaPagamento: true },
+    });
+
+    const ehEntrada = (t) => t === "VENDA" || t === "SUPRIMENTO" || t === "RECEBER_CONTA";
+    const ehSaida = (t) => t === "SANGRIA" || t === "PAGAR_CONTA" || t === "ESTORNO_VENDA";
+
+    const totaisPorCaixa = new Map();
+    for (const id of ids) {
+      totaisPorCaixa.set(id, { entradasDinheiro: 0, entradasOutras: 0, saidasDinheiro: 0, saidasOutras: 0 });
+    }
+    for (const m of movs) {
+      if (m.tipo === "ABERTURA" || m.tipo === "FECHAMENTO") continue;
+      const t = totaisPorCaixa.get(m.caixaId);
+      const v = Number(m.valor);
+      const dinheiro = m.formaPagamento === "DINHEIRO";
+      if (ehEntrada(m.tipo)) {
+        if (dinheiro) t.entradasDinheiro += v; else t.entradasOutras += v;
+      } else if (ehSaida(m.tipo)) {
+        if (dinheiro) t.saidasDinheiro += v; else t.saidasOutras += v;
+      }
+    }
+
+    const porDia = new Map();
+    const totaisGerais = {
+      caixas: caixas.length,
+      entradas: 0, saidas: 0,
+      quebras: 0, sobras: 0,
+      diferencaLiquida: 0,
+      vendas: 0,
+    };
+
+    for (const c of caixas) {
+      const t = totaisPorCaixa.get(c.id);
+      const ent = t.entradasDinheiro + t.entradasOutras;
+      const sai = t.saidasDinheiro + t.saidasOutras;
+      const dif = Number(c.diferenca || 0);
+
+      const dataKey = c.fechadoEm
+        ? new Date(c.fechadoEm).toISOString().slice(0, 10)
+        : "sem-data";
+      if (!porDia.has(dataKey)) {
+        porDia.set(dataKey, {
+          data: dataKey, caixas: 0,
+          entradas: 0, saidas: 0,
+          quebras: 0, sobras: 0, vendas: 0,
+        });
+      }
+      const dia = porDia.get(dataKey);
+      dia.caixas++;
+      dia.entradas += ent;
+      dia.saidas += sai;
+      dia.vendas += c._count.vendas;
+      if (dif < 0) dia.quebras += Math.abs(dif);
+      else if (dif > 0) dia.sobras += dif;
+
+      totaisGerais.entradas += ent;
+      totaisGerais.saidas += sai;
+      totaisGerais.vendas += c._count.vendas;
+      if (dif < 0) totaisGerais.quebras += Math.abs(dif);
+      else if (dif > 0) totaisGerais.sobras += dif;
+      totaisGerais.diferencaLiquida += dif;
+    }
+
+    res.json({
+      geradoEm: new Date().toISOString(),
+      filtros: {
+        dataInicio: dataInicio || null,
+        dataFim: dataFim || null,
+        userId: req.user.role === "VENDEDOR" ? req.user.sub : (userId || null),
+      },
+      resumo: totaisGerais,
+      dre: Array.from(porDia.values()).sort((a, b) => a.data.localeCompare(b.data)),
+      caixas: caixas.map(c => {
+        const t = totaisPorCaixa.get(c.id);
+        return {
+          id: c.id,
+          numero: c.numero,
+          operador: c.user?.nome || null,
+          abertoEm: c.abertoEm,
+          fechadoEm: c.fechadoEm,
+          saldoInicial: Number(c.saldoInicial),
+          saldoFinalEsperado: c.saldoFinalEsperado != null ? Number(c.saldoFinalEsperado) : null,
+          saldoFinalContado: c.saldoFinalContado != null ? Number(c.saldoFinalContado) : null,
+          trocoProximoDia: c.trocoProximoDia != null ? Number(c.trocoProximoDia) : null,
+          diferenca: Number(c.diferenca || 0),
+          totalEntradas: t.entradasDinheiro + t.entradasOutras,
+          totalSaidas: t.saidasDinheiro + t.saidasOutras,
+          vendas: c._count.vendas,
+          movimentacoes: c._count.movimentacoes,
+        };
+      }),
+    });
+  } catch (err) {
+    next(err);
+  }
+}

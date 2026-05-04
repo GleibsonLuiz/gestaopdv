@@ -1,5 +1,5 @@
 import prisma from "../lib/prisma.js";
-import { exigirCaixaAberto, registrarNoCaixaAberto } from "./caixaController.js";
+import { exigirCaixaAberto, registrarNoCaixaAberto, calcularTotaisCaixa } from "./caixaController.js";
 
 const FORMAS_VALIDAS = new Set([
   "DINHEIRO", "CARTAO_CREDITO", "CARTAO_DEBITO", "PIX", "BOLETO", "CREDIARIO",
@@ -223,6 +223,36 @@ export async function cancelar(req, res, next) {
           data: { status: "CANCELADA" },
           include: INCLUDE_DETALHE,
         });
+
+        // Estorno no caixa: so reverte se a venda estava vinculada a um caixa
+        // que AINDA esta aberto. Se o caixa ja foi fechado, a divergencia fica
+        // como "ajuste pos-fechamento" no proprio extrato (sera vista no
+        // historico, mas nao mexe em saldo de caixa fechado).
+        if (atual.caixaId) {
+          const caixaVenda = await tx.caixa.findUnique({
+            where: { id: atual.caixaId },
+            select: { status: true, userId: true, saldoInicial: true },
+          });
+          if (caixaVenda?.status === "ABERTO") {
+            const totais = await calcularTotaisCaixa(atual.caixaId, Number(caixaVenda.saldoInicial), tx);
+            const saldoAntes = Math.round(totais.saldoEsperadoDinheiro * 100) / 100;
+            const ehDinheiro = atual.formaPagamento === "DINHEIRO";
+            const saldoDepois = Math.round((saldoAntes - (ehDinheiro ? Number(atual.total) : 0)) * 100) / 100;
+            await tx.movimentacaoCaixa.create({
+              data: {
+                caixaId: atual.caixaId,
+                userId: req.user.sub,
+                tipo: "ESTORNO_VENDA",
+                formaPagamento: atual.formaPagamento,
+                valor: Number(atual.total),
+                descricao: `ESTORNO VENDA #${atual.numero}`,
+                saldoAntes,
+                saldoDepois,
+                vendaId: atual.id,
+              },
+            });
+          }
+        }
 
         // Estorno: cria ENTRADA para cada item e devolve ao estoque.
         // Servicos nao tem estoque a estornar — pulam silenciosamente.

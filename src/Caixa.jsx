@@ -21,6 +21,7 @@ const fmtDataCurta = (iso) => {
 const TIPO_INFO = {
   ABERTURA:      { label: "Abertura",       icone: "🟢", cor: "accent" },
   VENDA:         { label: "Venda",          icone: "🛒", cor: "green",  sinal: "+" },
+  ESTORNO_VENDA: { label: "Estorno venda",  icone: "↩",  cor: "red",    sinal: "−" },
   SUPRIMENTO:    { label: "Suprimento",     icone: "💵", cor: "green",  sinal: "+" },
   RECEBER_CONTA: { label: "Recebimento",    icone: "📥", cor: "green",  sinal: "+" },
   SANGRIA:       { label: "Sangria",        icone: "✂",  cor: "yellow", sinal: "−" },
@@ -249,6 +250,7 @@ function AbaAtual({ user, caixa, carregando, onMudar, onErro }) {
       {modal === "fechar" && (
         <ModalFechar
           caixa={caixa}
+          user={user}
           onCancelar={() => setModal(null)}
           onSucesso={(diferenca) => {
             setModal(null);
@@ -261,6 +263,7 @@ function AbaAtual({ user, caixa, carregando, onMudar, onErro }) {
       {modal === "sangria" && (
         <ModalManual
           caixa={caixa}
+          user={user}
           tipo="sangria"
           onCancelar={() => setModal(null)}
           onSucesso={() => { setModal(null); onMudar("Sangria registrada"); }}
@@ -269,6 +272,7 @@ function AbaAtual({ user, caixa, carregando, onMudar, onErro }) {
       {modal === "suprimento" && (
         <ModalManual
           caixa={caixa}
+          user={user}
           tipo="suprimento"
           onCancelar={() => setModal(null)}
           onSucesso={() => { setModal(null); onMudar("Suprimento registrado"); }}
@@ -609,13 +613,15 @@ function ModalAbrir({ onCancelar, onSucesso }) {
   );
 }
 
-function ModalFechar({ caixa, onCancelar, onSucesso }) {
+function ModalFechar({ caixa, user, onCancelar, onSucesso }) {
   const [saldoContado, setSaldoContado] = useState("");
   const [trocoProximo, setTrocoProximo] = useState("");
   const [observacoes, setObservacoes] = useState("");
+  const [autorizacao, setAutorizacao] = useState({ email: "", senha: "" });
   const [revelado, setRevelado] = useState(null);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+  const exigeAutorizacao = user?.role === "VENDEDOR";
 
   async function salvar(e) {
     e.preventDefault();
@@ -625,6 +631,9 @@ function ModalFechar({ caixa, onCancelar, onSucesso }) {
     if (!Number.isFinite(contado) || contado < 0) { setErro("Saldo contado inválido"); return; }
     if (!Number.isFinite(troco) || troco < 0) { setErro("Troco inválido"); return; }
     if (troco > contado) { setErro("O troco não pode ser maior que o saldo contado"); return; }
+    if (exigeAutorizacao && (!autorizacao.email || !autorizacao.senha)) {
+      setErro("Autorização gerencial obrigatória para fechar o caixa"); return;
+    }
 
     setSalvando(true);
     try {
@@ -632,6 +641,8 @@ function ModalFechar({ caixa, onCancelar, onSucesso }) {
         saldoFinalContado: contado,
         trocoProximoDia: troco,
         observacoesFechamento: observacoes,
+        emailAutorizacao: exigeAutorizacao ? autorizacao.email : undefined,
+        senhaAutorizacao: exigeAutorizacao ? autorizacao.senha : undefined,
       });
       setRevelado({
         contado, troco,
@@ -701,6 +712,9 @@ function ModalFechar({ caixa, onCancelar, onSucesso }) {
           <input value={observacoes} onChange={e => setObservacoes(e.target.value)}
             placeholder="Opcional" style={inputStyle} />
         </Campo>
+        {exigeAutorizacao && (
+          <AutorizacaoGerente valor={autorizacao} onMudar={setAutorizacao} acao="fechar o caixa" />
+        )}
         {erro && <div style={erroStyle}>{erro}</div>}
         <RodapeModal>
           <button type="button" onClick={onCancelar} disabled={salvando} style={btnCancelar}>Cancelar</button>
@@ -713,22 +727,33 @@ function ModalFechar({ caixa, onCancelar, onSucesso }) {
   );
 }
 
-function ModalManual({ caixa, tipo, onCancelar, onSucesso }) {
+function ModalManual({ caixa, user, tipo, onCancelar, onSucesso }) {
   const ehSangria = tipo === "sangria";
   const [valor, setValor] = useState("");
   const [descricao, setDescricao] = useState("");
+  const [autorizacao, setAutorizacao] = useState({ email: "", senha: "" });
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+  const exigeAutorizacao = ehSangria && user?.role === "VENDEDOR";
 
   async function salvar(e) {
     e.preventDefault();
     setErro("");
     const v = Number(String(valor).replace(",", "."));
     if (!Number.isFinite(v) || v <= 0) { setErro("Valor inválido"); return; }
+    if (exigeAutorizacao && (!autorizacao.email || !autorizacao.senha)) {
+      setErro("Autorização gerencial obrigatória para sangria"); return;
+    }
     setSalvando(true);
     try {
       const fn = ehSangria ? api.sangriaCaixa : api.suprimentoCaixa;
-      await fn(caixa.id, { valor: v, descricao });
+      await fn(caixa.id, {
+        valor: v,
+        descricao,
+        ...(exigeAutorizacao
+          ? { emailAutorizacao: autorizacao.email, senhaAutorizacao: autorizacao.senha }
+          : {}),
+      });
       onSucesso();
     } catch (err) { setErro(err.message); }
     finally { setSalvando(false); }
@@ -757,6 +782,9 @@ function ModalManual({ caixa, tipo, onCancelar, onSucesso }) {
             placeholder={ehSangria ? "Ex: depósito banco, vale funcionário" : "Ex: troca de cédula"}
             style={inputStyle} />
         </Campo>
+        {exigeAutorizacao && (
+          <AutorizacaoGerente valor={autorizacao} onMudar={setAutorizacao} acao="sangria" />
+        )}
         {erro && <div style={erroStyle}>{erro}</div>}
         <RodapeModal>
           <button type="button" onClick={onCancelar} disabled={salvando} style={btnCancelar}>Cancelar</button>
@@ -839,6 +867,39 @@ function KpiBox({ titulo, valor, cor }) {
       </div>
       <div style={{ color: cor, fontWeight: 800, fontSize: 18, marginTop: 4, fontFamily: "monospace" }}>
         {valor}
+      </div>
+    </div>
+  );
+}
+
+function AutorizacaoGerente({ valor, onMudar, acao }) {
+  return (
+    <div style={{
+      marginTop: 14, marginBottom: 10, padding: "12px 14px", borderRadius: 10,
+      background: C.purple + "15", border: `1px dashed ${C.purple}66`,
+    }}>
+      <div style={{ color: C.purple, fontWeight: 800, fontSize: 12, marginBottom: 8, letterSpacing: 0.4 }}>
+        🔐 AUTORIZAÇÃO GERENCIAL
+      </div>
+      <div style={{ color: C.muted, fontSize: 11, marginBottom: 10 }}>
+        Esta operação ({acao}) precisa ser aprovada por um <b style={{ color: C.text }}>ADMIN ou GERENTE</b>.
+        Peça para alguém autorizado digitar e-mail + senha aqui.
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <input
+          type="email" autoComplete="off"
+          placeholder="E-mail do gerente"
+          value={valor.email}
+          onChange={e => onMudar({ ...valor, email: e.target.value })}
+          style={inputStyle}
+        />
+        <input
+          type="password" autoComplete="new-password"
+          placeholder="Senha"
+          value={valor.senha}
+          onChange={e => onMudar({ ...valor, senha: e.target.value })}
+          style={inputStyle}
+        />
       </div>
     </div>
   );

@@ -39,6 +39,7 @@ const ABAS = [
   { id: "compras", label: "🛍️ Compras", cor: C.yellow },
   { id: "financeiro", label: "💰 Financeiro", cor: C.green },
   { id: "estoque", label: "📦 Estoque", cor: C.purple },
+  { id: "caixas", label: "💵 Caixas (DRE)", cor: C.red },
 ];
 
 export default function Relatorios() {
@@ -65,6 +66,7 @@ export default function Relatorios() {
       {aba === "compras" && <RelatorioCompras key="c" />}
       {aba === "financeiro" && <RelatorioFinanceiro key="f" />}
       {aba === "estoque" && <RelatorioEstoque key="e" />}
+      {aba === "caixas" && <RelatorioCaixas key="x" />}
     </div>
   );
 }
@@ -633,6 +635,133 @@ function RelatorioEstoque() {
               fmtBRL(p.valorEmEstoqueVenda),
             ])}
             vazioTexto="Nenhum produto encontrado com os filtros."
+          />
+        </>
+      )}
+    </BlocoRelatorio>
+  );
+}
+
+// ============ RELATÓRIO DE CAIXAS (DRE DIÁRIO) ============
+function RelatorioCaixas() {
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  const gerar = useCallback(async () => {
+    setCarregando(true); setErro("");
+    try {
+      const r = await api.relatorioCaixas({ dataInicio, dataFim });
+      setDados(r);
+    } catch (err) { setErro(err.message); }
+    finally { setCarregando(false); }
+  }, [dataInicio, dataFim]);
+
+  function exportar() {
+    if (!dados) return;
+    const doc = criarPDF("Relatório de Caixas — DRE Diário");
+    addPeriodo(doc, dataInicio, dataFim);
+    addLinha(doc, `Gerado em ${fmtDataHora(dados.geradoEm)}`);
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 4,
+      head: [["Indicador", "Valor"]],
+      body: [
+        ["Caixas fechados", fmtNum(dados.resumo.caixas)],
+        ["Total de vendas registradas", fmtNum(dados.resumo.vendas)],
+        ["Total de entradas", fmtBRL(dados.resumo.entradas)],
+        ["Total de saídas", fmtBRL(dados.resumo.saidas)],
+        ["Quebras (faltou dinheiro)", fmtBRL(dados.resumo.quebras)],
+        ["Sobras (excedeu o esperado)", fmtBRL(dados.resumo.sobras)],
+        ["Diferença líquida", fmtBRL(dados.resumo.diferencaLiquida)],
+      ],
+      theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+      styles: { fontSize: 10 },
+    });
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 6,
+      head: [["Dia", "Caixas", "Vendas", "Entradas", "Saídas", "Quebras", "Sobras"]],
+      body: dados.dre.map(d => [
+        fmtData(d.data + "T12:00:00"),
+        d.caixas, d.vendas,
+        fmtBRL(d.entradas), fmtBRL(d.saidas),
+        fmtBRL(d.quebras), fmtBRL(d.sobras),
+      ]),
+      theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+      styles: { fontSize: 9 },
+    });
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 6,
+      head: [["#", "Operador", "Aberto em", "Fechado em", "Saldo Inic.", "Esperado", "Contado", "Diferença"]],
+      body: dados.caixas.map(c => [
+        `#${c.numero}`, c.operador || "—",
+        fmtDataHora(c.abertoEm), fmtDataHora(c.fechadoEm),
+        fmtBRL(c.saldoInicial),
+        c.saldoFinalEsperado != null ? fmtBRL(c.saldoFinalEsperado) : "—",
+        c.saldoFinalContado != null ? fmtBRL(c.saldoFinalContado) : "—",
+        c.diferenca > 0 ? `+${fmtBRL(c.diferenca)}` : fmtBRL(c.diferenca),
+      ]),
+      theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+      styles: { fontSize: 8 },
+    });
+
+    doc.save(`relatorio-caixas-${hoje()}.pdf`);
+  }
+
+  return (
+    <BlocoRelatorio
+      titulo="Relatório de Caixas (DRE Diário)" cor={C.red}
+      filtros={
+        <>
+          <CampoData label="Início" value={dataInicio} onChange={setDataInicio} />
+          <CampoData label="Fim" value={dataFim} onChange={setDataFim} />
+        </>
+      }
+      onGerar={gerar} onExportar={exportar} carregando={carregando}
+      erro={erro} dados={dados}
+    >
+      {dados && (
+        <>
+          <Resumo cards={[
+            { rotulo: "Caixas fechados", valor: fmtNum(dados.resumo.caixas), cor: C.accent },
+            { rotulo: "Vendas", valor: fmtNum(dados.resumo.vendas), cor: C.green },
+            { rotulo: "Entradas", valor: fmtBRL(dados.resumo.entradas), cor: C.green },
+            { rotulo: "Saídas", valor: fmtBRL(dados.resumo.saidas), cor: C.red },
+            { rotulo: "Quebras", valor: fmtBRL(dados.resumo.quebras), cor: dados.resumo.quebras > 0 ? C.red : C.muted },
+            { rotulo: "Sobras", valor: fmtBRL(dados.resumo.sobras), cor: dados.resumo.sobras > 0 ? C.yellow : C.muted },
+          ]} />
+
+          <Tabela
+            titulo={`DRE diário (${dados.dre.length} ${dados.dre.length === 1 ? "dia" : "dias"})`}
+            colunas={["Dia", "Caixas", "Vendas", "Entradas", "Saídas", "Quebras", "Sobras"]}
+            alinhamentos={["left", "right", "right", "right", "right", "right", "right"]}
+            linhas={dados.dre.map(d => [
+              fmtData(d.data + "T12:00:00"),
+              d.caixas, d.vendas,
+              fmtBRL(d.entradas), fmtBRL(d.saidas),
+              d.quebras > 0 ? fmtBRL(d.quebras) : "—",
+              d.sobras > 0 ? fmtBRL(d.sobras) : "—",
+            ])}
+            vazioTexto="Nenhum caixa fechado no período."
+          />
+
+          <Tabela
+            titulo={`Caixas detalhados (${dados.caixas.length})`}
+            colunas={["#", "Operador", "Aberto em", "Fechado em", "Saldo inic.", "Esperado", "Contado", "Diferença"]}
+            alinhamentos={["left", "left", "left", "left", "right", "right", "right", "right"]}
+            linhas={dados.caixas.map(c => [
+              `#${c.numero}`, c.operador || "—",
+              fmtDataHora(c.abertoEm), fmtDataHora(c.fechadoEm),
+              fmtBRL(c.saldoInicial),
+              c.saldoFinalEsperado != null ? fmtBRL(c.saldoFinalEsperado) : "—",
+              c.saldoFinalContado != null ? fmtBRL(c.saldoFinalContado) : "—",
+              c.diferenca > 0 ? `+${fmtBRL(c.diferenca)}` : fmtBRL(c.diferenca),
+            ])}
+            vazioTexto="Nenhum caixa fechado no período."
           />
         </>
       )}

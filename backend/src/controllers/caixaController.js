@@ -1,8 +1,33 @@
 import prisma from "../lib/prisma.js";
+import bcrypt from "bcryptjs";
 
 const FORMAS_VALIDAS = new Set([
   "DINHEIRO", "CARTAO_CREDITO", "CARTAO_DEBITO", "PIX", "BOLETO", "CREDIARIO",
 ]);
+
+// Operacoes sensiveis (sangria, fechamento) feitas por VENDEDOR exigem
+// senha de um ADMIN/GERENTE ativo. ADMIN/GERENTE passam direto.
+async function exigirAutorizacaoGerencial(req) {
+  if (req.user.role !== "VENDEDOR") return; // ADMIN/GERENTE passam
+  const { senhaAutorizacao, emailAutorizacao } = req.body || {};
+  if (!senhaAutorizacao || !emailAutorizacao) {
+    const e = new Error("Esta operacao requer autorizacao de um gerente ou administrador");
+    e.status = 403;
+    throw e;
+  }
+  const aut = await prisma.user.findUnique({ where: { email: emailAutorizacao } });
+  if (!aut || !aut.ativo || (aut.role !== "ADMIN" && aut.role !== "GERENTE")) {
+    const e = new Error("Usuario autorizador invalido (precisa ser ADMIN ou GERENTE ativo)");
+    e.status = 403;
+    throw e;
+  }
+  const ok = await bcrypt.compare(senhaAutorizacao, aut.senha);
+  if (!ok) {
+    const e = new Error("Senha do autorizador incorreta");
+    e.status = 403;
+    throw e;
+  }
+}
 
 function toNumber(v) {
   if (v === undefined || v === null || v === "") return null;
@@ -137,6 +162,12 @@ export async function fechar(req, res, next) {
     }
 
     try {
+      await exigirAutorizacaoGerencial(req);
+    } catch (err) {
+      return res.status(err.status || 403).json({ erro: err.message });
+    }
+
+    try {
       const caixa = await prisma.$transaction(async (tx) => {
         const atual = await tx.caixa.findUnique({ where: { id } });
         if (!atual) {
@@ -212,6 +243,16 @@ async function lancarManual(req, res, next, tipo) {
 
     if (valor === null || Number.isNaN(valor) || valor <= 0) {
       return res.status(400).json({ erro: "Valor invalido" });
+    }
+
+    // Sangria (saida de dinheiro) exige autorizacao gerencial para VENDEDOR.
+    // Suprimento (entrada) nao precisa — nao ha risco de fraude.
+    if (tipo === "SANGRIA") {
+      try {
+        await exigirAutorizacaoGerencial(req);
+      } catch (err) {
+        return res.status(err.status || 403).json({ erro: err.message });
+      }
     }
 
     try {
@@ -338,7 +379,7 @@ export async function calcularTotaisCaixa(caixaId, saldoInicial, tx = prisma) {
   });
 
   const ehEntrada = (t) => t === "VENDA" || t === "SUPRIMENTO" || t === "RECEBER_CONTA";
-  const ehSaida = (t) => t === "SANGRIA" || t === "PAGAR_CONTA";
+  const ehSaida = (t) => t === "SANGRIA" || t === "PAGAR_CONTA" || t === "ESTORNO_VENDA";
 
   let entradasDinheiro = 0;
   let saidasDinheiro = 0;

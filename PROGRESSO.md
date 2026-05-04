@@ -133,6 +133,68 @@ Não existe rota/UI para **cancelar/excluir** uma compra. Hoje, se uma compra é
 
 ## Histórico de sessões
 
+### Sessão — 2026-05-04 (Caixa — polimento: estorno, autorização gerencial, DRE diário)
+
+Três follow-ups do módulo Caixa entregues em sequência: reversão automática de venda cancelada no extrato, exigência de senha de gerente para sangria/fechamento quando o operador é VENDEDOR, e novo relatório DRE diário com export PDF.
+
+**1. Estorno de venda cancelada** — migration `20260504223047_add_estorno_venda_e_dre`
+
+- Novo valor `ESTORNO_VENDA` no enum `TipoMovimentacaoCaixa`
+- `vendaController.cancelar` agora, dentro da mesma transação:
+  - Localiza o caixa vinculado à venda (`atual.caixaId`)
+  - Se o caixa **ainda está aberto**, cria `MovimentacaoCaixa.ESTORNO_VENDA` com `valor = total da venda`, sinal de saída
+  - Se já foi fechado, não estorna (não dá pra mexer em saldo de caixa fechado) — a venda fica `CANCELADA` mesmo assim, e o estoque continua sendo estornado normalmente
+- `calcularTotaisCaixa` reconhece `ESTORNO_VENDA` como saída (afeta `saidasDinheiro` quando forma=DINHEIRO)
+- Frontend [`Caixa.jsx`](src/Caixa.jsx) ganha entrada no `TIPO_INFO` com ícone ↩ vermelho e sinal "−"
+
+**2. Autorização gerencial para sangria/fechamento**
+
+- Novo helper privado `exigirAutorizacaoGerencial(req)` em [`caixaController.js`](backend/src/controllers/caixaController.js):
+  - Se `req.user.role !== "VENDEDOR"`, **passa direto** (ADMIN/GERENTE têm autoridade própria)
+  - Se VENDEDOR, exige `emailAutorizacao` + `senhaAutorizacao` no body
+  - Valida que o autorizador é ADMIN/GERENTE ativo via `bcrypt.compare` contra a senha do user no banco
+  - Erros: 403 com mensagens específicas ("requer autorizacao", "senha incorreta", "autorizador invalido")
+- Aplicado em `fechar` (sempre) e `lancarManual` apenas para `tipo === "SANGRIA"` (suprimento é entrada — sem risco de fraude)
+- Frontend: novo componente reutilizável `AutorizacaoGerente` (card roxo tracejado com 2 inputs e-mail + senha), renderizado condicionalmente em `ModalFechar` e `ModalManual` apenas quando `user.role === "VENDEDOR"`
+- `api.js` propaga `emailAutorizacao` + `senhaAutorizacao` em `fecharCaixa` e `sangriaCaixa`
+
+**3. Relatório de Caixas (DRE diário)** — endpoint `GET /relatorios/caixas`
+
+- [`relatoriosController.relatorioCaixas`](backend/src/controllers/relatoriosController.js): busca caixas FECHADOS com filtros opcionais (`dataInicio`, `dataFim`, `userId`); VENDEDOR sempre vê só os próprios
+- Para cada caixa, calcula entradas/saidas reais a partir das movimentações (não confia só no `saldoFinalEsperado` armazenado — cobre casos de movimentação pós-fechamento)
+- Agrupa por dia (chave `YYYY-MM-DD` do `fechadoEm`) gerando o DRE: caixas, vendas, entradas, saidas, **quebras** (diferença negativa) e **sobras** (positiva)
+- Resumo geral: caixas, vendas, entradas, saidas, quebras, sobras, **diferença líquida** (soma de todas as diferenças)
+- Devolve também tabela detalhada por caixa com saldoInicial/Esperado/Contado/Diferença
+
+- Frontend [`Relatorios.jsx`](src/Relatorios.jsx): nova aba `💵 Caixas (DRE)` na cor `C.red`. Componente `RelatorioCaixas` com filtros de data, 6 cards de resumo, **2 tabelas** (DRE diário + detalhado), e export PDF com 3 autoTables (resumo + DRE + caixas detalhados)
+- `api.js`: novo método `relatorioCaixas({ dataInicio, dataFim, userId })`
+
+**Validado via API:**
+
+```
+# 1) Estorno
+POST /caixas/abrir { saldoInicial: 100 }                → caixa #N aberto
+POST /vendas DINHEIRO 2x R$24.90 (vinculada ao caixa)   → saldo 100 → 149.80
+POST /vendas/:id/cancelar                                → CANCELADA + ESTORNO_VENDA criado
+GET  /caixas/:id/extrato                                 → linha ESTORNO_VENDA R$49.80, saldo volta a 100
+
+# 2) Autorizacao gerencial (vendedor amanda.silva)
+POST /caixas/:id/sangria { valor: 10 }                   → 403 "requer autorizacao"
+POST /caixas/:id/sangria + senha errada                  → 403 "senha incorreta"
+POST /caixas/:id/sangria + admin/admin123                → 201 SANGRIA OK
+POST /caixas/:id/suprimento { valor: 5 } sem auth        → 201 OK (suprimento nao exige)
+POST /caixas/:id/fechar { contado: 45 } sem auth         → 403
+POST /caixas/:id/fechar + admin/admin123                 → 200 FECHADO diferenca=0
+
+# 3) Relatorio DRE
+GET  /relatorios/caixas                                  → 200
+  resumo: { caixas: 2, vendas: 2, entradas: 104.80, saidas: 40, quebras: 9.80, sobras: 0, diferencaLiquida: -9.80 }
+  dre: [{ data: 2026-05-04, caixas: 2, vendas: 2, entradas: 104.80, saidas: 40, quebras: 9.80, sobras: 0 }]
+  caixas detalhados: [#1 ADMIN dif=-9.80, #3 AMANDA dif=0]
+
+npx vite build                                           → ok 611ms
+```
+
 ### Sessão — 2026-05-04 (Módulo Caixa: abertura, fechamento cego, extrato + integração PDV/Financeiro)
 
 Novo módulo **Caixa** que controla o dinheiro físico do PDV. Cada usuário opera o seu próprio caixa (modelo "por operador"), com sugestão automática de troco baseada no último fechamento, conferência cega no fechamento e extrato cronológico com saldo acumulado linha a linha. Vendas e pagamentos financeiros em DINHEIRO movimentam o caixa aberto automaticamente; outras formas de pagamento (PIX/cartão) entram no extrato mas não afetam o saldo físico em dinheiro.

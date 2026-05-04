@@ -242,6 +242,14 @@ export const api = {
     const q = qs.toString();
     return request(`/relatorios/estoque${q ? `?${q}` : ""}`);
   },
+  relatorioCaixas: ({ dataInicio = "", dataFim = "", userId = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (dataInicio) qs.set("dataInicio", dataInicio);
+    if (dataFim) qs.set("dataFim", dataFim);
+    if (userId) qs.set("userId", userId);
+    const q = qs.toString();
+    return request(`/relatorios/caixas${q ? `?${q}` : ""}`);
+  },
 
   listarContasPagar: ({ search = "", status = "", fornecedorId = "", dataInicio = "", dataFim = "", vencidas = "" } = {}) => {
     const qs = new URLSearchParams();
@@ -323,13 +331,16 @@ export const api = {
       method: "POST",
       body: { saldoInicial, observacoesAbertura },
     }),
-  fecharCaixa: (id, { saldoFinalContado, trocoProximoDia, observacoesFechamento }) =>
+  fecharCaixa: (id, { saldoFinalContado, trocoProximoDia, observacoesFechamento, emailAutorizacao, senhaAutorizacao }) =>
     request(`/caixas/${id}/fechar`, {
       method: "POST",
-      body: { saldoFinalContado, trocoProximoDia, observacoesFechamento },
+      body: { saldoFinalContado, trocoProximoDia, observacoesFechamento, emailAutorizacao, senhaAutorizacao },
     }),
-  sangriaCaixa: (id, { valor, descricao }) =>
-    request(`/caixas/${id}/sangria`, { method: "POST", body: { valor, descricao } }),
+  sangriaCaixa: (id, { valor, descricao, emailAutorizacao, senhaAutorizacao }) =>
+    request(`/caixas/${id}/sangria`, {
+      method: "POST",
+      body: { valor, descricao, emailAutorizacao, senhaAutorizacao },
+    }),
   suprimentoCaixa: (id, { valor, descricao }) =>
     request(`/caixas/${id}/suprimento`, { method: "POST", body: { valor, descricao } }),
 };

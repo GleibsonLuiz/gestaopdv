@@ -57,6 +57,21 @@ enum TipoItem {
   SERVICO
 }
 
+enum StatusCaixa {
+  ABERTO
+  FECHADO
+}
+
+enum TipoMovimentacaoCaixa {
+  ABERTURA
+  VENDA
+  SANGRIA
+  SUPRIMENTO
+  PAGAR_CONTA
+  RECEBER_CONTA
+  FECHAMENTO
+}
+
 // ============ USUARIOS ============
 
 model User {
@@ -70,8 +85,10 @@ model User {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  vendas        Venda[]
-  movimentacoes MovimentacaoEstoque[]
+  vendas              Venda[]
+  movimentacoes       MovimentacaoEstoque[]
+  caixas              Caixa[]
+  movimentacoesCaixa  MovimentacaoCaixa[]
 
   @@map("users")
 }
@@ -179,8 +196,13 @@ model Venda {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
-  itens ItemVenda[]
+  caixaId String?
+  caixa   Caixa?  @relation(fields: [caixaId], references: [id])
 
+  itens         ItemVenda[]
+  movimentacoesCaixa MovimentacaoCaixa[]
+
+  @@index([caixaId])
   @@map("vendas")
 }
 
@@ -274,7 +296,8 @@ model ContaPagar {
   fornecedorId String?
   fornecedor   Fornecedor? @relation(fields: [fornecedorId], references: [id])
 
-  anexos Anexo[]
+  anexos             Anexo[]
+  movimentacoesCaixa MovimentacaoCaixa[]
 
   @@index([grupoRecorrenciaId])
   @@map("contas_pagar")
@@ -302,7 +325,8 @@ model ContaReceber {
   clienteId String?
   cliente   Cliente? @relation(fields: [clienteId], references: [id])
 
-  anexos Anexo[]
+  anexos             Anexo[]
+  movimentacoesCaixa MovimentacaoCaixa[]
 
   @@index([grupoRecorrenciaId])
   @@map("contas_receber")
@@ -326,4 +350,58 @@ model Anexo {
   @@index([contaPagarId])
   @@index([contaReceberId])
   @@map("anexos")
+}
+
+// ============ CAIXA ============
+
+model Caixa {
+  id                    String       @id @default(uuid())
+  numero                Int          @unique @default(autoincrement())
+  status                StatusCaixa  @default(ABERTO)
+  saldoInicial          Decimal      @db.Decimal(10, 2)
+  saldoFinalContado     Decimal?     @db.Decimal(10, 2)
+  saldoFinalEsperado    Decimal?     @db.Decimal(10, 2)
+  trocoProximoDia       Decimal?     @db.Decimal(10, 2)
+  diferenca             Decimal?     @db.Decimal(10, 2)
+  observacoesAbertura   String?
+  observacoesFechamento String?
+  abertoEm              DateTime     @default(now())
+  fechadoEm             DateTime?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  vendas        Venda[]
+  movimentacoes MovimentacaoCaixa[]
+
+  @@index([userId, status])
+  @@index([abertoEm])
+  @@map("caixas")
+}
+
+model MovimentacaoCaixa {
+  id             String                @id @default(uuid())
+  tipo           TipoMovimentacaoCaixa
+  valor          Decimal               @db.Decimal(10, 2)
+  formaPagamento FormaPagamento        @default(DINHEIRO)
+  descricao      String
+  saldoAntes     Decimal               @db.Decimal(10, 2)
+  saldoDepois    Decimal               @db.Decimal(10, 2)
+  createdAt      DateTime              @default(now())
+
+  caixaId String
+  caixa   Caixa  @relation(fields: [caixaId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  vendaId        String?
+  venda          Venda?         @relation(fields: [vendaId], references: [id])
+  contaPagarId   String?
+  contaPagar     ContaPagar?    @relation(fields: [contaPagarId], references: [id])
+  contaReceberId String?
+  contaReceber   ContaReceber?  @relation(fields: [contaReceberId], references: [id])
+
+  @@index([caixaId, createdAt])
+  @@map("movimentacoes_caixa")
 }

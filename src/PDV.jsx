@@ -86,11 +86,14 @@ function NovaVenda({ user }) {
   const [cancelarAberto, setCancelarAberto] = useState(false);
   const [valorRecebido, setValorRecebido] = useState("");
   const [destacado, setDestacado] = useState(null); // produtoId recém-adicionado (para flash)
+  const [caixaAtual, setCaixaAtual] = useState(null);
+  const [caixaCarregando, setCaixaCarregando] = useState(true);
   const buscaRef = useRef(null);
   const finalizarRef = useRef(null);
   const valorRecebidoRef = useRef(null);
 
   const algumaModalAberta = pagamentoAberto || cancelarAberto || !!reciboAberto;
+  const semCaixa = !caixaCarregando && !caixaAtual;
 
   const focarBusca = useCallback(() => {
     setTimeout(() => buscaRef.current?.focus(), 0);
@@ -109,6 +112,10 @@ function NovaVenda({ user }) {
   useEffect(() => {
     api.listarProdutos({ ativo: "true" }).then(setProdutos).catch(() => {});
     api.listarClientes({ ativo: "true" }).then(setClientes).catch(() => {});
+    api.obterCaixaAtual()
+      .then(r => setCaixaAtual(r.caixa))
+      .catch(() => setCaixaAtual(null))
+      .finally(() => setCaixaCarregando(false));
   }, []);
 
   useEffect(() => {
@@ -319,6 +326,7 @@ function NovaVenda({ user }) {
 
   function abrirPagamento() {
     setErro("");
+    if (semCaixa) { flashErro("Abra um caixa antes de finalizar uma venda."); return; }
     if (carrinho.length === 0) { flashErro("Adicione ao menos um item"); return; }
     if (descontoNum > subtotal) { flashErro("Desconto não pode ser maior que o subtotal"); return; }
     setPagamentoAberto(true);
@@ -377,6 +385,39 @@ function NovaVenda({ user }) {
         .pdv-sugestao:hover { background: ${C.accent}22 !important; }
         .pdv-cancel-row:hover { background: ${C.red}22 !important; }
       `}</style>
+
+      {/* BANNER DE STATUS DO CAIXA */}
+      {!caixaCarregando && (
+        semCaixa ? (
+          <div style={{
+            background: C.red + "22", border: `1px solid ${C.red}66`, borderRadius: 10,
+            padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between",
+            gap: 12, flexWrap: "wrap",
+          }}>
+            <div style={{ color: C.red, fontWeight: 700, fontSize: 14 }}>
+              🔒 <b>Nenhum caixa aberto.</b> Você não pode registrar vendas sem caixa.
+              Vá em <b style={{ color: C.white }}>Caixa → Abrir Caixa</b>.
+            </div>
+          </div>
+        ) : (
+          <div style={{
+            background: C.green + "1a", border: `1px solid ${C.green}55`, borderRadius: 10,
+            padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between",
+            gap: 12, flexWrap: "wrap", fontSize: 13,
+          }}>
+            <div style={{ color: C.text }}>
+              <span style={{ color: C.green, fontWeight: 800 }}>🟢 Caixa #{caixaAtual.numero} aberto</span>
+              {" · saldo esperado em dinheiro: "}
+              <b style={{ color: C.white, fontFamily: "monospace" }}>
+                {fmtBRL(caixaAtual.totais?.saldoEsperadoDinheiro)}
+              </b>
+            </div>
+            <div style={{ color: C.muted, fontSize: 12 }}>
+              {caixaAtual._count?.vendas || 0} venda(s) registrada(s)
+            </div>
+          </div>
+        )
+      )}
 
       {/* BARRA DE BIPAGEM CENTRAL — autofocus permanente */}
       <div style={{
@@ -607,17 +648,18 @@ function NovaVenda({ user }) {
 
             <button
               onClick={abrirPagamento}
-              disabled={carrinho.length === 0}
+              disabled={carrinho.length === 0 || semCaixa}
+              title={semCaixa ? "Abra um caixa antes de finalizar" : ""}
               style={{
-                background: carrinho.length === 0 ? C.surface : `linear-gradient(135deg, ${C.green}, #15803d)`,
+                background: (carrinho.length === 0 || semCaixa) ? C.surface : `linear-gradient(135deg, ${C.green}, #15803d)`,
                 color: C.white, border: "none", borderRadius: 10,
                 padding: "16px", fontWeight: 800, fontSize: 16,
-                cursor: carrinho.length === 0 ? "not-allowed" : "pointer",
-                opacity: carrinho.length === 0 ? 0.5 : 1,
-                boxShadow: carrinho.length === 0 ? "none" : `0 4px 14px ${C.green}55`,
+                cursor: (carrinho.length === 0 || semCaixa) ? "not-allowed" : "pointer",
+                opacity: (carrinho.length === 0 || semCaixa) ? 0.5 : 1,
+                boxShadow: (carrinho.length === 0 || semCaixa) ? "none" : `0 4px 14px ${C.green}55`,
                 letterSpacing: 0.3,
               }}>
-              ✓ FINALIZAR — {fmtBRL(total)}
+              {semCaixa ? "🔒 CAIXA FECHADO" : `✓ FINALIZAR — ${fmtBRL(total)}`}
               <div style={{ fontSize: 10, marginTop: 2, opacity: 0.85, fontWeight: 700 }}>F10</div>
             </button>
           </div>

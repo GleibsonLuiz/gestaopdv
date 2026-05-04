@@ -1,4 +1,5 @@
 import prisma from "../lib/prisma.js";
+import { exigirCaixaAberto, registrarNoCaixaAberto } from "./caixaController.js";
 
 const FORMAS_VALIDAS = new Set([
   "DINHEIRO", "CARTAO_CREDITO", "CARTAO_DEBITO", "PIX", "BOLETO", "CREDIARIO",
@@ -100,6 +101,9 @@ export async function criar(req, res, next) {
     const total = Math.max(0, subtotal - desconto);
 
     try {
+      // Defesa explicita: nao deixa registrar venda sem caixa aberto.
+      const caixaAtivo = await exigirCaixaAberto(req.user.sub);
+
       const venda = await prisma.$transaction(async (tx) => {
         if (clienteId) {
           const c = await tx.cliente.findUnique({ where: { id: clienteId } });
@@ -133,6 +137,7 @@ export async function criar(req, res, next) {
           data: {
             clienteId: clienteId || null,
             userId: req.user.sub,
+            caixaId: caixaAtivo.id,
             formaPagamento,
             status: "CONCLUIDA",
             desconto,
@@ -148,6 +153,16 @@ export async function criar(req, res, next) {
             },
           },
           include: INCLUDE_DETALHE,
+        });
+
+        // Registra a venda no extrato do caixa (todas as formas — saldo so
+        // muda quando DINHEIRO).
+        await registrarNoCaixaAberto(tx, req.user.sub, {
+          tipo: "VENDA",
+          formaPagamento,
+          valor: total,
+          descricao: `VENDA #${vendaCriada.numero}${clienteId ? "" : " — CONSUMIDOR"}`,
+          vendaId: vendaCriada.id,
         });
 
         for (const it of itensNorm) {

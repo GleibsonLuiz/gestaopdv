@@ -133,6 +133,41 @@ Não existe rota/UI para **cancelar/excluir** uma compra. Hoje, se uma compra é
 
 ## Histórico de sessões
 
+### Sessão — 2026-05-04 (Produto: código de barras + referência)
+
+Cadastro de produtos ganhou dois campos novos: **código de barras** (EAN/GTIN, único quando preenchido) e **referência** (código do fabricante/fornecedor, livre). PDV passou a fazer bipagem por qualquer um dos três identificadores (codigoBarras → codigo → referencia), priorizando código de barras (caso típico de scanner).
+
+**Banco** — migration `20260504_add_produto_codigo_barras_referencia`
+
+- `Produto.codigoBarras String? @unique` — nullable + unique parcial (Postgres não considera `NULL` como duplicata, então vários produtos podem ficar sem código de barras sem violar a constraint).
+- `Produto.referencia String?` — sem unique. Pode ter dois produtos com a mesma referência do fornecedor.
+- Migration criada manualmente (ambiente não-interativo) e aplicada via `prisma migrate deploy`.
+
+**Backend** ([produtoController.js](backend/src/controllers/produtoController.js))
+
+- `criar`/`atualizar` aceitam os novos campos via `norm()` (string vazia → `null`).
+- Tratamento de `P2002` agora inspeciona `err.meta?.target` e devolve mensagem específica (`"Ja existe um produto com este codigo de barras"` vs `"...este codigo"`).
+- `listar` com `?search=` passou a buscar também em `codigoBarras` e `referencia` (4 campos no `OR`).
+
+**Frontend** ([Produtos.jsx](src/Produtos.jsx))
+
+- Form: novos campos "Código de barras" (input numérico, monoespaçado, sem espaços) e "Referência" (uppercase automático), encaixados em uma linha 1+2 entre os campos Código/Nome e Descrição.
+- Lista: abaixo do código interno, agora aparecem os campos preenchidos com badges-mini de cor — `📊 7891234567890` em accent (azul) para barras, `🏷 REF-XYZ` em purple para referência. Só renderiza quando preenchidos (ocupam 0 espaço se nulos).
+- Search box: placeholder atualizado para "Buscar por código, código de barras, referência ou nome…".
+
+**PDV** ([PDV.jsx](src/PDV.jsx))
+
+- `biparOuConfirmar`: match exato em ordem de prioridade `codigoBarras → codigo → referencia` (case-insensitive). Caso típico — operador escaneia → o leitor digita o EAN → Enter → produto entra na cestinha.
+- `sugestoes`: filtra também por código de barras e referência (além de código e nome).
+- Dropdown de sugestão: quando o produto tem código de barras, mostra o EAN em accent ao lado do código interno.
+
+**Validação possível (UI):**
+- Cadastrar produto com código de barras `7891234567890` → bipá-lo no PDV → produto entra automaticamente
+- Cadastrar dois produtos com mesmo código de barras → segundo deve dar 409 com mensagem específica
+- Buscar na lista por trecho do código de barras ou referência → filtra normalmente
+
+`npx vite build` ok em 604ms.
+
 ### Sessão — 2026-05-04 (Reset Total — ampliação para módulos pós-MVP)
 
 O Reset Total foi criado em 30/abr cobrindo só os modelos do MVP. Depois entraram **Caixa**, **MovimentacaoCaixa**, **Produto.imagem** (fotos físicas em `uploads/produtos/`) e **ConfiguracaoEmpresa** com logotipo. Esta sessão ampliou o reset para cobrir os novos modelos e arquivos físicos, mantendo a separação operacional vs configuração.

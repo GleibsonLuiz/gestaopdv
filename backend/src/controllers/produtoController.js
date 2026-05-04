@@ -38,6 +38,8 @@ export async function listar(req, res, next) {
     if (search) {
       where.OR = [
         { codigo: { contains: search, mode: "insensitive" } },
+        { codigoBarras: { contains: search, mode: "insensitive" } },
+        { referencia: { contains: search, mode: "insensitive" } },
         { nome: { contains: search, mode: "insensitive" } },
       ];
     }
@@ -103,6 +105,8 @@ export async function criar(req, res, next) {
     const produto = await prisma.produto.create({
       data: {
         codigo,
+        codigoBarras: norm(req.body.codigoBarras),
+        referencia: norm(req.body.referencia),
         nome,
         descricao: norm(req.body.descricao),
         tipoItem,
@@ -118,7 +122,10 @@ export async function criar(req, res, next) {
     });
     res.status(201).json(produto);
   } catch (err) {
-    if (err.code === "P2002") return res.status(409).json({ erro: "Ja existe um produto com este codigo" });
+    if (err.code === "P2002") {
+      const campo = err.meta?.target?.includes("codigoBarras") ? "codigo de barras" : "codigo";
+      return res.status(409).json({ erro: `Ja existe um produto com este ${campo}` });
+    }
     if (err.code === "P2003") return res.status(400).json({ erro: "Categoria ou fornecedor inexistente" });
     next(err);
   }
@@ -138,6 +145,8 @@ export async function atualizar(req, res, next) {
       data.nome = n;
     }
     if (req.body.descricao !== undefined) data.descricao = norm(req.body.descricao);
+    if (req.body.codigoBarras !== undefined) data.codigoBarras = norm(req.body.codigoBarras);
+    if (req.body.referencia !== undefined) data.referencia = norm(req.body.referencia);
     if (req.body.tipoItem !== undefined) {
       const t = normalizarTipoItem(req.body.tipoItem);
       if (t === null) return res.status(400).json({ erro: "Tipo de item invalido (use PRODUTO ou SERVICO)" });
@@ -186,7 +195,10 @@ export async function atualizar(req, res, next) {
     res.json(produto);
   } catch (err) {
     if (err.code === "P2025") return res.status(404).json({ erro: "Produto nao encontrado" });
-    if (err.code === "P2002") return res.status(409).json({ erro: "Ja existe um produto com este codigo" });
+    if (err.code === "P2002") {
+      const campo = err.meta?.target?.includes("codigoBarras") ? "codigo de barras" : "codigo";
+      return res.status(409).json({ erro: `Ja existe um produto com este ${campo}` });
+    }
     if (err.code === "P2003") return res.status(400).json({ erro: "Categoria ou fornecedor inexistente" });
     next(err);
   }

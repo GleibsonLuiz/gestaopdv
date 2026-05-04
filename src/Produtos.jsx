@@ -5,7 +5,8 @@ import MovimentarEstoqueModal from "./MovimentarEstoqueModal.jsx";
 
 
 const VAZIO = {
-  codigo: "", nome: "", descricao: "",
+  codigo: "", codigoBarras: "", referencia: "",
+  nome: "", descricao: "",
   tipoItem: "PRODUTO",
   precoVenda: "", precoCusto: "",
   estoque: "0", estoqueMinimo: "0", unidade: "UN",
@@ -112,6 +113,8 @@ export default function Produtos({ user }) {
     setEditando(p);
     setForm({
       codigo: p.codigo || "",
+      codigoBarras: p.codigoBarras || "",
+      referencia: p.referencia || "",
       nome: p.nome || "",
       descricao: p.descricao || "",
       tipoItem: p.tipoItem || "PRODUTO",
@@ -191,6 +194,8 @@ export default function Produtos({ user }) {
       const ehServico = form.tipoItem === "SERVICO";
       const payload = {
         codigo: form.codigo,
+        codigoBarras: form.codigoBarras || null,
+        referencia: form.referencia || null,
         nome: form.nome,
         descricao: form.descricao,
         tipoItem: form.tipoItem,
@@ -266,7 +271,7 @@ export default function Produtos({ user }) {
     <div>
       <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
         <input
-          placeholder="Buscar por código ou nome..."
+          placeholder="Buscar por código, código de barras, referência ou nome..."
           value={search} onChange={e => setSearch(e.target.value)}
           style={{
             flex: "1 1 240px", background: C.surface, border: `1px solid ${C.border}`,
@@ -340,7 +345,19 @@ export default function Produtos({ user }) {
               padding: "12px 16px", borderBottom: `1px solid ${C.border}`,
               alignItems: "center", fontSize: 13, opacity: p.ativo ? 1 : 0.55,
             }}>
-              <div style={{ color: C.muted, fontFamily: "monospace", fontSize: 12 }}>{p.codigo}</div>
+              <div style={{ color: C.muted, fontFamily: "monospace", fontSize: 12 }}>
+                <div>{p.codigo}</div>
+                {p.codigoBarras && (
+                  <div style={{ fontSize: 10, marginTop: 2, color: C.accent }} title="Código de barras">
+                    📊 {p.codigoBarras}
+                  </div>
+                )}
+                {p.referencia && (
+                  <div style={{ fontSize: 10, marginTop: 1, color: C.purple }} title="Referência">
+                    🏷 {p.referencia}
+                  </div>
+                )}
+              </div>
               <div style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}>
                 <Miniatura url={p.imagem} nome={p.nome} servico={ehServico} />
                 <div style={{ minWidth: 0 }}>
@@ -452,6 +469,19 @@ export default function Produtos({ user }) {
               <Campo label="Nome *" span={2}>
                 <input value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })}
                   required style={inputStyle} />
+              </Campo>
+              <Campo label="Código de barras">
+                <input value={form.codigoBarras}
+                  onChange={e => setForm({ ...form, codigoBarras: e.target.value.replace(/\s/g, "") })}
+                  placeholder="EAN-13, EAN-8, GTIN…"
+                  inputMode="numeric"
+                  style={{ ...inputStyle, fontFamily: "monospace" }} />
+              </Campo>
+              <Campo label="Referência" span={2}>
+                <input value={form.referencia}
+                  onChange={e => setForm({ ...form, referencia: e.target.value.toUpperCase() })}
+                  placeholder="Código do fabricante / fornecedor"
+                  style={inputStyle} />
               </Campo>
               <Campo label="Descrição" span={3}>
                 <textarea value={form.descricao} onChange={e => setForm({ ...form, descricao: e.target.value })}

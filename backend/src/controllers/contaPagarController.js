@@ -2,6 +2,11 @@ import prisma from "../lib/prisma.js";
 import {
   toNumber, parseDate, calcularValores, gerarSerieRecorrencia, TIPOS_RECORRENCIA,
 } from "../lib/contas.js";
+import { registrarNoCaixaAberto } from "./caixaController.js";
+
+const FORMAS_VALIDAS = new Set([
+  "DINHEIRO", "CARTAO_CREDITO", "CARTAO_DEBITO", "PIX", "BOLETO", "CREDIARIO",
+]);
 
 const INCLUDE = {
   fornecedor: { select: { id: true, nome: true, cnpj: true } },
@@ -191,6 +196,11 @@ export async function pagar(req, res, next) {
     const dataPagamento = req.body?.pagamento ? parseDate(req.body.pagamento) : new Date();
     if (!dataPagamento) return res.status(400).json({ erro: "Data de pagamento invalida" });
 
+    const formaPagamento = req.body?.formaPagamento || "DINHEIRO";
+    if (!FORMAS_VALIDAS.has(formaPagamento)) {
+      return res.status(400).json({ erro: "Forma de pagamento invalida" });
+    }
+
     // Permite ajustar juros/multa/desconto no ato do pagamento (cobrancas
     // tardias). Se vier algo, recalcula. Caso contrario mantem o que estava.
     const ajustePagamento = ["juros", "multa", "desconto"]
@@ -207,11 +217,27 @@ export async function pagar(req, res, next) {
       extras = calc.valores;
     }
 
-    const conta = await prisma.contaPagar.update({
-      where: { id: req.params.id },
-      data: { status: "PAGA", pagamento: dataPagamento, ...extras },
-      include: INCLUDE,
+    const { conta } = await prisma.$transaction(async (tx) => {
+      const atualizada = await tx.contaPagar.update({
+        where: { id: req.params.id },
+        data: { status: "PAGA", pagamento: dataPagamento, ...extras },
+        include: INCLUDE,
+      });
+
+      // Quando ha caixa aberto, registra a saida no extrato. Se nao houver
+      // (ex: ADMIN pagando contas de manha sem caixa de PDV aberto), so
+      // marca como paga — financeiro independe do caixa.
+      await registrarNoCaixaAberto(tx, req.user.sub, {
+        tipo: "PAGAR_CONTA",
+        formaPagamento,
+        valor: Number(atualizada.valor),
+        descricao: `PAGAMENTO: ${atualizada.descricao}`.toUpperCase().slice(0, 200),
+        contaPagarId: atualizada.id,
+      });
+
+      return { conta: atualizada };
     });
+
     res.json(conta);
   } catch (err) {
     next(err);

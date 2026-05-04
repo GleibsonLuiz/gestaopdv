@@ -2,6 +2,7 @@
 export const IDS_MODULOS = [
   "PDV",
   "DASHBOARD",
+  "CAIXA",
   "CLIENTES",
   "FORNECEDORES",
   "PRODUTOS",
@@ -29,10 +30,10 @@ export function sanitizarPermissoes(arr) {
 export function permissoesPadrao(role) {
   if (role === "ADMIN") return [...IDS_MODULOS];
   if (role === "GERENTE") {
-    return ["PDV","DASHBOARD","CLIENTES","FORNECEDORES","PRODUTOS",
+    return ["PDV","DASHBOARD","CAIXA","CLIENTES","FORNECEDORES","PRODUTOS",
             "ESTOQUE","COMPRAS","FINANCEIRO","RELATORIOS"];
   }
-  return ["PDV","CLIENTES","PRODUTOS"];
+  return ["PDV","CAIXA","CLIENTES","PRODUTOS"];
 }
 
 // ADMIN sempre passa. FUNCIONARIOS so para ADMIN.

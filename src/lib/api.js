@@ -307,4 +307,29 @@ export const api = {
 
   resetarSistema: (confirmacao) =>
     request("/admin/reset", { method: "POST", body: { confirmacao } }),
+
+  // ==================== CAIXA ====================
+  obterCaixaAtual: () => request("/caixas/atual"),
+  sugerirTrocoCaixa: () => request("/caixas/sugestao-troco"),
+  listarCaixas: (params = {}) => {
+    const qs = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v !== "" && v != null)
+    ).toString();
+    return request(`/caixas${qs ? `?${qs}` : ""}`);
+  },
+  obterExtratoCaixa: (id) => request(`/caixas/${id}/extrato`),
+  abrirCaixa: ({ saldoInicial, observacoesAbertura }) =>
+    request("/caixas/abrir", {
+      method: "POST",
+      body: { saldoInicial, observacoesAbertura },
+    }),
+  fecharCaixa: (id, { saldoFinalContado, trocoProximoDia, observacoesFechamento }) =>
+    request(`/caixas/${id}/fechar`, {
+      method: "POST",
+      body: { saldoFinalContado, trocoProximoDia, observacoesFechamento },
+    }),
+  sangriaCaixa: (id, { valor, descricao }) =>
+    request(`/caixas/${id}/sangria`, { method: "POST", body: { valor, descricao } }),
+  suprimentoCaixa: (id, { valor, descricao }) =>
+    request(`/caixas/${id}/suprimento`, { method: "POST", body: { valor, descricao } }),
 };

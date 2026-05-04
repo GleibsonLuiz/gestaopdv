@@ -17,6 +17,7 @@ import contasReceberRoutes from "./routes/contas-receber.js";
 import alertasRoutes from "./routes/alertas.js";
 import relatoriosRoutes from "./routes/relatorios.js";
 import adminRoutes from "./routes/admin.js";
+import caixasRoutes from "./routes/caixas.js";
 
 dotenv.config();
 
@@ -59,6 +60,7 @@ app.use("/contas-receber", contasReceberRoutes);
 app.use("/alertas", alertasRoutes);
 app.use("/relatorios", relatoriosRoutes);
 app.use("/admin", adminRoutes);
+app.use("/caixas", caixasRoutes);
 
 app.use((err, req, res, _next) => {
   console.error(err);

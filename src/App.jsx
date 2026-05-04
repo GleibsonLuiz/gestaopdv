@@ -8,6 +8,7 @@ import Estoque from "./Estoque.jsx";
 import Compras from "./Compras.jsx";
 import Funcionarios from "./Funcionarios.jsx";
 import Financeiro from "./Financeiro.jsx";
+import Caixa from "./Caixa.jsx";
 import PDV from "./PDV.jsx";
 import Dashboard from "./Dashboard.jsx";
 import Relatorios from "./Relatorios.jsx";
@@ -144,7 +145,7 @@ export default function App() {
   // Mapeia cada tela do app para o modulo de permissao correspondente.
   // "projeto" e ferramenta interna, fica liberada.
   const TELA_MODULO = {
-    pdv: "PDV", dashboard: "DASHBOARD", clientes: "CLIENTES",
+    pdv: "PDV", dashboard: "DASHBOARD", caixa: "CAIXA", clientes: "CLIENTES",
     fornecedores: "FORNECEDORES", produtos: "PRODUTOS", estoque: "ESTOQUE",
     compras: "COMPRAS", financeiro: "FINANCEIRO", relatorios: "RELATORIOS",
     funcionarios: "FUNCIONARIOS",
@@ -160,7 +161,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     if (!podeVer(tela)) {
-      const primeira = ["pdv","dashboard","clientes","fornecedores","produtos",
+      const primeira = ["pdv","dashboard","caixa","clientes","fornecedores","produtos",
         "estoque","compras","financeiro","relatorios","funcionarios","projeto","sistema"].find(podeVer);
       if (primeira && primeira !== tela) setTela(primeira);
     }
@@ -251,8 +252,11 @@ export default function App() {
           {podeAcessar(user, "PRODUTOS") && (
             <Item icone="📦" label="Produtos" ativo={tela === "produtos"} onClick={() => navegar("produtos")} />
           )}
-          {(podeAcessar(user, "ESTOQUE") || podeAcessar(user, "COMPRAS") || podeAcessar(user, "FINANCEIRO") || podeAcessar(user, "RELATORIOS")) && (
+          {(podeAcessar(user, "CAIXA") || podeAcessar(user, "ESTOQUE") || podeAcessar(user, "COMPRAS") || podeAcessar(user, "FINANCEIRO") || podeAcessar(user, "RELATORIOS")) && (
             <Secao>Operação</Secao>
+          )}
+          {podeAcessar(user, "CAIXA") && (
+            <Item icone="💵" label="Caixa" ativo={tela === "caixa"} onClick={() => navegar("caixa")} />
           )}
           {podeAcessar(user, "ESTOQUE") && (
             <Item icone="🗃️" label="Estoque" ativo={tela === "estoque"} onClick={() => navegar("estoque")} />
@@ -422,6 +426,12 @@ export default function App() {
             <>
               <PageHeader titulo="Financeiro" subtitulo="Contas a pagar e a receber — fluxo de caixa do negócio" />
               <Financeiro user={user} />
+            </>
+          )}
+          {tela === "caixa" && (
+            <>
+              <PageHeader titulo="Caixa" subtitulo="Abertura, fechamento e extrato — controle do dinheiro físico no PDV" />
+              <Caixa user={user} />
             </>
           )}
           {tela === "relatorios" && (

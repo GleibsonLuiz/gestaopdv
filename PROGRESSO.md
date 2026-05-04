@@ -133,6 +133,81 @@ Não existe rota/UI para **cancelar/excluir** uma compra. Hoje, se uma compra é
 
 ## Histórico de sessões
 
+### Sessão — 2026-05-04 (Módulo Caixa: abertura, fechamento cego, extrato + integração PDV/Financeiro)
+
+Novo módulo **Caixa** que controla o dinheiro físico do PDV. Cada usuário opera o seu próprio caixa (modelo "por operador"), com sugestão automática de troco baseada no último fechamento, conferência cega no fechamento e extrato cronológico com saldo acumulado linha a linha. Vendas e pagamentos financeiros em DINHEIRO movimentam o caixa aberto automaticamente; outras formas de pagamento (PIX/cartão) entram no extrato mas não afetam o saldo físico em dinheiro.
+
+**1. Banco** — migration `20260504174149_add_caixa`
+
+- 2 enums: `StatusCaixa { ABERTO, FECHADO }` e `TipoMovimentacaoCaixa { ABERTURA, VENDA, SANGRIA, SUPRIMENTO, PAGAR_CONTA, RECEBER_CONTA, FECHAMENTO }`
+- Modelo `Caixa`: `numero` (autoincrement), `status`, `saldoInicial`, `saldoFinalContado`, `saldoFinalEsperado`, `trocoProximoDia`, `diferenca`, observações abertura/fechamento, `abertoEm/fechadoEm`, FK para `User`
+- Modelo `MovimentacaoCaixa`: `tipo`, `valor`, `formaPagamento` (default DINHEIRO), `descricao`, `saldoAntes/saldoDepois`, FKs opcionais para `Venda`, `ContaPagar`, `ContaReceber`
+- `Venda.caixaId` adicionado (nullable — vendas antigas sem caixa)
+- Back-refs em `User`, `Venda`, `ContaPagar`, `ContaReceber`
+
+**2. Backend** — [`caixaController.js`](backend/src/controllers/caixaController.js) + [`routes/caixas.js`](backend/src/routes/caixas.js)
+
+- `GET /caixas/atual` → caixa ABERTO do usuário (ou null) com totais calculados
+- `GET /caixas/sugestao-troco` → último `trocoProximoDia` do user (zero se primeiro caixa)
+- `GET /caixas` → histórico (VENDEDOR vê só o próprio; ADMIN/GERENTE vê tudo)
+- `GET /caixas/:id/extrato` → caixa + movimentações + totais
+- `POST /caixas/abrir` → 409 se já tem aberto; cria movimentação ABERTURA
+- `POST /caixas/:id/fechar` → cega: recebe `saldoFinalContado` + `trocoProximoDia`, calcula `diferenca = contado - esperado`, registra movimentação FECHAMENTO com mensagem "QUEBRA"/"SOBRA"/"SEM DIFERENCA"
+- `POST /caixas/:id/sangria` → saída manual em dinheiro (bloqueia se saldo ficaria negativo)
+- `POST /caixas/:id/suprimento` → entrada manual em dinheiro
+- Helper `registrarNoCaixaAberto(tx, userId, dados)` — usado pelo vendaController e pelos contaPagar/Receber. Se não há caixa aberto, retorna null silenciosamente (financeiro funciona sem caixa). Saldo só muda quando `formaPagamento === "DINHEIRO"`.
+- Helper `exigirCaixaAberto(userId)` — usado pelo vendaController para bloquear venda sem caixa
+- Cálculo de totais: `saldoEsperadoDinheiro = saldoInicial + entradasDinheiro - saidasDinheiro` (PIX/cartão entram em `entradasOutras`, fora do saldo físico)
+- Permissões: VENDEDOR só opera o próprio caixa; ADMIN/GERENTE pode fechar/movimentar caixa de terceiros
+
+**3. Integrações**
+
+- `vendaController.criar`: chama `exigirCaixaAberto` antes de iniciar a transação (400 se fechado), grava `caixaId` na venda, e cria `MovimentacaoCaixa.VENDA` para qualquer forma de pagamento
+- `contaPagarController.pagar`: aceita `formaPagamento` (default DINHEIRO), envolve update + movimentação em `prisma.$transaction`, gera `MovimentacaoCaixa.PAGAR_CONTA` se houver caixa aberto
+- `contaReceberController.receber`: idem, gera `MovimentacaoCaixa.RECEBER_CONTA`
+- Permissões: novo módulo `CAIXA` em `IDS_MODULOS` (front+back) — ADMIN/GERENTE/VENDEDOR têm por default
+
+**4. Frontend** — [`Caixa.jsx`](src/Caixa.jsx) (697 linhas)
+
+- 3 abas: **Meu Caixa** (KPIs + ações), **Extrato #N** (tabela cronológica), **Histórico** (clique abre extrato readonly)
+- Tela "Sem caixa aberto": card vazio centralizado com botão "🟢 Abrir Caixa"
+- Modal **Abrir**: pré-preenche `saldoInicial` com sugestão do backend; mostra dica explicando a origem (caixa #N fechado em DD/MM)
+- Modal **Fechar (conferência cega)**: dica amarela explicando o conceito; input grande para o operador digitar; só após o POST revela esperado/contado/diferença em 4 cards coloridos (verde se igual, amarelo se sobra, vermelho se quebra)
+- Modais **Sangria** (yellow) / **Suprimento** (green): valor + descrição
+- Tabela de extrato com colunas: Quando | Tipo (badge colorido) | Descrição | Valor (com sinal) | Forma | Saldo após. Rodapé com 4 totais: Saldo Anterior, Total Entradas, Total Saídas, Saldo Atual
+- Para caixa fechado, rodapé extra: Contado / Troco próximo dia / Diferença (cor por status)
+- Cards KPI no topo: Saldo Inicial / Entradas / Saídas / Saldo Esperado (destaque)
+- Detalhamento por forma de pagamento em mini cards
+- [`PDV.jsx`](src/PDV.jsx): banner verde "🟢 Caixa #N aberto" com saldo, ou banner vermelho "🔒 Nenhum caixa aberto" bloqueando o botão Finalizar (vira "🔒 CAIXA FECHADO" desabilitado)
+- [`App.jsx`](src/App.jsx): nova entrada "💵 Caixa" na seção Operação da sidebar
+- [`api.js`](src/lib/api.js): 8 métodos novos (`obterCaixaAtual`, `sugerirTrocoCaixa`, `listarCaixas`, `obterExtratoCaixa`, `abrirCaixa`, `fecharCaixa`, `sangriaCaixa`, `suprimentoCaixa`)
+
+**Validado via API:**
+
+```
+GET  /caixas/atual (sem caixa aberto)              → { caixa: null }
+POST /vendas (sem caixa)                            → 400 "Voce precisa abrir um caixa..."
+GET  /caixas/sugestao-troco (primeiro caixa)        → { sugestao: 0, origem: null }
+POST /caixas/abrir { saldoInicial: 100 }            → 201 caixa #1 ABERTO
+POST /vendas DINHEIRO 2x R$24.90                    → 201 venda #46, caixaId vinculado
+POST /vendas PIX R$50                                → 201 venda #47, entra no extrato
+POST /caixas/:id/sangria { valor: 30 }              → 201 saldoAntes=149.80, saldoDepois=119.80
+GET  /caixas/atual                                   → entradasDinheiro=49.80, entradasOutras=50, saidasDinheiro=30, saldoEsperado=119.80
+POST /contas-pagar/:id/pagar { formaPagamento: "DINHEIRO" } com caixa aberto → status PAGA + movimentacao PAGAR_CONTA
+POST /caixas/:id/fechar { saldoFinalContado: 110, trocoProximoDia: 50 }
+  → status FECHADO, esperado=119.80, contado=110, diferenca=-9.80 (quebra)
+GET  /caixas/sugestao-troco (apos fechar)           → { sugestao: 50, origem: { caixaNumero: 1, fechadoEm: ... } }
+GET  /caixas/:id/extrato                            → 5 movimentacoes em ordem (ABERTURA, VENDA dinheiro, VENDA pix, SANGRIA, FECHAMENTO) com saldo acumulado correto
+npx vite build                                       → ok 934ms
+```
+
+**Lacunas conhecidas:**
+
+- Sem prevenção de saldo negativo no `PAGAR_CONTA` automático (financeiro deliberadamente independe do caixa — pagar uma conta de R$ 200 com caixa de R$ 50 deixa o caixa com −150 e o operador resolve no fechamento)
+- Cancelamento de venda (já existente) não estorna a movimentação no caixa — se a venda foi de um caixa já fechado, não dá pra estornar mesmo. Sugestão futura: `MovimentacaoCaixa.ESTORNO_VENDA` quando o caixa ainda está aberto
+- Imprecisão de ponto flutuante em alguns totais (`119.80000000000001`) — backend já arredonda no `toDecimal` antes de gravar; só aparece no campo `totais` calculado em runtime
+- Sangria não pede senha de gerente — qualquer VENDEDOR com caixa aberto pode retirar dinheiro
+
 ### Sessão — 2026-05-04 (Tipo de item: PRODUTO vs SERVICO)
 
 Distinção entre itens **físicos** (com controle de estoque) e **serviços/digitais** (sem estoque, sempre disponíveis para venda). Resolve o caso de papelaria que vende impressão, encadernação e 2ª via de boleto — itens que apareciam como "0 UN" em vermelho na lista e bloqueavam o PDV.

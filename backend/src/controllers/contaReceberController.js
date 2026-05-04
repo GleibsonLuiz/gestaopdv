@@ -2,6 +2,11 @@ import prisma from "../lib/prisma.js";
 import {
   toNumber, parseDate, calcularValores, gerarSerieRecorrencia, TIPOS_RECORRENCIA,
 } from "../lib/contas.js";
+import { registrarNoCaixaAberto } from "./caixaController.js";
+
+const FORMAS_VALIDAS = new Set([
+  "DINHEIRO", "CARTAO_CREDITO", "CARTAO_DEBITO", "PIX", "BOLETO", "CREDIARIO",
+]);
 
 const INCLUDE = {
   cliente: { select: { id: true, nome: true, cpfCnpj: true } },
@@ -187,6 +192,11 @@ export async function receber(req, res, next) {
     const dataRecebimento = req.body?.recebimento ? parseDate(req.body.recebimento) : new Date();
     if (!dataRecebimento) return res.status(400).json({ erro: "Data de recebimento invalida" });
 
+    const formaPagamento = req.body?.formaPagamento || "DINHEIRO";
+    if (!FORMAS_VALIDAS.has(formaPagamento)) {
+      return res.status(400).json({ erro: "Forma de pagamento invalida" });
+    }
+
     const ajusteRecebimento = ["juros", "multa", "desconto"]
       .some(k => req.body?.[k] !== undefined);
     let extras = {};
@@ -201,11 +211,24 @@ export async function receber(req, res, next) {
       extras = calc.valores;
     }
 
-    const conta = await prisma.contaReceber.update({
-      where: { id: req.params.id },
-      data: { status: "PAGA", recebimento: dataRecebimento, ...extras },
-      include: INCLUDE,
+    const { conta } = await prisma.$transaction(async (tx) => {
+      const atualizada = await tx.contaReceber.update({
+        where: { id: req.params.id },
+        data: { status: "PAGA", recebimento: dataRecebimento, ...extras },
+        include: INCLUDE,
+      });
+
+      await registrarNoCaixaAberto(tx, req.user.sub, {
+        tipo: "RECEBER_CONTA",
+        formaPagamento,
+        valor: Number(atualizada.valor),
+        descricao: `RECEBIMENTO: ${atualizada.descricao}`.toUpperCase().slice(0, 200),
+        contaReceberId: atualizada.id,
+      });
+
+      return { conta: atualizada };
     });
+
     res.json(conta);
   } catch (err) {
     next(err);

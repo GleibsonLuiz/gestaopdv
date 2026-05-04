@@ -8,18 +8,20 @@ function urlImagem(imagem) {
   return `${BASE_URL}${imagem}`;
 }
 
-function FotoProduto({ url, nome, tamanho = 56 }) {
+function FotoProduto({ url, nome, tamanho = 56, servico = false }) {
   const src = urlImagem(url);
   const estilo = {
     width: tamanho, height: tamanho, borderRadius: 10, flexShrink: 0,
-    objectFit: "cover", border: `1px solid ${C.border}`, background: C.surface,
+    objectFit: "cover",
+    border: `1px solid ${servico ? C.purple + "55" : C.border}`,
+    background: servico ? C.purple + "22" : C.surface,
   };
   if (src) return <img src={src} alt={nome || ""} loading="lazy" style={estilo} />;
   return (
     <div style={{
       ...estilo, display: "flex", alignItems: "center", justifyContent: "center",
-      color: C.muted, fontSize: tamanho * 0.42,
-    }}>📦</div>
+      color: servico ? C.purple : C.muted, fontSize: tamanho * 0.42,
+    }}>{servico ? "🛠" : "📦"}</div>
   );
 }
 
@@ -114,12 +116,12 @@ function NovaVenda({ user }) {
   }, []);
 
   // Sugestões aparecem só com texto digitado — vista limpa quando idle, focada
-  // em bipagem por scanner.
+  // em bipagem por scanner. Servicos sempre aparecem (estoque nao se aplica).
   const sugestoes = useMemo(() => {
     const q = busca.trim().toLowerCase();
     if (!q) return [];
     return produtos
-      .filter(p => p.ativo && p.estoque > 0)
+      .filter(p => p.ativo && (p.tipoItem === "SERVICO" || p.estoque > 0))
       .filter(p =>
         p.codigo.toLowerCase().includes(q) ||
         p.nome.toLowerCase().includes(q),
@@ -129,11 +131,13 @@ function NovaVenda({ user }) {
 
   function adicionarProduto(p, qtd = 1) {
     const incremento = Math.max(1, parseInt(qtd, 10) || 1);
+    const ehServico = p.tipoItem === "SERVICO";
     setCarrinho(prev => {
       const idx = prev.findIndex(it => it.produtoId === p.id);
       if (idx >= 0) {
         const qtdAtual = prev[idx].quantidade;
-        if (qtdAtual + incremento > p.estoque) {
+        // Servico: ignora limite de estoque.
+        if (!ehServico && qtdAtual + incremento > p.estoque) {
           flashErro(`Estoque insuficiente de "${p.nome}" (disponível: ${p.estoque}).`);
           return prev;
         }
@@ -142,7 +146,7 @@ function NovaVenda({ user }) {
         const restante = prev.filter((_, i) => i !== idx);
         return [atualizado, ...restante];
       }
-      if (p.estoque < incremento) {
+      if (!ehServico && p.estoque < incremento) {
         flashErro(`Estoque insuficiente de "${p.nome}" (disponível: ${p.estoque}).`);
         return prev;
       }
@@ -151,7 +155,10 @@ function NovaVenda({ user }) {
         codigo: p.codigo,
         nome: p.nome,
         unidade: p.unidade,
-        estoque: p.estoque,
+        // Para servicos guardamos Infinity como estoque "logico" — assim os
+        // controles + e definirQuantidade nao bloqueiam nada.
+        estoque: ehServico ? Infinity : p.estoque,
+        tipoItem: p.tipoItem || "PRODUTO",
         precoUnitario: Number(p.precoVenda),
         imagem: p.imagem || null,
         quantidade: incremento,
@@ -171,7 +178,11 @@ function NovaVenda({ user }) {
     if (!q) return;
     const exato = produtos.find(p => p.ativo && p.codigo.toLowerCase() === q.toLowerCase());
     if (exato) {
-      if (exato.estoque <= 0) { flashErro(`Sem estoque de "${exato.nome}".`); return; }
+      // Servicos nunca ficam "sem estoque".
+      if (exato.tipoItem !== "SERVICO" && exato.estoque <= 0) {
+        flashErro(`Sem estoque de "${exato.nome}".`);
+        return;
+      }
       adicionarProduto(exato, 1);
       return;
     }
@@ -187,6 +198,7 @@ function NovaVenda({ user }) {
       if (it.produtoId !== produtoId) return it;
       const nova = it.quantidade + delta;
       if (nova <= 0) return it;
+      // Servicos: estoque = Infinity, qualquer quantidade passa.
       if (nova > it.estoque) {
         setErro(`Estoque insuficiente de "${it.nome}" (disponível: ${it.estoque}).`);
         setTimeout(() => setErro(""), 2500);
@@ -425,12 +437,20 @@ function NovaVenda({ user }) {
                   transition: "background 0.1s ease",
                 }}
               >
-                <FotoProduto url={p.imagem} nome={p.nome} tamanho={40} />
+                <FotoProduto url={p.imagem} nome={p.nome} tamanho={40} servico={p.tipoItem === "SERVICO"} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ color: C.white, fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <div style={{ color: C.white, fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
                     {p.nome}
+                    {p.tipoItem === "SERVICO" && (
+                      <span style={{
+                        fontSize: 9, fontWeight: 800, padding: "1px 5px", borderRadius: 4,
+                        background: C.purple + "33", color: C.purple, letterSpacing: 0.4,
+                      }}>SERVIÇO</span>
+                    )}
                   </div>
-                  <div style={{ color: C.muted, fontFamily: "monospace", fontSize: 11 }}>{p.codigo} · {p.estoque} {p.unidade}</div>
+                  <div style={{ color: C.muted, fontFamily: "monospace", fontSize: 11 }}>
+                    {p.codigo} · {p.tipoItem === "SERVICO" ? "♾ disponível" : `${p.estoque} ${p.unidade}`}
+                  </div>
                 </div>
                 <div style={{ color: C.green, fontWeight: 700, fontSize: 14 }}>{fmtBRL(p.precoVenda)}</div>
               </div>
@@ -491,11 +511,18 @@ function NovaVenda({ user }) {
                     padding: "14px 18px", borderBottom: `1px solid ${C.border}`,
                   }}
                 >
-                  <FotoProduto url={it.imagem} nome={it.nome} tamanho={64} />
+                  <FotoProduto url={it.imagem} nome={it.nome} tamanho={64} servico={it.tipoItem === "SERVICO"} />
 
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ color: C.white, fontSize: 15, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ color: C.white, fontSize: 15, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 8 }}>
                       {it.nome}
+                      {it.tipoItem === "SERVICO" && (
+                        <span style={{
+                          fontSize: 10, fontWeight: 800, padding: "2px 6px", borderRadius: 4,
+                          background: C.purple + "22", color: C.purple, border: `1px solid ${C.purple}55`,
+                          letterSpacing: 0.4,
+                        }}>♾ SERVIÇO</span>
+                      )}
                     </div>
                     <div style={{ color: C.muted, fontFamily: "monospace", fontSize: 11, marginTop: 2 }}>
                       {it.codigo}
@@ -504,7 +531,9 @@ function NovaVenda({ user }) {
                       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                         <button onClick={() => alterarQuantidade(it.produtoId, -1)} style={btnQtd}>−</button>
                         <input
-                          type="number" min="1" max={it.estoque} value={it.quantidade}
+                          type="number" min="1"
+                          max={Number.isFinite(it.estoque) ? it.estoque : undefined}
+                          value={it.quantidade}
                           onChange={e => definirQuantidade(it.produtoId, e.target.value)}
                           style={{
                             width: 54, textAlign: "center",
@@ -672,7 +701,7 @@ function NovaVenda({ user }) {
                       transition: "background 0.12s ease",
                     }}
                   >
-                    <FotoProduto url={it.imagem} nome={it.nome} tamanho={48} />
+                    <FotoProduto url={it.imagem} nome={it.nome} tamanho={48} servico={it.tipoItem === "SERVICO"} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ color: C.white, fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {it.nome}

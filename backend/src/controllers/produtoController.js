@@ -2,6 +2,14 @@ import prisma from "../lib/prisma.js";
 
 const norm = (v) => (v === undefined || v === null || v === "" ? null : v);
 
+const TIPOS_ITEM_VALIDOS = new Set(["PRODUTO", "SERVICO"]);
+
+function normalizarTipoItem(v) {
+  if (v === undefined || v === null || v === "") return "PRODUTO";
+  const s = String(v).trim().toUpperCase();
+  return TIPOS_ITEM_VALIDOS.has(s) ? s : null;
+}
+
 function toNumber(v) {
   if (v === undefined || v === null || v === "") return null;
   const n = typeof v === "number" ? v : Number(String(v).replace(",", "."));
@@ -70,6 +78,9 @@ export async function criar(req, res, next) {
     if (!codigo) return res.status(400).json({ erro: "Codigo e obrigatorio" });
     if (!nome) return res.status(400).json({ erro: "Nome e obrigatorio" });
 
+    const tipoItem = normalizarTipoItem(req.body.tipoItem);
+    if (tipoItem === null) return res.status(400).json({ erro: "Tipo de item invalido (use PRODUTO ou SERVICO)" });
+
     const precoVenda = toNumber(req.body.precoVenda);
     if (precoVenda === null || Number.isNaN(precoVenda) || precoVenda < 0) {
       return res.status(400).json({ erro: "Preco de venda invalido" });
@@ -78,16 +89,23 @@ export async function criar(req, res, next) {
     if (precoCusto !== null && (Number.isNaN(precoCusto) || precoCusto < 0)) {
       return res.status(400).json({ erro: "Preco de custo invalido" });
     }
-    const estoque = toInt(req.body.estoque, 0);
-    const estoqueMinimo = toInt(req.body.estoqueMinimo, 0);
-    if (Number.isNaN(estoque) || estoque < 0) return res.status(400).json({ erro: "Estoque invalido" });
-    if (Number.isNaN(estoqueMinimo) || estoqueMinimo < 0) return res.status(400).json({ erro: "Estoque minimo invalido" });
+
+    // Servicos nao tem estoque: ignora qualquer valor enviado e zera os campos.
+    let estoque = 0;
+    let estoqueMinimo = 0;
+    if (tipoItem === "PRODUTO") {
+      estoque = toInt(req.body.estoque, 0);
+      estoqueMinimo = toInt(req.body.estoqueMinimo, 0);
+      if (Number.isNaN(estoque) || estoque < 0) return res.status(400).json({ erro: "Estoque invalido" });
+      if (Number.isNaN(estoqueMinimo) || estoqueMinimo < 0) return res.status(400).json({ erro: "Estoque minimo invalido" });
+    }
 
     const produto = await prisma.produto.create({
       data: {
         codigo,
         nome,
         descricao: norm(req.body.descricao),
+        tipoItem,
         precoVenda,
         precoCusto,
         estoque,
@@ -120,6 +138,17 @@ export async function atualizar(req, res, next) {
       data.nome = n;
     }
     if (req.body.descricao !== undefined) data.descricao = norm(req.body.descricao);
+    if (req.body.tipoItem !== undefined) {
+      const t = normalizarTipoItem(req.body.tipoItem);
+      if (t === null) return res.status(400).json({ erro: "Tipo de item invalido (use PRODUTO ou SERVICO)" });
+      data.tipoItem = t;
+      // Trocar para SERVICO zera estoque/minimo automaticamente — servicos
+      // nao tem controle de estoque.
+      if (t === "SERVICO") {
+        data.estoque = 0;
+        data.estoqueMinimo = 0;
+      }
+    }
     if (req.body.precoVenda !== undefined) {
       const v = toNumber(req.body.precoVenda);
       if (v === null || Number.isNaN(v) || v < 0) return res.status(400).json({ erro: "Preco de venda invalido" });
@@ -130,12 +159,14 @@ export async function atualizar(req, res, next) {
       if (v !== null && (Number.isNaN(v) || v < 0)) return res.status(400).json({ erro: "Preco de custo invalido" });
       data.precoCusto = v;
     }
-    if (req.body.estoque !== undefined) {
+    // Estoque so e aceito quando o item NAO esta sendo marcado como SERVICO
+    // (campo ja zerado acima nesse caso).
+    if (req.body.estoque !== undefined && data.tipoItem !== "SERVICO") {
       const v = toInt(req.body.estoque, NaN);
       if (Number.isNaN(v) || v < 0) return res.status(400).json({ erro: "Estoque invalido" });
       data.estoque = v;
     }
-    if (req.body.estoqueMinimo !== undefined) {
+    if (req.body.estoqueMinimo !== undefined && data.tipoItem !== "SERVICO") {
       const v = toInt(req.body.estoqueMinimo, NaN);
       if (Number.isNaN(v) || v < 0) return res.status(400).json({ erro: "Estoque minimo invalido" });
       data.estoqueMinimo = v;

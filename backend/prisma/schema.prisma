@@ -52,6 +52,11 @@ enum TipoRecorrencia {
   RECORRENTE
 }
 
+enum TipoItem {
+  PRODUTO
+  SERVICO
+}
+
 // ============ USUARIOS ============
 
 model User {
@@ -133,6 +138,7 @@ model Produto {
   nome          String
   descricao     String?
   imagem        String?
+  tipoItem      TipoItem @default(PRODUTO)
   precoVenda    Decimal  @db.Decimal(10, 2)
   precoCusto    Decimal? @db.Decimal(10, 2)
   estoque       Int      @default(0)

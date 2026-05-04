@@ -133,6 +133,40 @@ Não existe rota/UI para **cancelar/excluir** uma compra. Hoje, se uma compra é
 
 ## Histórico de sessões
 
+### Sessão — 2026-05-04 (Compra → Conta a Pagar automática)
+
+Modal de Nova Compra ganhou seção "💰 Gerar conta a pagar no Financeiro" (ativa por padrão). Ao confirmar, a compra e a(s) conta(s) a pagar são criadas na **mesma transação** — se algo falhar, ambas são revertidas.
+
+**Backend** ([compraController.js](backend/src/controllers/compraController.js))
+
+- `criar` aceita `gerarContaPagar?: { vencimento, parcelas, descricao?, observacoes? }` opcional
+- Validação do vencimento via `parseDate` e parcelas (1–60) **antes** de iniciar a transação — falha rápida sem rollback
+- Reaproveita helpers do financeiro (`calcularValores` + `gerarSerieRecorrencia`):
+  - 1 parcela → `tipoRecorrencia: NENHUMA` (uma única ContaPagar)
+  - >1 parcela → `tipoRecorrencia: PARCELADA` (divide o total + cria N contas com `grupoRecorrenciaId` compartilhado e vencimentos mês a mês)
+- Descrição padrão: `COMPRA #N - <FORNECEDOR>` (ou customizável via body)
+- Observação padrão: `GERADA AUTOMATICAMENTE PELA COMPRA #N`
+- Resposta do POST `/compras` agora inclui campo `contasGeradas: [{ id, descricao, valor, vencimento, parcelaAtual, parcelaTotal }]` (vazio se não solicitado)
+
+**Frontend** ([Compras.jsx](src/Compras.jsx))
+
+- `NovaCompraModal` ganha 3 estados novos: `gerarConta` (default `true`), `vencimento` (default `hoje + 30 dias`), `parcelas` (default `1`)
+- Bloco verde-suave logo após o TOTAL, com:
+  - Checkbox grande "💰 Gerar conta a pagar no Financeiro" — quando desligado, esconde os campos
+  - Campo data de vencimento (label muda para "Vencimento da 1ª parcela" se parcelas > 1)
+  - Select de parcelas (1× à vista, 2/3/4/5/6/8/10/12) com **preview do valor por parcela** já no próprio rótulo (`3× (R$ 100,00 cada)`)
+  - Linha de confirmação dinâmica: `"✓ Será criado: 3× R$ 100,00 — vencendo no dia 15 de cada mês a partir de 15/06/2026"`
+- Helper `dataDaqui(N)` produz string `YYYY-MM-DD` aceita por `<input type="date">`
+- Mensagem de sucesso enriquecida: `"Compra #42 registrada — total R$ 300,00 · 3 contas a pagar geradas"`
+
+**Como validar (UI):**
+- Abrir Nova Compra → escolher fornecedor → adicionar 1 item de R$ 300 → manter checkbox marcado → escolher 3× → clicar Registrar
+- Esperado: 1 compra + 3 contas a pagar de R$ 100 cada com mesmo `grupoRecorrenciaId`, vencimentos espaçados de 1 mês
+- Desligar o checkbox → comportamento original (só compra, sem conta)
+- Validar atomicidade: forçar erro (ex: produto inexistente) → nem compra nem contas devem ser criadas
+
+`npx vite build` ok.
+
 ### Sessão — 2026-05-04 (Produto: código de barras + referência)
 
 Cadastro de produtos ganhou dois campos novos: **código de barras** (EAN/GTIN, único quando preenchido) e **referência** (código do fabricante/fornecedor, livre). PDV passou a fazer bipagem por qualquer um dos três identificadores (codigoBarras → codigo → referencia), priorizando código de barras (caso típico de scanner).

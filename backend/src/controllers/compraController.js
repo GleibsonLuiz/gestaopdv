@@ -1,4 +1,5 @@
 import prisma from "../lib/prisma.js";
+import { parseDate, gerarSerieRecorrencia, calcularValores } from "../lib/contas.js";
 
 const INCLUDE_LISTA = {
   fornecedor: { select: { id: true, nome: true, cnpj: true } },
@@ -56,11 +57,33 @@ export async function obter(req, res, next) {
 
 export async function criar(req, res, next) {
   try {
-    const { fornecedorId, observacoes, itens } = req.body;
+    const { fornecedorId, observacoes, itens, gerarContaPagar } = req.body;
 
     if (!fornecedorId) return res.status(400).json({ erro: "fornecedorId e obrigatorio" });
     if (!Array.isArray(itens) || itens.length === 0) {
       return res.status(400).json({ erro: "Informe ao menos um item" });
+    }
+
+    // Validacao da conta a pagar (se solicitada). Feita ANTES da transacao
+    // para falhar rapido sem precisar reverter a compra.
+    let configConta = null;
+    if (gerarContaPagar) {
+      const venc = parseDate(gerarContaPagar.vencimento);
+      if (!venc) return res.status(400).json({ erro: "Vencimento da conta a pagar invalido" });
+      const parcelas = parseInt(gerarContaPagar.parcelas, 10) || 1;
+      if (parcelas < 1 || parcelas > 60) {
+        return res.status(400).json({ erro: "Numero de parcelas deve estar entre 1 e 60" });
+      }
+      configConta = {
+        vencimento: venc,
+        parcelas,
+        descricaoCustom: gerarContaPagar.descricao
+          ? String(gerarContaPagar.descricao).trim().toUpperCase().slice(0, 200)
+          : null,
+        observacoesConta: gerarContaPagar.observacoes
+          ? String(gerarContaPagar.observacoes).trim().toUpperCase().slice(0, 500)
+          : null,
+      };
     }
 
     const itensNorm = [];
@@ -142,7 +165,46 @@ export async function criar(req, res, next) {
           });
         }
 
-        return compraCriada;
+        // Conta a pagar opcional. Reaproveita a logica de parcelamento do
+        // financeiro: 1 parcela = NENHUMA, >1 = PARCELADA (divide o total).
+        // Tudo dentro da mesma transacao — se algo falhar, a compra tambem
+        // e revertida.
+        let contasGeradas = [];
+        if (configConta) {
+          const descricao = configConta.descricaoCustom
+            || `COMPRA #${compraCriada.numero} - ${fornecedor.nome.toUpperCase()}`;
+          const calc = calcularValores({
+            valorBruto: total, juros: 0, multa: 0, desconto: 0,
+          });
+          if (!calc.ok) { const e = new Error(calc.erro); e.status = 400; throw e; }
+          const serie = gerarSerieRecorrencia({
+            tipoRecorrencia: configConta.parcelas > 1 ? "PARCELADA" : "NENHUMA",
+            parcelaTotal: configConta.parcelas,
+            valores: calc.valores,
+            vencimento: configConta.vencimento,
+            dadosBase: {
+              descricao,
+              fornecedorId,
+              observacoes: configConta.observacoesConta || `GERADA AUTOMATICAMENTE PELA COMPRA #${compraCriada.numero}`,
+            },
+          });
+          if (!serie.ok) {
+            const e = new Error(serie.erro); e.status = 400; throw e;
+          }
+          for (const reg of serie.registros) {
+            const conta = await tx.contaPagar.create({ data: reg });
+            contasGeradas.push({
+              id: conta.id,
+              descricao: conta.descricao,
+              valor: Number(conta.valor),
+              vencimento: conta.vencimento,
+              parcelaAtual: conta.parcelaAtual,
+              parcelaTotal: conta.parcelaTotal,
+            });
+          }
+        }
+
+        return { ...compraCriada, contasGeradas };
       });
 
       res.status(201).json(compra);

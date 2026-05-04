@@ -14,6 +14,13 @@ const fmtData = (iso) => {
   return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 };
 
+// Devolve a data de hoje + N dias no formato YYYY-MM-DD aceito por <input type="date">.
+function dataDaqui(diasAFrente) {
+  const d = new Date();
+  d.setDate(d.getDate() + diasAFrente);
+  return d.toISOString().slice(0, 10);
+}
+
 export default function Compras({ user }) {
   const [compras, setCompras] = useState([]);
   const [carregando, setCarregando] = useState(false);
@@ -155,7 +162,11 @@ export default function Compras({ user }) {
           onCancelar={() => setNovoAberto(false)}
           onSalvar={(c) => {
             setNovoAberto(false);
-            flash(`Compra #${c.numero} registrada — total ${fmtBRL(c.total)}`);
+            const qtdContas = c.contasGeradas?.length || 0;
+            const sufixo = qtdContas > 0
+              ? ` · ${qtdContas} conta${qtdContas > 1 ? "s" : ""} a pagar gerada${qtdContas > 1 ? "s" : ""}`
+              : "";
+            flash(`Compra #${c.numero} registrada — total ${fmtBRL(c.total)}${sufixo}`);
             carregar();
           }}
         />
@@ -174,6 +185,13 @@ function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }) {
   const [itens, setItens] = useState([]);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+
+  // Bloco financeiro: gerar conta a pagar automatica vinculada a esta compra.
+  // Default: ativo quando ha pelo menos 1 item, vencimento 30 dias a frente,
+  // 1 parcela. Usuario pode desligar, mudar vencimento ou parcelar.
+  const [gerarConta, setGerarConta] = useState(true);
+  const [vencimento, setVencimento] = useState(() => dataDaqui(30));
+  const [parcelas, setParcelas] = useState(1);
 
   const total = useMemo(
     () => itens.reduce((acc, it) => {
@@ -218,9 +236,18 @@ function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }) {
       if (!Number.isFinite(p) || p < 0) { setErro(`Item ${i + 1}: preço unitário inválido`); return; }
     }
 
+    // Validacao do bloco financeiro (so se ativo).
+    if (gerarConta) {
+      if (!vencimento) { setErro("Informe o vencimento da conta a pagar"); return; }
+      const p = parseInt(parcelas, 10);
+      if (!Number.isFinite(p) || p < 1 || p > 60) {
+        setErro("Numero de parcelas deve estar entre 1 e 60"); return;
+      }
+    }
+
     setSalvando(true);
     try {
-      const c = await api.criarCompra({
+      const payload = {
         fornecedorId,
         observacoes,
         itens: itens.map(it => ({
@@ -228,7 +255,14 @@ function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }) {
           quantidade: it.quantidade,
           precoUnitario: it.precoUnitario,
         })),
-      });
+      };
+      if (gerarConta) {
+        payload.gerarContaPagar = {
+          vencimento,
+          parcelas: parseInt(parcelas, 10) || 1,
+        };
+      }
+      const c = await api.criarCompra(payload);
       onSalvar(c);
     } catch (err) {
       setErro(err.message);
@@ -324,6 +358,73 @@ function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }) {
         }}>
           <div style={{ color: C.muted, fontSize: 12, fontWeight: 600 }}>TOTAL DA COMPRA</div>
           <div style={{ color: C.green, fontSize: 22, fontWeight: 800 }}>{fmtBRL(total)}</div>
+        </div>
+
+        {/* BLOCO FINANCEIRO — gerar conta a pagar automatica */}
+        <div style={{
+          marginTop: 14, padding: 16,
+          background: gerarConta ? C.green + "11" : C.surface,
+          border: `1px solid ${gerarConta ? C.green + "55" : C.border}`,
+          borderRadius: 10,
+        }}>
+          <label style={{
+            display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer",
+          }}>
+            <input
+              type="checkbox" checked={gerarConta}
+              onChange={e => setGerarConta(e.target.checked)}
+              style={{ marginTop: 3, transform: "scale(1.2)", accentColor: C.green }}
+            />
+            <div style={{ flex: 1 }}>
+              <div style={{ color: gerarConta ? C.green : C.text, fontWeight: 700, fontSize: 14 }}>
+                💰 Gerar conta a pagar no Financeiro
+              </div>
+              <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>
+                {gerarConta
+                  ? "Será criada uma conta a pagar vinculada a esta compra para cobrança futura."
+                  : "Marque para registrar esta compra também como conta a pagar (cobrança a prazo)."}
+              </div>
+            </div>
+          </label>
+
+          {gerarConta && (
+            <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <Campo label={parcelas > 1 ? "Vencimento da 1ª parcela *" : "Vencimento *"}>
+                <input
+                  type="date"
+                  value={vencimento}
+                  onChange={e => setVencimento(e.target.value)}
+                  required={gerarConta}
+                  style={inputStyle}
+                />
+              </Campo>
+              <Campo label="Parcelas">
+                <select
+                  value={parcelas}
+                  onChange={e => setParcelas(parseInt(e.target.value, 10))}
+                  style={inputStyle}
+                >
+                  <option value={1}>1× à vista</option>
+                  {[2, 3, 4, 5, 6, 8, 10, 12].map(n => (
+                    <option key={n} value={n}>{n}× ({fmtBRL(total / n)} cada)</option>
+                  ))}
+                </select>
+              </Campo>
+              <div style={{
+                gridColumn: "span 2",
+                padding: "8px 12px", background: C.bg, borderRadius: 8,
+                color: C.muted, fontSize: 11, fontStyle: "italic",
+              }}>
+                ✓ Será criado: <b style={{ color: C.green }}>{parcelas}× {fmtBRL(total / parcelas)}</b>
+                {parcelas > 1 && (
+                  <> — vencendo no dia {new Date(vencimento + "T12:00:00").getDate()} de cada mês a partir de {new Date(vencimento + "T12:00:00").toLocaleDateString("pt-BR")}</>
+                )}
+                {parcelas === 1 && vencimento && (
+                  <> — vencimento em {new Date(vencimento + "T12:00:00").toLocaleDateString("pt-BR")}</>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {erro && (

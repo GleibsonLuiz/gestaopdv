@@ -7,11 +7,13 @@ const PALAVRA_CHAVE = "CONFIRMAR_RESET";
 
 const TABELAS_LIMPAS = [
   ["🛒", "Vendas e itens de venda"],
+  ["💵", "Caixas (abertura/fechamento + extrato)"],
+  ["🔄", "Movimentações de caixa (sangria, suprimento, estorno)"],
   ["🛍", "Compras e itens de compra"],
   ["📊", "Movimentações de estoque"],
-  ["📎", "Anexos (PDF/imagens)"],
+  ["📎", "Anexos (PDF/imagens) do financeiro"],
   ["💸", "Contas a pagar e a receber"],
-  ["📦", "Produtos"],
+  ["📦", "Produtos (incluindo serviços e fotos)"],
   ["🏷", "Categorias"],
   ["🏭", "Fornecedores"],
   ["👥", "Clientes"],
@@ -20,6 +22,8 @@ const TABELAS_LIMPAS = [
 const PRESERVADOS = [
   ["🧑‍💼", "Funcionários (incluindo você)"],
   ["🔐", "Permissões e perfis (ADMIN/GERENTE/VENDEDOR)"],
+  ["🏢", "Dados da empresa (razão social, CNPJ, endereço)"],
+  ["🖼", "Logotipo da empresa"],
 ];
 
 export default function Sistema({ user, onResetar }) {
@@ -175,9 +179,10 @@ function ModalReset({ onCancelar, onConcluir }) {
           color: C.text, fontSize: 13, lineHeight: 1.5,
         }}>
           Esta ação é <strong style={{ color: C.red }}>IRREVERSÍVEL</strong>.
-          Vendas, compras, estoque, financeiro e cadastros (clientes, fornecedores,
-          produtos e categorias) serão apagados permanentemente.
-          Os funcionários e suas permissões serão preservados.
+          Vendas, caixas, compras, estoque, financeiro e cadastros (clientes,
+          fornecedores, produtos e categorias) serão apagados permanentemente.
+          Os funcionários, permissões e dados da empresa (incluindo logotipo)
+          serão preservados.
         </div>
 
         <div style={{

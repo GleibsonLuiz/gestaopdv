@@ -74,11 +74,13 @@ export default function MovimentarEstoqueModal({ produtos, produtoInicial, onCan
           <select value={produtoId} onChange={e => setProdutoId(e.target.value)}
             disabled={!!produtoInicial} required style={inputStyle}>
             <option value="">— Selecione —</option>
-            {produtos.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.codigo} — {p.nome} (estoque: {p.estoque})
-              </option>
-            ))}
+            {produtos
+              .filter(p => p.tipoItem !== "SERVICO")
+              .map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.codigo} — {p.nome} (estoque: {p.estoque})
+                </option>
+              ))}
           </select>
         </Campo>
 

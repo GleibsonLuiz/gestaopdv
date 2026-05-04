@@ -261,6 +261,15 @@ const PRODUTOS_BASE = [
   { codigo: "PAP-0020", nome: "CALCULADORA CASIO HR-100 COM BOBINA",     cat: "TECNOLOGIA",   precoCusto: 145.00, precoVenda: 249.90, est: 0, min: 3,  unidade: "UN" },
 ];
 
+// Servicos sao itens vendiveis sem controle de estoque — papelaria tipica
+// vende impressao, encadernacao, segunda via de boletos, etc.
+const SERVICOS_BASE = [
+  { codigo: "SVC-0001", nome: "IMPRESSÃO P&B A4 (POR FOLHA)",       cat: "ESCRITÓRIO", precoVenda: 0.50, unidade: "UN", descricao: "SERVIÇO DE IMPRESSÃO PRETO E BRANCO EM PAPEL A4" },
+  { codigo: "SVC-0002", nome: "IMPRESSÃO COLORIDA A4 (POR FOLHA)",  cat: "ESCRITÓRIO", precoVenda: 2.00, unidade: "UN", descricao: "SERVIÇO DE IMPRESSÃO COLORIDA EM PAPEL A4" },
+  { codigo: "SVC-0003", nome: "ENCADERNAÇÃO ESPIRAL ATÉ 100 FOLHAS", cat: "ESCRITÓRIO", precoVenda: 8.00, unidade: "UN", descricao: "SERVIÇO DE ENCADERNAÇÃO COM ESPIRAL DE PLÁSTICO" },
+  { codigo: "SVC-0004", nome: "SEGUNDA VIA DE BOLETO BANCÁRIO",     cat: "ESCRITÓRIO", precoVenda: 5.00, unidade: "UN", descricao: "EMISSÃO DE 2ª VIA DE BOLETO PARA O CLIENTE" },
+];
+
 async function seedProdutos(categorias, fornecedores) {
   const catByName = new Map(categorias.map(c => [c.nome, c.id]));
   const result = [];
@@ -273,12 +282,14 @@ async function seedProdutos(categorias, fornecedores) {
       update: {
         nome: p.nome,
         descricao,
+        tipoItem: "PRODUTO",
         unidade: p.unidade,
       },
       create: {
         codigo: p.codigo,
         nome: p.nome,
         descricao,
+        tipoItem: "PRODUTO",
         precoVenda: p.precoVenda,
         precoCusto: p.precoCusto,
         estoque: p.est,
@@ -289,6 +300,33 @@ async function seedProdutos(categorias, fornecedores) {
       },
     });
     result.push(produto);
+  }
+  // Servicos: sem fornecedor, sem estoque/minimo, tipoItem = SERVICO.
+  for (const s of SERVICOS_BASE) {
+    const servico = await prisma.produto.upsert({
+      where: { codigo: s.codigo },
+      update: {
+        nome: s.nome,
+        descricao: s.descricao,
+        tipoItem: "SERVICO",
+        precoVenda: s.precoVenda,
+        unidade: s.unidade,
+      },
+      create: {
+        codigo: s.codigo,
+        nome: s.nome,
+        descricao: s.descricao,
+        tipoItem: "SERVICO",
+        precoVenda: s.precoVenda,
+        precoCusto: null,
+        estoque: 0,
+        estoqueMinimo: 0,
+        unidade: s.unidade,
+        categoriaId: catByName.get(s.cat) || null,
+        fornecedorId: null,
+      },
+    });
+    result.push(servico);
   }
   return result;
 }

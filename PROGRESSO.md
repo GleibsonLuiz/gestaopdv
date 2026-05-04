@@ -116,7 +116,7 @@ Não existe rota/UI para **cancelar/excluir** uma compra. Hoje, se uma compra é
 | categorias | 9 |
 | fornecedores | 25 |
 | clientes | 23 |
-| produtos | 23 |
+| produtos | 46 (20 PRODUTO + 4 SERVICO + 22 de testes manuais antigos) |
 | compras | 21 |
 | movimentacoes_estoque | 59 |
 | contas_pagar | 22 (PENDENTE 2, ATRASADA 0, PAGA 12, CANCELADA 8) |
@@ -132,6 +132,60 @@ Não existe rota/UI para **cancelar/excluir** uma compra. Hoje, se uma compra é
 ---
 
 ## Histórico de sessões
+
+### Sessão — 2026-05-04 (Tipo de item: PRODUTO vs SERVICO)
+
+Distinção entre itens **físicos** (com controle de estoque) e **serviços/digitais** (sem estoque, sempre disponíveis para venda). Resolve o caso de papelaria que vende impressão, encadernação e 2ª via de boleto — itens que apareciam como "0 UN" em vermelho na lista e bloqueavam o PDV.
+
+**1. Banco** — migration `20260504143548_add_tipo_item_produto`
+
+- `enum TipoItem { PRODUTO, SERVICO }`
+- `Produto.tipoItem TipoItem @default(PRODUTO)` — produtos existentes recebem PRODUTO automaticamente.
+
+**2. Backend**
+
+- `produtoController.criar/atualizar` — aceita `tipoItem`. Quando SERVICO, força `estoque=0` e `estoqueMinimo=0` (ignora valores enviados); quando PRODUTO, valida normalmente.
+- `vendaController.criar` — pula validação de estoque insuficiente para itens SERVICO; pula `produto.update` e `MovimentacaoEstoque.create`.
+- `vendaController.cancelar` — pula estorno para itens SERVICO (não geram ENTRADA).
+- `compraController.criar` — bloqueia SERVICO em compras com 400 `"<nome> e um servico — nao pode ser incluido em compra"`.
+- `estoqueController.criar` — bloqueia movimentação manual em SERVICO com 400.
+- `dashboardController` + `alertasController` — query raw `WHERE "tipoItem" = 'PRODUTO'` para que serviços nunca apareçam em "estoque baixo".
+- `relatoriosController.relatorioEstoque` — filtra `tipoItem: "PRODUTO"` no `where`.
+
+**3. Frontend**
+
+- `src/Produtos.jsx`:
+  - Form ganha campo "Tipo do item" como dois cards radio (Produto físico 📦 / Serviço-digital 🛠), cada um com descrição inline. Quando SERVICO, os campos "Estoque atual" e "Estoque mínimo" ficam desabilitados, sem valor, com placeholder "♾ Ilimitado" e borda tracejada.
+  - Lista exibe badge roxo `SERVIÇO` ao lado do nome, ícone ♾ na coluna Estoque (em vez de "0 UN" vermelho), unidade "—", e oculta o botão "📊 Movimentar estoque".
+  - `Miniatura` mostra 🛠 em fundo roxo quando serviço sem foto.
+- `src/PDV.jsx`:
+  - `sugestoes` agora inclui serviços independente de estoque.
+  - `adicionarProduto`, `biparOuConfirmar`, `alterarQuantidade`, `definirQuantidade` pulam validação de estoque para `tipoItem === "SERVICO"`.
+  - Item no carrinho carrega `tipoItem`; estoque "lógico" guardado como `Infinity` para destravar os controles.
+  - Cestinha + dropdown + modal Cancelar mostram badge `♾ SERVIÇO` e ícone roxo via `FotoProduto({ servico: true })`.
+- `src/MovimentarEstoqueModal.jsx`: select de produto filtra `p.tipoItem !== "SERVICO"`.
+
+**4. Seed** — 4 serviços novos
+
+- `SVC-0001` IMPRESSÃO P&B A4 (R$ 0,50)
+- `SVC-0002` IMPRESSÃO COLORIDA A4 (R$ 2,00)
+- `SVC-0003` ENCADERNAÇÃO ESPIRAL ATÉ 100 FOLHAS (R$ 8,00)
+- `SVC-0004` SEGUNDA VIA DE BOLETO BANCÁRIO (R$ 5,00)
+
+Categoria ESCRITÓRIO, sem fornecedor, `tipoItem=SERVICO`. `seedProdutos` sempre força `tipoItem` no upsert (re-execuções do seed normalizam o campo).
+
+**Validado via API:**
+
+```
+POST /vendas com SVC-0004 estoque=0 → 200, venda #45 CONCLUIDA, R$15
+GET  /produtos?search=SVC-0004 → estoque continua 0, sem movimentacao
+POST /estoque/movimentacoes SAIDA em SVC-0004
+  → 400 "Servicos nao tem estoque — movimentacao nao permitida"
+POST /compras com SVC-0004
+  → 400 "SEGUNDA VIA DE BOLETO BANCÁRIO e um servico — nao pode ser incluido em compra"
+GET  /alertas → 21 alertas, 5 estoqueBaixo, 0 servicos em estoqueBaixo
+npx vite build → ok 784ms
+```
 
 ### Sessão — 2026-05-04 (Refactor PDV bipagem + foto em produtos)
 

@@ -98,6 +98,10 @@ export async function criar(req, res, next) {
           if (!p) {
             const e = new Error(`Produto ${it.produtoId} nao encontrado`); e.status = 404; throw e;
           }
+          if (p.tipoItem === "SERVICO") {
+            const e = new Error(`"${p.nome}" e um servico — nao pode ser incluido em compra`);
+            e.status = 400; throw e;
+          }
         }
 
         const compraCriada = await tx.compra.create({

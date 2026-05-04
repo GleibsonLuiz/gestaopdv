@@ -121,6 +121,8 @@ export async function criar(req, res, next) {
           if (!p.ativo) {
             const e = new Error(`Produto "${p.nome}" esta inativo`); e.status = 400; throw e;
           }
+          // Servicos nao tem estoque a validar — venda e sempre permitida.
+          if (p.tipoItem === "SERVICO") continue;
           if (p.estoque < it.quantidade) {
             const e = new Error(`Estoque insuficiente de "${p.nome}". Disponivel: ${p.estoque}, solicitado: ${it.quantidade}`);
             e.status = 400; throw e;
@@ -150,6 +152,9 @@ export async function criar(req, res, next) {
 
         for (const it of itensNorm) {
           const p = mapaProdutos.get(it.produtoId);
+          // Servicos nao baixam estoque nem geram movimentacao — apenas o
+          // ItemVenda e o registro financeiro contam.
+          if (p.tipoItem === "SERVICO") continue;
           const antes = p.estoque;
           const depois = antes - it.quantidade;
           await tx.produto.update({
@@ -204,9 +209,11 @@ export async function cancelar(req, res, next) {
           include: INCLUDE_DETALHE,
         });
 
-        // Estorno: cria ENTRADA para cada item e devolve ao estoque
+        // Estorno: cria ENTRADA para cada item e devolve ao estoque.
+        // Servicos nao tem estoque a estornar — pulam silenciosamente.
         for (const it of atual.itens) {
           const prod = await tx.produto.findUnique({ where: { id: it.produtoId } });
+          if (prod.tipoItem === "SERVICO") continue;
           const antes = prod.estoque;
           const depois = antes + it.quantidade;
           await tx.produto.update({

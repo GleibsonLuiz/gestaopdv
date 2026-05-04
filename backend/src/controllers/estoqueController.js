@@ -55,6 +55,11 @@ export async function criar(req, res, next) {
         e.status = 404;
         throw e;
       }
+      if (produto.tipoItem === "SERVICO") {
+        const e = new Error("Servicos nao tem estoque — movimentacao nao permitida");
+        e.status = 400;
+        throw e;
+      }
 
       const antes = produto.estoque;
       let depois;

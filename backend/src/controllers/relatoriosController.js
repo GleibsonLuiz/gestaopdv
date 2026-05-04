@@ -331,7 +331,9 @@ export async function relatorioEstoque(req, res, next) {
   try {
     const { categoriaId, fornecedorId, situacao } = req.query;
 
-    const where = { ativo: true };
+    // Relatorio de estoque ignora servicos — eles nao tem unidades em
+    // estoque nem custo de aquisicao a apurar.
+    const where = { ativo: true, tipoItem: "PRODUTO" };
     if (categoriaId) where.categoriaId = categoriaId;
     if (fornecedorId) where.fornecedorId = fornecedorId;
 

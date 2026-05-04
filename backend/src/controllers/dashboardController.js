@@ -129,7 +129,9 @@ export async function resumo(req, res, next) {
       prisma.$queryRaw`
         SELECT id, codigo, nome, estoque, "estoqueMinimo", unidade
         FROM produtos
-        WHERE ativo = true AND estoque <= "estoqueMinimo"
+        WHERE ativo = true
+          AND "tipoItem" = 'PRODUTO'
+          AND estoque <= "estoqueMinimo"
         ORDER BY (estoque - "estoqueMinimo") ASC, nome ASC
         LIMIT 10
       `,

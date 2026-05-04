@@ -6,6 +6,7 @@ import MovimentarEstoqueModal from "./MovimentarEstoqueModal.jsx";
 
 const VAZIO = {
   codigo: "", nome: "", descricao: "",
+  tipoItem: "PRODUTO",
   precoVenda: "", precoCusto: "",
   estoque: "0", estoqueMinimo: "0", unidade: "UN",
   categoriaId: "", fornecedorId: "",
@@ -113,6 +114,7 @@ export default function Produtos({ user }) {
       codigo: p.codigo || "",
       nome: p.nome || "",
       descricao: p.descricao || "",
+      tipoItem: p.tipoItem || "PRODUTO",
       precoVenda: p.precoVenda != null ? String(p.precoVenda) : "",
       precoCusto: p.precoCusto != null ? String(p.precoCusto) : "",
       estoque: String(p.estoque ?? 0),
@@ -186,14 +188,18 @@ export default function Produtos({ user }) {
 
     setSalvando(true);
     try {
+      const ehServico = form.tipoItem === "SERVICO";
       const payload = {
         codigo: form.codigo,
         nome: form.nome,
         descricao: form.descricao,
+        tipoItem: form.tipoItem,
         precoVenda: form.precoVenda,
         precoCusto: form.precoCusto === "" ? null : form.precoCusto,
-        estoque: form.estoque,
-        estoqueMinimo: form.estoqueMinimo,
+        // Servicos sempre vao com estoque zerado — backend ja ignora, mas
+        // mandamos explicito para nao depender disso.
+        estoque: ehServico ? "0" : form.estoque,
+        estoqueMinimo: ehServico ? "0" : form.estoqueMinimo,
         unidade: form.unidade,
         categoriaId: form.categoriaId || null,
         fornecedorId: form.fornecedorId || null,
@@ -326,7 +332,8 @@ export default function Produtos({ user }) {
         ) : produtos.length === 0 ? (
           <div style={{ padding: 30, textAlign: "center", color: C.muted, fontSize: 13 }}>Nenhum produto encontrado.</div>
         ) : produtos.map(p => {
-          const baixo = p.estoque <= p.estoqueMinimo;
+          const ehServico = p.tipoItem === "SERVICO";
+          const baixo = !ehServico && p.estoque <= p.estoqueMinimo;
           return (
             <div key={p.id} style={{
               display: "grid", gridTemplateColumns: "100px 1.6fr 1.2fr 110px 110px 90px 100px 240px",
@@ -335,9 +342,18 @@ export default function Produtos({ user }) {
             }}>
               <div style={{ color: C.muted, fontFamily: "monospace", fontSize: 12 }}>{p.codigo}</div>
               <div style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}>
-                <Miniatura url={p.imagem} nome={p.nome} />
+                <Miniatura url={p.imagem} nome={p.nome} servico={ehServico} />
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ color: C.white, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nome}</div>
+                  <div style={{ color: C.white, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
+                    {p.nome}
+                    {ehServico && (
+                      <span style={{
+                        fontSize: 9, fontWeight: 800, padding: "2px 6px", borderRadius: 4,
+                        background: C.purple + "22", color: C.purple, border: `1px solid ${C.purple}55`,
+                        letterSpacing: 0.4,
+                      }}>SERVIÇO</span>
+                    )}
+                  </div>
                   {p.descricao && (
                     <div style={{ color: C.muted, fontSize: 11, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {p.descricao}
@@ -352,11 +368,19 @@ export default function Produtos({ user }) {
               <div style={{ textAlign: "right", color: C.green, fontWeight: 600 }}>
                 {fmtBRL(p.precoVenda)}
               </div>
-              <div style={{ textAlign: "right", color: baixo ? C.red : C.text, fontWeight: baixo ? 700 : 500 }}>
-                {p.estoque}
-                {baixo && <span style={{ fontSize: 10, marginLeft: 6 }}>⚠</span>}
+              <div style={{ textAlign: "right" }}>
+                {ehServico ? (
+                  <span title="Serviço — sem controle de estoque" style={{
+                    color: C.purple, fontWeight: 700, fontSize: 16, letterSpacing: 0.5,
+                  }}>♾</span>
+                ) : (
+                  <span style={{ color: baixo ? C.red : C.text, fontWeight: baixo ? 700 : 500 }}>
+                    {p.estoque}
+                    {baixo && <span style={{ fontSize: 10, marginLeft: 6 }}>⚠</span>}
+                  </span>
+                )}
               </div>
-              <div style={{ color: C.muted, fontSize: 12 }}>{p.unidade}</div>
+              <div style={{ color: C.muted, fontSize: 12 }}>{ehServico ? "—" : p.unidade}</div>
               <div>
                 <span style={{
                   fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 6,
@@ -366,7 +390,7 @@ export default function Produtos({ user }) {
                 }}>{p.ativo ? "ATIVO" : "INATIVO"}</span>
               </div>
               <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", flexWrap: "wrap" }}>
-                {podeEditar && (
+                {podeEditar && !ehServico && (
                   <button onClick={() => setModalEstoqueProduto(p)} style={btnIcone(C.yellow)} title="Movimentar estoque">📊</button>
                 )}
                 {podeEditar && (
@@ -441,6 +465,12 @@ export default function Produtos({ user }) {
                   inputRef={inputImagemRef}
                 />
               </Campo>
+              <Campo label="Tipo do item *" span={3}>
+                <SeletorTipoItem
+                  valor={form.tipoItem}
+                  onMudar={t => setForm(f => ({ ...f, tipoItem: t }))}
+                />
+              </Campo>
               <Campo label="Preço de Venda *">
                 <input type="number" step="0.01" min="0" value={form.precoVenda}
                   onChange={e => setForm({ ...form, precoVenda: e.target.value })}
@@ -456,15 +486,21 @@ export default function Produtos({ user }) {
                   onChange={e => setForm({ ...form, unidade: e.target.value.toUpperCase().slice(0, 6) })}
                   style={inputStyle} placeholder="UN, KG, LT..." />
               </Campo>
-              <Campo label="Estoque atual">
-                <input type="number" min="0" value={form.estoque}
+              <Campo label={form.tipoItem === "SERVICO" ? "Estoque atual (n/a — serviço)" : "Estoque atual"}>
+                <input type="number" min="0"
+                  value={form.tipoItem === "SERVICO" ? "" : form.estoque}
                   onChange={e => setForm({ ...form, estoque: e.target.value })}
-                  style={inputStyle} />
+                  disabled={form.tipoItem === "SERVICO"}
+                  placeholder={form.tipoItem === "SERVICO" ? "♾ Ilimitado" : ""}
+                  style={form.tipoItem === "SERVICO" ? inputDisabled : inputStyle} />
               </Campo>
-              <Campo label="Estoque mínimo">
-                <input type="number" min="0" value={form.estoqueMinimo}
+              <Campo label={form.tipoItem === "SERVICO" ? "Estoque mínimo (n/a — serviço)" : "Estoque mínimo"}>
+                <input type="number" min="0"
+                  value={form.tipoItem === "SERVICO" ? "" : form.estoqueMinimo}
                   onChange={e => setForm({ ...form, estoqueMinimo: e.target.value })}
-                  style={inputStyle} />
+                  disabled={form.tipoItem === "SERVICO"}
+                  placeholder={form.tipoItem === "SERVICO" ? "—" : ""}
+                  style={form.tipoItem === "SERVICO" ? inputDisabled : inputStyle} />
               </Campo>
               <div />
               <Campo label="Fornecedor" span={3}>
@@ -545,6 +581,12 @@ const inputStyle = {
   outline: "none", boxSizing: "border-box",
 };
 
+const inputDisabled = {
+  ...inputStyle,
+  background: "#0f1117", color: "#64748b",
+  cursor: "not-allowed", borderStyle: "dashed",
+};
+
 const selectStyle = {
   background: "#1a1d27", border: "1px solid #2e3354", borderRadius: 8,
   padding: "10px 12px", color: "#e2e8f0", fontSize: 13, cursor: "pointer",
@@ -573,7 +615,7 @@ function alertStyle(cor) {
   };
 }
 
-function Miniatura({ url, nome }) {
+function Miniatura({ url, nome, servico = false }) {
   const src = urlImagem(url);
   if (src) {
     return (
@@ -591,10 +633,41 @@ function Miniatura({ url, nome }) {
   return (
     <div style={{
       width: 40, height: 40, borderRadius: 8, flexShrink: 0,
-      background: C.surface, border: `1px solid ${C.border}`,
+      background: servico ? C.purple + "22" : C.surface,
+      border: `1px solid ${servico ? C.purple + "55" : C.border}`,
       display: "flex", alignItems: "center", justifyContent: "center",
-      color: C.muted, fontSize: 18,
-    }}>📦</div>
+      color: servico ? C.purple : C.muted, fontSize: 18,
+    }}>{servico ? "🛠" : "📦"}</div>
+  );
+}
+
+function SeletorTipoItem({ valor, onMudar }) {
+  const opcoes = [
+    { id: "PRODUTO", icone: "📦", label: "Produto físico", desc: "Controla estoque, gera entradas/saídas, alerta quando baixo." },
+    { id: "SERVICO", icone: "🛠", label: "Serviço / digital", desc: "Sem estoque. Sempre disponível para venda (impressão, 2ª via...)." },
+  ];
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+      {opcoes.map(opt => {
+        const ativo = valor === opt.id;
+        return (
+          <button key={opt.id} type="button" onClick={() => onMudar(opt.id)} style={{
+            cursor: "pointer", textAlign: "left",
+            padding: "12px 14px", borderRadius: 10,
+            background: ativo ? (opt.id === "SERVICO" ? C.purple + "22" : C.accent + "22") : C.surface,
+            border: `1px solid ${ativo ? (opt.id === "SERVICO" ? C.purple : C.accent) : C.border}`,
+            color: ativo ? C.white : C.text,
+            transition: "all 0.15s ease",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: 13 }}>
+              <span style={{ fontSize: 18 }}>{opt.icone}</span>
+              {opt.label}
+            </div>
+            <div style={{ color: C.muted, fontSize: 11, marginTop: 4 }}>{opt.desc}</div>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

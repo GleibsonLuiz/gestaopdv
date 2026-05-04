@@ -133,6 +133,46 @@ Não existe rota/UI para **cancelar/excluir** uma compra. Hoje, se uma compra é
 
 ## Histórico de sessões
 
+### Sessão — 2026-05-04 (Refactor PDV bipagem + foto em produtos)
+
+Refactor profundo dos módulos PDV e Cadastro de Produtos para fluxo de loja física com scanner. **Mantida a convenção de estilos inline + paleta `C` via CSS variables** — pedido original mencionava Tailwind, mas isso quebraria o sistema de temas, então seguiu-se o padrão estabelecido.
+
+**1. Backend — foto em Produto** (migration `20260504122911_produto_imagem`)
+
+- Schema: campo `imagem String?` em `Produto`
+- `backend/src/controllers/produtoImagemController.js` — multer com pasta dedicada `backend/uploads/produtos/`, limite 2 MB, MIMEs `image/jpeg|png|webp`. Upload substitui imagem anterior (apaga arquivo antigo do disco antes de gravar a nova URL). DELETE limpa coluna + arquivo.
+- `backend/src/routes/produtos.js` — `POST /produtos/:id/imagem` e `DELETE /produtos/:id/imagem` (ambos `requireRole("ADMIN","GERENTE")` e `requirePermissao("PRODUTOS")`).
+- `src/lib/api.js` — `enviarImagemProduto(id, file)` (multipart) e `excluirImagemProduto(id)`.
+
+**2. Cadastro de Produtos — dropzone + preview**
+
+- `src/Produtos.jsx`: novo componente `DropzoneImagem` (clique ou arraste) com preview imediato via `URL.createObjectURL`. Componente `Miniatura` exibe foto na listagem (40×40 com fallback `📦`).
+- `useState<File|null>` para captura local; upload acontece **após** create/update do produto. Falha no upload exibe aviso mas mantém o produto salvo (não bloqueia o fluxo).
+- Helper exportado `urlImagem(imagem)` resolve URL relativa do backend para absoluta consumível por `<img>`.
+
+**3. PDV — bipagem por scanner + cestinha visual**
+
+- **Layout 70/30**: barra de bipagem central no topo (input grande com `🔎` e dicas F8/F10), cestinha 70% à esquerda com fotos 64×64 e novos itens **no topo** (incremento também move para o topo, com flash CSS de 0.7s), painel direito 30% com totais + botão Finalizar.
+- **Bipagem**: handler de `Enter` em `biparOuConfirmar()` busca match exato pelo código (caso scanner) e cai para a primeira sugestão se não houver. Sugestões aparecem como dropdown abaixo do input apenas quando há texto digitado (vista limpa quando idle).
+- **Refoco universal**: input tem `onBlur` que reFoca em ~120ms se nenhuma modal estiver aberta. Todas as ações (adicionar, remover, fechar pagamento, fechar recibo) chamam `focarBusca()`.
+- **Atalhos atualizados**: F1–F6 forma de pagamento, **F8** abre modal Cancelar Item, **F10** abre pagamento (substituiu `End`), `Esc` limpa input ou fecha modal aberta. Listener global usa refs vivas (`carrinhoRef`, `pagamentoAbertoRef`, `abrirPagamentoRef`) para evitar rebind a cada render.
+- **Modal Cancelar Item**: lista todos os itens do carrinho (foto + nome + qtd × preço); clique em qualquer linha remove e refoca a busca; se era o último item, fecha automaticamente.
+- Produtos no carrinho carregam o campo `imagem` do payload e exibem na cestinha + nas sugestões + no modal Cancelar.
+
+**Validado via curl (backend rodando local):**
+```
+POST /auth/login                                                      → 200 token
+GET  /produtos                                                         → 200 (campo imagem: null em todos)
+POST /produtos/:id/imagem (FormData arquivo PNG 1×1)                  → 200 imagem: "/uploads/produtos/<uuid>.png"
+GET  /uploads/produtos/<uuid>.png                                     → 200 content-type: image/png
+DELETE /produtos/:id/imagem                                           → 200 imagem: null (arquivo apagado do disco)
+npx vite build                                                         → ok (1.28s, 238 modules transformed)
+```
+
+**Lacunas conhecidas:**
+- Seed não popula imagens (sem dependência externa de URLs placeholder). Operador faz upload manual.
+- PDV preserva o cliente/desconto/forma quando "Cancelar Item" remove um item — só a venda completa é zerada quando o usuário usa "Limpar tudo" ou após uma venda concluída.
+
 ### Sessão — 2026-04-30 (Onda pós-MVP: hard-delete + Sistema + sidebar retrátil + temas + aba Extras)
 
 Cinco commits em sequência transformando o MVP num produto polido. Ordem cronológica abaixo.
@@ -536,11 +576,13 @@ GET /funcionarios → 20 registros
 
 ## Onde paramos
 
-**🎉 Projeto completo — 13 de 13 etapas + 9 melhorias pós-MVP entregues.**
+**🎉 Projeto completo — 13 de 13 etapas + 10 melhorias pós-MVP entregues.**
 
-Todas as etapas planejadas foram entregues e, em 2026-04-30, o produto recebeu uma onda de polimento que adicionou: hard-delete em cadastros, tela administrativa **Sistema** com Reset Total, **mini sidebar retrátil** (72↔240px com persistência), **sistema de temas** (4 paletas via CSS vars + modal Aparência), **PDV com atalhos/troco/cupom**, **Clientes com máscaras + ViaCEP**, **financeiro avançado** (juros/multa/desconto/recorrência/anexos), **permissões por módulo com bloqueio no backend** e a aba **Extras** documentando tudo dentro do próprio app.
+Todas as etapas planejadas foram entregues e o produto continuou a receber polimento. Em 2026-04-30, uma onda adicionou: hard-delete em cadastros, tela administrativa **Sistema** com Reset Total, **mini sidebar retrátil** (72↔240px com persistência), **sistema de temas** (4 paletas via CSS vars + modal Aparência), **PDV com atalhos/troco/cupom**, **Clientes com máscaras + ViaCEP**, **financeiro avançado** (juros/multa/desconto/recorrência/anexos), **permissões por módulo com bloqueio no backend** e a aba **Extras** documentando tudo dentro do próprio app.
 
-Estado em 2026-05-01: **trabalho em pausa** — última sessão produtiva foi 2026-04-30 noite (commits `b9a009e` → `5e02fb2`). Working tree limpo, branch `main` sincronizada com `origin/main`.
+Em 2026-05-04, novo refactor profundo: **PDV bipagem por scanner** (cestinha 70% com fotos, novos itens no topo, sugestões dropdown, F8 cancelar, F10 finalizar, refoco universal) e **foto em produto** (campo `imagem` no schema, upload via dropzone, preview imediato, miniatura na lista).
+
+Estado em 2026-05-04: **última sessão produtiva foi hoje** — refactor PDV+Produtos com foto. Working tree pronto para commit.
 
 ### Lacunas conhecidas (polimento opcional)
 

@@ -133,6 +133,40 @@ Não existe rota/UI para **cancelar/excluir** uma compra. Hoje, se uma compra é
 
 ## Histórico de sessões
 
+### Sessão — 2026-05-04 (Reset Total — ampliação para módulos pós-MVP)
+
+O Reset Total foi criado em 30/abr cobrindo só os modelos do MVP. Depois entraram **Caixa**, **MovimentacaoCaixa**, **Produto.imagem** (fotos físicas em `uploads/produtos/`) e **ConfiguracaoEmpresa** com logotipo. Esta sessão ampliou o reset para cobrir os novos modelos e arquivos físicos, mantendo a separação operacional vs configuração.
+
+**Backend** ([adminController.js](backend/src/controllers/adminController.js))
+
+- Nova ordem de delete na transação respeita as FKs adicionadas:
+  1. `itemVenda` + `movimentacaoCaixa` (filhos diretos)
+  2. `venda` (referencia `Caixa.id`)
+  3. `caixa` (libera depois de vendas e movimentações sumirem)
+  4. compras/estoque/financeiro/cadastros (ordem original do MVP)
+- Arquivos físicos: agora itera por **2 pastas operacionais** — `uploads/` (anexos do financeiro) e `uploads/produtos/` (fotos). A pasta `uploads/logo/` é deliberadamente excluída do loop — o logotipo da empresa faz parte da configuração, não dos dados operacionais.
+- Loop usa `fs.stat` para garantir que só apaga arquivos (não recursivo em subpastas — cada subpasta é tratada como entrada separada na lista `PASTAS_PARA_LIMPAR`).
+
+**Frontend** ([Sistema.jsx](src/Sistema.jsx))
+
+- Lista "Será apagado" agora tem 11 itens (2 novos): **💵 Caixas** e **🔄 Movimentações de caixa**. Texto de "Produtos" passou a mencionar "(incluindo serviços e fotos)".
+- Lista "Preservado" agora tem 4 itens (2 novos): **🏢 Dados da empresa** e **🖼 Logotipo da empresa**.
+- Texto de aviso no modal de confirmação atualizado: cita "vendas, caixas, compras, estoque, financeiro e cadastros" e explicita que "funcionários, permissões e dados da empresa (incluindo logotipo) serão preservados".
+
+**Validado via API:**
+
+```
+ANTES: 4 caixas, 24 produtos, 20 clientes/fornecedores/contas, empresa Maxcollor, logo presente
+POST /admin/reset { confirmacao: CONFIRMAR_RESET }
+  → ok: true, removidos: { caixas: 4, movimentacoesCaixa: 17, itensCompra: 39,
+                            compras: 20, movimentacoesEstoque: 39, contasPagar: 20,
+                            contasReceber: 20, produtos: 24, categorias: 8,
+                            fornecedores: 20, clientes: 20 }
+DEPOIS: 0 caixas/produtos/clientes/etc, empresa MAXCOLLOR preservada,
+        logotipo no disco preservado, 26 funcionarios + admin GLEIBSON preservados
+npx vite build → ok
+```
+
 ### Sessão — 2026-05-04 (Configuração da Empresa — Maxcollor Gráfica Rápida e Copiadora)
 
 Tela de **Dados do Emitente** (singleton) com formulário completo + upload de logotipo via Multer. Os dados aparecem automaticamente no recibo do PDV (cupom impresso), no extrato do Caixa e nos cabeçalhos dos PDFs de Relatórios. Admin user renomeado para **GLEIBSON LUIZ NUNES SILVA** (proprietário e administrador mestre).

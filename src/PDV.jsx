@@ -126,6 +126,8 @@ function NovaVenda({ user }) {
 
   // Sugestões aparecem só com texto digitado — vista limpa quando idle, focada
   // em bipagem por scanner. Servicos sempre aparecem (estoque nao se aplica).
+  // Busca tambem por codigo de barras e referencia para integrar scanner +
+  // catalogos que usam SKU do fornecedor.
   const sugestoes = useMemo(() => {
     const q = busca.trim().toLowerCase();
     if (!q) return [];
@@ -133,6 +135,8 @@ function NovaVenda({ user }) {
       .filter(p => p.ativo && (p.tipoItem === "SERVICO" || p.estoque > 0))
       .filter(p =>
         p.codigo.toLowerCase().includes(q) ||
+        (p.codigoBarras || "").toLowerCase().includes(q) ||
+        (p.referencia || "").toLowerCase().includes(q) ||
         p.nome.toLowerCase().includes(q),
       )
       .slice(0, 8);
@@ -179,13 +183,21 @@ function NovaVenda({ user }) {
     focarBusca();
   }
 
-  // Bipagem: chamado ao pressionar Enter no campo de busca. Procura match exato
-  // por código primeiro (caso comum de scanner); em falta, cai para a primeira
-  // sugestão ativa filtrada — assim digitar parte do nome + Enter também funciona.
+  // Bipagem: chamado ao pressionar Enter no campo de busca. Tenta match exato
+  // primeiro pelo CODIGO DE BARRAS (caso 99% dos scanners), depois pelo codigo
+  // interno, depois referencia. Em falta, cai para a primeira sugestao filtrada
+  // — permite digitar parte do nome + Enter.
   function biparOuConfirmar() {
     const q = busca.trim();
     if (!q) return;
-    const exato = produtos.find(p => p.ativo && p.codigo.toLowerCase() === q.toLowerCase());
+    const ql = q.toLowerCase();
+    const exato = produtos.find(p =>
+      p.ativo && (
+        (p.codigoBarras && p.codigoBarras.toLowerCase() === ql) ||
+        p.codigo.toLowerCase() === ql ||
+        (p.referencia && p.referencia.toLowerCase() === ql)
+      )
+    );
     if (exato) {
       // Servicos nunca ficam "sem estoque".
       if (exato.tipoItem !== "SERVICO" && exato.estoque <= 0) {
@@ -492,7 +504,9 @@ function NovaVenda({ user }) {
                     )}
                   </div>
                   <div style={{ color: C.muted, fontFamily: "monospace", fontSize: 11 }}>
-                    {p.codigo} · {p.tipoItem === "SERVICO" ? "♾ disponível" : `${p.estoque} ${p.unidade}`}
+                    {p.codigo}
+                    {p.codigoBarras && <span style={{ color: C.accent }}> · 📊 {p.codigoBarras}</span>}
+                    {" · "}{p.tipoItem === "SERVICO" ? "♾ disponível" : `${p.estoque} ${p.unidade}`}
                   </div>
                 </div>
                 <div style={{ color: C.green, fontWeight: 700, fontSize: 14 }}>{fmtBRL(p.precoVenda)}</div>

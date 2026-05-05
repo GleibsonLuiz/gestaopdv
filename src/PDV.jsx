@@ -4,6 +4,7 @@ import { api, BASE_URL } from "./lib/api.js";
 import { useConfiguracaoEmpresa, formatarEndereco } from "./HeaderRelatorio.jsx";
 import { urlLogotipo } from "./Configuracoes.jsx";
 import { ModalManual as ModalSangriaSuprimento } from "./Caixa.jsx";
+import { useModalKeys } from "./lib/modalKeys.js";
 
 function urlImagem(imagem) {
   if (!imagem) return null;
@@ -57,19 +58,124 @@ const fmtData = (iso) => {
   return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 };
 
-export default function PDV({ user }) {
+export default function PDV({ user, onSair, sair }) {
   const [aba, setAba] = useState("nova");
   return (
-    <div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        <button onClick={() => setAba("nova")} style={tabBtn(aba === "nova")}>🛒 Nova Venda</button>
-        <button onClick={() => setAba("historico")} style={tabBtn(aba === "historico")}>📜 Histórico de Vendas</button>
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+      <PDVHeader
+        user={user}
+        aba={aba} setAba={setAba}
+        onSair={onSair} sairConta={sair}
+      />
+      <div style={{ padding: "18px 24px", flex: 1 }}>
+        {aba === "nova" ? <NovaVenda user={user} /> : <Historico user={user} />}
       </div>
-
-      {aba === "nova" ? <NovaVenda user={user} /> : <Historico user={user} />}
     </div>
   );
 }
+
+// ==================== HEADER DO MODO PDV ====================
+// Header proprio do PDV em modo focado: logo + tabs + avatar com dropdown
+// (Menu / Sair). Substitui sidebar e topbar globais quando o user esta no
+// PDV. "Menu" volta para a tela principal (dashboard); "Sair" desloga.
+function PDVHeader({ user, aba, setAba, onSair, sairConta }) {
+  const [menuAberto, setMenuAberto] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    function onClickFora(e) {
+      if (menuAberto && menuRef.current && !menuRef.current.contains(e.target)) {
+        setMenuAberto(false);
+      }
+    }
+    document.addEventListener("mousedown", onClickFora);
+    return () => document.removeEventListener("mousedown", onClickFora);
+  }, [menuAberto]);
+
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 16,
+      padding: "10px 24px", borderBottom: `1px solid ${C.border}`,
+      background: C.surface, position: "sticky", top: 0, zIndex: 30,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ fontSize: 22 }}>🏪</div>
+        <div>
+          <div style={{ color: C.white, fontWeight: 800, fontSize: 15, lineHeight: 1.1 }}>GestãoPRO</div>
+          <div style={{ color: C.muted, fontSize: 10 }}>Ponto de Venda</div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 6, marginLeft: 12 }}>
+        <button onClick={() => setAba("nova")} style={tabBtn(aba === "nova")}>🛒 Nova Venda</button>
+        <button onClick={() => setAba("historico")} style={tabBtn(aba === "historico")}>📜 Histórico</button>
+      </div>
+
+      <div style={{ flex: 1 }} />
+
+      <div ref={menuRef} style={{ position: "relative" }}>
+        <button
+          onClick={() => setMenuAberto(v => !v)}
+          title="Menu / Sair do PDV"
+          style={{
+            display: "flex", alignItems: "center", gap: 8,
+            background: C.card, border: `1px solid ${C.border}`,
+            borderRadius: 10, padding: "6px 10px 6px 6px", cursor: "pointer",
+            color: C.text, fontSize: 12,
+          }}
+        >
+          <div style={{
+            width: 28, height: 28, borderRadius: "50%",
+            background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+            color: C.white, display: "flex", alignItems: "center", justifyContent: "center",
+            fontWeight: 800, fontSize: 13,
+          }}>{(user.nome || "?").charAt(0)}</div>
+          <div style={{ textAlign: "left", lineHeight: 1.2, maxWidth: 180, overflow: "hidden" }}>
+            <div style={{ color: C.white, fontWeight: 700, fontSize: 12, whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}>
+              {user.nome}
+            </div>
+            <div style={{ color: C.muted, fontSize: 10 }}>{user.role}</div>
+          </div>
+          <span style={{ color: C.muted, fontSize: 10 }}>▾</span>
+        </button>
+
+        {menuAberto && (
+          <div style={{
+            position: "absolute", top: "calc(100% + 6px)", right: 0, minWidth: 220,
+            background: C.card, border: `1px solid ${C.border}`, borderRadius: 10,
+            boxShadow: "0 8px 24px rgba(0,0,0,0.4)", overflow: "hidden", zIndex: 50,
+          }}>
+            <button
+              onClick={() => { setMenuAberto(false); onSair?.(); }}
+              style={menuItemStyle}
+              onMouseEnter={e => e.currentTarget.style.background = C.surface}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+            >
+              <span>🏠</span><span>Menu principal</span>
+            </button>
+            <div style={{ borderTop: `1px solid ${C.border}` }} />
+            <button
+              onClick={() => { setMenuAberto(false); sairConta?.(); }}
+              style={{ ...menuItemStyle, color: C.red }}
+              onMouseEnter={e => e.currentTarget.style.background = C.red + "11"}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+            >
+              <span>🚪</span><span>Sair da conta</span>
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const menuItemStyle = {
+  display: "flex", alignItems: "center", gap: 10, width: "100%",
+  background: "transparent", border: "none", color: C.text,
+  padding: "10px 14px", fontSize: 13, cursor: "pointer", textAlign: "left",
+  fontFamily: "inherit",
+};
+
 
 // ==================== NOVA VENDA ====================
 
@@ -330,14 +436,9 @@ function NovaVenda({ user }) {
       }
       if (e.key === "F10") {
         e.preventDefault();
-        if (!pagamentoAbertoRef.current) abrirPagamentoRef.current?.();
+        if (pagamentoAbertoRef.current) confirmarPagamentoRef.current?.();
+        else abrirPagamentoRef.current?.();
         return;
-      }
-      if (e.key === "Escape") {
-        if (cancelarAberto) {
-          setCancelarAberto(false);
-          focarBusca();
-        }
       }
     }
     window.addEventListener("keydown", onKeyDown);
@@ -349,6 +450,7 @@ function NovaVenda({ user }) {
   const carrinhoRef = useRef(carrinho);
   const pagamentoAbertoRef = useRef(pagamentoAberto);
   const abrirPagamentoRef = useRef(null);
+  const confirmarPagamentoRef = useRef(null);
   useEffect(() => { carrinhoRef.current = carrinho; }, [carrinho]);
   useEffect(() => { pagamentoAbertoRef.current = pagamentoAberto; }, [pagamentoAberto]);
 
@@ -403,6 +505,24 @@ function NovaVenda({ user }) {
       focarBusca();
     }
   }
+  useEffect(() => { confirmarPagamentoRef.current = confirmarPagamento; });
+
+  // Atalhos universais (Esc fecha) em cada modal aberto.
+  useModalKeys(cancelarAberto, {
+    onClose: () => { setCancelarAberto(false); focarBusca(); },
+  });
+  useModalKeys(pagamentoAberto, {
+    onClose: () => { if (!salvando) { setPagamentoAberto(false); focarBusca(); } },
+  });
+  useModalKeys(!!reciboAberto, {
+    onClose: () => { setReciboAberto(null); focarBusca(); },
+  });
+  useModalKeys(!!vendaDetalheAberta, {
+    onClose: () => { setVendaDetalheAberta(null); focarBusca(); },
+  });
+  useModalKeys(!!modalCaixa, {
+    onClose: () => { setModalCaixa(null); focarBusca(); },
+  });
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -846,6 +966,12 @@ function NovaVenda({ user }) {
                 }}
               >Fechar</button>
             </div>
+            <div style={{
+              marginTop: 8, color: C.muted, fontSize: 10, textAlign: "center",
+              fontFamily: "monospace", letterSpacing: 0.3,
+            }}>
+              Esc fecha · clique no item para remover
+            </div>
           </div>
         </div>
       )}
@@ -1016,6 +1142,12 @@ function NovaVenda({ user }) {
               >
                 {salvando ? "Confirmando..." : `✓ Confirmar Pagamento — ${fmtBRL(total)}`}
               </button>
+            </div>
+            <div style={{
+              marginTop: 4, color: C.muted, fontSize: 10, textAlign: "right",
+              fontFamily: "monospace", letterSpacing: 0.3,
+            }}>
+              Esc cancela · F10 confirma
             </div>
           </div>
         </div>
@@ -1482,6 +1614,12 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar }) {
               Nova Venda
             </button>
           </div>
+          <div style={{
+            marginTop: 8, color: C.muted, fontSize: 10, textAlign: "center",
+            fontFamily: "monospace", letterSpacing: 0.3,
+          }}>
+            Esc fecha
+          </div>
         </div>
       </div>
 
@@ -1593,6 +1731,8 @@ function Historico({ user }) {
   const [mensagem, setMensagem] = useState("");
 
   const podeCancelar = user.role === "ADMIN" || user.role === "GERENTE";
+
+  useModalKeys(!!detalhe, { onClose: () => setDetalhe(null) });
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -1872,6 +2012,12 @@ function DetalheVendaModal({ venda, onFechar, onCancelar }) {
             background: C.surface, border: `1px solid ${C.border}`, color: C.text,
             borderRadius: 8, padding: "10px 18px", fontWeight: 600, fontSize: 13, cursor: "pointer",
           }}>Fechar</button>
+        </div>
+        <div style={{
+          marginTop: 8, color: C.muted, fontSize: 10, textAlign: "right",
+          fontFamily: "monospace", letterSpacing: 0.3,
+        }}>
+          Esc fecha
         </div>
       </div>
     </div>

@@ -183,6 +183,18 @@ export default function App() {
 
   if (!user) return <Login onSuccess={setUser} />;
 
+  // Modo focado do PDV: ocupa 100% da tela, sem sidebar/topbar/header de
+  // pagina. PDV gerencia seu proprio header com logo, tabs, status do
+  // caixa e botao "Menu" para sair do modo focado.
+  if (tela === "pdv") {
+    return (
+      <div style={{ background: C.bg, minHeight: "100vh", fontFamily: "'Segoe UI', sans-serif", color: C.text }}>
+        <style>{ESTILO_RESPONSIVO}</style>
+        <PDV user={user} onSair={() => setTela("dashboard")} sair={sair} />
+      </div>
+    );
+  }
+
   return (
     <div style={{ background: C.bg, minHeight: "100vh", fontFamily: "'Segoe UI', sans-serif", color: C.text }}>
       <style>{ESTILO_RESPONSIVO}</style>
@@ -384,12 +396,6 @@ export default function App() {
         </div>
 
         <div style={{ padding: "24px" }}>
-          {tela === "pdv" && (
-            <>
-              <PageHeader titulo="Ponto de Venda" subtitulo="Registro de vendas com baixa automática de estoque" />
-              <PDV user={user} />
-            </>
-          )}
           {tela === "dashboard" && (
             <>
               <PageHeader titulo="Dashboard" subtitulo="Visão geral do negócio — vendas, estoque e financeiro" />

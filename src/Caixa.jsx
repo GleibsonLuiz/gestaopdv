@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { C } from "./lib/theme.js";
 import { api } from "./lib/api.js";
 import HeaderRelatorio from "./HeaderRelatorio.jsx";
+import { useModalKeys } from "./lib/modalKeys.js";
 
 const fmtBRL = (v) => {
   const n = Number(v);
@@ -559,6 +560,7 @@ function ModalAbrir({ onCancelar, onSucesso }) {
   const [sugestao, setSugestao] = useState(null);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+  useModalKeys(true, { onClose: () => !salvando && onCancelar() });
 
   useEffect(() => {
     api.sugerirTrocoCaixa().then(r => {
@@ -626,6 +628,7 @@ function ModalFechar({ caixa, user, onCancelar, onSucesso }) {
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const exigeAutorizacao = user?.role === "VENDEDOR";
+  useModalKeys(true, { onClose: () => !salvando && onCancelar() });
 
   async function salvar(e) {
     e.preventDefault();
@@ -739,6 +742,7 @@ export function ModalManual({ caixa, user, tipo, onCancelar, onSucesso }) {
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const exigeAutorizacao = ehSangria && user?.role === "VENDEDOR";
+  useModalKeys(true, { onClose: () => !salvando && onCancelar() });
 
   async function salvar(e) {
     e.preventDefault();
@@ -945,10 +949,18 @@ function Campo({ label, children }) {
   );
 }
 
-function RodapeModal({ children }) {
+function RodapeModal({ children, dicaTeclado = "Esc cancela · Enter confirma" }) {
   return (
-    <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
-      {children}
+    <div style={{ marginTop: 16 }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+        {children}
+      </div>
+      {dicaTeclado && (
+        <div style={{
+          marginTop: 8, color: C.muted, fontSize: 10, textAlign: "right",
+          fontFamily: "monospace", letterSpacing: 0.3,
+        }}>{dicaTeclado}</div>
+      )}
     </div>
   );
 }

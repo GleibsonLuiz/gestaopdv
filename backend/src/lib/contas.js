@@ -17,6 +17,14 @@ export function toNumber(v) {
 
 export function parseDate(v) {
   if (!v) return null;
+  // Strings YYYY-MM-DD vindas de <input type="date"> sao tratadas como
+  // data LOCAL (meio-dia local) — evita o shift de timezone que volta
+  // um dia em fusos negativos (ex: "2026-05-05" virando 04/05 em BRT).
+  // Strings com hora explicita (T...) ou objetos Date passam direto.
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+    const [y, m, d] = v.split("-").map(Number);
+    return new Date(y, m - 1, d, 12, 0, 0, 0);
+  }
   const d = new Date(v);
   return isNaN(d.getTime()) ? null : d;
 }

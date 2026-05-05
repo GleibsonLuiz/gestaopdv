@@ -744,9 +744,18 @@ const FORMAS_PAGAMENTO = [
   { id: "CREDIARIO",      label: "📒 Crediário" },
 ];
 
+// Data de hoje em formato YYYY-MM-DD usando o fuso LOCAL. toISOString()
+// retorna em UTC e em fusos negativos (ex: BRT) joga "ontem" depois das 21h.
+function hojeLocal() {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${dd}`;
+}
+
 function PagarReceberModal({ tipo, conta, onCancelar, onConfirmar }) {
   const ehPagar = tipo === "pagar";
-  const [data, setData] = useState(new Date().toISOString().slice(0, 10));
+  const [data, setData] = useState(hojeLocal());
   const [ajustar, setAjustar] = useState(false);
   const [juros, setJuros] = useState(conta.juros ? String(conta.juros) : "");
   const [multa, setMulta] = useState(conta.multa ? String(conta.multa) : "");

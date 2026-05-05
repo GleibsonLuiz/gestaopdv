@@ -4,6 +4,7 @@ import { api, BASE_URL } from "./lib/api.js";
 import { useConfiguracaoEmpresa, formatarEndereco } from "./HeaderRelatorio.jsx";
 import { urlLogotipo } from "./Configuracoes.jsx";
 import { ModalManual as ModalSangriaSuprimento } from "./Caixa.jsx";
+import { GerenciarFormasModal } from "./Financeiro.jsx";
 import { useModalKeys } from "./lib/modalKeys.js";
 
 function urlImagem(imagem) {
@@ -203,6 +204,9 @@ function NovaVenda({ user }) {
   const [sugestaoIdx, setSugestaoIdx] = useState(0); // índice destacado nas sugestões
   const [qtdModalProduto, setQtdModalProduto] = useState(null); // produto p/ modal de qtd
   const [qtdModalValor, setQtdModalValor] = useState("1");
+  const [formasCustom, setFormasCustom] = useState([]);
+  const [formaCustomId, setFormaCustomId] = useState(null); // null = padrao; id = custom
+  const [gerenciarFormasAberto, setGerenciarFormasAberto] = useState(false);
   const buscaRef = useRef(null);
   const finalizarRef = useRef(null);
   const valorRecebidoRef = useRef(null);
@@ -238,12 +242,19 @@ function NovaVenda({ user }) {
       .catch(() => {});
   }, []);
 
+  const recarregarFormasCustom = useCallback(() => {
+    return api.listarFormasPagamento({ ativo: "true" })
+      .then(lista => setFormasCustom(Array.isArray(lista) ? lista : []))
+      .catch(() => setFormasCustom([]));
+  }, []);
+
   useEffect(() => {
     api.listarProdutos({ ativo: "true" }).then(setProdutos).catch(() => {});
     api.listarClientes({ ativo: "true" }).then(setClientes).catch(() => {});
     recarregarCaixa().finally(() => setCaixaCarregando(false));
     recarregarPainel();
-  }, [recarregarCaixa, recarregarPainel]);
+    recarregarFormasCustom();
+  }, [recarregarCaixa, recarregarPainel, recarregarFormasCustom]);
 
   useEffect(() => {
     buscaRef.current?.focus();
@@ -427,10 +438,22 @@ function NovaVenda({ user }) {
     setDesconto("0");
     setObservacoes("");
     setForma("DINHEIRO");
+    setFormaCustomId(null);
     setErro("");
     setValorRecebido("");
     setBusca("");
     if (refocar) focarBusca();
+  }
+
+  // Selecao de forma de pagamento — separa default vs custom para ser
+  // possivel destacar visualmente qual variante esta ativa.
+  function selecionarFormaPadrao(enumId) {
+    setForma(enumId);
+    setFormaCustomId(null);
+  }
+  function selecionarFormaCustom(custom) {
+    setForma(custom.baseFormaPagamento);
+    setFormaCustomId(custom.id);
   }
 
   const subtotal = useMemo(
@@ -464,7 +487,7 @@ function NovaVenda({ user }) {
     function onKeyDown(e) {
       if (FORMA_POR_TECLA[e.key]) {
         e.preventDefault();
-        setForma(FORMA_POR_TECLA[e.key]);
+        selecionarFormaPadrao(FORMA_POR_TECLA[e.key]);
         if (FORMA_POR_TECLA[e.key] === "DINHEIRO" && pagamentoAberto) {
           setTimeout(() => valorRecebidoRef.current?.focus(), 0);
         }
@@ -911,29 +934,66 @@ function NovaVenda({ user }) {
                 F1–F6 forma de pagamento
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                {FORMAS.map(f => (
-                  <button
-                    key={f.id} type="button"
-                    onClick={() => setForma(f.id)}
-                    title={`${f.atalho} • ${f.label}`}
-                    style={{
-                      flex: "1 1 calc(33% - 4px)", minWidth: 0,
-                      background: forma === f.id ? C.accent + "33" : C.surface,
-                      border: `1px solid ${forma === f.id ? C.accent + "88" : C.border}`,
-                      color: forma === f.id ? C.white : C.text,
-                      borderRadius: 6, padding: "5px 4px",
-                      fontSize: 10, fontWeight: 700, cursor: "pointer",
-                      display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
-                      lineHeight: 1.2,
-                    }}
-                  >
-                    <span style={{ fontSize: 13 }}>{f.icone}</span>
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>
-                      {f.label}
-                    </span>
-                  </button>
-                ))}
+                {FORMAS.map(f => {
+                  const ativo = forma === f.id && !formaCustomId;
+                  return (
+                    <button
+                      key={f.id} type="button"
+                      onClick={() => selecionarFormaPadrao(f.id)}
+                      title={`${f.atalho} • ${f.label}`}
+                      style={{
+                        flex: "1 1 calc(33% - 4px)", minWidth: 0,
+                        background: ativo ? C.accent + "33" : C.surface,
+                        border: `1px solid ${ativo ? C.accent + "88" : C.border}`,
+                        color: ativo ? C.white : C.text,
+                        borderRadius: 6, padding: "5px 4px",
+                        fontSize: 10, fontWeight: 700, cursor: "pointer",
+                        display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      <span style={{ fontSize: 13 }}>{f.icone}</span>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>
+                        {f.label}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
+              {formasCustom.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ color: C.muted, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 }}>
+                    Personalizadas
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                    {formasCustom.map(c => {
+                      const ativo = formaCustomId === c.id;
+                      return (
+                        <button
+                          key={c.id} type="button"
+                          onClick={() => selecionarFormaCustom(c)}
+                          title={`${c.nome} (${c.baseFormaPagamento})`}
+                          style={{
+                            flex: "1 1 calc(50% - 4px)", minWidth: 0,
+                            background: ativo ? C.purple + "33" : C.surface,
+                            border: `1px solid ${ativo ? C.purple + "88" : C.border}`,
+                            color: ativo ? C.white : C.text,
+                            borderRadius: 6, padding: "5px 4px",
+                            fontSize: 10, fontWeight: 700, cursor: "pointer",
+                            display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          <span style={{ fontSize: 13 }}>{c.icone || "•"}</span>
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>
+                            {c.nome}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1191,22 +1251,61 @@ function NovaVenda({ user }) {
             </div>
 
             <div>
-              <label style={labelStyle}>Forma de pagamento</label>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
-                {FORMAS.map(f => (
-                  <button key={f.id} onClick={() => setForma(f.id)} type="button" style={{
-                    cursor: "pointer", padding: "10px 4px", borderRadius: 8,
-                    background: forma === f.id ? C.accent : C.surface,
-                    border: forma === f.id ? `1px solid ${C.accent}` : `1px solid ${C.border}`,
-                    color: forma === f.id ? C.white : C.muted,
-                    fontSize: 12, fontWeight: 700, textAlign: "center",
-                  }}>
-                    <div style={{ fontSize: 18 }}>{f.icone}</div>
-                    <div>{f.label}</div>
-                    <div style={{ fontSize: 9, opacity: 0.7 }}>{f.atalho}</div>
-                  </button>
-                ))}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <label style={labelStyle}>Forma de pagamento</label>
+                <button
+                  type="button"
+                  onClick={() => setGerenciarFormasAberto(true)}
+                  title="Cadastrar/editar formas de pagamento"
+                  style={{
+                    background: "transparent", border: "none", color: C.accent,
+                    fontSize: 11, fontWeight: 700, cursor: "pointer", padding: 0,
+                  }}
+                >⚙ Gerenciar</button>
               </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+                {FORMAS.map(f => {
+                  const ativo = forma === f.id && !formaCustomId;
+                  return (
+                    <button key={f.id} onClick={() => selecionarFormaPadrao(f.id)} type="button" style={{
+                      cursor: "pointer", padding: "10px 4px", borderRadius: 8,
+                      background: ativo ? C.accent : C.surface,
+                      border: ativo ? `1px solid ${C.accent}` : `1px solid ${C.border}`,
+                      color: ativo ? C.white : C.muted,
+                      fontSize: 12, fontWeight: 700, textAlign: "center",
+                    }}>
+                      <div style={{ fontSize: 18 }}>{f.icone}</div>
+                      <div>{f.label}</div>
+                      <div style={{ fontSize: 9, opacity: 0.7 }}>{f.atalho}</div>
+                    </button>
+                  );
+                })}
+              </div>
+              {formasCustom.length > 0 && (
+                <>
+                  <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginTop: 10, marginBottom: 4 }}>
+                    Personalizadas
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+                    {formasCustom.map(c => {
+                      const ativo = formaCustomId === c.id;
+                      return (
+                        <button key={c.id} onClick={() => selecionarFormaCustom(c)} type="button" style={{
+                          cursor: "pointer", padding: "10px 4px", borderRadius: 8,
+                          background: ativo ? C.purple : C.surface,
+                          border: ativo ? `1px solid ${C.purple}` : `1px solid ${C.border}`,
+                          color: ativo ? C.white : C.muted,
+                          fontSize: 12, fontWeight: 700, textAlign: "center",
+                        }}>
+                          <div style={{ fontSize: 18 }}>{c.icone || "•"}</div>
+                          <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nome}</div>
+                          <div style={{ fontSize: 9, opacity: 0.7 }}>{c.baseFormaPagamento === "CARTAO_DEBITO" ? "Débito" : c.baseFormaPagamento === "CARTAO_CREDITO" ? "Crédito" : c.baseFormaPagamento.charAt(0) + c.baseFormaPagamento.slice(1).toLowerCase()}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -1355,6 +1454,16 @@ function NovaVenda({ user }) {
             recarregarCaixa();
             recarregarPainel();
             focarBusca();
+          }}
+        />
+      )}
+
+      {gerenciarFormasAberto && (
+        <GerenciarFormasModal
+          podeExcluir={user.role === "ADMIN"}
+          onFechar={async () => {
+            setGerenciarFormasAberto(false);
+            await recarregarFormasCustom();
           }}
         />
       )}

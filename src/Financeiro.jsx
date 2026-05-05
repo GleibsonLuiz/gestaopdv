@@ -1124,7 +1124,9 @@ function Campo({ label, children }) {
 // forma cadastrada referencia uma das 6 padroes (DINHEIRO/PIX/etc) — o
 // label custom aparece no dropdown mas o valor persistido no banco
 // continua sendo o enum base, preservando relatorios e historico.
-function GerenciarFormasModal({ podeExcluir, onFechar }) {
+//
+// Exportado para ser reusado em PDV.jsx e Compras.jsx.
+export function GerenciarFormasModal({ podeExcluir, onFechar }) {
   const [formas, setFormas] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");

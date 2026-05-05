@@ -3,6 +3,7 @@ import { C } from "./lib/theme.js";
 import { api, BASE_URL } from "./lib/api.js";
 import { useConfiguracaoEmpresa, formatarEndereco } from "./HeaderRelatorio.jsx";
 import { urlLogotipo } from "./Configuracoes.jsx";
+import { ModalManual as ModalSangriaSuprimento } from "./Caixa.jsx";
 
 function urlImagem(imagem) {
   if (!imagem) return null;
@@ -90,6 +91,9 @@ function NovaVenda({ user }) {
   const [destacado, setDestacado] = useState(null); // produtoId recém-adicionado (para flash)
   const [caixaAtual, setCaixaAtual] = useState(null);
   const [caixaCarregando, setCaixaCarregando] = useState(true);
+  const [painel, setPainel] = useState({ topProdutos: [], ultimasVendas: [] });
+  const [vendaDetalheAberta, setVendaDetalheAberta] = useState(null);
+  const [modalCaixa, setModalCaixa] = useState(null); // 'sangria' | 'suprimento'
   const buscaRef = useRef(null);
   const finalizarRef = useRef(null);
   const valorRecebidoRef = useRef(null);
@@ -111,14 +115,24 @@ function NovaVenda({ user }) {
     setTimeout(() => setDestacado(prev => (prev === produtoId ? null : prev)), 800);
   }
 
+  const recarregarCaixa = useCallback(() => {
+    return api.obterCaixaAtual()
+      .then(r => setCaixaAtual(r.caixa))
+      .catch(() => setCaixaAtual(null));
+  }, []);
+
+  const recarregarPainel = useCallback(() => {
+    return api.obterPainelPDV()
+      .then(setPainel)
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     api.listarProdutos({ ativo: "true" }).then(setProdutos).catch(() => {});
     api.listarClientes({ ativo: "true" }).then(setClientes).catch(() => {});
-    api.obterCaixaAtual()
-      .then(r => setCaixaAtual(r.caixa))
-      .catch(() => setCaixaAtual(null))
-      .finally(() => setCaixaCarregando(false));
-  }, []);
+    recarregarCaixa().finally(() => setCaixaCarregando(false));
+    recarregarPainel();
+  }, [recarregarCaixa, recarregarPainel]);
 
   useEffect(() => {
     buscaRef.current?.focus();
@@ -380,6 +394,8 @@ function NovaVenda({ user }) {
       const trocoPago = forma === "DINHEIRO" ? troco : 0;
       setReciboAberto({ venda, valorRecebido: recebido, troco: trocoPago });
       limparCarrinho();
+      recarregarCaixa();
+      recarregarPainel();
     } catch (err) {
       setErro(err.message);
     } finally {
@@ -400,7 +416,7 @@ function NovaVenda({ user }) {
         .pdv-cancel-row:hover { background: ${C.red}22 !important; }
       `}</style>
 
-      {/* BANNER DE STATUS DO CAIXA */}
+      {/* CARD DE STATUS DO CAIXA */}
       {!caixaCarregando && (
         semCaixa ? (
           <div style={{
@@ -414,22 +430,11 @@ function NovaVenda({ user }) {
             </div>
           </div>
         ) : (
-          <div style={{
-            background: C.green + "1a", border: `1px solid ${C.green}55`, borderRadius: 10,
-            padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between",
-            gap: 12, flexWrap: "wrap", fontSize: 13,
-          }}>
-            <div style={{ color: C.text }}>
-              <span style={{ color: C.green, fontWeight: 800 }}>🟢 Caixa #{caixaAtual.numero} aberto</span>
-              {" · saldo esperado em dinheiro: "}
-              <b style={{ color: C.white, fontFamily: "monospace" }}>
-                {fmtBRL(caixaAtual.totais?.saldoEsperadoDinheiro)}
-              </b>
-            </div>
-            <div style={{ color: C.muted, fontSize: 12 }}>
-              {caixaAtual._count?.vendas || 0} venda(s) registrada(s)
-            </div>
-          </div>
+          <CaixaStatusCard
+            caixa={caixaAtual}
+            onSangria={() => setModalCaixa("sangria")}
+            onSuprimento={() => setModalCaixa("suprimento")}
+          />
         )
       )}
 
@@ -466,10 +471,6 @@ function NovaVenda({ user }) {
               letterSpacing: 0.5,
             }}
           />
-          <div style={{ color: C.muted, fontSize: 11, textAlign: "right", lineHeight: 1.4 }}>
-            <div><b style={{ color: C.text }}>F8</b> cancelar item</div>
-            <div><b style={{ color: C.green }}>F10</b> finalizar</div>
-          </div>
         </div>
 
         {/* Sugestões dropdown — só aparece quando há texto digitado */}
@@ -549,14 +550,23 @@ function NovaVenda({ user }) {
           </div>
 
           {carrinho.length === 0 ? (
-            <div style={{
-              padding: "60px 30px", textAlign: "center", color: C.muted, fontSize: 14,
-              display: "flex", flexDirection: "column", alignItems: "center", gap: 12,
-            }}>
-              <div style={{ fontSize: 48, opacity: 0.5 }}>🛒</div>
-              <div style={{ fontWeight: 600 }}>Cestinha vazia</div>
-              <div style={{ fontSize: 12 }}>Bipe um produto ou digite o código no campo acima.</div>
-            </div>
+            <AcessoRapido
+              topProdutos={painel.topProdutos}
+              ultimasVendas={painel.ultimasVendas}
+              onAdicionar={(p) => {
+                if (p.tipoItem !== "SERVICO" && p.estoque <= 0) {
+                  flashErro(`Sem estoque de "${p.nome}".`);
+                  return;
+                }
+                adicionarProduto(p, 1);
+              }}
+              onAbrirVenda={async (id) => {
+                try {
+                  const v = await api.obterVenda(id);
+                  setVendaDetalheAberta(v);
+                } catch (err) { flashErro(err.message); }
+              }}
+            />
           ) : (
             <div style={{ maxHeight: "calc(100vh - 320px)", overflowY: "auto" }}>
               {carrinho.map(it => (
@@ -681,15 +691,57 @@ function NovaVenda({ user }) {
           </div>
 
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
-            <div style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>
-              Atalhos
+            <div style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 10 }}>
+              Atalhos rápidos
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 10px", fontSize: 12, color: C.muted }}>
-              <b style={{ color: C.text }}>Enter</b><span>adicionar produto bipado</span>
-              <b style={{ color: C.text }}>F1–F6</b><span>forma de pagamento</span>
-              <b style={{ color: C.red }}>F8</b><span>cancelar item</span>
-              <b style={{ color: C.green }}>F10</b><span>finalizar venda</span>
-              <b style={{ color: C.text }}>Esc</b><span>limpar busca / fechar</span>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+              <BotaoAtalho
+                tecla="F8" cor={C.red} label="Cancelar item"
+                disabled={carrinho.length === 0}
+                onClick={() => carrinho.length > 0 && setCancelarAberto(true)}
+              />
+              <BotaoAtalho
+                tecla="F10" cor={C.green} label="Finalizar"
+                disabled={carrinho.length === 0 || semCaixa}
+                onClick={abrirPagamento}
+              />
+              <BotaoAtalho
+                tecla="Esc" cor={C.text} label="Limpar busca"
+                onClick={() => { setBusca(""); focarBusca(); }}
+              />
+              <BotaoAtalho
+                tecla="Enter" cor={C.accent} label="Adicionar bipado"
+                onClick={() => { biparOuConfirmar(); focarBusca(); }}
+              />
+            </div>
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}` }}>
+              <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>
+                F1–F6 forma de pagamento
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                {FORMAS.map(f => (
+                  <button
+                    key={f.id} type="button"
+                    onClick={() => setForma(f.id)}
+                    title={`${f.atalho} • ${f.label}`}
+                    style={{
+                      flex: "1 1 calc(33% - 4px)", minWidth: 0,
+                      background: forma === f.id ? C.accent + "33" : C.surface,
+                      border: `1px solid ${forma === f.id ? C.accent + "88" : C.border}`,
+                      color: forma === f.id ? C.white : C.text,
+                      borderRadius: 6, padding: "5px 4px",
+                      fontSize: 10, fontWeight: 700, cursor: "pointer",
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    <span style={{ fontSize: 13 }}>{f.icone}</span>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>
+                      {f.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -973,6 +1025,28 @@ function NovaVenda({ user }) {
           onFechar={() => { setReciboAberto(null); focarBusca(); }}
         />
       )}
+
+      {vendaDetalheAberta && (
+        <DetalheVendaModal
+          venda={vendaDetalheAberta}
+          onFechar={() => { setVendaDetalheAberta(null); focarBusca(); }}
+        />
+      )}
+
+      {modalCaixa && caixaAtual && (
+        <ModalSangriaSuprimento
+          caixa={caixaAtual}
+          user={user}
+          tipo={modalCaixa}
+          onCancelar={() => { setModalCaixa(null); focarBusca(); }}
+          onSucesso={() => {
+            setModalCaixa(null);
+            recarregarCaixa();
+            recarregarPainel();
+            focarBusca();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -983,6 +1057,204 @@ function Linha({ label, valor, cor }) {
       <div style={{ color: C.muted }}>{label}</div>
       <div style={{ color: cor || C.text, fontWeight: 600 }}>{valor}</div>
     </div>
+  );
+}
+
+// ============== STATUS DO CAIXA ==============
+// 3 KPIs em grid (saldo dinheiro, vendas, faturamento) + acoes rapidas.
+// Destaque vermelho quando o saldo dinheiro fica negativo (sangria > suprimento).
+function CaixaStatusCard({ caixa, onSangria, onSuprimento }) {
+  const saldo = Number(caixa.totais?.saldoEsperadoDinheiro ?? 0);
+  const entradas = Number(caixa.totais?.totalEntradas ?? 0);
+  const numVendas = caixa._count?.vendas || 0;
+  const negativo = saldo < 0;
+  const corSaldo = negativo ? C.red : C.green;
+
+  return (
+    <div style={{
+      background: C.card, border: `1px solid ${negativo ? C.red + "55" : C.border}`,
+      borderRadius: 12, padding: "12px 16px",
+      display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 16,
+      alignItems: "center",
+    }}>
+      <KpiCaixa
+        titulo="Saldo dinheiro" valor={fmtBRL(saldo)} cor={corSaldo}
+        sub={negativo ? "⚠ saldo negativo" : `Caixa #${caixa.numero}`}
+      />
+      <KpiCaixa titulo="Vendas no caixa" valor={String(numVendas)} cor={C.text} sub="finalizadas" />
+      <KpiCaixa titulo="Faturamento" valor={fmtBRL(entradas)} cor={C.green} sub="entradas totais" />
+      <div style={{ display: "flex", gap: 6 }}>
+        <button onClick={onSuprimento} title="Adicionar dinheiro ao caixa" style={{
+          background: C.green + "22", border: `1px solid ${C.green}55`, color: C.green,
+          borderRadius: 8, padding: "8px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer",
+          whiteSpace: "nowrap",
+        }}>＋ Suprimento</button>
+        <button onClick={onSangria} title="Retirar dinheiro do caixa" style={{
+          background: C.yellow + "22", border: `1px solid ${C.yellow}55`, color: C.yellow,
+          borderRadius: 8, padding: "8px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer",
+          whiteSpace: "nowrap",
+        }}>✂ Sangria</button>
+      </div>
+    </div>
+  );
+}
+
+function KpiCaixa({ titulo, valor, cor, sub }) {
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase" }}>
+        {titulo}
+      </div>
+      <div style={{ color: cor, fontSize: 18, fontWeight: 800, fontFamily: "monospace", marginTop: 2 }}>
+        {valor}
+      </div>
+      {sub && <div style={{ color: C.muted, fontSize: 10, marginTop: 1 }}>{sub}</div>}
+    </div>
+  );
+}
+
+// ============== ACESSO RAPIDO (cestinha vazia) ==============
+// Mostrado no espaco antes ocupado por "Cestinha vazia". Combina chips dos
+// produtos mais vendidos (clicaveis) com lista das ultimas vendas do caixa.
+function AcessoRapido({ topProdutos, ultimasVendas, onAdicionar, onAbrirVenda }) {
+  const semDados = (!topProdutos?.length) && (!ultimasVendas?.length);
+
+  if (semDados) {
+    return (
+      <div style={{
+        padding: "60px 30px", textAlign: "center", color: C.muted, fontSize: 14,
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 12,
+      }}>
+        <div style={{ fontSize: 48, opacity: 0.5 }}>🛒</div>
+        <div style={{ fontWeight: 600 }}>Cestinha vazia</div>
+        <div style={{ fontSize: 12 }}>Bipe um produto ou digite o código no campo acima.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 16 }}>
+      {topProdutos?.length > 0 && (
+        <div>
+          <div style={{
+            display: "flex", justifyContent: "space-between", alignItems: "baseline",
+            marginBottom: 8,
+          }}>
+            <div style={{ color: C.text, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4 }}>
+              ⚡ Mais vendidos (30 dias)
+            </div>
+            <div style={{ color: C.muted, fontSize: 11 }}>clique para adicionar</div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 8 }}>
+            {topProdutos.map(p => {
+              const semEstoque = p.tipoItem !== "SERVICO" && p.estoque <= 0;
+              return (
+                <button
+                  key={p.id} type="button"
+                  onClick={() => !semEstoque && onAdicionar(p)}
+                  disabled={semEstoque}
+                  title={semEstoque ? "Sem estoque" : `Adicionar ${p.nome}`}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 10,
+                    padding: 8, background: C.surface,
+                    border: `1px solid ${semEstoque ? C.red + "33" : C.border}`,
+                    borderRadius: 10, cursor: semEstoque ? "not-allowed" : "pointer",
+                    textAlign: "left", opacity: semEstoque ? 0.5 : 1,
+                    transition: "transform 0.1s, border-color 0.1s",
+                  }}
+                  onMouseEnter={e => { if (!semEstoque) e.currentTarget.style.borderColor = C.accent + "88"; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = semEstoque ? C.red + "33" : C.border; }}
+                >
+                  <FotoProduto url={p.imagem} nome={p.nome} tamanho={42} servico={p.tipoItem === "SERVICO"} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      color: C.white, fontWeight: 600, fontSize: 12, lineHeight: 1.3,
+                      overflow: "hidden", textOverflow: "ellipsis",
+                      display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+                    }}>{p.nome}</div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 3 }}>
+                      <span style={{ color: C.green, fontWeight: 700, fontSize: 12 }}>{fmtBRL(p.precoVenda)}</span>
+                      <span style={{ color: C.muted, fontSize: 10 }}>
+                        {p.tipoItem === "SERVICO" ? "♾" : `${p.estoque} ${p.unidade}`}
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {ultimasVendas?.length > 0 && (
+        <div>
+          <div style={{
+            color: C.text, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4,
+            marginBottom: 8,
+          }}>
+            🧾 Últimas vendas deste caixa
+          </div>
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}>
+            {ultimasVendas.map((v, i) => (
+              <button
+                key={v.id} type="button"
+                onClick={() => onAbrirVenda(v.id)}
+                className="pdv-sugestao"
+                style={{
+                  display: "grid", gridTemplateColumns: "70px 1fr 90px 100px 70px",
+                  alignItems: "center", gap: 10,
+                  width: "100%", padding: "10px 12px",
+                  background: "transparent",
+                  border: "none", borderTop: i === 0 ? "none" : `1px solid ${C.border}`,
+                  cursor: "pointer", color: C.text, textAlign: "left",
+                  transition: "background 0.1s",
+                }}
+              >
+                <div style={{ color: C.white, fontFamily: "monospace", fontWeight: 700, fontSize: 13 }}>
+                  #{v.numero}
+                </div>
+                <div style={{ color: C.text, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {v.cliente?.nome || <span style={{ color: C.muted, fontStyle: "italic" }}>Consumidor</span>}
+                </div>
+                <div style={{ color: C.muted, fontSize: 11 }}>
+                  {FORMA_LABEL[v.formaPagamento] || v.formaPagamento}
+                </div>
+                <div style={{ color: C.green, fontWeight: 700, fontSize: 13, textAlign: "right" }}>
+                  {fmtBRL(v.total)}
+                </div>
+                <div style={{ color: C.muted, fontSize: 10, textAlign: "right" }}>
+                  {new Date(v.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============== ATALHO CLICAVEL ==============
+function BotaoAtalho({ tecla, label, cor, disabled, onClick }) {
+  return (
+    <button
+      type="button" onClick={onClick} disabled={disabled}
+      title={`Pressione ${tecla}`}
+      style={{
+        display: "flex", flexDirection: "column", alignItems: "flex-start",
+        background: C.surface, border: `1px solid ${C.border}`,
+        borderRadius: 8, padding: "8px 10px",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.4 : 1,
+        textAlign: "left", lineHeight: 1.2,
+        transition: "border-color 0.1s, background 0.1s",
+      }}
+      onMouseEnter={e => { if (!disabled) e.currentTarget.style.borderColor = cor + "88"; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; }}
+    >
+      <span style={{ color: cor, fontWeight: 800, fontSize: 11, fontFamily: "monospace" }}>{tecla}</span>
+      <span style={{ color: C.text, fontSize: 11, marginTop: 2 }}>{label}</span>
+    </button>
   );
 }
 

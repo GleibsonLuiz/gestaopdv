@@ -731,7 +731,7 @@ function ModalFechar({ caixa, user, onCancelar, onSucesso }) {
   );
 }
 
-function ModalManual({ caixa, user, tipo, onCancelar, onSucesso }) {
+export function ModalManual({ caixa, user, tipo, onCancelar, onSucesso }) {
   const ehSangria = tipo === "sangria";
   const [valor, setValor] = useState("");
   const [descricao, setDescricao] = useState("");

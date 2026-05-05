@@ -329,6 +329,7 @@ export const api = {
 
   // ==================== CAIXA ====================
   obterCaixaAtual: () => request("/caixas/atual"),
+  obterPainelPDV: () => request("/pdv/inicio"),
   sugerirTrocoCaixa: () => request("/caixas/sugestao-troco"),
   listarCaixas: (params = {}) => {
     const qs = new URLSearchParams(

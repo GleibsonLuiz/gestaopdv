@@ -2,7 +2,7 @@ import prisma from "../lib/prisma.js";
 import {
   toNumber, parseDate, calcularValores, gerarSerieRecorrencia, TIPOS_RECORRENCIA,
 } from "../lib/contas.js";
-import { registrarNoCaixaAberto } from "./caixaController.js";
+import { registrarNoCaixaAberto, registrarEmCaixa } from "./caixaController.js";
 
 const FORMAS_VALIDAS = new Set([
   "DINHEIRO", "CARTAO_CREDITO", "CARTAO_DEBITO", "PIX", "BOLETO", "CREDIARIO",
@@ -197,6 +197,9 @@ export async function receber(req, res, next) {
       return res.status(400).json({ erro: "Forma de pagamento invalida" });
     }
 
+    const caixaIdInformado = req.body?.caixaId;
+    const registrarNoPDV = caixaIdInformado !== null;
+
     const ajusteRecebimento = ["juros", "multa", "desconto"]
       .some(k => req.body?.[k] !== undefined);
     let extras = {};
@@ -211,28 +214,69 @@ export async function receber(req, res, next) {
       extras = calc.valores;
     }
 
-    const { conta } = await prisma.$transaction(async (tx) => {
-      const atualizada = await tx.contaReceber.update({
-        where: { id: req.params.id },
-        data: { status: "PAGA", recebimento: dataRecebimento, ...extras },
-        include: INCLUDE,
+    try {
+      const { conta } = await prisma.$transaction(async (tx) => {
+        const atualizada = await tx.contaReceber.update({
+          where: { id: req.params.id },
+          data: { status: "PAGA", recebimento: dataRecebimento, ...extras },
+          include: INCLUDE,
+        });
+
+        if (registrarNoPDV) {
+          const dadosMov = {
+            tipo: "RECEBER_CONTA",
+            formaPagamento,
+            valor: Number(atualizada.valor),
+            descricao: `RECEBIMENTO: ${atualizada.descricao}`.toUpperCase().slice(0, 200),
+            contaReceberId: atualizada.id,
+          };
+          if (caixaIdInformado) {
+            await registrarEmCaixa(tx, caixaIdInformado, req.user.sub, dadosMov);
+          } else {
+            await registrarNoCaixaAberto(tx, req.user.sub, dadosMov);
+          }
+        }
+
+        return { conta: atualizada };
       });
 
-      await registrarNoCaixaAberto(tx, req.user.sub, {
-        tipo: "RECEBER_CONTA",
-        formaPagamento,
-        valor: Number(atualizada.valor),
-        descricao: `RECEBIMENTO: ${atualizada.descricao}`.toUpperCase().slice(0, 200),
-        contaReceberId: atualizada.id,
-      });
-
-      return { conta: atualizada };
-    });
-
-    res.json(conta);
+      res.json(conta);
+    } catch (err) {
+      if (err.status) return res.status(err.status).json({ erro: err.message });
+      throw err;
+    }
   } catch (err) {
     next(err);
   }
+}
+
+// Estorna no caixa todas as movimentacoes RECEBER_CONTA vinculadas. Cria
+// movimentacoes ESTORNO_RECEBER_CONTA reversas. Caixas FECHADOS sao puladas.
+async function estornarMovimentacoesRecebimento(tx, conta, userId) {
+  const movs = await tx.movimentacaoCaixa.findMany({
+    where: { contaReceberId: conta.id, tipo: "RECEBER_CONTA" },
+    include: { caixa: { select: { id: true, status: true } } },
+  });
+  let estornadas = 0, puladas = 0;
+  for (const mov of movs) {
+    const ja = await tx.movimentacaoCaixa.findFirst({
+      where: {
+        contaReceberId: conta.id, tipo: "ESTORNO_RECEBER_CONTA",
+        caixaId: mov.caixaId, valor: mov.valor,
+      },
+    });
+    if (ja) continue;
+    if (mov.caixa.status !== "ABERTO") { puladas++; continue; }
+    await registrarEmCaixa(tx, mov.caixaId, userId, {
+      tipo: "ESTORNO_RECEBER_CONTA",
+      formaPagamento: mov.formaPagamento,
+      valor: Number(mov.valor),
+      descricao: `ESTORNO RECEBIMENTO: ${conta.descricao}`.toUpperCase().slice(0, 200),
+      contaReceberId: conta.id,
+    });
+    estornadas++;
+  }
+  return { estornadas, puladas };
 }
 
 export async function reabrir(req, res, next) {
@@ -245,10 +289,15 @@ export async function reabrir(req, res, next) {
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
     const novoStatus = existente.vencimento < hoje ? "ATRASADA" : "PENDENTE";
-    const conta = await prisma.contaReceber.update({
-      where: { id: req.params.id },
-      data: { status: novoStatus, recebimento: null },
-      include: INCLUDE,
+
+    const { conta } = await prisma.$transaction(async (tx) => {
+      const atualizada = await tx.contaReceber.update({
+        where: { id: req.params.id },
+        data: { status: novoStatus, recebimento: null },
+        include: INCLUDE,
+      });
+      await estornarMovimentacoesRecebimento(tx, atualizada, req.user.sub);
+      return { conta: atualizada };
     });
     res.json(conta);
   } catch (err) {
@@ -260,16 +309,19 @@ export async function cancelar(req, res, next) {
   try {
     const existente = await prisma.contaReceber.findUnique({ where: { id: req.params.id } });
     if (!existente) return res.status(404).json({ erro: "Conta nao encontrada" });
-    if (existente.status === "PAGA") {
-      return res.status(409).json({ erro: "Conta recebida nao pode ser cancelada" });
-    }
     if (existente.status === "CANCELADA") {
       return res.status(409).json({ erro: "Conta ja esta cancelada" });
     }
-    const conta = await prisma.contaReceber.update({
-      where: { id: req.params.id },
-      data: { status: "CANCELADA" },
-      include: INCLUDE,
+    const { conta } = await prisma.$transaction(async (tx) => {
+      if (existente.status === "PAGA") {
+        await estornarMovimentacoesRecebimento(tx, existente, req.user.sub);
+      }
+      const atualizada = await tx.contaReceber.update({
+        where: { id: req.params.id },
+        data: { status: "CANCELADA", recebimento: null },
+        include: INCLUDE,
+      });
+      return { conta: atualizada };
     });
     res.json(conta);
   } catch (err) {

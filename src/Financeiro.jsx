@@ -735,6 +735,15 @@ function BtnRecorrencia({ ativa, onClick, children }) {
   );
 }
 
+const FORMAS_PAGAMENTO = [
+  { id: "DINHEIRO",       label: "💵 Dinheiro" },
+  { id: "PIX",            label: "⚡ PIX" },
+  { id: "CARTAO_DEBITO",  label: "💳 Débito" },
+  { id: "CARTAO_CREDITO", label: "💳 Crédito" },
+  { id: "BOLETO",         label: "🧾 Boleto" },
+  { id: "CREDIARIO",      label: "📒 Crediário" },
+];
+
 function PagarReceberModal({ tipo, conta, onCancelar, onConfirmar }) {
   const ehPagar = tipo === "pagar";
   const [data, setData] = useState(new Date().toISOString().slice(0, 10));
@@ -742,8 +751,21 @@ function PagarReceberModal({ tipo, conta, onCancelar, onConfirmar }) {
   const [juros, setJuros] = useState(conta.juros ? String(conta.juros) : "");
   const [multa, setMulta] = useState(conta.multa ? String(conta.multa) : "");
   const [desconto, setDesconto] = useState(conta.desconto ? String(conta.desconto) : "");
+  const [formaPagamento, setFormaPagamento] = useState("DINHEIRO");
+  const [caixaId, setCaixaId] = useState(""); // "" => default backend (caixa do user); "FORA" => null (fora do PDV)
+  const [caixasAbertos, setCaixasAbertos] = useState([]);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+
+  // Carrega caixas abertos (todos do sistema) para o usuario escolher onde
+  // lancar a movimentacao. Default fica "" (backend usa o caixa do user).
+  useEffect(() => {
+    api.listarCaixas({ status: "ABERTO" })
+      .then(lista => {
+        setCaixasAbertos(Array.isArray(lista) ? lista : (lista?.caixas || []));
+      })
+      .catch(() => setCaixasAbertos([]));
+  }, []);
 
   const valorBrutoOriginal = Number(conta.valorBruto || conta.valor || 0);
 
@@ -765,6 +787,10 @@ function PagarReceberModal({ tipo, conta, onCancelar, onConfirmar }) {
     setSalvando(true);
     try {
       const payload = ehPagar ? { pagamento: data } : { recebimento: data };
+      payload.formaPagamento = formaPagamento;
+      // caixaId: "FORA" -> null explicito (nao registra no caixa); "" -> nao envia (default backend); uuid -> caixa especifico
+      if (caixaId === "FORA") payload.caixaId = null;
+      else if (caixaId) payload.caixaId = caixaId;
       if (ajustar) {
         payload.juros = parseFloat(String(juros).replace(",", ".")) || 0;
         payload.multa = parseFloat(String(multa).replace(",", ".")) || 0;
@@ -809,6 +835,27 @@ function PagarReceberModal({ tipo, conta, onCancelar, onConfirmar }) {
           <input type="date" value={data} onChange={e => setData(e.target.value)}
             required style={inputStyle} />
         </Campo>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+          <Campo label="Forma de pagamento">
+            <select value={formaPagamento} onChange={e => setFormaPagamento(e.target.value)} style={inputStyle}>
+              {FORMAS_PAGAMENTO.map(f => (
+                <option key={f.id} value={f.id}>{f.label}</option>
+              ))}
+            </select>
+          </Campo>
+          <Campo label={ehPagar ? "Caixa de pagamento" : "Caixa de recebimento"}>
+            <select value={caixaId} onChange={e => setCaixaId(e.target.value)} style={inputStyle}>
+              <option value="">— Caixa do meu usuário (padrão) —</option>
+              {caixasAbertos.map(c => (
+                <option key={c.id} value={c.id}>
+                  Caixa #{c.numero} · {c.user?.nome || "—"}
+                </option>
+              ))}
+              <option value="FORA">Fora do PDV (não registrar)</option>
+            </select>
+          </Campo>
+        </div>
 
         <button type="button" onClick={() => setAjustar(v => !v)} style={{
           width: "100%", marginBottom: ajustar ? 12 : 0, padding: "9px 12px",

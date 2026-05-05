@@ -378,8 +378,10 @@ export async function calcularTotaisCaixa(caixaId, saldoInicial, tx = prisma) {
     select: { tipo: true, valor: true, formaPagamento: true },
   });
 
-  const ehEntrada = (t) => t === "VENDA" || t === "SUPRIMENTO" || t === "RECEBER_CONTA";
-  const ehSaida = (t) => t === "SANGRIA" || t === "PAGAR_CONTA" || t === "ESTORNO_VENDA";
+  // ESTORNO_PAGAR_CONTA reverte uma saida (PAGAR_CONTA), entao entra dinheiro de volta.
+  // ESTORNO_RECEBER_CONTA reverte uma entrada (RECEBER_CONTA), entao sai dinheiro.
+  const ehEntrada = (t) => t === "VENDA" || t === "SUPRIMENTO" || t === "RECEBER_CONTA" || t === "ESTORNO_PAGAR_CONTA";
+  const ehSaida = (t) => t === "SANGRIA" || t === "PAGAR_CONTA" || t === "ESTORNO_VENDA" || t === "ESTORNO_RECEBER_CONTA";
 
   let entradasDinheiro = 0;
   let saidasDinheiro = 0;
@@ -422,19 +424,26 @@ export async function calcularTotaisCaixa(caixaId, saldoInicial, tx = prisma) {
 // pagamento financeiro sem caixa aberto — a operacao financeira segue
 // normal mas nao gera movimentacao no caixa).
 
-export async function registrarNoCaixaAberto(tx, userId, dados) {
-  const caixa = await tx.caixa.findFirst({
-    where: { userId, status: "ABERTO" },
-    select: { id: true, saldoInicial: true },
+// Registra movimentacao em um caixa especifico ja conhecido (qualquer caixa
+// ABERTO, nao necessariamente do user). Usado quando o usuario escolhe em
+// qual caixa lancar o pagamento/recebimento.
+export async function registrarEmCaixa(tx, caixaId, userId, dados) {
+  const caixa = await tx.caixa.findUnique({
+    where: { id: caixaId },
+    select: { id: true, saldoInicial: true, status: true },
   });
-  if (!caixa) return null;
+  if (!caixa) {
+    const e = new Error("Caixa nao encontrado"); e.status = 404; throw e;
+  }
+  if (caixa.status !== "ABERTO") {
+    const e = new Error("Nao e possivel registrar movimentacao em caixa fechado"); e.status = 400; throw e;
+  }
 
   const totais = await calcularTotaisCaixa(caixa.id, Number(caixa.saldoInicial), tx);
   const saldoAntes = toDecimal(totais.saldoEsperadoDinheiro);
-  const ehEntrada = dados.tipo === "VENDA" || dados.tipo === "SUPRIMENTO" || dados.tipo === "RECEBER_CONTA";
+  const ehEntrada = dados.tipo === "VENDA" || dados.tipo === "SUPRIMENTO"
+    || dados.tipo === "RECEBER_CONTA" || dados.tipo === "ESTORNO_PAGAR_CONTA";
   const ehDinheiro = (dados.formaPagamento || "DINHEIRO") === "DINHEIRO";
-  // Saldo so muda quando e DINHEIRO. Outras formas entram no extrato com
-  // saldoAntes == saldoDepois (apenas registro).
   const delta = ehDinheiro ? (ehEntrada ? Number(dados.valor) : -Number(dados.valor)) : 0;
   const saldoDepois = toDecimal(saldoAntes + delta);
 
@@ -453,6 +462,18 @@ export async function registrarNoCaixaAberto(tx, userId, dados) {
       contaReceberId: dados.contaReceberId || null,
     },
   });
+}
+
+// Versao "automatica" — busca o caixa aberto do user logado e delega.
+// Mantida para compatibilidade com vendaController e fluxos onde o usuario
+// nao escolheu caixa explicitamente.
+export async function registrarNoCaixaAberto(tx, userId, dados) {
+  const caixa = await tx.caixa.findFirst({
+    where: { userId, status: "ABERTO" },
+    select: { id: true },
+  });
+  if (!caixa) return null;
+  return await registrarEmCaixa(tx, caixa.id, userId, dados);
 }
 
 export async function buscarCaixaAberto(userId) {

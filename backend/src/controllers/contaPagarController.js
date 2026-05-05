@@ -2,7 +2,7 @@ import prisma from "../lib/prisma.js";
 import {
   toNumber, parseDate, calcularValores, gerarSerieRecorrencia, TIPOS_RECORRENCIA,
 } from "../lib/contas.js";
-import { registrarNoCaixaAberto } from "./caixaController.js";
+import { registrarNoCaixaAberto, registrarEmCaixa } from "./caixaController.js";
 
 const FORMAS_VALIDAS = new Set([
   "DINHEIRO", "CARTAO_CREDITO", "CARTAO_DEBITO", "PIX", "BOLETO", "CREDIARIO",
@@ -201,6 +201,13 @@ export async function pagar(req, res, next) {
       return res.status(400).json({ erro: "Forma de pagamento invalida" });
     }
 
+    // caixaId opcional na requisicao:
+    //   string -> registra naquele caixa especifico (precisa estar ABERTO)
+    //   null   -> "fora do PDV": NAO registra movimentacao em nenhum caixa
+    //   undefined -> default: usa o caixa aberto do user logado (compat)
+    const caixaIdInformado = req.body?.caixaId;
+    const registrarNoPDV = caixaIdInformado !== null;
+
     // Permite ajustar juros/multa/desconto no ato do pagamento (cobrancas
     // tardias). Se vier algo, recalcula. Caso contrario mantem o que estava.
     const ajustePagamento = ["juros", "multa", "desconto"]
@@ -217,31 +224,76 @@ export async function pagar(req, res, next) {
       extras = calc.valores;
     }
 
-    const { conta } = await prisma.$transaction(async (tx) => {
-      const atualizada = await tx.contaPagar.update({
-        where: { id: req.params.id },
-        data: { status: "PAGA", pagamento: dataPagamento, ...extras },
-        include: INCLUDE,
+    try {
+      const { conta } = await prisma.$transaction(async (tx) => {
+        const atualizada = await tx.contaPagar.update({
+          where: { id: req.params.id },
+          data: { status: "PAGA", pagamento: dataPagamento, ...extras },
+          include: INCLUDE,
+        });
+
+        if (registrarNoPDV) {
+          const dadosMov = {
+            tipo: "PAGAR_CONTA",
+            formaPagamento,
+            valor: Number(atualizada.valor),
+            descricao: `PAGAMENTO: ${atualizada.descricao}`.toUpperCase().slice(0, 200),
+            contaPagarId: atualizada.id,
+          };
+          if (caixaIdInformado) {
+            // Caixa explicito (qualquer caixa ABERTO do sistema).
+            await registrarEmCaixa(tx, caixaIdInformado, req.user.sub, dadosMov);
+          } else {
+            // Compat: usa o caixa aberto do proprio user, se houver.
+            await registrarNoCaixaAberto(tx, req.user.sub, dadosMov);
+          }
+        }
+
+        return { conta: atualizada };
       });
 
-      // Quando ha caixa aberto, registra a saida no extrato. Se nao houver
-      // (ex: ADMIN pagando contas de manha sem caixa de PDV aberto), so
-      // marca como paga — financeiro independe do caixa.
-      await registrarNoCaixaAberto(tx, req.user.sub, {
-        tipo: "PAGAR_CONTA",
-        formaPagamento,
-        valor: Number(atualizada.valor),
-        descricao: `PAGAMENTO: ${atualizada.descricao}`.toUpperCase().slice(0, 200),
-        contaPagarId: atualizada.id,
-      });
-
-      return { conta: atualizada };
-    });
-
-    res.json(conta);
+      res.json(conta);
+    } catch (err) {
+      if (err.status) return res.status(err.status).json({ erro: err.message });
+      throw err;
+    }
   } catch (err) {
     next(err);
   }
+}
+
+// Estorna no caixa todas as movimentacoes PAGAR_CONTA vinculadas a esta
+// conta que ainda nao foram estornadas. Cria movimentacoes ESTORNO_PAGAR_CONTA
+// no MESMO caixa e na mesma forma de pagamento, devolvendo o saldo.
+//
+// Caixas ja FECHADOS sao puladas com motivo registrado nas observacoes —
+// nao mexer em historico fechado e regra do negocio.
+async function estornarMovimentacoesPagamento(tx, conta, userId) {
+  const movs = await tx.movimentacaoCaixa.findMany({
+    where: { contaPagarId: conta.id, tipo: "PAGAR_CONTA" },
+    include: { caixa: { select: { id: true, status: true, numero: true } } },
+  });
+  let estornadas = 0, puladas = 0;
+  for (const mov of movs) {
+    // Verifica se ja foi estornada antes (para nao duplicar em re-reabrir).
+    const ja = await tx.movimentacaoCaixa.findFirst({
+      where: {
+        contaPagarId: conta.id, tipo: "ESTORNO_PAGAR_CONTA",
+        caixaId: mov.caixaId, valor: mov.valor,
+      },
+    });
+    if (ja) continue;
+    if (mov.caixa.status !== "ABERTO") { puladas++; continue; }
+    await registrarEmCaixa(tx, mov.caixaId, userId, {
+      tipo: "ESTORNO_PAGAR_CONTA",
+      formaPagamento: mov.formaPagamento,
+      valor: Number(mov.valor),
+      descricao: `ESTORNO PAGAMENTO: ${conta.descricao}`.toUpperCase().slice(0, 200),
+      contaPagarId: conta.id,
+    });
+    estornadas++;
+  }
+  return { estornadas, puladas };
 }
 
 export async function reabrir(req, res, next) {
@@ -254,10 +306,15 @@ export async function reabrir(req, res, next) {
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
     const novoStatus = existente.vencimento < hoje ? "ATRASADA" : "PENDENTE";
-    const conta = await prisma.contaPagar.update({
-      where: { id: req.params.id },
-      data: { status: novoStatus, pagamento: null },
-      include: INCLUDE,
+
+    const { conta } = await prisma.$transaction(async (tx) => {
+      const atualizada = await tx.contaPagar.update({
+        where: { id: req.params.id },
+        data: { status: novoStatus, pagamento: null },
+        include: INCLUDE,
+      });
+      await estornarMovimentacoesPagamento(tx, atualizada, req.user.sub);
+      return { conta: atualizada };
     });
     res.json(conta);
   } catch (err) {
@@ -269,16 +326,20 @@ export async function cancelar(req, res, next) {
   try {
     const existente = await prisma.contaPagar.findUnique({ where: { id: req.params.id } });
     if (!existente) return res.status(404).json({ erro: "Conta nao encontrada" });
-    if (existente.status === "PAGA") {
-      return res.status(409).json({ erro: "Conta paga nao pode ser cancelada" });
-    }
     if (existente.status === "CANCELADA") {
       return res.status(409).json({ erro: "Conta ja esta cancelada" });
     }
-    const conta = await prisma.contaPagar.update({
-      where: { id: req.params.id },
-      data: { status: "CANCELADA" },
-      include: INCLUDE,
+    // Conta PAGA agora pode ser cancelada — internamente estorna no caixa.
+    const { conta } = await prisma.$transaction(async (tx) => {
+      if (existente.status === "PAGA") {
+        await estornarMovimentacoesPagamento(tx, existente, req.user.sub);
+      }
+      const atualizada = await tx.contaPagar.update({
+        where: { id: req.params.id },
+        data: { status: "CANCELADA", pagamento: null },
+        include: INCLUDE,
+      });
+      return { conta: atualizada };
     });
     res.json(conta);
   } catch (err) {

@@ -175,6 +175,7 @@ export const api = {
   },
   obterCompra: (id) => request(`/compras/${id}`),
   criarCompra: (data) => request("/compras", { method: "POST", body: data }),
+  estornarCompra: (id, motivo) => request(`/compras/${id}/estornar`, { method: "POST", body: { motivo } }),
 
   listarFuncionarios: ({ search = "", ativo = "", role = "" } = {}) => {
     const qs = new URLSearchParams();

@@ -227,16 +227,20 @@ model ItemVenda {
 // ============ COMPRAS ============
 
 model Compra {
-  id          String   @id @default(uuid())
-  numero      Int      @unique @default(autoincrement())
-  total       Decimal  @db.Decimal(10, 2)
-  observacoes String?
-  createdAt   DateTime @default(now())
+  id                 String    @id @default(uuid())
+  numero             Int       @unique @default(autoincrement())
+  total              Decimal   @db.Decimal(10, 2)
+  observacoes        String?
+  cancelada          Boolean   @default(false)
+  canceladaEm        DateTime?
+  motivoCancelamento String?
+  createdAt          DateTime  @default(now())
 
   fornecedorId String
   fornecedor   Fornecedor @relation(fields: [fornecedorId], references: [id])
 
-  itens ItemCompra[]
+  itens       ItemCompra[]
+  contasPagar ContaPagar[]
 
   @@map("compras")
 }
@@ -299,10 +303,14 @@ model ContaPagar {
   fornecedorId String?
   fornecedor   Fornecedor? @relation(fields: [fornecedorId], references: [id])
 
+  compraId String?
+  compra   Compra?  @relation(fields: [compraId], references: [id], onDelete: SetNull)
+
   anexos             Anexo[]
   movimentacoesCaixa MovimentacaoCaixa[]
 
   @@index([grupoRecorrenciaId])
+  @@index([compraId])
   @@map("contas_pagar")
 }
 

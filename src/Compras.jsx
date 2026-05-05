@@ -70,6 +70,13 @@ export default function Compras({ user }) {
     }
   }
 
+  async function recarregarDetalhe(id) {
+    try {
+      const c = await api.obterCompra(id);
+      setDetalhe(c);
+    } catch { /* mantem o detalhe atual */ }
+  }
+
   return (
     <div>
       <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
@@ -137,17 +144,31 @@ export default function Compras({ user }) {
             display: "grid", gridTemplateColumns: "150px 90px 2fr 100px 130px 120px",
             padding: "12px 16px", borderBottom: `1px solid ${C.border}`,
             alignItems: "center", fontSize: 13,
+            opacity: c.cancelada ? 0.55 : 1,
           }}>
             <div style={{ color: C.muted, fontSize: 12 }}>{fmtData(c.createdAt)}</div>
             <div style={{ color: C.white, fontFamily: "monospace", fontWeight: 700 }}>#{c.numero}</div>
             <div>
-              <div style={{ color: C.white, fontWeight: 600 }}>{c.fornecedor?.nome || "—"}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ color: C.white, fontWeight: 600 }}>{c.fornecedor?.nome || "—"}</div>
+                {c.cancelada && (
+                  <span style={{
+                    background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red,
+                    fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999,
+                    textTransform: "uppercase", letterSpacing: 0.5,
+                  }}>Estornada</span>
+                )}
+              </div>
               {c.fornecedor?.cnpj && (
                 <div style={{ color: C.muted, fontSize: 11 }}>{c.fornecedor.cnpj}</div>
               )}
             </div>
             <div style={{ textAlign: "right", color: C.text }}>{c._count?.itens ?? "—"}</div>
-            <div style={{ textAlign: "right", color: C.green, fontWeight: 700, fontSize: 14 }}>{fmtBRL(c.total)}</div>
+            <div style={{
+              textAlign: "right", color: c.cancelada ? C.muted : C.green,
+              fontWeight: 700, fontSize: 14,
+              textDecoration: c.cancelada ? "line-through" : "none",
+            }}>{fmtBRL(c.total)}</div>
             <div style={{ textAlign: "right" }}>
               <button onClick={() => abrirDetalhe(c.id)} style={btnIcone(C.accent)}>Ver detalhes</button>
             </div>
@@ -173,7 +194,16 @@ export default function Compras({ user }) {
       )}
 
       {detalhe && (
-        <DetalheCompraModal compra={detalhe} onFechar={() => setDetalhe(null)} />
+        <DetalheCompraModal
+          compra={detalhe}
+          podeEstornar={podeCriar}
+          onFechar={() => setDetalhe(null)}
+          onEstornado={(msg) => {
+            recarregarDetalhe(detalhe.id);
+            carregar();
+            flash(msg);
+          }}
+        />
       )}
     </div>
   );
@@ -450,14 +480,54 @@ function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }) {
   );
 }
 
-function DetalheCompraModal({ compra, onFechar }) {
+function DetalheCompraModal({ compra, podeEstornar, onFechar, onEstornado }) {
+  const [estornoAberto, setEstornoAberto] = useState(false);
+  const [motivo, setMotivo] = useState("");
+  const [estornando, setEstornando] = useState(false);
+  const [erroEstorno, setErroEstorno] = useState("");
+
+  const contas = compra.contasPagar || [];
+  const contasPagas = contas.filter(c => c.status === "PAGA").length;
+  const podeAcionarEstorno = podeEstornar && !compra.cancelada;
+
+  async function confirmarEstorno() {
+    setErroEstorno("");
+    const m = motivo.trim();
+    if (!m) { setErroEstorno("Informe o motivo do estorno"); return; }
+    setEstornando(true);
+    try {
+      const r = await api.estornarCompra(compra.id, m);
+      const itens = r.itensEstornados || 0;
+      const ccs = r.contasCanceladas || 0;
+      const partes = [`Compra #${r.compra?.numero ?? compra.numero} estornada`];
+      if (itens) partes.push(`${itens} item${itens > 1 ? "s" : ""} devolvido${itens > 1 ? "s" : ""} ao estoque`);
+      if (ccs) partes.push(`${ccs} conta${ccs > 1 ? "s" : ""} a pagar cancelada${ccs > 1 ? "s" : ""}`);
+      onEstornado(partes.join(" · "));
+      setEstornoAberto(false);
+      setMotivo("");
+    } catch (err) {
+      setErroEstorno(err.message);
+    } finally {
+      setEstornando(false);
+    }
+  }
+
   return (
     <div onClick={onFechar} style={modalOverlay}>
       <div onClick={e => e.stopPropagation()} style={{ ...modalCard, maxWidth: 720 }}>
         <div style={modalHeader}>
           <div>
-            <div style={{ color: C.white, fontWeight: 700, fontSize: 18 }}>
-              Compra #{compra.numero}
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ color: C.white, fontWeight: 700, fontSize: 18 }}>
+                Compra #{compra.numero}
+              </div>
+              {compra.cancelada && (
+                <span style={{
+                  background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red,
+                  fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999,
+                  textTransform: "uppercase", letterSpacing: 0.5,
+                }}>Estornada</span>
+              )}
             </div>
             <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>
               {fmtData(compra.createdAt)}
@@ -465,6 +535,21 @@ function DetalheCompraModal({ compra, onFechar }) {
           </div>
           <button type="button" onClick={onFechar} style={btnFechar}>×</button>
         </div>
+
+        {compra.cancelada && (
+          <div style={{
+            marginBottom: 14, padding: "10px 14px",
+            background: C.red + "11", border: `1px solid ${C.red}44`,
+            borderRadius: 10, fontSize: 12, color: C.text,
+          }}>
+            <div style={{ color: C.red, fontWeight: 700, marginBottom: 4 }}>
+              Compra estornada em {fmtData(compra.canceladaEm)}
+            </div>
+            {compra.motivoCancelamento && (
+              <div><span style={{ color: C.muted }}>Motivo: </span>{compra.motivoCancelamento}</div>
+            )}
+          </div>
+        )}
 
         <div style={{
           padding: "12px 14px", background: C.surface, border: `1px solid ${C.border}`,
@@ -516,10 +601,102 @@ function DetalheCompraModal({ compra, onFechar }) {
           display: "flex", justifyContent: "space-between", alignItems: "center",
         }}>
           <div style={{ color: C.muted, fontSize: 12, fontWeight: 600 }}>TOTAL</div>
-          <div style={{ color: C.green, fontSize: 22, fontWeight: 800 }}>{fmtBRL(compra.total)}</div>
+          <div style={{
+            color: compra.cancelada ? C.muted : C.green,
+            fontSize: 22, fontWeight: 800,
+            textDecoration: compra.cancelada ? "line-through" : "none",
+          }}>{fmtBRL(compra.total)}</div>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
+        {contas.length > 0 && (
+          <div style={{ marginTop: 14 }}>
+            <div style={{ color: C.muted, fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>
+              Contas a pagar vinculadas
+            </div>
+            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}>
+              {contas.map(cp => {
+                const cor = cp.status === "PAGA" ? C.green
+                  : cp.status === "CANCELADA" ? C.muted
+                  : cp.status === "ATRASADA" ? C.red
+                  : C.accent;
+                return (
+                  <div key={cp.id} style={{
+                    display: "grid", gridTemplateColumns: "60px 1fr 110px 100px",
+                    padding: "8px 14px", borderBottom: `1px solid ${C.border}`,
+                    alignItems: "center", fontSize: 12, gap: 8,
+                  }}>
+                    <div style={{ color: C.muted, fontFamily: "monospace" }}>
+                      {cp.parcelaTotal > 1 ? `${cp.parcelaAtual}/${cp.parcelaTotal}` : "—"}
+                    </div>
+                    <div style={{ color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {cp.descricao}
+                    </div>
+                    <div style={{ textAlign: "right", color: C.text }}>{fmtBRL(cp.valor)}</div>
+                    <div style={{ textAlign: "right" }}>
+                      <span style={{
+                        background: cor + "22", border: `1px solid ${cor}55`, color: cor,
+                        fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999,
+                      }}>{cp.status}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {estornoAberto && (
+          <div style={{
+            marginTop: 16, padding: 14, background: C.red + "11",
+            border: `1px solid ${C.red}55`, borderRadius: 10,
+          }}>
+            <div style={{ color: C.red, fontWeight: 700, fontSize: 13, marginBottom: 8 }}>
+              Confirmar estorno da compra #{compra.numero}
+            </div>
+            <div style={{ color: C.muted, fontSize: 12, marginBottom: 10 }}>
+              Esta ação vai criar uma SAÍDA de estoque para cada item (revertendo a entrada original)
+              {contas.length > 0 ? ` e cancelar ${contas.length - contasPagas} conta(s) a pagar pendente(s).` : "."}
+              {contasPagas > 0 && ` Há ${contasPagas} conta(s) já paga(s) — reabra-as no Financeiro antes de prosseguir.`}
+            </div>
+            <textarea
+              value={motivo}
+              onChange={e => setMotivo(e.target.value)}
+              rows={2}
+              maxLength={500}
+              autoFocus
+              placeholder="Motivo do estorno (obrigatório)"
+              style={{ ...inputStyle, resize: "vertical", fontFamily: "inherit" }}
+            />
+            {erroEstorno && (
+              <div style={{
+                marginTop: 8, padding: "8px 12px", borderRadius: 8,
+                background: C.red + "22", border: `1px solid ${C.red}55`,
+                color: C.red, fontSize: 12,
+              }}>{erroEstorno}</div>
+            )}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 10 }}>
+              <button onClick={() => { setEstornoAberto(false); setErroEstorno(""); setMotivo(""); }}
+                disabled={estornando} style={btnSecundario}>Cancelar</button>
+              <button onClick={confirmarEstorno} disabled={estornando} style={{
+                background: C.red, color: C.white, border: "none", borderRadius: 8,
+                padding: "10px 22px", fontWeight: 700, fontSize: 13, cursor: "pointer",
+                opacity: estornando ? 0.6 : 1,
+              }}>
+                {estornando ? "Estornando..." : "Confirmar estorno"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 20 }}>
+          <div>
+            {podeAcionarEstorno && !estornoAberto && (
+              <button onClick={() => setEstornoAberto(true)} style={{
+                background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red,
+                borderRadius: 8, padding: "10px 16px", fontWeight: 600, fontSize: 13, cursor: "pointer",
+              }}>↩ Estornar compra</button>
+            )}
+          </div>
           <button onClick={onFechar} style={btnSecundario}>Fechar</button>
         </div>
       </div>

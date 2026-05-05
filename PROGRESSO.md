@@ -928,12 +928,12 @@ Todas as etapas planejadas foram entregues e o produto continuou a receber polim
 
 Em 2026-05-04, novo refactor profundo: **PDV bipagem por scanner** (cestinha 70% com fotos, novos itens no topo, sugestões dropdown, F8 cancelar, F10 finalizar, refoco universal) e **foto em produto** (campo `imagem` no schema, upload via dropzone, preview imediato, miniatura na lista).
 
-Estado em 2026-05-04: **última sessão produtiva foi hoje** — refactor PDV+Produtos com foto. Working tree pronto para commit.
+Em 2026-05-05, **estorno de compra**: nova rota `POST /compras/:id/estornar` (ADMIN/GERENTE) que cria SAIDA reversa para cada item, decrementa o estoque e cancela as contas a pagar PENDENTES/ATRASADAS vinculadas. Schema ganhou `cancelada/canceladaEm/motivoCancelamento` em `Compra` e FK opcional `compraId` em `ContaPagar` (vinculação explícita ao criar). Bloqueia o estorno se houver conta já PAGA — usuário precisa reabrir antes. UI: badge "Estornada" na lista (com total riscado) e modal de detalhe com bloco de confirmação + motivo + lista de contas vinculadas com status.
+
+Estado em 2026-05-05: working tree pronto para commit.
 
 ### Lacunas conhecidas (polimento opcional)
 
-- **Etapa 9 (Compras):** sem rota/UI para cancelar uma compra. Hoje o estorno é manual via SAIDA no Estoque.
-  - Sugestão: `DELETE /compras/:id` com estorno transacional (cria SAIDA com motivo `"CANCELAMENTO COMPRA #N"`).
 - **Etapa 13 (Relatórios):** sem filtro por cliente no relatório de vendas (campo aceito no backend, mas não exposto no UI).
 - **Permissões:** quando um vendedor sem `DASHBOARD` é redirecionado pelo `useEffect`, há um flicker breve (mostra a tela errada por ~1 frame). Fix opcional: usar `podeVer(tela)` direto na renderização para evitar render inicial.
 - **Anexos do Financeiro:** ao deletar uma conta (com `prisma.contaPagar.delete`), o cascade do DB remove o registro `Anexo` mas o arquivo físico em `backend/uploads/` fica órfão. Adicionar limpeza do disco antes do delete da conta.
@@ -943,12 +943,11 @@ Estado em 2026-05-04: **última sessão produtiva foi hoje** — refactor PDV+Pr
 
 ### Próxima decisão (a ser tomada)
 
-- **(a)** Fechar lacuna de cancelamento de compra (~30 linhas backend + botão no frontend).
-- **(b)** Implementar `PUT /auth/preferencias` (campo `User.preferencias Json?`) e migrar tema/sidebar do `localStorage` para a conta — destrava sync entre dispositivos.
-- **(c)** Filtro por cliente no relatório de vendas (UI já tem o select de clientes em outras telas; reaproveitar).
-- **(d)** Auditoria do Reset Total (log estruturado de execuções).
-- **(e)** Atalhos visuais para o admin enxergar de relance "que módulos cada funcionário tem" — ex: chip-cluster pequeno na linha da tabela.
-- **(f)** Encerrar o projeto.
+- **(a)** Implementar `PUT /auth/preferencias` (campo `User.preferencias Json?`) e migrar tema/sidebar do `localStorage` para a conta — destrava sync entre dispositivos.
+- **(b)** Filtro por cliente no relatório de vendas (UI já tem o select de clientes em outras telas; reaproveitar).
+- **(c)** Auditoria do Reset Total (log estruturado de execuções).
+- **(d)** Atalhos visuais para o admin enxergar de relance "que módulos cada funcionário tem" — ex: chip-cluster pequeno na linha da tabela.
+- **(e)** Encerrar o projeto.
 
 ### Como retomar
 

@@ -13,6 +13,13 @@ const INCLUDE_DETALHE = {
       produto: { select: { id: true, codigo: true, nome: true, unidade: true } },
     },
   },
+  contasPagar: {
+    select: {
+      id: true, descricao: true, valor: true, vencimento: true,
+      status: true, parcelaAtual: true, parcelaTotal: true,
+    },
+    orderBy: { vencimento: "asc" },
+  },
 };
 
 function toNumber(v) {
@@ -192,7 +199,7 @@ export async function criar(req, res, next) {
             const e = new Error(serie.erro); e.status = 400; throw e;
           }
           for (const reg of serie.registros) {
-            const conta = await tx.contaPagar.create({ data: reg });
+            const conta = await tx.contaPagar.create({ data: { ...reg, compraId: compraCriada.id } });
             contasGeradas.push({
               id: conta.id,
               descricao: conta.descricao,
@@ -208,6 +215,100 @@ export async function criar(req, res, next) {
       });
 
       res.status(201).json(compra);
+    } catch (err) {
+      if (err.status) return res.status(err.status).json({ erro: err.message });
+      throw err;
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Estorna uma compra ja registrada: gera SAIDA para cada item (revertendo
+// o estoque), cancela as contas a pagar PENDENTES vinculadas e marca a
+// compra como cancelada. Bloqueia se houver conta paga (sinaliza que o
+// dinheiro ja saiu — usuario precisa reabrir a conta antes para continuar).
+export async function estornar(req, res, next) {
+  try {
+    const { motivo } = req.body || {};
+    const motivoNorm = motivo ? String(motivo).trim().slice(0, 500) : null;
+    if (!motivoNorm) return res.status(400).json({ erro: "Informe o motivo do estorno" });
+
+    try {
+      const compra = await prisma.$transaction(async (tx) => {
+        const c = await tx.compra.findUnique({
+          where: { id: req.params.id },
+          include: { itens: true, contasPagar: true },
+        });
+        if (!c) { const e = new Error("Compra nao encontrada"); e.status = 404; throw e; }
+        if (c.cancelada) {
+          const e = new Error("Compra ja foi estornada"); e.status = 400; throw e;
+        }
+
+        const contasPagas = c.contasPagar.filter(cp => cp.status === "PAGA");
+        if (contasPagas.length > 0) {
+          const e = new Error(
+            `Esta compra possui ${contasPagas.length} conta(s) ja paga(s). ` +
+            `Reabra-a(s) no Financeiro antes de estornar.`
+          );
+          e.status = 400; throw e;
+        }
+
+        const produtos = await tx.produto.findMany({
+          where: { id: { in: c.itens.map(i => i.produtoId) } },
+        });
+        const mapaProdutos = new Map(produtos.map(p => [p.id, p]));
+
+        for (const it of c.itens) {
+          const p = mapaProdutos.get(it.produtoId);
+          if (!p) continue; // produto excluido — pula a movimentacao mas segue
+          const antes = p.estoque;
+          const depois = antes - it.quantidade;
+          await tx.produto.update({
+            where: { id: it.produtoId },
+            data: { estoque: depois },
+          });
+          await tx.movimentacaoEstoque.create({
+            data: {
+              tipo: "SAIDA",
+              quantidade: it.quantidade,
+              estoqueAntes: antes,
+              estoqueDepois: depois,
+              motivo: `Estorno compra #${c.numero}`,
+              produtoId: it.produtoId,
+              userId: req.user.sub,
+            },
+          });
+        }
+
+        // Cancela contas a pagar pendentes/atrasadas vinculadas. Pagas ja
+        // foram bloqueadas acima; canceladas ficam como estao.
+        const idsCancelar = c.contasPagar
+          .filter(cp => cp.status === "PENDENTE" || cp.status === "ATRASADA")
+          .map(cp => cp.id);
+        let contasCanceladas = 0;
+        if (idsCancelar.length > 0) {
+          const upd = await tx.contaPagar.updateMany({
+            where: { id: { in: idsCancelar } },
+            data: { status: "CANCELADA" },
+          });
+          contasCanceladas = upd.count;
+        }
+
+        const atualizada = await tx.compra.update({
+          where: { id: c.id },
+          data: {
+            cancelada: true,
+            canceladaEm: new Date(),
+            motivoCancelamento: motivoNorm,
+          },
+          include: INCLUDE_DETALHE,
+        });
+
+        return { compra: atualizada, contasCanceladas, itensEstornados: c.itens.length };
+      });
+
+      res.json(compra);
     } catch (err) {
       if (err.status) return res.status(err.status).json({ erro: err.message });
       throw err;

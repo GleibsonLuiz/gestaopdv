@@ -40,6 +40,24 @@ enum FormaPagamento {
   CREDIARIO
 }
 
+// Formas de pagamento extras cadastradas pelo usuario (ex: Vale-Refeicao,
+// Cheque, etc). Cada uma referencia uma das FormaPagamento "base" para
+// preservar compatibilidade com colunas enum em vendas/contas — ao escolher
+// um custom, o backend persiste o enum base; o label custom e usado apenas
+// para exibicao no dropdown / relatorios.
+model FormaPagamentoCustom {
+  id                 String         @id @default(uuid())
+  nome               String         @unique
+  icone              String?
+  baseFormaPagamento FormaPagamento
+  ativo              Boolean        @default(true)
+  ordem              Int            @default(0)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@map("formas_pagamento_custom")
+}
+
 enum TipoMovimentacao {
   ENTRADA
   SAIDA

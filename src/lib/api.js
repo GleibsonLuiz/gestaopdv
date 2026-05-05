@@ -133,6 +133,16 @@ export const api = {
   atualizarCategoria: (id, data) => request(`/categorias/${id}`, { method: "PUT", body: data }),
   excluirCategoria: (id) => request(`/categorias/${id}`, { method: "DELETE" }),
 
+  listarFormasPagamento: ({ ativo = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (ativo !== "") qs.set("ativo", ativo);
+    const query = qs.toString();
+    return request(`/formas-pagamento${query ? `?${query}` : ""}`);
+  },
+  criarFormaPagamento: (data) => request("/formas-pagamento", { method: "POST", body: data }),
+  atualizarFormaPagamento: (id, data) => request(`/formas-pagamento/${id}`, { method: "PUT", body: data }),
+  excluirFormaPagamento: (id) => request(`/formas-pagamento/${id}`, { method: "DELETE" }),
+
   listarProdutos: ({ search = "", ativo = "", categoriaId = "", fornecedorId = "", estoqueBaixo = "" } = {}) => {
     const qs = new URLSearchParams();
     if (search) qs.set("search", search);

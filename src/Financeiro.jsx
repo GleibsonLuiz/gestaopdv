@@ -448,6 +448,7 @@ function ListaContas({ tipo, podeEditar }) {
         <PagarReceberModal
           tipo={tipo}
           conta={recebendoPagando}
+          podeEditar={podeEditar}
           onCancelar={() => setRecebendoPagando(null)}
           onConfirmar={(payload) => executarPagarReceber(recebendoPagando, payload)}
         />
@@ -753,14 +754,19 @@ function hojeLocal() {
   return `${d.getFullYear()}-${m}-${dd}`;
 }
 
-function PagarReceberModal({ tipo, conta, onCancelar, onConfirmar }) {
+function PagarReceberModal({ tipo, conta, podeEditar, onCancelar, onConfirmar }) {
   const ehPagar = tipo === "pagar";
   const [data, setData] = useState(hojeLocal());
   const [ajustar, setAjustar] = useState(false);
   const [juros, setJuros] = useState(conta.juros ? String(conta.juros) : "");
   const [multa, setMulta] = useState(conta.multa ? String(conta.multa) : "");
   const [desconto, setDesconto] = useState(conta.desconto ? String(conta.desconto) : "");
-  const [formaPagamento, setFormaPagamento] = useState("DINHEIRO");
+  // Valor armazenado e composito: "default:<ENUM>" para as 6 padroes ou
+  // "custom:<id>" para formas cadastradas pelo usuario. No submit traduzimos
+  // de volta para o enum FormaPagamento.
+  const [formaSel, setFormaSel] = useState("default:DINHEIRO");
+  const [formasCustom, setFormasCustom] = useState([]);
+  const [gerenciarAberto, setGerenciarAberto] = useState(false);
   const [caixaId, setCaixaId] = useState(""); // "" => default backend (caixa do user); "FORA" => null (fora do PDV)
   const [caixasAbertos, setCaixasAbertos] = useState([]);
   const [salvando, setSalvando] = useState(false);
@@ -775,6 +781,26 @@ function PagarReceberModal({ tipo, conta, onCancelar, onConfirmar }) {
       })
       .catch(() => setCaixasAbertos([]));
   }, []);
+
+  const recarregarFormasCustom = useCallback(() => {
+    return api.listarFormasPagamento({ ativo: "true" })
+      .then(lista => setFormasCustom(Array.isArray(lista) ? lista : []))
+      .catch(() => setFormasCustom([]));
+  }, []);
+
+  useEffect(() => { recarregarFormasCustom(); }, [recarregarFormasCustom]);
+
+  // Traduz o valor selecionado (composito) para o enum FormaPagamento que
+  // sera persistido no backend.
+  const formaPagamentoEnum = useMemo(() => {
+    if (formaSel.startsWith("default:")) return formaSel.slice("default:".length);
+    if (formaSel.startsWith("custom:")) {
+      const id = formaSel.slice("custom:".length);
+      const c = formasCustom.find(x => x.id === id);
+      return c ? c.baseFormaPagamento : "DINHEIRO";
+    }
+    return "DINHEIRO";
+  }, [formaSel, formasCustom]);
 
   const valorBrutoOriginal = Number(conta.valorBruto || conta.valor || 0);
 
@@ -796,7 +822,7 @@ function PagarReceberModal({ tipo, conta, onCancelar, onConfirmar }) {
     setSalvando(true);
     try {
       const payload = ehPagar ? { pagamento: data } : { recebimento: data };
-      payload.formaPagamento = formaPagamento;
+      payload.formaPagamento = formaPagamentoEnum;
       // caixaId: "FORA" -> null explicito (nao registra no caixa); "" -> nao envia (default backend); uuid -> caixa especifico
       if (caixaId === "FORA") payload.caixaId = null;
       else if (caixaId) payload.caixaId = caixaId;
@@ -846,13 +872,35 @@ function PagarReceberModal({ tipo, conta, onCancelar, onConfirmar }) {
         </Campo>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
-          <Campo label="Forma de pagamento">
-            <select value={formaPagamento} onChange={e => setFormaPagamento(e.target.value)} style={inputStyle}>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+              <label style={{ color: C.muted, fontSize: 12, fontWeight: 600 }}>Forma de pagamento</label>
+              {podeEditar && (
+                <button
+                  type="button"
+                  onClick={() => setGerenciarAberto(true)}
+                  title="Cadastrar/editar formas de pagamento"
+                  style={{
+                    background: "transparent", border: "none", color: C.accent,
+                    fontSize: 11, fontWeight: 700, cursor: "pointer", padding: 0,
+                  }}
+                >⚙ Gerenciar</button>
+              )}
+            </div>
+            <select value={formaSel} onChange={e => setFormaSel(e.target.value)} style={inputStyle}>
               {FORMAS_PAGAMENTO.map(f => (
-                <option key={f.id} value={f.id}>{f.label}</option>
+                <option key={f.id} value={`default:${f.id}`}>{f.label}</option>
+              ))}
+              {formasCustom.length > 0 && (
+                <option disabled>──────── Personalizadas ────────</option>
+              )}
+              {formasCustom.map(c => (
+                <option key={c.id} value={`custom:${c.id}`}>
+                  {c.icone ? `${c.icone} ` : ""}{c.nome}
+                </option>
               ))}
             </select>
-          </Campo>
+          </div>
           <Campo label={ehPagar ? "Caixa de pagamento" : "Caixa de recebimento"}>
             <select value={caixaId} onChange={e => setCaixaId(e.target.value)} style={inputStyle}>
               <option value="">— Caixa do meu usuário (padrão) —</option>
@@ -912,6 +960,16 @@ function PagarReceberModal({ tipo, conta, onCancelar, onConfirmar }) {
           </button>
         </div>
       </form>
+
+      {gerenciarAberto && (
+        <GerenciarFormasModal
+          podeExcluir={podeEditar}
+          onFechar={async () => {
+            setGerenciarAberto(false);
+            await recarregarFormasCustom();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1061,6 +1119,231 @@ function Campo({ label, children }) {
     </div>
   );
 }
+
+// Modal de cadastro/edicao das formas de pagamento personalizadas. Cada
+// forma cadastrada referencia uma das 6 padroes (DINHEIRO/PIX/etc) — o
+// label custom aparece no dropdown mas o valor persistido no banco
+// continua sendo o enum base, preservando relatorios e historico.
+function GerenciarFormasModal({ podeExcluir, onFechar }) {
+  const [formas, setFormas] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState("");
+  const [editando, setEditando] = useState(null); // null = nova; objeto = editando
+  const [nome, setNome] = useState("");
+  const [icone, setIcone] = useState("");
+  const [base, setBase] = useState("DINHEIRO");
+  const [ordem, setOrdem] = useState("0");
+  const [salvando, setSalvando] = useState(false);
+
+  const carregar = useCallback(async () => {
+    setCarregando(true);
+    try {
+      const lista = await api.listarFormasPagamento();
+      setFormas(Array.isArray(lista) ? lista : []);
+    } catch (err) {
+      setErro(err.message);
+    } finally {
+      setCarregando(false);
+    }
+  }, []);
+
+  useEffect(() => { carregar(); }, [carregar]);
+
+  function limparForm() {
+    setEditando(null); setNome(""); setIcone("");
+    setBase("DINHEIRO"); setOrdem("0"); setErro("");
+  }
+
+  function iniciarEdicao(f) {
+    setEditando(f);
+    setNome(f.nome);
+    setIcone(f.icone || "");
+    setBase(f.baseFormaPagamento);
+    setOrdem(String(f.ordem ?? 0));
+    setErro("");
+  }
+
+  async function salvar(e) {
+    e.preventDefault();
+    setErro("");
+    const nomeTrim = nome.trim();
+    if (!nomeTrim) { setErro("Informe um nome"); return; }
+    setSalvando(true);
+    try {
+      const payload = {
+        nome: nomeTrim,
+        icone: icone.trim() || null,
+        baseFormaPagamento: base,
+        ordem: parseInt(ordem, 10) || 0,
+      };
+      if (editando) {
+        payload.ativo = editando.ativo;
+        await api.atualizarFormaPagamento(editando.id, payload);
+      } else {
+        await api.criarFormaPagamento(payload);
+      }
+      await carregar();
+      limparForm();
+    } catch (err) {
+      setErro(err.message);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function alternarAtivo(f) {
+    setErro("");
+    try {
+      await api.atualizarFormaPagamento(f.id, {
+        nome: f.nome,
+        icone: f.icone,
+        baseFormaPagamento: f.baseFormaPagamento,
+        ordem: f.ordem,
+        ativo: !f.ativo,
+      });
+      await carregar();
+    } catch (err) { setErro(err.message); }
+  }
+
+  async function remover(f) {
+    if (!confirm(`Excluir a forma "${f.nome}"?`)) return;
+    setErro("");
+    try {
+      await api.excluirFormaPagamento(f.id);
+      await carregar();
+      if (editando?.id === f.id) limparForm();
+    } catch (err) { setErro(err.message); }
+  }
+
+  return (
+    <div onClick={onFechar} style={{ ...modalOverlay, zIndex: 110 }}>
+      <div onClick={e => e.stopPropagation()} style={{ ...modalCard, maxWidth: 560 }}>
+        <div style={modalHeader}>
+          <div>
+            <div style={{ color: C.white, fontWeight: 700, fontSize: 18 }}>
+              💳 Formas de pagamento
+            </div>
+            <div style={{ color: C.muted, fontSize: 12, marginTop: 4 }}>
+              Cadastre formas extras (ex: Vale-Refeição). Cada uma é vinculada a uma forma base
+              (Dinheiro/PIX/etc) para fins de relatório.
+            </div>
+          </div>
+          <button type="button" onClick={onFechar} style={btnFechar}>×</button>
+        </div>
+
+        {/* LISTA */}
+        <div style={{
+          background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10,
+          padding: 8, marginBottom: 14, maxHeight: 220, overflowY: "auto",
+        }}>
+          {carregando ? (
+            <div style={{ padding: 14, color: C.muted, fontSize: 12, textAlign: "center" }}>
+              Carregando...
+            </div>
+          ) : formas.length === 0 ? (
+            <div style={{ padding: 14, color: C.muted, fontSize: 12, textAlign: "center" }}>
+              Nenhuma forma cadastrada ainda. Use o formulário abaixo.
+            </div>
+          ) : formas.map(f => (
+            <div key={f.id} style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: "8px 10px", borderRadius: 6,
+              background: editando?.id === f.id ? C.accent + "22" : "transparent",
+              opacity: f.ativo ? 1 : 0.55,
+            }}>
+              <div style={{ fontSize: 18, width: 24, textAlign: "center" }}>{f.icone || "•"}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: C.white, fontSize: 13, fontWeight: 600 }}>
+                  {f.nome}
+                  {!f.ativo && (
+                    <span style={{
+                      marginLeft: 8, fontSize: 9, padding: "1px 6px", borderRadius: 4,
+                      background: C.muted + "22", color: C.muted, fontWeight: 700,
+                    }}>INATIVA</span>
+                  )}
+                </div>
+                <div style={{ color: C.muted, fontSize: 10, marginTop: 1 }}>
+                  base: {LABEL_BASE[f.baseFormaPagamento] || f.baseFormaPagamento} · ordem {f.ordem}
+                </div>
+              </div>
+              <button type="button" onClick={() => iniciarEdicao(f)}
+                style={{ ...btnAcao(C.accent), fontSize: 10 }}>Editar</button>
+              <button type="button" onClick={() => alternarAtivo(f)}
+                style={{ ...btnAcao(f.ativo ? C.yellow : C.green), fontSize: 10 }}>
+                {f.ativo ? "Desativar" : "Ativar"}
+              </button>
+              {podeExcluir && (
+                <button type="button" onClick={() => remover(f)}
+                  style={{ ...btnAcao(C.red), fontSize: 10 }}>×</button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* FORMULARIO */}
+        <form onSubmit={salvar} style={{
+          background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10,
+          padding: 14,
+        }}>
+          <div style={{ color: C.muted, fontSize: 11, fontWeight: 700, letterSpacing: 0.4, marginBottom: 10 }}>
+            {editando ? "EDITAR FORMA" : "NOVA FORMA"}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "70px 1fr", gap: 8 }}>
+            <Campo label="Ícone">
+              <input value={icone} onChange={e => setIcone(e.target.value)}
+                placeholder="🍽" maxLength={4} style={{ ...inputStyle, textAlign: "center" }} />
+            </Campo>
+            <Campo label="Nome *">
+              <input value={nome} onChange={e => setNome(e.target.value)}
+                required placeholder="Ex: Vale-Refeição"
+                style={inputStyle} />
+            </Campo>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 100px", gap: 8 }}>
+            <Campo label="Forma base *">
+              <select value={base} onChange={e => setBase(e.target.value)} style={inputStyle}>
+                {FORMAS_PAGAMENTO.map(f => (
+                  <option key={f.id} value={f.id}>{f.label}</option>
+                ))}
+              </select>
+            </Campo>
+            <Campo label="Ordem">
+              <input type="number" value={ordem} onChange={e => setOrdem(e.target.value)}
+                style={inputStyle} />
+            </Campo>
+          </div>
+
+          {erro && (
+            <div style={{
+              padding: "8px 10px", borderRadius: 6,
+              background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red, fontSize: 12,
+              marginBottom: 8,
+            }}>{erro}</div>
+          )}
+
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            {editando && (
+              <button type="button" onClick={limparForm}
+                disabled={salvando} style={btnSecundario}>Cancelar edição</button>
+            )}
+            <button type="submit" disabled={salvando} style={btnPrimario}>
+              {salvando ? "Salvando..." : (editando ? "Salvar" : "+ Adicionar")}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+const LABEL_BASE = {
+  DINHEIRO: "Dinheiro",
+  PIX: "PIX",
+  CARTAO_DEBITO: "Débito",
+  CARTAO_CREDITO: "Crédito",
+  BOLETO: "Boleto",
+  CREDIARIO: "Crediário",
+};
 
 const inputStyle = {
   background: C.surface, border: `1px solid ${C.border}`,

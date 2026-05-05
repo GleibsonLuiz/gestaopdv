@@ -200,11 +200,16 @@ function NovaVenda({ user }) {
   const [painel, setPainel] = useState({ topProdutos: [], ultimasVendas: [], resumoDia: null });
   const [vendaDetalheAberta, setVendaDetalheAberta] = useState(null);
   const [modalCaixa, setModalCaixa] = useState(null); // 'sangria' | 'suprimento'
+  const [sugestaoIdx, setSugestaoIdx] = useState(0); // índice destacado nas sugestões
+  const [qtdModalProduto, setQtdModalProduto] = useState(null); // produto p/ modal de qtd
+  const [qtdModalValor, setQtdModalValor] = useState("1");
   const buscaRef = useRef(null);
   const finalizarRef = useRef(null);
   const valorRecebidoRef = useRef(null);
+  const qtdInputRef = useRef(null);
+  const qtdConfirmarRef = useRef(null);
 
-  const algumaModalAberta = pagamentoAberto || cancelarAberto || !!reciboAberto;
+  const algumaModalAberta = pagamentoAberto || cancelarAberto || !!reciboAberto || !!qtdModalProduto;
   const semCaixa = !caixaCarregando && !caixaAtual;
 
   const focarBusca = useCallback(() => {
@@ -262,6 +267,13 @@ function NovaVenda({ user }) {
       .slice(0, 8);
   }, [busca, produtos]);
 
+  // Índice destacado na lista clampeado contra o tamanho atual de `sugestoes`
+  // (a lista encolhe à medida que o usuário digita). Para resetar a 0 quando o
+  // texto muda, o setSugestaoIdx(0) é chamado direto no onChange do input.
+  const sugestaoSelecionada = sugestoes.length > 0
+    ? Math.min(Math.max(sugestaoIdx, 0), sugestoes.length - 1)
+    : 0;
+
   function adicionarProduto(p, qtd = 1) {
     const incremento = Math.max(1, parseInt(qtd, 10) || 1);
     const ehServico = p.tipoItem === "SERVICO";
@@ -303,10 +315,43 @@ function NovaVenda({ user }) {
     focarBusca();
   }
 
+  // Abre o modal de quantidade para um produto da lista de sugestões. Em vez
+  // de adicionar direto qtd=1, deixa o operador escolher (Enter confirma).
+  function abrirQtdModal(produto) {
+    if (produto.tipoItem !== "SERVICO" && produto.estoque <= 0) {
+      flashErro(`Sem estoque de "${produto.nome}".`);
+      return;
+    }
+    setQtdModalProduto(produto);
+    setQtdModalValor("1");
+    setTimeout(() => {
+      qtdInputRef.current?.focus();
+      qtdInputRef.current?.select();
+    }, 0);
+  }
+
+  function fecharQtdModal() {
+    setQtdModalProduto(null);
+    setQtdModalValor("1");
+    focarBusca();
+  }
+
+  function confirmarQtdModal() {
+    if (!qtdModalProduto) return;
+    const n = Math.max(1, parseInt(qtdModalValor, 10) || 0);
+    if (qtdModalProduto.tipoItem !== "SERVICO" && n > qtdModalProduto.estoque) {
+      flashErro(`Estoque insuficiente de "${qtdModalProduto.nome}" (disponível: ${qtdModalProduto.estoque}).`);
+      return;
+    }
+    adicionarProduto(qtdModalProduto, n);
+    setQtdModalProduto(null);
+    setQtdModalValor("1");
+  }
+
   // Bipagem: chamado ao pressionar Enter no campo de busca. Tenta match exato
   // primeiro pelo CODIGO DE BARRAS (caso 99% dos scanners), depois pelo codigo
-  // interno, depois referencia. Em falta, cai para a primeira sugestao filtrada
-  // — permite digitar parte do nome + Enter.
+  // interno, depois referencia — nesses casos adiciona qtd=1 direto (scanner).
+  // Em falta, abre o modal de quantidade para a sugestão destacada.
   function biparOuConfirmar() {
     const q = busca.trim();
     if (!q) return;
@@ -328,7 +373,7 @@ function NovaVenda({ user }) {
       return;
     }
     if (sugestoes.length > 0) {
-      adicionarProduto(sugestoes[0], 1);
+      abrirQtdModal(sugestoes[sugestaoSelecionada]);
       return;
     }
     flashErro(`Nenhum produto encontrado para "${q}".`);
@@ -376,7 +421,7 @@ function NovaVenda({ user }) {
     focarBusca();
   }
 
-  function limparCarrinho() {
+  function limparCarrinho({ refocar = true } = {}) {
     setCarrinho([]);
     setClienteId("");
     setDesconto("0");
@@ -385,7 +430,7 @@ function NovaVenda({ user }) {
     setErro("");
     setValorRecebido("");
     setBusca("");
-    focarBusca();
+    if (refocar) focarBusca();
   }
 
   const subtotal = useMemo(
@@ -495,14 +540,15 @@ function NovaVenda({ user }) {
       const recebido = forma === "DINHEIRO" ? valorRecebidoNum : 0;
       const trocoPago = forma === "DINHEIRO" ? troco : 0;
       setReciboAberto({ venda, valorRecebido: recebido, troco: trocoPago });
-      limparCarrinho();
+      // Não refocar busca — o ReciboModal vai roubar foco para "Nova Venda".
+      limparCarrinho({ refocar: false });
       recarregarCaixa();
       recarregarPainel();
     } catch (err) {
       setErro(err.message);
+      focarBusca();
     } finally {
       setSalvando(false);
-      focarBusca();
     }
   }
   useEffect(() => { confirmarPagamentoRef.current = confirmarPagamento; });
@@ -522,6 +568,11 @@ function NovaVenda({ user }) {
   });
   useModalKeys(!!modalCaixa, {
     onClose: () => { setModalCaixa(null); focarBusca(); },
+  });
+  useModalKeys(!!qtdModalProduto, {
+    onClose: fecharQtdModal,
+    onConfirm: confirmarQtdModal,
+    permitirEnter: true,
   });
 
   return (
@@ -570,8 +621,22 @@ function NovaVenda({ user }) {
             ref={buscaRef}
             placeholder="Bipe um produto ou digite código/nome — pressione Enter para adicionar"
             value={busca}
-            onChange={e => setBusca(e.target.value)}
+            onChange={e => { setBusca(e.target.value); setSugestaoIdx(0); }}
             onKeyDown={e => {
+              if (e.key === "ArrowDown") {
+                if (sugestoes.length > 0) {
+                  e.preventDefault();
+                  setSugestaoIdx(i => (i + 1) % sugestoes.length);
+                }
+                return;
+              }
+              if (e.key === "ArrowUp") {
+                if (sugestoes.length > 0) {
+                  e.preventDefault();
+                  setSugestaoIdx(i => (i - 1 + sugestoes.length) % sugestoes.length);
+                }
+                return;
+              }
               if (e.key === "Enter") { e.preventDefault(); biparOuConfirmar(); }
               if (e.key === "Escape") { e.preventDefault(); setBusca(""); }
             }}
@@ -605,11 +670,14 @@ function NovaVenda({ user }) {
               <div
                 key={p.id}
                 className="pdv-sugestao"
-                onMouseDown={e => { e.preventDefault(); adicionarProduto(p, 1); }}
+                onMouseEnter={() => setSugestaoIdx(idx)}
+                onMouseDown={e => { e.preventDefault(); abrirQtdModal(p); }}
                 style={{
                   display: "flex", alignItems: "center", gap: 12,
                   padding: "10px 14px", cursor: "pointer",
                   borderTop: idx === 0 ? "none" : `1px solid ${C.border}`,
+                  background: idx === sugestaoSelecionada ? C.accent + "33" : "transparent",
+                  borderLeft: idx === sugestaoSelecionada ? `3px solid ${C.accent}` : "3px solid transparent",
                   transition: "background 0.1s ease",
                 }}
               >
@@ -971,6 +1039,113 @@ function NovaVenda({ user }) {
               fontFamily: "monospace", letterSpacing: 0.3,
             }}>
               Esc fecha · clique no item para remover
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL QUANTIDADE — abre ao escolher item via setas+Enter ou clique */}
+      {qtdModalProduto && (
+        <div
+          onClick={fecharQtdModal}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 20, zIndex: 110,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: C.card, border: `1px solid ${C.accent}66`, borderRadius: 14,
+              width: "100%", maxWidth: 460, padding: 22,
+              boxShadow: `0 12px 40px rgba(0,0,0,0.5)`,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+              <FotoProduto
+                url={qtdModalProduto.imagem}
+                nome={qtdModalProduto.nome}
+                tamanho={56}
+                servico={qtdModalProduto.tipoItem === "SERVICO"}
+              />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: C.white, fontWeight: 700, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {qtdModalProduto.nome}
+                </div>
+                <div style={{ color: C.muted, fontFamily: "monospace", fontSize: 11, marginTop: 2 }}>
+                  {qtdModalProduto.codigo}
+                  {" · "}
+                  {qtdModalProduto.tipoItem === "SERVICO"
+                    ? "♾ disponível"
+                    : `${qtdModalProduto.estoque} ${qtdModalProduto.unidade || "un"}`}
+                </div>
+                <div style={{ color: C.green, fontWeight: 700, fontSize: 14, marginTop: 2 }}>
+                  {fmtBRL(qtdModalProduto.precoVenda)}
+                </div>
+              </div>
+            </div>
+
+            <label style={{ display: "block", color: C.muted, fontSize: 11, fontWeight: 700, letterSpacing: 0.4, marginBottom: 6 }}>
+              QUANTIDADE
+            </label>
+            <input
+              ref={qtdInputRef}
+              type="number"
+              min="1"
+              max={qtdModalProduto.tipoItem === "SERVICO" ? undefined : qtdModalProduto.estoque}
+              value={qtdModalValor}
+              onChange={e => setQtdModalValor(e.target.value)}
+              style={{
+                width: "100%", background: C.surface, border: `2px solid ${C.accent}66`,
+                borderRadius: 10, padding: "16px 18px", color: C.white,
+                fontSize: 28, fontWeight: 800, textAlign: "center", outline: "none",
+                letterSpacing: 1,
+              }}
+            />
+
+            {(() => {
+              const n = Math.max(1, parseInt(qtdModalValor, 10) || 0);
+              const sub = n * Number(qtdModalProduto.precoVenda);
+              return (
+                <div style={{
+                  marginTop: 12, padding: "10px 14px",
+                  background: C.surface, borderRadius: 8,
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                }}>
+                  <span style={{ color: C.muted, fontSize: 12, fontWeight: 700 }}>SUBTOTAL</span>
+                  <span style={{ color: C.green, fontSize: 20, fontWeight: 800 }}>{fmtBRL(sub)}</span>
+                </div>
+              );
+            })()}
+
+            <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+              <button
+                type="button"
+                onClick={fecharQtdModal}
+                style={{
+                  flex: 1, background: "transparent", border: `1px solid ${C.border}`,
+                  color: C.text, borderRadius: 10, padding: "12px", fontWeight: 700,
+                  fontSize: 14, cursor: "pointer",
+                }}
+              >Cancelar</button>
+              <button
+                ref={qtdConfirmarRef}
+                type="button"
+                onClick={confirmarQtdModal}
+                style={{
+                  flex: 1, background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+                  color: C.white, border: "none", borderRadius: 10,
+                  padding: "12px", fontWeight: 800, fontSize: 14, cursor: "pointer",
+                  boxShadow: `0 4px 14px ${C.accent}55`,
+                }}
+              >✓ Adicionar (Enter)</button>
+            </div>
+            <div style={{
+              marginTop: 8, color: C.muted, fontSize: 10, textAlign: "center",
+              fontFamily: "monospace", letterSpacing: 0.3,
+            }}>
+              Esc cancela · Enter adiciona à cestinha
             </div>
           </div>
         </div>
@@ -1495,6 +1670,17 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar }) {
   const empresa = useConfiguracaoEmpresa();
   const logoUrl = empresa ? urlLogotipo(empresa.logotipo) : null;
   const enderecoCompleto = empresa ? formatarEndereco(empresa) : "";
+  const novaVendaBtnRef = useRef(null);
+
+  // Foca o botão "Nova Venda" ao abrir o recibo — Enter já dispara nova venda.
+  // Tenta imediatamente (vence qualquer focarBusca() em paralelo do parent) e
+  // de novo após um tick caso outro setTimeout(0) ainda esteja na fila.
+  useEffect(() => {
+    novaVendaBtnRef.current?.focus();
+    const t1 = setTimeout(() => novaVendaBtnRef.current?.focus(), 30);
+    const t2 = setTimeout(() => novaVendaBtnRef.current?.focus(), 150);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
 
   function imprimir() {
     window.print();
@@ -1531,6 +1717,11 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar }) {
           border: 0;
           border-top: 1px dashed #000;
           margin: 6px 0;
+        }
+        .recibo-nova-venda:focus,
+        .recibo-nova-venda:focus-visible {
+          box-shadow: 0 0 0 3px ${C.accent}aa, 0 4px 14px ${C.accent}66;
+          transform: translateY(-1px);
         }
         .cupom-imprimivel .cupom-linha {
           display: flex;
@@ -1606,11 +1797,17 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar }) {
             }}>
               🖨️ Imprimir Cupom
             </button>
-            <button onClick={onFechar} style={{
-              flex: 1, background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-              color: C.white, border: "none", borderRadius: 10,
-              padding: "12px", fontWeight: 700, fontSize: 14, cursor: "pointer",
-            }}>
+            <button
+              ref={novaVendaBtnRef}
+              onClick={onFechar}
+              className="recibo-nova-venda"
+              style={{
+                flex: 1, background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+                color: C.white, border: "none", borderRadius: 10,
+                padding: "12px", fontWeight: 700, fontSize: 14, cursor: "pointer",
+                outline: "none",
+              }}
+            >
               Nova Venda
             </button>
           </div>

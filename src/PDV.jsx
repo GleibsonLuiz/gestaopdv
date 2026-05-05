@@ -91,7 +91,7 @@ function NovaVenda({ user }) {
   const [destacado, setDestacado] = useState(null); // produtoId recém-adicionado (para flash)
   const [caixaAtual, setCaixaAtual] = useState(null);
   const [caixaCarregando, setCaixaCarregando] = useState(true);
-  const [painel, setPainel] = useState({ topProdutos: [], ultimasVendas: [] });
+  const [painel, setPainel] = useState({ topProdutos: [], ultimasVendas: [], resumoDia: null });
   const [vendaDetalheAberta, setVendaDetalheAberta] = useState(null);
   const [modalCaixa, setModalCaixa] = useState(null); // 'sangria' | 'suprimento'
   const buscaRef = useRef(null);
@@ -648,47 +648,51 @@ function NovaVenda({ user }) {
           position: "sticky", top: 14,
           maxHeight: "calc(100vh - 32px)", overflowY: "auto",
         }}>
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <Linha label={`Itens (${carrinho.reduce((acc, it) => acc + it.quantidade, 0)})`} valor={fmtBRL(subtotal)} />
-              {descontoNum > 0 && (
-                <Linha label="Desconto" valor={`− ${fmtBRL(descontoNum)}`} cor={C.red} />
-              )}
-              <div style={{
-                display: "flex", justifyContent: "space-between", alignItems: "center",
-                marginTop: 6, padding: "16px 16px",
-                background: C.surface, borderRadius: 10,
-                boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
-              }}>
-                <div style={{ color: C.muted, fontSize: 12, fontWeight: 700, letterSpacing: 0.4 }}>TOTAL</div>
-                <div style={{ color: C.green, fontSize: 28, fontWeight: 800 }}>{fmtBRL(total)}</div>
+          {carrinho.length === 0 ? (
+            <ResumoDia resumo={painel.resumoDia} />
+          ) : (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <Linha label={`Itens (${carrinho.reduce((acc, it) => acc + it.quantidade, 0)})`} valor={fmtBRL(subtotal)} />
+                {descontoNum > 0 && (
+                  <Linha label="Desconto" valor={`− ${fmtBRL(descontoNum)}`} cor={C.red} />
+                )}
+                <div style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  marginTop: 6, padding: "16px 16px",
+                  background: C.surface, borderRadius: 10,
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
+                }}>
+                  <div style={{ color: C.muted, fontSize: 12, fontWeight: 700, letterSpacing: 0.4 }}>TOTAL</div>
+                  <div style={{ color: C.green, fontSize: 28, fontWeight: 800 }}>{fmtBRL(total)}</div>
+                </div>
               </div>
+
+              {erro && !algumaModalAberta && (
+                <div style={{
+                  padding: "8px 12px", borderRadius: 8,
+                  background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red, fontSize: 12,
+                }}>{erro}</div>
+              )}
+
+              <button
+                onClick={abrirPagamento}
+                disabled={semCaixa}
+                title={semCaixa ? "Abra um caixa antes de finalizar" : ""}
+                style={{
+                  background: semCaixa ? C.surface : `linear-gradient(135deg, ${C.green}, #15803d)`,
+                  color: C.white, border: "none", borderRadius: 10,
+                  padding: "16px", fontWeight: 800, fontSize: 16,
+                  cursor: semCaixa ? "not-allowed" : "pointer",
+                  opacity: semCaixa ? 0.5 : 1,
+                  boxShadow: semCaixa ? "none" : `0 4px 14px ${C.green}55`,
+                  letterSpacing: 0.3,
+                }}>
+                {semCaixa ? "🔒 CAIXA FECHADO" : `✓ FINALIZAR — ${fmtBRL(total)}`}
+                <div style={{ fontSize: 10, marginTop: 2, opacity: 0.85, fontWeight: 700 }}>F10</div>
+              </button>
             </div>
-
-            {erro && !algumaModalAberta && (
-              <div style={{
-                padding: "8px 12px", borderRadius: 8,
-                background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red, fontSize: 12,
-              }}>{erro}</div>
-            )}
-
-            <button
-              onClick={abrirPagamento}
-              disabled={carrinho.length === 0 || semCaixa}
-              title={semCaixa ? "Abra um caixa antes de finalizar" : ""}
-              style={{
-                background: (carrinho.length === 0 || semCaixa) ? C.surface : `linear-gradient(135deg, ${C.green}, #15803d)`,
-                color: C.white, border: "none", borderRadius: 10,
-                padding: "16px", fontWeight: 800, fontSize: 16,
-                cursor: (carrinho.length === 0 || semCaixa) ? "not-allowed" : "pointer",
-                opacity: (carrinho.length === 0 || semCaixa) ? 0.5 : 1,
-                boxShadow: (carrinho.length === 0 || semCaixa) ? "none" : `0 4px 14px ${C.green}55`,
-                letterSpacing: 0.3,
-              }}>
-              {semCaixa ? "🔒 CAIXA FECHADO" : `✓ FINALIZAR — ${fmtBRL(total)}`}
-              <div style={{ fontSize: 10, marginTop: 2, opacity: 0.85, fontWeight: 700 }}>F10</div>
-            </button>
-          </div>
+          )}
 
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
             <div style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 10 }}>
@@ -1230,6 +1234,94 @@ function AcessoRapido({ topProdutos, ultimasVendas, onAdicionar, onAbrirVenda })
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ============== RESUMO DO DIA (painel direito quando carrinho vazio) ==============
+function ResumoDia({ resumo }) {
+  const r = resumo || { quantidade: 0, total: 0, ticketMedio: 0, porForma: [] };
+  const totalPagamentos = r.porForma.reduce((acc, f) => acc + f.total, 0) || 1;
+  const FORMA_COR = {
+    DINHEIRO: C.green, PIX: C.accent, CARTAO_DEBITO: "#0ea5e9",
+    CARTAO_CREDITO: C.purple, BOLETO: C.yellow, CREDIARIO: C.muted,
+  };
+
+  return (
+    <div style={{
+      background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
+      padding: 16, display: "flex", flexDirection: "column", gap: 14,
+    }}>
+      <div style={{
+        display: "flex", justifyContent: "space-between", alignItems: "baseline",
+      }}>
+        <div style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4 }}>
+          📊 Resumo do dia
+        </div>
+        <div style={{ color: C.muted, fontSize: 10 }}>
+          {new Date().toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short" })}
+        </div>
+      </div>
+
+      <div style={{
+        padding: "14px 16px", background: C.surface, borderRadius: 10,
+        boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
+        display: "flex", flexDirection: "column", gap: 4,
+      }}>
+        <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase" }}>
+          Faturamento
+        </div>
+        <div style={{ color: C.green, fontSize: 26, fontWeight: 800, fontFamily: "monospace" }}>
+          {fmtBRL(r.total)}
+        </div>
+        <div style={{ color: C.muted, fontSize: 11 }}>
+          {r.quantidade} venda{r.quantidade === 1 ? "" : "s"} · ticket {fmtBRL(r.ticketMedio)}
+        </div>
+      </div>
+
+      {r.porForma.length > 0 ? (
+        <div>
+          <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 8 }}>
+            Por forma de pagamento
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {r.porForma.map(f => {
+              const pct = (f.total / totalPagamentos) * 100;
+              const cor = FORMA_COR[f.formaPagamento] || C.accent;
+              return (
+                <div key={f.formaPagamento}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 3 }}>
+                    <span style={{ color: C.text, fontWeight: 600 }}>
+                      {FORMA_LABEL[f.formaPagamento] || f.formaPagamento}
+                    </span>
+                    <span style={{ color: C.muted, fontFamily: "monospace" }}>
+                      {fmtBRL(f.total)} <span style={{ color: cor }}>· {pct.toFixed(0)}%</span>
+                    </span>
+                  </div>
+                  <div style={{ height: 4, background: C.surface, borderRadius: 4, overflow: "hidden" }}>
+                    <div style={{ width: `${pct}%`, height: "100%", background: cor, transition: "width 0.3s ease" }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div style={{
+          padding: "14px 12px", textAlign: "center", color: C.muted, fontSize: 12,
+          background: C.surface, borderRadius: 8, border: `1px dashed ${C.border}`,
+        }}>
+          Nenhuma venda finalizada hoje ainda.
+        </div>
+      )}
+
+      <div style={{
+        padding: "10px 12px", background: C.accent + "11",
+        border: `1px dashed ${C.accent}55`, borderRadius: 8,
+        color: C.muted, fontSize: 11, textAlign: "center",
+      }}>
+        💡 Bipe um produto para começar a venda
+      </div>
     </div>
   );
 }

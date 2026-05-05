@@ -9,9 +9,12 @@ export async function inicio(req, res, next) {
     const trintaDiasAtras = new Date();
     trintaDiasAtras.setDate(trintaDiasAtras.getDate() - 30);
 
+    const inicioDia = new Date();
+    inicioDia.setHours(0, 0, 0, 0);
+
     const caixa = await buscarCaixaAberto(req.user.sub);
 
-    const [topGroups, ultimasVendas] = await Promise.all([
+    const [topGroups, ultimasVendas, vendasHojeAgg, formasHoje] = await Promise.all([
       prisma.itemVenda.groupBy({
         by: ["produtoId"],
         where: {
@@ -37,7 +40,32 @@ export async function inicio(req, res, next) {
             },
           })
         : Promise.resolve([]),
+      prisma.venda.aggregate({
+        where: { status: "CONCLUIDA", createdAt: { gte: inicioDia } },
+        _count: true,
+        _sum: { total: true },
+      }),
+      prisma.venda.groupBy({
+        by: ["formaPagamento"],
+        where: { status: "CONCLUIDA", createdAt: { gte: inicioDia } },
+        _count: true,
+        _sum: { total: true },
+        orderBy: { _sum: { total: "desc" } },
+      }),
     ]);
+
+    const vendasCount = vendasHojeAgg._count || 0;
+    const vendasTotal = Number(vendasHojeAgg._sum?.total || 0);
+    const resumoDia = {
+      quantidade: vendasCount,
+      total: vendasTotal,
+      ticketMedio: vendasCount > 0 ? vendasTotal / vendasCount : 0,
+      porForma: formasHoje.map(f => ({
+        formaPagamento: f.formaPagamento,
+        quantidade: f._count,
+        total: Number(f._sum?.total || 0),
+      })),
+    };
 
     const ids = topGroups.map(g => g.produtoId);
     let topProdutos = [];
@@ -60,7 +88,7 @@ export async function inicio(req, res, next) {
         .filter(Boolean);
     }
 
-    res.json({ topProdutos, ultimasVendas });
+    res.json({ topProdutos, ultimasVendas, resumoDia });
   } catch (err) {
     next(err);
   }

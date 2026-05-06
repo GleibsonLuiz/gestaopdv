@@ -1773,7 +1773,7 @@ const btnQtd = {
 
 // ==================== RECIBO ====================
 
-function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar }) {
+function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpressao = false }) {
   const subtotalCupom = Number(venda.total) + Number(venda.desconto || 0);
   const mostrarRecebidoTroco = Number(valorRecebido) > 0;
   const empresa = useConfiguracaoEmpresa();
@@ -1781,9 +1781,9 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar }) {
   const enderecoCompleto = empresa ? formatarEndereco(empresa) : "";
   const novaVendaBtnRef = useRef(null);
 
-  // Foca o botão "Nova Venda" ao abrir o recibo — Enter já dispara nova venda.
-  // Tenta imediatamente (vence qualquer focarBusca() em paralelo do parent) e
-  // de novo após um tick caso outro setTimeout(0) ainda esteja na fila.
+  // Foca o botão principal (Nova Venda no fluxo PDV; Fechar na reimpressão).
+  // Tenta imediatamente e de novo apos ticks caso outro setTimeout(0) esteja
+  // na fila — vence focarBusca() do parent quando vindo do PDV.
   useEffect(() => {
     novaVendaBtnRef.current?.focus();
     const t1 = setTimeout(() => novaVendaBtnRef.current?.focus(), 30);
@@ -1845,8 +1845,10 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar }) {
       <div onClick={onFechar} style={modalOverlay}>
         <div onClick={e => e.stopPropagation()} style={{ ...modalCard, maxWidth: 480 }}>
           <div style={{ textAlign: "center", marginBottom: 16 }}>
-            <div style={{ fontSize: 48 }}>✅</div>
-            <div style={{ color: C.white, fontSize: 22, fontWeight: 800, marginTop: 4 }}>Venda Concluída!</div>
+            <div style={{ fontSize: 48 }}>{modoReimpressao ? "🖨️" : "✅"}</div>
+            <div style={{ color: C.white, fontSize: 22, fontWeight: 800, marginTop: 4 }}>
+              {modoReimpressao ? "Reimpressão de Cupom" : "Venda Concluída!"}
+            </div>
             <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>
               Venda #{venda.numero} · {fmtData(venda.createdAt)}
             </div>
@@ -1917,7 +1919,7 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar }) {
                 outline: "none",
               }}
             >
-              Nova Venda
+              {modoReimpressao ? "Fechar" : "Nova Venda"}
             </button>
           </div>
           <div style={{
@@ -1958,6 +1960,11 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar }) {
         <hr className="cupom-divisor" />
         <div className="cupom-centro cupom-bold">CUPOM DE VENDA</div>
         <div className="cupom-centro" style={{ fontSize: 10 }}>** NÃO É DOCUMENTO FISCAL **</div>
+        {modoReimpressao && (
+          <div className="cupom-centro cupom-bold" style={{ fontSize: 11, marginTop: 2 }}>
+            ** 2ª VIA — REIMPRESSÃO **
+          </div>
+        )}
         <hr className="cupom-divisor" />
         <div>Venda: <span className="cupom-bold">#{venda.numero}</span></div>
         <div>Data: {fmtData(venda.createdAt)}</div>
@@ -2034,11 +2041,13 @@ function Historico({ user }) {
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
   const [detalhe, setDetalhe] = useState(null);
+  const [reimpressao, setReimpressao] = useState(null);
   const [mensagem, setMensagem] = useState("");
 
   const podeCancelar = user.role === "ADMIN" || user.role === "GERENTE";
 
   useModalKeys(!!detalhe, { onClose: () => setDetalhe(null) });
+  useModalKeys(!!reimpressao, { onClose: () => setReimpressao(null) });
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -2070,6 +2079,15 @@ function Historico({ user }) {
     try {
       const v = await api.obterVenda(id);
       setDetalhe(v);
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  async function abrirReimpressao(id) {
+    try {
+      const v = await api.obterVenda(id);
+      setReimpressao(v);
     } catch (err) {
       alert(err.message);
     }
@@ -2143,7 +2161,7 @@ function Historico({ user }) {
 
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
         <div style={{
-          display: "grid", gridTemplateColumns: "150px 80px 1.5fr 120px 100px 90px 130px 110px",
+          display: "grid", gridTemplateColumns: "150px 80px 1.5fr 120px 100px 90px 130px 150px",
           padding: "12px 16px", background: C.surface,
           borderBottom: `1px solid ${C.border}`, fontSize: 12, fontWeight: 700,
           color: C.muted, textTransform: "uppercase", letterSpacing: 0.5,
@@ -2166,7 +2184,7 @@ function Historico({ user }) {
           const st = STATUS_INFO[v.status] || STATUS_INFO.CONCLUIDA;
           return (
             <div key={v.id} style={{
-              display: "grid", gridTemplateColumns: "150px 80px 1.5fr 120px 100px 90px 130px 110px",
+              display: "grid", gridTemplateColumns: "150px 80px 1.5fr 120px 100px 90px 130px 150px",
               padding: "12px 16px", borderBottom: `1px solid ${C.border}`,
               alignItems: "center", fontSize: 13,
               opacity: v.status === "CANCELADA" ? 0.6 : 1,
@@ -2188,8 +2206,15 @@ function Historico({ user }) {
               </div>
               <div style={{ textAlign: "right", color: C.text }}>{v._count?.itens || 0}</div>
               <div style={{ textAlign: "right", color: C.green, fontWeight: 700, fontSize: 14 }}>{fmtBRL(v.total)}</div>
-              <div style={{ textAlign: "right" }}>
+              <div style={{ textAlign: "right", display: "flex", gap: 6, justifyContent: "flex-end" }}>
                 <button onClick={() => abrirDetalhe(v.id)} style={btnIcone(C.accent)}>Ver</button>
+                {v.status === "CONCLUIDA" && (
+                  <button
+                    onClick={() => abrirReimpressao(v.id)}
+                    style={btnIcone(C.green)}
+                    title="Reimprimir cupom (2ª via)"
+                  >🖨️</button>
+                )}
               </div>
             </div>
           );
@@ -2201,6 +2226,18 @@ function Historico({ user }) {
           venda={detalhe}
           onFechar={() => setDetalhe(null)}
           onCancelar={podeCancelar && detalhe.status === "CONCLUIDA" ? () => cancelar(detalhe) : null}
+          onReimprimir={detalhe.status === "CONCLUIDA" ? () => {
+            setReimpressao(detalhe);
+            setDetalhe(null);
+          } : null}
+        />
+      )}
+
+      {reimpressao && (
+        <ReciboModal
+          venda={reimpressao}
+          modoReimpressao
+          onFechar={() => setReimpressao(null)}
         />
       )}
     </div>
@@ -2216,7 +2253,7 @@ function Card({ titulo, valor, cor }) {
   );
 }
 
-function DetalheVendaModal({ venda, onFechar, onCancelar }) {
+function DetalheVendaModal({ venda, onFechar, onCancelar, onReimprimir }) {
   const st = STATUS_INFO[venda.status] || STATUS_INFO.CONCLUIDA;
   return (
     <div onClick={onFechar} style={modalOverlay}>
@@ -2314,10 +2351,20 @@ function DetalheVendaModal({ venda, onFechar, onCancelar }) {
               Cancelar venda (estornar estoque)
             </button>
           ) : <div />}
-          <button onClick={onFechar} style={{
-            background: C.surface, border: `1px solid ${C.border}`, color: C.text,
-            borderRadius: 8, padding: "10px 18px", fontWeight: 600, fontSize: 13, cursor: "pointer",
-          }}>Fechar</button>
+          <div style={{ display: "flex", gap: 10 }}>
+            {onReimprimir && (
+              <button onClick={onReimprimir} style={{
+                background: C.green + "22", border: `1px solid ${C.green}55`, color: C.green,
+                borderRadius: 8, padding: "10px 16px", fontWeight: 700, fontSize: 13, cursor: "pointer",
+              }}>
+                🖨️ Reimprimir cupom
+              </button>
+            )}
+            <button onClick={onFechar} style={{
+              background: C.surface, border: `1px solid ${C.border}`, color: C.text,
+              borderRadius: 8, padding: "10px 18px", fontWeight: 600, fontSize: 13, cursor: "pointer",
+            }}>Fechar</button>
+          </div>
         </div>
         <div style={{
           marginTop: 8, color: C.muted, fontSize: 10, textAlign: "right",

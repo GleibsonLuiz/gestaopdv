@@ -21,6 +21,17 @@ function dataDaqui(diasAFrente) {
   return d.toISOString().slice(0, 10);
 }
 
+// Hoje em YYYY-MM-DD usando o fuso LOCAL (toISOString usa UTC e pode voltar
+// um dia em fusos negativos como BRT — usamos getFullYear/Month/Date para
+// pegar a data como o usuario ve no relogio).
+function hojeLocalISO() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dia = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dia}`;
+}
+
 export default function Compras({ user }) {
   const [compras, setCompras] = useState([]);
   const [carregando, setCarregando] = useState(false);
@@ -212,6 +223,10 @@ export default function Compras({ user }) {
 function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }) {
   const [fornecedorId, setFornecedorId] = useState("");
   const [observacoes, setObservacoes] = useState("");
+  // Data da compra: default = hoje. Permite lancamento retroativo (ex.: nota
+  // que ficou esquecida na gaveta) — o backend usa essa data como createdAt
+  // da compra e da movimentacao de estoque, mantendo o historico fiel.
+  const [dataCompra, setDataCompra] = useState(() => hojeLocalISO());
   const [itens, setItens] = useState([]);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
@@ -257,6 +272,8 @@ function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }) {
     setErro("");
     if (!fornecedorId) { setErro("Selecione um fornecedor"); return; }
     if (itens.length === 0) { setErro("Adicione ao menos um item"); return; }
+    if (!dataCompra) { setErro("Informe a data da compra"); return; }
+    if (dataCompra > hojeLocalISO()) { setErro("Data da compra nao pode ser futura"); return; }
     for (let i = 0; i < itens.length; i++) {
       const it = itens[i];
       if (!it.produtoId) { setErro(`Item ${i + 1}: selecione o produto`); return; }
@@ -286,6 +303,12 @@ function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }) {
           precoUnitario: it.precoUnitario,
         })),
       };
+      // Envia dataCompra apenas quando o usuario escolheu data anterior a hoje;
+      // se ficar em hoje, o backend usa now() e preserva o timestamp completo
+      // (ordenacao correta entre varias compras lancadas no mesmo dia).
+      if (dataCompra && dataCompra < hojeLocalISO()) {
+        payload.dataCompra = dataCompra;
+      }
       if (gerarConta) {
         payload.gerarContaPagar = {
           vencimento,
@@ -311,7 +334,18 @@ function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }) {
           <button type="button" onClick={onCancelar} style={btnFechar}>×</button>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "170px 1fr 1.5fr", gap: 12, marginBottom: 16 }}>
+          <Campo label="Data da compra *">
+            <input
+              type="date"
+              value={dataCompra}
+              max={hojeLocalISO()}
+              onChange={e => setDataCompra(e.target.value)}
+              required
+              style={inputStyle}
+              title="Use uma data anterior para lancar compras retroativas"
+            />
+          </Campo>
           <Campo label="Fornecedor *">
             <select value={fornecedorId} onChange={e => setFornecedorId(e.target.value)} required style={inputStyle}>
               <option value="">— Selecione —</option>

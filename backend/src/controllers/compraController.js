@@ -64,11 +64,30 @@ export async function obter(req, res, next) {
 
 export async function criar(req, res, next) {
   try {
-    const { fornecedorId, observacoes, itens, gerarContaPagar } = req.body;
+    const { fornecedorId, observacoes, itens, gerarContaPagar, dataCompra } = req.body;
 
     if (!fornecedorId) return res.status(400).json({ erro: "fornecedorId e obrigatorio" });
     if (!Array.isArray(itens) || itens.length === 0) {
       return res.status(400).json({ erro: "Informe ao menos um item" });
+    }
+
+    // Data manual da compra (entrada retroativa). Quando ausente, o Prisma
+    // usa o default now() — preserva o timestamp completo (hh:mm:ss) das
+    // compras lancadas no proprio dia. Quando informada, vira meio-dia local
+    // via parseDate e e propagada para a movimentacao de estoque para que o
+    // historico de entrada/saida fique alinhado com a data da nota.
+    let dataCompraDate = null;
+    if (dataCompra !== undefined && dataCompra !== null && dataCompra !== "") {
+      dataCompraDate = parseDate(dataCompra);
+      if (!dataCompraDate) {
+        return res.status(400).json({ erro: "Data da compra invalida" });
+      }
+      const hoje = new Date();
+      const hojeYMD = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`;
+      const compraYMD = `${dataCompraDate.getFullYear()}-${String(dataCompraDate.getMonth() + 1).padStart(2, "0")}-${String(dataCompraDate.getDate()).padStart(2, "0")}`;
+      if (compraYMD > hojeYMD) {
+        return res.status(400).json({ erro: "Data da compra nao pode ser futura" });
+      }
     }
 
     // Validacao da conta a pagar (se solicitada). Feita ANTES da transacao
@@ -139,6 +158,7 @@ export async function criar(req, res, next) {
             fornecedorId,
             total,
             observacoes: observacoes ? String(observacoes).trim() : null,
+            ...(dataCompraDate ? { createdAt: dataCompraDate } : {}),
             itens: {
               create: itensNorm.map(it => ({
                 produtoId: it.produtoId,
@@ -168,6 +188,7 @@ export async function criar(req, res, next) {
               motivo: `Compra #${compraCriada.numero}`,
               produtoId: it.produtoId,
               userId: req.user.sub,
+              ...(dataCompraDate ? { createdAt: dataCompraDate } : {}),
             },
           });
         }

@@ -1,5 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "prisma generate",
+  "outputDirectory": null,
   "rewrites": [
     { "source": "/(.*)", "destination": "/api" }
   ]

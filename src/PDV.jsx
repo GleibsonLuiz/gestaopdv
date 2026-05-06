@@ -687,7 +687,6 @@ function NovaVenda({ user }) {
               return (
               <div
                 key={p.id}
-                className="pdv-sugestao"
                 onMouseEnter={() => setSugestaoIdx(idx)}
                 onMouseDown={e => { e.preventDefault(); abrirQtdModal(p); }}
                 style={{

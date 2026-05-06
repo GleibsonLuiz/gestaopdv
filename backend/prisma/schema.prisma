@@ -93,6 +93,37 @@ enum TipoMovimentacaoCaixa {
   FECHAMENTO
 }
 
+// Tipo do documento: ORCAMENTO e proposta comercial; ORDEM_SERVICO e
+// trabalho ja em execucao (impressao, instalacao). A estrutura e a mesma
+// — muda apenas a nomenclatura no front e o ciclo de vida.
+enum TipoOrcamento {
+  ORCAMENTO
+  ORDEM_SERVICO
+}
+
+// Ciclo de vida do orcamento. RASCUNHO permite editar livremente; depois
+// de AGUARDANDO_APROVACAO so muda por acao explicita do usuario. ENTREGUE
+// e estado final positivo (sera convertido em venda); REJEITADO/CANCELADO
+// sao finais negativos.
+enum StatusOrcamento {
+  RASCUNHO
+  AGUARDANDO_APROVACAO
+  APROVADO
+  REJEITADO
+  ENTREGUE
+  CANCELADO
+}
+
+// Tabelas de preco aplicaveis ao orcamento como multiplicador unico sobre
+// todos os itens (AV = a vista, PZ = a prazo, AT = atacado). Os fatores
+// sao definidos no controller e podem ser ajustados via configuracao no
+// futuro.
+enum TabelaPreco {
+  AV
+  PZ
+  AT
+}
+
 // ============ USUARIOS ============
 
 model User {
@@ -110,6 +141,8 @@ model User {
   movimentacoes       MovimentacaoEstoque[]
   caixas              Caixa[]
   movimentacoesCaixa  MovimentacaoCaixa[]
+  orcamentos          Orcamento[] @relation("OrcamentoCriador")
+  orcamentosResponsavel Orcamento[] @relation("OrcamentoResponsavel")
 
   @@map("users")
 }
@@ -133,6 +166,7 @@ model Cliente {
 
   vendas        Venda[]
   contasReceber ContaReceber[]
+  orcamentos    Orcamento[]
 
   @@map("clientes")
 }
@@ -194,9 +228,10 @@ model Produto {
   fornecedorId String?
   fornecedor   Fornecedor? @relation(fields: [fornecedorId], references: [id])
 
-  itensVenda    ItemVenda[]
-  itensCompra   ItemCompra[]
-  movimentacoes MovimentacaoEstoque[]
+  itensVenda     ItemVenda[]
+  itensCompra    ItemCompra[]
+  itensOrcamento ItemOrcamento[]
+  movimentacoes  MovimentacaoEstoque[]
 
   @@map("produtos")
 }
@@ -224,6 +259,7 @@ model Venda {
 
   itens         ItemVenda[]
   movimentacoesCaixa MovimentacaoCaixa[]
+  orcamento     Orcamento?
 
   @@index([caixaId])
   @@map("vendas")
@@ -463,4 +499,142 @@ model MovimentacaoCaixa {
 
   @@index([caixaId, createdAt])
   @@map("movimentacoes_caixa")
+}
+
+// ============ ORCAMENTOS / ORDENS DE SERVICO ============
+//
+// Documento comercial pre-venda (ORCAMENTO) ou em execucao (ORDEM_SERVICO).
+// Diferente de Venda, NAO baixa estoque ao ser criado e NAO depende de
+// caixa aberto. Quando concluido (status ENTREGUE), pode ser convertido em
+// Venda — a partir desse momento ganha vendaId e a baixa de estoque +
+// registro no caixa acontecem.
+//
+// Calculo dos itens:
+//   - Para itens com unidade em area (largura/altura preenchidos):
+//       totalEm = largura * altura
+//       valorTotalEm = totalEm * valorProduto
+//       subtotal = valorTotalEm * quantidade + acertoTotal
+//   - Para itens lineares (largura/altura zerados):
+//       subtotal = quantidade * valorProduto
+//
+// Tabela de preco e um multiplicador unico (AV/PZ/AT) aplicado sobre o
+// VALOR PRODUTO de cada item no front antes de salvar — o backend grava
+// ja com o valor final.
+model Orcamento {
+  id             String          @id @default(uuid())
+  numero         Int             @unique @default(autoincrement())
+  tipo           TipoOrcamento   @default(ORCAMENTO)
+  status         StatusOrcamento @default(RASCUNHO)
+  tabelaPreco    TabelaPreco     @default(AV)
+
+  // Dados do cliente — clienteId opcional permite orcamentos para
+  // prospects ainda nao cadastrados; nesse caso, descricaoCliente vira
+  // texto livre. Quando clienteId existe, descricaoCliente fica como
+  // snapshot do nome no momento da emissao.
+  clienteId       String?
+  cliente         Cliente?  @relation(fields: [clienteId], references: [id])
+  descricaoCliente String?
+  contato         String?
+  telefone        String?
+
+  // Documento (snapshot tipo Imprimir 1a/2a via — meramente informativo)
+  via             Int       @default(1)
+
+  // Texto exibido no rodape do orcamento. Quando imprimirObservacoes for
+  // false, o documento gerado nao mostra o campo (cliente nao precisa ver
+  // anotacao interna).
+  observacoes          String?
+  imprimirObservacoes  Boolean   @default(true)
+  // Texto-padrao de garantia/avisos exibido em destaque no orcamento
+  // (campo "Sempre guarde esse comprovante…" da tela original).
+  rodape          String?
+
+  // Imprimir o valor unitario por metro quadrado em itens com area
+  // (campo "Marcar para Mostrar Valor do Metro na Impressao").
+  mostrarValorMetro    Boolean   @default(false)
+  // Imprimir os totais (produtos/servicos/desconto/total) — corresponde
+  // ao radio "Marcar para sair os Valores na Impressao".
+  imprimirValores      Boolean   @default(true)
+
+  // Totais calculados pelo backend a partir dos itens (saneados em criar/
+  // atualizar). Mantemos os 4 campos separados para refletir a tela:
+  // produtos, servicos, deslocamento, desconto.
+  valorProdutos   Decimal   @default(0) @db.Decimal(10, 2)
+  valorServicos   Decimal   @default(0) @db.Decimal(10, 2)
+  deslocamento    Decimal   @default(0) @db.Decimal(10, 2)
+  desconto        Decimal   @default(0) @db.Decimal(10, 2)
+  total           Decimal   @default(0) @db.Decimal(10, 2)
+
+  formaCondicaoPagamento String?
+
+  // Datas-chave do ciclo de vida (preenchidas a cada transicao de status).
+  dataAprovacao   DateTime?
+  dataEntrega     DateTime?
+  dataRejeicao    DateTime?
+  motivoRejeicao  String?
+  dataCancelamento DateTime?
+  motivoCancelamento String?
+
+  // Quem criou o orcamento (sempre obrigatorio) e quem e o responsavel
+  // tecnico/comercial pelo trabalho (opcional, escolhido em um dropdown).
+  userId         String
+  user           User      @relation("OrcamentoCriador", fields: [userId], references: [id])
+  responsavelId  String?
+  responsavel    User?     @relation("OrcamentoResponsavel", fields: [responsavelId], references: [id])
+
+  // Quando convertido, aponta para a venda gerada. UNIQUE garante que
+  // cada orcamento gera no maximo uma venda.
+  vendaId        String?   @unique
+  venda          Venda?    @relation(fields: [vendaId], references: [id], onDelete: SetNull)
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  itens          ItemOrcamento[]
+
+  @@index([clienteId])
+  @@index([status])
+  @@index([tipo, status])
+  @@map("orcamentos")
+}
+
+model ItemOrcamento {
+  id            String   @id @default(uuid())
+
+  // produtoId obrigatorio porque preco/unidade/tipo (PRODUTO|SERVICO) sao
+  // lidos do cadastro. descricao guardada como snapshot no momento do
+  // lancamento (caso o produto seja renomeado depois).
+  produtoId     String
+  produto       Produto  @relation(fields: [produtoId], references: [id])
+  descricao     String
+
+  // Quantidade aceita decimal para itens vendidos por metro/peso.
+  quantidade    Decimal  @db.Decimal(10, 3)
+
+  // Valor unitario ja com a tabela de preco aplicada (multiplicador
+  // resolvido no front).
+  valorUnitario Decimal  @db.Decimal(10, 4)
+
+  // Calculo por area: largura/altura em metros (ou unidade do produto).
+  // totalEm e o produto largura*altura quando ambos > 0; caso contrario
+  // 0 (item linear). subtotal sempre populado.
+  largura       Decimal? @db.Decimal(10, 3)
+  altura        Decimal? @db.Decimal(10, 3)
+  totalEm       Decimal  @default(0) @db.Decimal(10, 4)
+  acertoTotal   Decimal  @default(0) @db.Decimal(10, 2)
+  subtotal      Decimal  @db.Decimal(10, 2)
+
+  // Campos descritivos da grafica/sinalizacao (livres).
+  formato       String?
+  vias          String?
+  cores         String?
+  complemento   String?
+
+  ordem         Int      @default(0)
+
+  orcamentoId String
+  orcamento   Orcamento @relation(fields: [orcamentoId], references: [id], onDelete: Cascade)
+
+  @@index([orcamentoId, ordem])
+  @@map("itens_orcamento")
 }

@@ -6,6 +6,7 @@ import Fornecedores from "./Fornecedores.jsx";
 import Produtos from "./Produtos.jsx";
 import Estoque from "./Estoque.jsx";
 import Compras from "./Compras.jsx";
+import Orcamentos from "./Orcamentos.jsx";
 import Funcionarios from "./Funcionarios.jsx";
 import Financeiro from "./Financeiro.jsx";
 import Caixa from "./Caixa.jsx";
@@ -148,7 +149,8 @@ export default function App() {
   const TELA_MODULO = {
     pdv: "PDV", dashboard: "DASHBOARD", caixa: "CAIXA", clientes: "CLIENTES",
     fornecedores: "FORNECEDORES", produtos: "PRODUTOS", estoque: "ESTOQUE",
-    compras: "COMPRAS", financeiro: "FINANCEIRO", relatorios: "RELATORIOS",
+    compras: "COMPRAS", orcamentos: "ORCAMENTOS",
+    financeiro: "FINANCEIRO", relatorios: "RELATORIOS",
     funcionarios: "FUNCIONARIOS",
   };
 
@@ -163,7 +165,7 @@ export default function App() {
     if (!user) return;
     if (!podeVer(tela)) {
       const primeira = ["pdv","dashboard","caixa","clientes","fornecedores","produtos",
-        "estoque","compras","financeiro","relatorios","funcionarios","projeto","sistema","empresa"].find(podeVer);
+        "estoque","compras","orcamentos","financeiro","relatorios","funcionarios","projeto","sistema","empresa"].find(podeVer);
       if (primeira && primeira !== tela) setTela(primeira);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -265,7 +267,7 @@ export default function App() {
           {podeAcessar(user, "PRODUTOS") && (
             <Item icone="📦" label="Produtos" ativo={tela === "produtos"} onClick={() => navegar("produtos")} />
           )}
-          {(podeAcessar(user, "CAIXA") || podeAcessar(user, "ESTOQUE") || podeAcessar(user, "COMPRAS") || podeAcessar(user, "FINANCEIRO") || podeAcessar(user, "RELATORIOS")) && (
+          {(podeAcessar(user, "CAIXA") || podeAcessar(user, "ESTOQUE") || podeAcessar(user, "COMPRAS") || podeAcessar(user, "ORCAMENTOS") || podeAcessar(user, "FINANCEIRO") || podeAcessar(user, "RELATORIOS")) && (
             <Secao>Operação</Secao>
           )}
           {podeAcessar(user, "CAIXA") && (
@@ -276,6 +278,9 @@ export default function App() {
           )}
           {podeAcessar(user, "COMPRAS") && (
             <Item icone="🛍️" label="Compras" ativo={tela === "compras"} onClick={() => navegar("compras")} />
+          )}
+          {podeAcessar(user, "ORCAMENTOS") && (
+            <Item icone="📝" label="Orçamentos" ativo={tela === "orcamentos"} onClick={() => navegar("orcamentos")} />
           )}
           {podeAcessar(user, "FINANCEIRO") && (
             <Item icone="💰" label="Financeiro" ativo={tela === "financeiro"} onClick={() => navegar("financeiro")} />
@@ -430,6 +435,12 @@ export default function App() {
             <>
               <PageHeader titulo="Compras" subtitulo="Registro de compras (gera entrada de estoque automaticamente)" />
               <Compras user={user} />
+            </>
+          )}
+          {tela === "orcamentos" && (
+            <>
+              <PageHeader titulo="Orçamentos / Ordens de Serviço" subtitulo="Documento comercial pré-venda — vira venda quando aprovado e finalizado" />
+              <Orcamentos user={user} />
             </>
           )}
           {tela === "financeiro" && (

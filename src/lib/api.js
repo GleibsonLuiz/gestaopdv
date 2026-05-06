@@ -216,6 +216,28 @@ export const api = {
   criarVenda: (data) => request("/vendas", { method: "POST", body: data }),
   cancelarVenda: (id) => request(`/vendas/${id}/cancelar`, { method: "POST" }),
 
+  // ==================== ORCAMENTOS / ORDENS DE SERVICO ====================
+  listarOrcamentos: ({ clienteId = "", status = "", tipo = "", dataInicio = "", dataFim = "", search = "", limite = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (clienteId) qs.set("clienteId", clienteId);
+    if (status) qs.set("status", status);
+    if (tipo) qs.set("tipo", tipo);
+    if (dataInicio) qs.set("dataInicio", dataInicio);
+    if (dataFim) qs.set("dataFim", dataFim);
+    if (search) qs.set("search", search);
+    if (limite) qs.set("limite", limite);
+    const q = qs.toString();
+    return request(`/orcamentos${q ? `?${q}` : ""}`);
+  },
+  obterOrcamento: (id) => request(`/orcamentos/${id}`),
+  criarOrcamento: (data) => request("/orcamentos", { method: "POST", body: data }),
+  atualizarOrcamento: (id, data) => request(`/orcamentos/${id}`, { method: "PUT", body: data }),
+  alterarStatusOrcamento: (id, status, motivo) =>
+    request(`/orcamentos/${id}/status`, { method: "POST", body: { status, motivo } }),
+  converterOrcamentoEmVenda: (id, formaPagamento) =>
+    request(`/orcamentos/${id}/converter-venda`, { method: "POST", body: { formaPagamento } }),
+  excluirOrcamento: (id) => request(`/orcamentos/${id}`, { method: "DELETE" }),
+
   obterDashboard: () => request("/dashboard/resumo"),
   obterAlertas: () => request("/alertas"),
 

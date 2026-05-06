@@ -14,9 +14,13 @@ import { put, del } from "@vercel/blob";
 const PASTA_LOCAL = path.resolve("uploads");
 const TEM_BLOB = !!process.env.BLOB_READ_WRITE_TOKEN;
 
-// Garante que a pasta local exista quando estamos em modo dev.
-if (!TEM_BLOB) {
-  await fs.mkdir(PASTA_LOCAL, { recursive: true });
+// Cria a pasta local sob demanda (lazy). Importante: em ambiente serverless
+// (Vercel) o filesystem e read-only — fazer mkdir no top-level quebra o
+// load do modulo. Em dev, isso garante a pasta antes do primeiro upload.
+async function garantirPastaLocal(subdir = "") {
+  const dir = subdir ? path.join(PASTA_LOCAL, subdir) : PASTA_LOCAL;
+  await fs.mkdir(dir, { recursive: true });
+  return dir;
 }
 
 // Sobe um arquivo. Recebe Buffer + extensao + mimeType e devolve uma URL
@@ -36,8 +40,7 @@ export async function salvarArquivo({ pasta = "", buffer, extensao, mimeType }) 
     });
     return { url: blob.url, nomeArmazenado: blob.pathname };
   } else {
-    const dir = pasta ? path.join(PASTA_LOCAL, pasta) : PASTA_LOCAL;
-    await fs.mkdir(dir, { recursive: true });
+    const dir = await garantirPastaLocal(pasta);
     await fs.writeFile(path.join(dir, nome), buffer);
     const url = `/uploads/${pasta ? pasta + "/" : ""}${nome}`;
     return { url, nomeArmazenado: nome };

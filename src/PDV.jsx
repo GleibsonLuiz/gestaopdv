@@ -3,7 +3,6 @@ import { C } from "./lib/theme.js";
 import { api, BASE_URL } from "./lib/api.js";
 import { useConfiguracaoEmpresa, formatarEndereco } from "./HeaderRelatorio.jsx";
 import { urlLogotipo } from "./Configuracoes.jsx";
-import { ModalManual as ModalSangriaSuprimento } from "./Caixa.jsx";
 import { GerenciarFormasModal } from "./Financeiro.jsx";
 import { useModalKeys } from "./lib/modalKeys.js";
 
@@ -200,7 +199,6 @@ function NovaVenda({ user }) {
   const [caixaCarregando, setCaixaCarregando] = useState(true);
   const [painel, setPainel] = useState({ topProdutos: [], ultimasVendas: [], resumoDia: null });
   const [vendaDetalheAberta, setVendaDetalheAberta] = useState(null);
-  const [modalCaixa, setModalCaixa] = useState(null); // 'sangria' | 'suprimento'
   const [sugestaoIdx, setSugestaoIdx] = useState(0); // índice destacado nas sugestões
   const [qtdModalProduto, setQtdModalProduto] = useState(null); // produto p/ modal de qtd
   const [qtdModalValor, setQtdModalValor] = useState("1");
@@ -589,9 +587,6 @@ function NovaVenda({ user }) {
   useModalKeys(!!vendaDetalheAberta, {
     onClose: () => { setVendaDetalheAberta(null); focarBusca(); },
   });
-  useModalKeys(!!modalCaixa, {
-    onClose: () => { setModalCaixa(null); focarBusca(); },
-  });
   useModalKeys(!!qtdModalProduto, {
     onClose: fecharQtdModal,
     onConfirm: confirmarQtdModal,
@@ -610,7 +605,9 @@ function NovaVenda({ user }) {
         .pdv-cancel-row:hover { background: ${C.red}22 !important; }
       `}</style>
 
-      {/* CARD DE STATUS DO CAIXA */}
+      {/* TOPO: alerta quando nao ha caixa aberto OU resumo de vendas do dia
+          por forma de pagamento (info financeira detalhada — saldo, sangria,
+          suprimento — fica restrita a tela do Caixa). */}
       {!caixaCarregando && (
         semCaixa ? (
           <div style={{
@@ -624,11 +621,7 @@ function NovaVenda({ user }) {
             </div>
           </div>
         ) : (
-          <CaixaStatusCard
-            caixa={caixaAtual}
-            onSangria={() => setModalCaixa("sangria")}
-            onSuprimento={() => setModalCaixa("suprimento")}
-          />
+          <FormasPagamentoTopo resumo={painel.resumoDia} />
         )
       )}
 
@@ -859,9 +852,7 @@ function NovaVenda({ user }) {
           position: "sticky", top: 14,
           maxHeight: "calc(100vh - 32px)", overflowY: "auto",
         }}>
-          {carrinho.length === 0 ? (
-            <ResumoDia resumo={painel.resumoDia} />
-          ) : (
+          {carrinho.length > 0 && (
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <Linha label={`Itens (${carrinho.reduce((acc, it) => acc + it.quantidade, 0)})`} valor={fmtBRL(subtotal)} />
@@ -1443,21 +1434,6 @@ function NovaVenda({ user }) {
         />
       )}
 
-      {modalCaixa && caixaAtual && (
-        <ModalSangriaSuprimento
-          caixa={caixaAtual}
-          user={user}
-          tipo={modalCaixa}
-          onCancelar={() => { setModalCaixa(null); focarBusca(); }}
-          onSucesso={() => {
-            setModalCaixa(null);
-            recarregarCaixa();
-            recarregarPainel();
-            focarBusca();
-          }}
-        />
-      )}
-
       {gerenciarFormasAberto && (
         <GerenciarFormasModal
           podeExcluir={user.role === "ADMIN"}
@@ -1480,55 +1456,95 @@ function Linha({ label, valor, cor }) {
   );
 }
 
-// ============== STATUS DO CAIXA ==============
-// 3 KPIs em grid (saldo dinheiro, vendas, faturamento) + acoes rapidas.
-// Destaque vermelho quando o saldo dinheiro fica negativo (sangria > suprimento).
-function CaixaStatusCard({ caixa, onSangria, onSuprimento }) {
-  const saldo = Number(caixa.totais?.saldoEsperadoDinheiro ?? 0);
-  const entradas = Number(caixa.totais?.totalEntradas ?? 0);
-  const numVendas = caixa._count?.vendas || 0;
-  const negativo = saldo < 0;
-  const corSaldo = negativo ? C.red : C.green;
+// ============== TOPO DO PDV: VENDAS DE HOJE POR FORMA DE PAGAMENTO ==============
+// Substitui o antigo CaixaStatusCard. Saldo, sangria, suprimento e faturamento
+// total deixam de aparecer aqui — tudo isso fica restrito a tela do Caixa,
+// que e quem trata da gestao financeira do operador. Aqui exibimos apenas a
+// quebra de vendas do dia por forma de pagamento, util para o operador
+// acompanhar o mix sem virar uma KPI dashboard.
+function FormasPagamentoTopo({ resumo }) {
+  const r = resumo || { porForma: [] };
+  const totalPagamentos = r.porForma.reduce((acc, f) => acc + f.total, 0) || 1;
+  const FORMA_COR = {
+    DINHEIRO: C.green, PIX: C.accent, CARTAO_DEBITO: "#0ea5e9",
+    CARTAO_CREDITO: C.purple, BOLETO: C.yellow, CREDIARIO: C.muted,
+  };
+  const dataLabel = new Date().toLocaleDateString("pt-BR", {
+    weekday: "short", day: "2-digit", month: "short",
+  });
 
   return (
     <div style={{
-      background: C.card, border: `1px solid ${negativo ? C.red + "55" : C.border}`,
-      borderRadius: 12, padding: "12px 16px",
-      display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 16,
-      alignItems: "center",
+      background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
+      padding: "12px 16px",
     }}>
-      <KpiCaixa
-        titulo="Saldo dinheiro" valor={fmtBRL(saldo)} cor={corSaldo}
-        sub={negativo ? "⚠ saldo negativo" : `Caixa #${caixa.numero}`}
-      />
-      <KpiCaixa titulo="Vendas no caixa" valor={String(numVendas)} cor={C.text} sub="finalizadas" />
-      <KpiCaixa titulo="Faturamento" valor={fmtBRL(entradas)} cor={C.green} sub="entradas totais" />
-      <div style={{ display: "flex", gap: 6 }}>
-        <button onClick={onSuprimento} title="Adicionar dinheiro ao caixa" style={{
-          background: C.green + "22", border: `1px solid ${C.green}55`, color: C.green,
-          borderRadius: 8, padding: "8px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer",
-          whiteSpace: "nowrap",
-        }}>＋ Suprimento</button>
-        <button onClick={onSangria} title="Retirar dinheiro do caixa" style={{
-          background: C.yellow + "22", border: `1px solid ${C.yellow}55`, color: C.yellow,
-          borderRadius: 8, padding: "8px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer",
-          whiteSpace: "nowrap",
-        }}>✂ Sangria</button>
+      <div style={{
+        display: "flex", justifyContent: "space-between", alignItems: "baseline",
+        marginBottom: r.porForma.length > 0 ? 10 : 8,
+      }}>
+        <div style={{
+          color: C.muted, fontSize: 11, fontWeight: 700,
+          letterSpacing: 0.4, textTransform: "uppercase",
+        }}>
+          📊 Vendas de hoje por forma de pagamento
+        </div>
+        <div style={{ color: C.muted, fontSize: 10 }}>{dataLabel}</div>
       </div>
-    </div>
-  );
-}
 
-function KpiCaixa({ titulo, valor, cor, sub }) {
-  return (
-    <div style={{ minWidth: 0 }}>
-      <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase" }}>
-        {titulo}
-      </div>
-      <div style={{ color: cor, fontSize: 18, fontWeight: 800, fontFamily: "monospace", marginTop: 2 }}>
-        {valor}
-      </div>
-      {sub && <div style={{ color: C.muted, fontSize: 10, marginTop: 1 }}>{sub}</div>}
+      {r.porForma.length === 0 ? (
+        <div style={{
+          padding: "10px 12px", textAlign: "center", color: C.muted, fontSize: 12,
+          background: C.surface, borderRadius: 8, border: `1px dashed ${C.border}`,
+        }}>
+          Nenhuma venda finalizada hoje ainda.
+        </div>
+      ) : (
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: `repeat(${Math.min(r.porForma.length, 6)}, 1fr)`,
+          gap: 16,
+        }}>
+          {r.porForma.map(f => {
+            const pct = (f.total / totalPagamentos) * 100;
+            const cor = FORMA_COR[f.formaPagamento] || C.accent;
+            return (
+              <div key={f.formaPagamento} style={{ minWidth: 0 }}>
+                <div style={{
+                  display: "flex", justifyContent: "space-between",
+                  alignItems: "baseline", gap: 6,
+                }}>
+                  <span style={{
+                    color: C.text, fontSize: 11, fontWeight: 600,
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}>
+                    {FORMA_LABEL[f.formaPagamento] || f.formaPagamento}
+                  </span>
+                  <span style={{
+                    color: cor, fontSize: 11, fontWeight: 700, fontFamily: "monospace",
+                  }}>
+                    {pct.toFixed(0)}%
+                  </span>
+                </div>
+                <div style={{
+                  color: cor, fontSize: 16, fontWeight: 800,
+                  fontFamily: "monospace", marginTop: 2,
+                }}>
+                  {fmtBRL(f.total)}
+                </div>
+                <div style={{
+                  height: 4, background: C.surface, borderRadius: 4,
+                  overflow: "hidden", marginTop: 4,
+                }}>
+                  <div style={{
+                    width: `${pct}%`, height: "100%", background: cor,
+                    transition: "width 0.3s ease",
+                  }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1650,94 +1666,6 @@ function AcessoRapido({ topProdutos, ultimasVendas, onAdicionar, onAbrirVenda })
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// ============== RESUMO DO DIA (painel direito quando carrinho vazio) ==============
-function ResumoDia({ resumo }) {
-  const r = resumo || { quantidade: 0, total: 0, ticketMedio: 0, porForma: [] };
-  const totalPagamentos = r.porForma.reduce((acc, f) => acc + f.total, 0) || 1;
-  const FORMA_COR = {
-    DINHEIRO: C.green, PIX: C.accent, CARTAO_DEBITO: "#0ea5e9",
-    CARTAO_CREDITO: C.purple, BOLETO: C.yellow, CREDIARIO: C.muted,
-  };
-
-  return (
-    <div style={{
-      background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
-      padding: 16, display: "flex", flexDirection: "column", gap: 14,
-    }}>
-      <div style={{
-        display: "flex", justifyContent: "space-between", alignItems: "baseline",
-      }}>
-        <div style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4 }}>
-          📊 Resumo do dia
-        </div>
-        <div style={{ color: C.muted, fontSize: 10 }}>
-          {new Date().toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short" })}
-        </div>
-      </div>
-
-      <div style={{
-        padding: "14px 16px", background: C.surface, borderRadius: 10,
-        boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
-        display: "flex", flexDirection: "column", gap: 4,
-      }}>
-        <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase" }}>
-          Faturamento
-        </div>
-        <div style={{ color: C.green, fontSize: 26, fontWeight: 800, fontFamily: "monospace" }}>
-          {fmtBRL(r.total)}
-        </div>
-        <div style={{ color: C.muted, fontSize: 11 }}>
-          {r.quantidade} venda{r.quantidade === 1 ? "" : "s"} · ticket {fmtBRL(r.ticketMedio)}
-        </div>
-      </div>
-
-      {r.porForma.length > 0 ? (
-        <div>
-          <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 8 }}>
-            Por forma de pagamento
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {r.porForma.map(f => {
-              const pct = (f.total / totalPagamentos) * 100;
-              const cor = FORMA_COR[f.formaPagamento] || C.accent;
-              return (
-                <div key={f.formaPagamento}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 3 }}>
-                    <span style={{ color: C.text, fontWeight: 600 }}>
-                      {FORMA_LABEL[f.formaPagamento] || f.formaPagamento}
-                    </span>
-                    <span style={{ color: C.muted, fontFamily: "monospace" }}>
-                      {fmtBRL(f.total)} <span style={{ color: cor }}>· {pct.toFixed(0)}%</span>
-                    </span>
-                  </div>
-                  <div style={{ height: 4, background: C.surface, borderRadius: 4, overflow: "hidden" }}>
-                    <div style={{ width: `${pct}%`, height: "100%", background: cor, transition: "width 0.3s ease" }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : (
-        <div style={{
-          padding: "14px 12px", textAlign: "center", color: C.muted, fontSize: 12,
-          background: C.surface, borderRadius: 8, border: `1px dashed ${C.border}`,
-        }}>
-          Nenhuma venda finalizada hoje ainda.
-        </div>
-      )}
-
-      <div style={{
-        padding: "10px 12px", background: C.accent + "11",
-        border: `1px dashed ${C.accent}55`, borderRadius: 8,
-        color: C.muted, fontSize: 11, textAlign: "center",
-      }}>
-        💡 Bipe um produto para começar a venda
-      </div>
     </div>
   );
 }

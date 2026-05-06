@@ -682,7 +682,9 @@ function NovaVenda({ user }) {
             zIndex: 5, overflow: "hidden",
             boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
           }}>
-            {sugestoes.map((p, idx) => (
+            {sugestoes.map((p, idx) => {
+              const ativo = idx === sugestaoSelecionada;
+              return (
               <div
                 key={p.id}
                 className="pdv-sugestao"
@@ -692,9 +694,10 @@ function NovaVenda({ user }) {
                   display: "flex", alignItems: "center", gap: 12,
                   padding: "10px 14px", cursor: "pointer",
                   borderTop: idx === 0 ? "none" : `1px solid ${C.border}`,
-                  background: idx === sugestaoSelecionada ? C.accent + "33" : "transparent",
-                  borderLeft: idx === sugestaoSelecionada ? `3px solid ${C.accent}` : "3px solid transparent",
-                  transition: "background 0.1s ease",
+                  background: ativo ? C.accent + "55" : "transparent",
+                  borderLeft: ativo ? `4px solid ${C.accent}` : "4px solid transparent",
+                  boxShadow: ativo ? `inset 0 0 0 1px ${C.accent}77` : "none",
+                  transition: "background 0.12s ease, box-shadow 0.12s ease",
                 }}
               >
                 <FotoProduto url={p.imagem} nome={p.nome} tamanho={40} servico={p.tipoItem === "SERVICO"} />
@@ -716,7 +719,8 @@ function NovaVenda({ user }) {
                 </div>
                 <div style={{ color: C.green, fontWeight: 700, fontSize: 14 }}>{fmtBRL(p.precoVenda)}</div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

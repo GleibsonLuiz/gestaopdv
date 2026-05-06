@@ -55,6 +55,10 @@ export async function resetarSistema(req, res, next) {
       const fornecedores = await tx.fornecedor.deleteMany();
       const clientes = await tx.cliente.deleteMany();
 
+      // 8. Formas de pagamento personalizadas (sem FKs — vendas/contas guardam
+      //    apenas o enum base FormaPagamento, nao referenciam o custom).
+      const formasPagamentoCustom = await tx.formaPagamentoCustom.deleteMany();
+
       return {
         itensVenda: itensVenda.count, vendas: vendas.count,
         movimentacoesCaixa: movimentacoesCaixa.count, caixas: caixas.count,
@@ -64,6 +68,7 @@ export async function resetarSistema(req, res, next) {
         contasPagar: contasPagar.count, contasReceber: contasReceber.count,
         produtos: produtos.count, categorias: categorias.count,
         fornecedores: fornecedores.count, clientes: clientes.count,
+        formasPagamentoCustom: formasPagamentoCustom.count,
       };
     });
 

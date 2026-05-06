@@ -17,6 +17,7 @@ const TABELAS_LIMPAS = [
   ["🏷", "Categorias"],
   ["🏭", "Fornecedores"],
   ["👥", "Clientes"],
+  ["💳", "Formas de pagamento personalizadas"],
 ];
 
 const PRESERVADOS = [
@@ -179,10 +180,10 @@ function ModalReset({ onCancelar, onConcluir }) {
           color: C.text, fontSize: 13, lineHeight: 1.5,
         }}>
           Esta ação é <strong style={{ color: C.red }}>IRREVERSÍVEL</strong>.
-          Vendas, caixas, compras, estoque, financeiro e cadastros (clientes,
-          fornecedores, produtos e categorias) serão apagados permanentemente.
-          Os funcionários, permissões e dados da empresa (incluindo logotipo)
-          serão preservados.
+          Vendas, caixas, compras, estoque, financeiro, cadastros (clientes,
+          fornecedores, produtos e categorias) e formas de pagamento
+          personalizadas serão apagados permanentemente. Os funcionários,
+          permissões e dados da empresa (incluindo logotipo) serão preservados.
         </div>
 
         <div style={{

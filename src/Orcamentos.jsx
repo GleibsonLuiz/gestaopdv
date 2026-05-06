@@ -1,6 +1,15 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { C } from "./lib/theme.js";
-import { api } from "./lib/api.js";
+import { api, BASE_URL } from "./lib/api.js";
+
+// URL absoluta do logotipo da empresa (replicado de Configuracoes.jsx para
+// evitar import cruzado). Backend devolve um caminho relativo do tipo
+// "/uploads/logo-xyz.png" — o popup de impressao precisa de URL completa.
+function urlLogotipo(logotipo) {
+  if (!logotipo) return null;
+  if (/^https?:\/\//i.test(logotipo)) return logotipo;
+  return `${BASE_URL}${logotipo}`;
+}
 
 // ===================== HELPERS =====================
 
@@ -84,6 +93,7 @@ export default function Orcamentos({ user }) {
   const [clientes, setClientes] = useState([]);
   const [produtos, setProdutos] = useState([]);
   const [funcionarios, setFuncionarios] = useState([]);
+  const [empresa, setEmpresa] = useState(null);
 
   const [novoAberto, setNovoAberto] = useState(false);
   const [editando, setEditando] = useState(null);
@@ -113,6 +123,7 @@ export default function Orcamentos({ user }) {
   useEffect(() => {
     api.listarClientes({ ativo: "true" }).then(setClientes).catch(() => {});
     api.listarProdutos({ ativo: "true" }).then(setProdutos).catch(() => {});
+    api.obterConfiguracao().then(setEmpresa).catch(() => {});
     if (user.role === "ADMIN") {
       api.listarFuncionarios({ ativo: "true" }).then(setFuncionarios).catch(() => {});
     }
@@ -299,6 +310,7 @@ export default function Orcamentos({ user }) {
       {detalhe && (
         <DetalheOrcamentoModal
           orcamento={detalhe}
+          empresa={empresa}
           podeAgir={podeCriar}
           podeExcluir={user.role === "ADMIN" || user.role === "GERENTE"}
           onFechar={() => setDetalhe(null)}
@@ -808,7 +820,7 @@ function ItemFormulario({ indice, item, produtos, tabelaPreco, onAtualizar, onRe
 
 // ===================== MODAL DETALHE =====================
 
-function DetalheOrcamentoModal({ orcamento: orc, podeAgir, podeExcluir, onFechar, onAtualizar, onExcluir }) {
+function DetalheOrcamentoModal({ orcamento: orc, empresa, podeAgir, podeExcluir, onFechar, onAtualizar, onExcluir }) {
   const [acaoAberta, setAcaoAberta] = useState("");
   const [motivo, setMotivo] = useState("");
   const [formaPagamento, setFormaPagamento] = useState("DINHEIRO");
@@ -893,7 +905,7 @@ function DetalheOrcamentoModal({ orcamento: orc, podeAgir, podeExcluir, onFechar
     // recarga e necessaria.
     const w = window.open("", "_blank", "width=900,height=700");
     if (!w) { alert("Bloqueio de popup impediu a impressao. Permita popups e tente novamente."); return; }
-    w.document.write(gerarHTMLImpressao(orc));
+    w.document.write(gerarHTMLImpressao(orc, empresa));
     w.document.close();
     setTimeout(() => { w.focus(); w.print(); }, 250);
   }
@@ -1114,10 +1126,59 @@ function DetalheOrcamentoModal({ orcamento: orc, podeAgir, podeExcluir, onFechar
 
 // ===================== HTML PARA IMPRESSAO =====================
 
-function gerarHTMLImpressao(orc) {
+// Escapa < > & para evitar HTML injection vindo de campos do usuario.
+function escapeHtml(s) {
+  if (s === null || s === undefined) return "";
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function gerarHTMLImpressao(orc, empresa) {
   const tipoLabel = orc.tipo === "ORDEM_SERVICO" ? "ORDEM DE SERVIÇO" : "ORÇAMENTO";
   const data = new Date(orc.createdAt).toLocaleString("pt-BR");
   const cliente = orc.cliente?.nome || orc.descricaoCliente || "—";
+
+  // Cabecalho da empresa: bloco com logotipo + razao social + dados de
+  // contato + endereco. Quando configuracao_empresa esta vazia, omite.
+  const empresaHTML = empresa ? (() => {
+    const nomeExibicao = empresa.nomeFantasia || empresa.razaoSocial || "";
+    const logoUrl = urlLogotipo(empresa.logotipo);
+    const linhaEnd = [
+      empresa.endereco,
+      empresa.numero,
+      empresa.bairro,
+    ].filter(Boolean).join(", ");
+    const linhaCidade = [
+      empresa.cidade,
+      empresa.estado,
+      empresa.cep,
+    ].filter(Boolean).join(" - ");
+    const linhaContato = [
+      empresa.telefone ? `Tel: ${empresa.telefone}` : null,
+      empresa.email ? `E-mail: ${empresa.email}` : null,
+    ].filter(Boolean).join(" · ");
+    const linhaDocs = [
+      empresa.cnpj ? `CNPJ: ${empresa.cnpj}` : null,
+      empresa.inscEstadual ? `IE: ${empresa.inscEstadual}` : null,
+    ].filter(Boolean).join(" · ");
+    return `
+      <div class="empresa">
+        ${logoUrl ? `<div class="empresa-logo"><img src="${escapeHtml(logoUrl)}" alt="logo"></div>` : ""}
+        <div class="empresa-dados">
+          <div class="empresa-nome">${escapeHtml(nomeExibicao)}</div>
+          ${empresa.nomeFantasia && empresa.razaoSocial && empresa.nomeFantasia !== empresa.razaoSocial
+            ? `<div class="empresa-razao">${escapeHtml(empresa.razaoSocial)}</div>` : ""}
+          ${linhaDocs ? `<div class="empresa-linha">${escapeHtml(linhaDocs)}</div>` : ""}
+          ${linhaEnd ? `<div class="empresa-linha">${escapeHtml(linhaEnd)}</div>` : ""}
+          ${linhaCidade ? `<div class="empresa-linha">${escapeHtml(linhaCidade)}</div>` : ""}
+          ${linhaContato ? `<div class="empresa-linha">${escapeHtml(linhaContato)}</div>` : ""}
+        </div>
+      </div>
+    `;
+  })() : "";
   const itens = (orc.itens || []).map((it, i) => {
     const usaArea = Number(it.largura || 0) > 0 && Number(it.altura || 0) > 0;
     const desc = `${it.descricao}${it.complemento ? `<br><small>${it.complemento}</small>` : ""}`;
@@ -1161,6 +1222,14 @@ function gerarHTMLImpressao(orc) {
   body { font-family: Arial, sans-serif; max-width: 760px; margin: 20px auto; color: #222; padding: 0 16px; }
   h1 { font-size: 20px; border-bottom: 2px solid #333; padding-bottom: 6px; margin: 0 0 4px; }
   .meta { font-size: 12px; color: #666; margin-bottom: 16px; }
+  .empresa { display: flex; gap: 14px; align-items: center; padding: 12px 14px;
+             border: 1px solid #333; border-radius: 6px; margin-bottom: 14px; background: #fafafa; }
+  .empresa-logo { flex-shrink: 0; max-width: 110px; }
+  .empresa-logo img { max-width: 110px; max-height: 90px; object-fit: contain; display: block; }
+  .empresa-dados { flex: 1; font-size: 12px; line-height: 1.4; }
+  .empresa-nome { font-size: 16px; font-weight: 700; color: #111; margin-bottom: 2px; }
+  .empresa-razao { font-size: 11px; color: #555; margin-bottom: 4px; }
+  .empresa-linha { color: #444; font-size: 11px; }
   .box { border: 1px solid #aaa; padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
   .box b { color: #333; }
   table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -1174,8 +1243,9 @@ function gerarHTMLImpressao(orc) {
   .obs { font-size: 12px; padding: 8px; background: #f6f6f6; border-radius: 4px; margin-top: 12px; }
   .rodape { margin-top: 18px; padding: 8px; text-align: center; font-style: italic; color: #b00; font-size: 12px; }
   .status { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; background: #eee; }
-  @media print { body { margin: 0; } }
+  @media print { body { margin: 0; } .empresa { background: transparent; } }
 </style></head><body>
+  ${empresaHTML}
   <h1>${tipoLabel} Nº ${orc.numero} ${orc.via === 2 ? "<small>(2ª via)</small>" : ""}</h1>
   <div class="meta">Emitido em ${data} · Tabela ${orc.tabelaPreco} · <span class="status">${orc.status.replace(/_/g, " ")}</span></div>
 

@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import authRoutes from "./routes/auth.js";
 import clientesRoutes from "./routes/clientes.js";
 import fornecedoresRoutes from "./routes/fornecedores.js";
@@ -28,14 +29,22 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3333;
 
-app.use(cors());
+// CORS: em dev (sem FRONTEND_URL) libera tudo; em producao (Vercel) limita
+// ao dominio do frontend. Vercel preview deployments tem URL diferente da
+// prod — para liberar geral, deixar FRONTEND_URL = "*".
+const FRONTEND_URL = process.env.FRONTEND_URL;
+app.use(cors({
+  origin: FRONTEND_URL && FRONTEND_URL !== "*" ? FRONTEND_URL : true,
+  credentials: true,
+}));
 app.use(express.json());
 
-// Anexos de contas (PDF/JPG/PNG) salvos em backend/uploads. Servidos como
-// arquivos estaticos. Token nao e exigido aqui — assume-se que conhecer a
-// URL randomica (UUID) ja restringe o acesso. Se precisar de download
-// autenticado, transformar em rota com authRequired e res.sendFile.
-app.use("/uploads", express.static(path.resolve("uploads")));
+// Em dev (sem Vercel Blob configurado) servimos os uploads do filesystem
+// para preservar o fluxo local. Em producao, as URLs no banco apontam
+// direto para o blob.vercel-storage.com — esse middleware fica inerte.
+if (!process.env.BLOB_READ_WRITE_TOKEN) {
+  app.use("/uploads", express.static(path.resolve("uploads")));
+}
 
 app.get("/", (req, res) => {
   res.json({
@@ -75,6 +84,13 @@ app.use((err, req, res, _next) => {
   res.status(500).json({ erro: "Erro interno do servidor" });
 });
 
-app.listen(PORT, () => {
-  console.log(`Servidor rodando em http://localhost:${PORT}`);
-});
+// Listen apenas quando rodado direto (npm run dev). Quando importado pelo
+// Vercel (api/index.js), nao tenta abrir porta — o runtime ja gerencia.
+const ehExecucaoDireta = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+if (ehExecucaoDireta) {
+  app.listen(PORT, () => {
+    console.log(`Servidor rodando em http://localhost:${PORT}`);
+  });
+}
+
+export default app;

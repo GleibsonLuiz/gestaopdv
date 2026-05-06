@@ -1,26 +1,18 @@
 import path from "node:path";
-import fs from "node:fs/promises";
 import multer from "multer";
-import crypto from "node:crypto";
 import prisma from "../lib/prisma.js";
+import { salvarArquivo, removerArquivo } from "../lib/storage.js";
 
-const PASTA_UPLOADS = path.resolve("uploads");
 const TAMANHO_MAX = 5 * 1024 * 1024; // 5 MB
 const MIMES_PERMITIDOS = new Set([
   "application/pdf",
   "image/jpeg", "image/jpg", "image/png",
 ]);
 
-await fs.mkdir(PASTA_UPLOADS, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, PASTA_UPLOADS),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase().slice(0, 8);
-    const id = crypto.randomUUID();
-    cb(null, `${id}${ext}`);
-  },
-});
+// memoryStorage: arquivo fica em RAM como Buffer ate ser persistido pelo
+// salvarArquivo (Blob em prod, filesystem em dev). Indispensavel no Vercel
+// porque /tmp e ephemeral e o restante do FS e read-only.
+const storage = multer.memoryStorage();
 
 export const upload = multer({
   storage,
@@ -46,26 +38,24 @@ export function tratarErroUpload(err, _req, res, next) {
   next(err);
 }
 
-async function removerArquivo(nomeArmazenado) {
-  if (!nomeArmazenado) return;
-  try {
-    await fs.unlink(path.join(PASTA_UPLOADS, nomeArmazenado));
-  } catch {
-    // arquivo ja inexistente — ignora
-  }
-}
-
 // Anexa um arquivo a uma conta a pagar OU a receber. O parametro `tipo` decide
-// qual relacao usar. Cria registro Anexo apontando para o arquivo no disco.
+// qual relacao usar. Cria registro Anexo apontando para o arquivo persistido.
 async function anexarArquivo(tipo, contaId, file, res) {
   if (!file) return res.status(400).json({ erro: "Arquivo nao enviado" });
 
   const tabela = tipo === "pagar" ? prisma.contaPagar : prisma.contaReceber;
   const conta = await tabela.findUnique({ where: { id: contaId } });
   if (!conta) {
-    await removerArquivo(file.filename);
     return res.status(404).json({ erro: "Conta nao encontrada" });
   }
+
+  const ext = path.extname(file.originalname).toLowerCase();
+  const { url, nomeArmazenado } = await salvarArquivo({
+    pasta: "anexos",
+    buffer: file.buffer,
+    extensao: ext,
+    mimeType: file.mimetype,
+  });
 
   const dadosLink = tipo === "pagar"
     ? { contaPagarId: contaId }
@@ -74,10 +64,10 @@ async function anexarArquivo(tipo, contaId, file, res) {
   const anexo = await prisma.anexo.create({
     data: {
       nomeOriginal: file.originalname,
-      nomeArmazenado: file.filename,
+      nomeArmazenado,
       mimeType: file.mimetype,
       tamanho: file.size,
-      url: `/uploads/${file.filename}`,
+      url,
       ...dadosLink,
     },
   });
@@ -86,18 +76,12 @@ async function anexarArquivo(tipo, contaId, file, res) {
 
 export async function anexarPagar(req, res, next) {
   try { await anexarArquivo("pagar", req.params.id, req.file, res); }
-  catch (err) {
-    if (req.file) await removerArquivo(req.file.filename);
-    next(err);
-  }
+  catch (err) { next(err); }
 }
 
 export async function anexarReceber(req, res, next) {
   try { await anexarArquivo("receber", req.params.id, req.file, res); }
-  catch (err) {
-    if (req.file) await removerArquivo(req.file.filename);
-    next(err);
-  }
+  catch (err) { next(err); }
 }
 
 export async function excluirAnexo(req, res, next) {
@@ -115,7 +99,9 @@ export async function excluirAnexo(req, res, next) {
     }
 
     await prisma.anexo.delete({ where: { id: anexo.id } });
-    await removerArquivo(anexo.nomeArmazenado);
+    // Em prod a url e absoluta (Blob); em dev e /uploads/.. — storage.js
+    // sabe lidar com os dois.
+    await removerArquivo(anexo.url);
     res.status(204).end();
   } catch (err) {
     if (err.code === "P2025") return res.status(404).json({ erro: "Anexo nao encontrado" });

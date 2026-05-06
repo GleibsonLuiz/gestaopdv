@@ -1,22 +1,12 @@
 import path from "node:path";
-import fs from "node:fs/promises";
 import multer from "multer";
-import crypto from "node:crypto";
 import prisma from "../lib/prisma.js";
+import { salvarArquivo, removerArquivo } from "../lib/storage.js";
 
-const PASTA_PRODUTOS = path.resolve("uploads", "produtos");
 const TAMANHO_MAX = 2 * 1024 * 1024; // 2 MB
 const MIMES_PERMITIDOS = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp"]);
 
-await fs.mkdir(PASTA_PRODUTOS, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, PASTA_PRODUTOS),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase().slice(0, 8) || ".jpg";
-    cb(null, `${crypto.randomUUID()}${ext}`);
-  },
-});
+const storage = multer.memoryStorage();
 
 export const uploadImagem = multer({
   storage,
@@ -38,32 +28,26 @@ export function tratarErroUploadImagem(err, _req, res, next) {
   next(err);
 }
 
-async function removerArquivoSeguro(urlImagem) {
-  if (!urlImagem) return;
-  // url e' tipo "/uploads/produtos/<uuid>.jpg" — extrai apenas o nome do arquivo.
-  const nome = path.basename(urlImagem);
-  if (!nome) return;
-  try {
-    await fs.unlink(path.join(PASTA_PRODUTOS, nome));
-  } catch {
-    // arquivo ja removido — ignora
-  }
-}
-
 export async function enviarImagem(req, res, next) {
   try {
     if (!req.file) return res.status(400).json({ erro: "Imagem nao enviada" });
 
     const produto = await prisma.produto.findUnique({ where: { id: req.params.id } });
     if (!produto) {
-      await removerArquivoSeguro(`/uploads/produtos/${req.file.filename}`);
       return res.status(404).json({ erro: "Produto nao encontrado" });
     }
 
     // Remove imagem antiga (se houver) antes de gravar a nova URL.
-    if (produto.imagem) await removerArquivoSeguro(produto.imagem);
+    if (produto.imagem) await removerArquivo(produto.imagem);
 
-    const url = `/uploads/produtos/${req.file.filename}`;
+    const ext = path.extname(req.file.originalname).toLowerCase() || ".jpg";
+    const { url } = await salvarArquivo({
+      pasta: "produtos",
+      buffer: req.file.buffer,
+      extensao: ext,
+      mimeType: req.file.mimetype,
+    });
+
     const atualizado = await prisma.produto.update({
       where: { id: req.params.id },
       data: { imagem: url },
@@ -74,7 +58,6 @@ export async function enviarImagem(req, res, next) {
     });
     res.json(atualizado);
   } catch (err) {
-    if (req.file) await removerArquivoSeguro(`/uploads/produtos/${req.file.filename}`);
     next(err);
   }
 }
@@ -84,7 +67,7 @@ export async function excluirImagem(req, res, next) {
     const produto = await prisma.produto.findUnique({ where: { id: req.params.id } });
     if (!produto) return res.status(404).json({ erro: "Produto nao encontrado" });
 
-    if (produto.imagem) await removerArquivoSeguro(produto.imagem);
+    if (produto.imagem) await removerArquivo(produto.imagem);
 
     const atualizado = await prisma.produto.update({
       where: { id: req.params.id },

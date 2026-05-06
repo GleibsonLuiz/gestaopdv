@@ -1,4 +1,6 @@
-export const BASE_URL = "http://localhost:3333";
+// URL do backend. Em producao (Vercel), VITE_API_URL e injetado pela
+// variavel de ambiente do projeto. Em dev, default para o backend local.
+export const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3333";
 
 const TOKEN_KEY = "gestao_token";
 const USER_KEY = "gestao_user";

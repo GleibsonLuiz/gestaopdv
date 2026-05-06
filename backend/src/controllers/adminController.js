@@ -72,25 +72,30 @@ export async function resetarSistema(req, res, next) {
       };
     });
 
-    // Apaga arquivos fisicos das pastas operacionais (best-effort — DB ja
-    // foi limpo na transacao, no maximo sobram orfaos no disco).
+    // Limpeza de arquivos fisicos:
+    //   - Em dev (sem BLOB token): apaga arquivos das pastas operacionais
+    //     diretamente do filesystem (best-effort).
+    //   - Em prod (Vercel Blob): nao limpa, ja que o filesystem e read-only.
+    //     Os arquivos no Blob viram orfaos — podem ser limpos manualmente
+    //     no painel do Vercel se incomodarem. Como o reset e raro e os
+    //     anexos foram apagados do banco, o link com a UI ja some.
     let arquivosRemovidos = 0;
-    for (const pasta of PASTAS_PARA_LIMPAR) {
-      try {
-        const arquivos = await fs.readdir(pasta);
-        for (const nome of arquivos) {
-          const alvo = path.join(pasta, nome);
-          try {
-            const stat = await fs.stat(alvo);
-            if (stat.isFile()) {
-              await fs.unlink(alvo);
-              arquivosRemovidos++;
-            }
-            // Subpastas como "produtos/" ja sao tratadas em outro item do loop;
-            // a pasta "logo/" e ignorada porque nao esta em PASTAS_PARA_LIMPAR.
-          } catch { /* ignora arquivo individual */ }
-        }
-      } catch { /* pasta inexistente — sem problema */ }
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      for (const pasta of PASTAS_PARA_LIMPAR) {
+        try {
+          const arquivos = await fs.readdir(pasta);
+          for (const nome of arquivos) {
+            const alvo = path.join(pasta, nome);
+            try {
+              const stat = await fs.stat(alvo);
+              if (stat.isFile()) {
+                await fs.unlink(alvo);
+                arquivosRemovidos++;
+              }
+            } catch { /* ignora arquivo individual */ }
+          }
+        } catch { /* pasta inexistente — sem problema */ }
+      }
     }
 
     res.json({ ok: true, removidos, arquivosRemovidos });

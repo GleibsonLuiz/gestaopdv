@@ -693,9 +693,17 @@ function NovaVenda({ user }) {
                   display: "flex", alignItems: "center", gap: 12,
                   padding: "10px 14px", cursor: "pointer",
                   borderTop: idx === 0 ? "none" : `1px solid ${C.border}`,
-                  background: ativo ? C.accent + "55" : "transparent",
+                  // C.accent e var(--accent); concatenar `+ "55"` gera tokens
+                  // separados que o parser de cor descarta no background.
+                  // color-mix mistura com transparente preservando a CSS var
+                  // (e segue o tema escolhido pelo usuario automaticamente).
+                  background: ativo
+                    ? `color-mix(in srgb, ${C.accent} 38%, transparent)`
+                    : "transparent",
                   borderLeft: ativo ? `4px solid ${C.accent}` : "4px solid transparent",
-                  boxShadow: ativo ? `inset 0 0 0 1px ${C.accent}77` : "none",
+                  boxShadow: ativo
+                    ? `inset 0 0 0 1px color-mix(in srgb, ${C.accent} 60%, transparent)`
+                    : "none",
                   transition: "background 0.12s ease, box-shadow 0.12s ease",
                 }}
               >

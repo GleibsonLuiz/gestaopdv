@@ -8,6 +8,7 @@ import Estoque from "./Estoque.jsx";
 import Compras from "./Compras.jsx";
 import Orcamentos from "./Orcamentos.jsx";
 import Funcionarios from "./Funcionarios.jsx";
+import Comissoes from "./Comissoes.jsx";
 import FinanceiroPage from "./pages/financeiro/FinanceiroPage.jsx";
 import Caixa from "./Caixa.jsx";
 import PDV from "./PDV.jsx";
@@ -17,7 +18,7 @@ import Projeto from "./Projeto.jsx";
 import Sistema from "./Sistema.jsx";
 import Configuracoes from "./Configuracoes.jsx";
 import TrocarSenhaModal from "./TrocarSenhaModal.jsx";
-import AparenciaModal from "./AparenciaModal.jsx";
+import Aparencia from "./Aparencia.jsx";
 import Alertas from "./Alertas.jsx";
 import { getUser, getToken, clearSession, api } from "./lib/api.js";
 import { podeAcessar } from "./lib/permissoes.js";
@@ -73,7 +74,6 @@ export default function App() {
   const [tela, setTela] = useState("pdv");
   const [menuUsuario, setMenuUsuario] = useState(false);
   const [trocarSenhaAberto, setTrocarSenhaAberto] = useState(false);
-  const [aparenciaAberta, setAparenciaAberta] = useState(false);
   const [sidebarAberta, setSidebarAberta] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => lerPreferenciaSidebar());
   const menuRef = useRef(null);
@@ -151,11 +151,12 @@ export default function App() {
     fornecedores: "FORNECEDORES", produtos: "PRODUTOS", estoque: "ESTOQUE",
     compras: "COMPRAS", orcamentos: "ORCAMENTOS",
     financeiro: "FINANCEIRO", relatorios: "RELATORIOS",
+    comissoes: "COMISSOES",
     funcionarios: "FUNCIONARIOS",
   };
 
   function podeVer(t) {
-    if (t === "projeto") return true;
+    if (t === "projeto" || t === "aparencia") return true;
     if (t === "sistema" || t === "empresa") return user?.role === "ADMIN";
     return podeAcessar(user, TELA_MODULO[t]);
   }
@@ -165,7 +166,7 @@ export default function App() {
     if (!user) return;
     if (!podeVer(tela)) {
       const primeira = ["pdv","dashboard","caixa","clientes","fornecedores","produtos",
-        "estoque","compras","orcamentos","financeiro","relatorios","funcionarios","projeto","sistema","empresa"].find(podeVer);
+        "estoque","compras","orcamentos","financeiro","relatorios","comissoes","funcionarios","projeto","sistema","empresa"].find(podeVer);
       if (primeira && primeira !== tela) setTela(primeira);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -288,6 +289,9 @@ export default function App() {
           {podeAcessar(user, "RELATORIOS") && (
             <Item icone="📑" label="Relatórios" ativo={tela === "relatorios"} onClick={() => navegar("relatorios")} />
           )}
+          {podeAcessar(user, "COMISSOES") && (
+            <Item icone="🏆" label="Comissões" ativo={tela === "comissoes"} onClick={() => navegar("comissoes")} />
+          )}
           <Secao>Sistema</Secao>
           {user.role === "ADMIN" && (
             <Item icone="🧑‍💼" label="Funcionários" ativo={tela === "funcionarios"} onClick={() => navegar("funcionarios")} />
@@ -355,7 +359,7 @@ export default function App() {
                   whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                 }}>{user.email || user.nome}</div>
               </div>
-              <button onClick={() => { setMenuUsuario(false); setAparenciaAberta(true); }} style={menuItem}>
+              <button onClick={() => { setMenuUsuario(false); navegar("aparencia"); }} style={menuItem}>
                 🎨 Aparência
               </button>
               <button onClick={() => { setMenuUsuario(false); setTrocarSenhaAberto(true); }} style={menuItem}>
@@ -461,6 +465,12 @@ export default function App() {
               <Relatorios user={user} />
             </>
           )}
+          {tela === "comissoes" && (
+            <>
+              <PageHeader titulo="Comissões" subtitulo="Configure como cada vendedor é remunerado por venda e meta" />
+              <Comissoes user={user} />
+            </>
+          )}
           {tela === "funcionarios" && user.role === "ADMIN" && (
             <>
               <PageHeader titulo="Funcionários" subtitulo="Cadastro de funcionários e controle de acesso (Admin/Gerente/Vendedor)" />
@@ -472,6 +482,9 @@ export default function App() {
               <PageHeader titulo="Rastreador do Projeto" subtitulo="Acompanhe o progresso das etapas" />
               <Projeto />
             </>
+          )}
+          {tela === "aparencia" && (
+            <Aparencia />
           )}
           {tela === "sistema" && user.role === "ADMIN" && (
             <>
@@ -491,10 +504,6 @@ export default function App() {
 
       {trocarSenhaAberto && (
         <TrocarSenhaModal onFechar={() => setTrocarSenhaAberto(false)} />
-      )}
-
-      {aparenciaAberta && (
-        <AparenciaModal onFechar={() => setAparenciaAberta(false)} />
       )}
     </div>
   );

@@ -202,9 +202,11 @@ function splitVal(n) {
 export default function FinanceiroPage({ user }) {
   const podeEditar = user?.role === 'ADMIN' || user?.role === 'GERENTE';
   const [aba, setAba] = useState('pagar');
+  const [contagens, setContagens] = useState({ pagar: null, receber: null });
 
-  const [contasPagar, setContasPagar] = useState([]);
-  const [contasReceber, setContasReceber] = useState([]);
+  function setCount(tipo, n) {
+    setContagens(prev => prev[tipo] === n ? prev : { ...prev, [tipo]: n });
+  }
 
   return (
     <div className="financeiro-bg min-h-screen text-fg font-sans antialiased tracking-tightish -mx-6 -my-6">
@@ -216,26 +218,20 @@ export default function FinanceiroPage({ user }) {
           aba={aba}
           setAba={setAba}
           podeEditar={podeEditar}
-          contasPagar={contasPagar}
-          setContasPagar={setContasPagar}
-          contasReceber={contasReceber}
-          setContasReceber={setContasReceber}
+          contagens={contagens}
+          setCount={setCount}
         />
       </div>
     </div>
   );
 }
 
-function FinanceiroTabs({
-  aba, setAba, podeEditar,
-  contasPagar, setContasPagar,
-  contasReceber, setContasReceber,
-}) {
+function FinanceiroTabs({ aba, setAba, podeEditar, contagens, setCount }) {
   const tabs = [
-    { id: 'pagar',   label: 'A pagar',        count: contasPagar.length,   icon: 'inbox' },
-    { id: 'receber', label: 'A receber',      count: contasReceber.length, icon: 'arrow-down' },
-    { id: 'fluxo',   label: 'Fluxo de caixa',                              icon: 'pulse' },
-    { id: 'concil',  label: 'Conciliação',                                 icon: 'rows' },
+    { id: 'pagar',   label: 'A pagar',        count: contagens.pagar ?? undefined,   icon: 'inbox' },
+    { id: 'receber', label: 'A receber',      count: contagens.receber ?? undefined, icon: 'arrow-down' },
+    { id: 'fluxo',   label: 'Fluxo de caixa',                                        icon: 'pulse' },
+    { id: 'concil',  label: 'Conciliação',                                           icon: 'rows' },
   ];
 
   const [novoAberto, setNovoAberto] = useState(false);
@@ -259,22 +255,18 @@ function FinanceiroTabs({
         <ContasView
           tipo="pagar"
           podeEditar={podeEditar}
-          onContas={setContasPagar}
+          onContas={(lista) => setCount('pagar', lista.length)}
         />
       )}
       {aba === 'receber' && (
         <ContasView
           tipo="receber"
           podeEditar={podeEditar}
-          onContas={setContasReceber}
+          onContas={(lista) => setCount('receber', lista.length)}
         />
       )}
-      {aba === 'fluxo' && (
-        <FluxoView contasPagar={contasPagar} contasReceber={contasReceber} />
-      )}
-      {aba === 'concil' && (
-        <ConcilView contasPagar={contasPagar} contasReceber={contasReceber} />
-      )}
+      {aba === 'fluxo' && <FluxoView />}
+      {aba === 'concil' && <ConcilView />}
 
       {novoAberto && (
         <ContaModalReloader
@@ -475,7 +467,42 @@ function ContasView({ tipo, podeEditar, onContas }) {
   );
 }
 
-function FluxoView({ contasPagar, contasReceber }) {
+function useContasFinanceiro() {
+  const [contasPagar, setContasPagar] = useState([]);
+  const [contasReceber, setContasReceber] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState('');
+
+  const recarregar = useCallback(async () => {
+    setCarregando(true); setErro('');
+    try {
+      const [pagar, receber] = await Promise.all([
+        api.listarContasPagar({}),
+        api.listarContasReceber({}),
+      ]);
+      setContasPagar(Array.isArray(pagar) ? pagar : []);
+      setContasReceber(Array.isArray(receber) ? receber : []);
+    } catch (err) {
+      setErro(err.message || 'Erro ao carregar contas');
+    } finally {
+      setCarregando(false);
+    }
+  }, []);
+
+  useEffect(() => { recarregar(); }, [recarregar]);
+
+  useEffect(() => {
+    function onReload() { recarregar(); }
+    window.addEventListener('financeiro:reload', onReload);
+    return () => window.removeEventListener('financeiro:reload', onReload);
+  }, [recarregar]);
+
+  return { contasPagar, contasReceber, carregando, erro };
+}
+
+function FluxoView() {
+  const { contasPagar, contasReceber, carregando, erro } = useContasFinanceiro();
+
   const linhas = useMemo(() => {
     const items = [];
     for (const c of contasPagar) {
@@ -514,11 +541,26 @@ function FluxoView({ contasPagar, contasReceber }) {
   const totalSaidas = linhas.filter(l => l.tipo === 'saida').reduce((a, l) => a + l.valor, 0);
   const saldoFinal = totalEntradas + totalSaidas;
 
-  if (contasPagar.length === 0 && contasReceber.length === 0) {
+  if (carregando) {
     return (
       <div className="bg-surface border border-hairline-soft rounded-card p-10 text-center text-fg-muted text-sm">
-        Abra as abas <b className="text-fg">A pagar</b> e <b className="text-fg">A receber</b> primeiro
-        para o fluxo carregar os dados.
+        Carregando…
+      </div>
+    );
+  }
+
+  if (erro) {
+    return (
+      <div className="bg-surface border border-hairline-soft rounded-card p-10 text-center text-coral text-sm">
+        {erro}
+      </div>
+    );
+  }
+
+  if (linhas.length === 0) {
+    return (
+      <div className="bg-surface border border-hairline-soft rounded-card p-10 text-center text-fg-muted text-sm">
+        Nenhuma conta cadastrada para compor o fluxo.
       </div>
     );
   }
@@ -584,7 +626,9 @@ function FluxoView({ contasPagar, contasReceber }) {
   );
 }
 
-function ConcilView({ contasPagar, contasReceber }) {
+function ConcilView() {
+  const { contasPagar, contasReceber, carregando, erro } = useContasFinanceiro();
+
   const grupos = useMemo(() => {
     const map = new Map();
     function add(c, tipo) {
@@ -610,11 +654,18 @@ function ConcilView({ contasPagar, contasReceber }) {
     return [...map.values()].sort((a, b) => b.data.localeCompare(a.data));
   }, [contasPagar, contasReceber]);
 
-  if (contasPagar.length === 0 && contasReceber.length === 0) {
+  if (carregando) {
     return (
       <div className="bg-surface border border-hairline-soft rounded-card p-10 text-center text-fg-muted text-sm">
-        Abra as abas <b className="text-fg">A pagar</b> e <b className="text-fg">A receber</b> primeiro
-        para a conciliação carregar os dados.
+        Carregando…
+      </div>
+    );
+  }
+
+  if (erro) {
+    return (
+      <div className="bg-surface border border-hairline-soft rounded-card p-10 text-center text-coral text-sm">
+        {erro}
       </div>
     );
   }

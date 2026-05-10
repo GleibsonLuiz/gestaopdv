@@ -6,6 +6,7 @@ import TabsBar      from './components/TabsBar';
 import KpiCard      from './components/KpiCard';
 import FiltersBar   from './components/FiltersBar';
 import BillsTable   from './components/BillsTable';
+import CompositionStrip from './components/CompositionStrip';
 import { api } from '../../lib/api.js';
 import {
   ContaModal,
@@ -360,6 +361,25 @@ function ContasView({ tipo, podeEditar, onContas }) {
   const kpis = useMemo(() => calcularKpis(contas, ehPagar), [contas, ehPagar]);
   const bills = useMemo(() => contas.map(c => billFromConta(c, ehPagar)), [contas, ehPagar]);
 
+  const totais = useMemo(() => {
+    let pendente = 0, atrasado = 0, pago = 0, vencendo = 0, vencendoQtd = 0;
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const em7 = new Date(hoje); em7.setDate(em7.getDate() + 7);
+    for (const c of contas) {
+      if (c.status === 'CANCELADA') continue;
+      const v = Number(c.valor) || 0;
+      const ef = statusEfetivo(c);
+      if (ef === 'PAGA') pago += v;
+      else if (ef === 'ATRASADA') atrasado += v;
+      else if (ef === 'PENDENTE') {
+        pendente += v;
+        const dv = new Date(c.vencimento);
+        if (dv <= em7) { vencendo += v; vencendoQtd++; }
+      }
+    }
+    return { pendente, atrasado, pago, vencendo, vencendoQtd };
+  }, [contas]);
+
   const totalFiltrado = useMemo(() => {
     const sum = contas
       .filter(c => c.status !== 'CANCELADA')
@@ -407,9 +427,18 @@ function ContasView({ tipo, podeEditar, onContas }) {
 
   return (
     <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-3.5">
         {kpis.map(k => <KpiCard key={k.id} kpi={k} />)}
       </div>
+
+      <CompositionStrip
+        pendente={totais.pendente}
+        atrasado={totais.atrasado}
+        pago={totais.pago}
+        vencendo={totais.vencendo}
+        vencendoQtd={totais.vencendoQtd}
+        ehPagar={ehPagar}
+      />
 
       <FiltersBar
         search={search} onSearch={setSearch}

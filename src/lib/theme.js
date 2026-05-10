@@ -157,6 +157,12 @@ function luma(hex) {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
+// Cor de texto contrastante para uso sobre o accent (botao primario, badges).
+// Usada em pdv.css e em qualquer componente que pinte com var(--accent-ink).
+function corDeContraste(hex) {
+  return luma(hex) > 0.55 ? "#06291e" : "#ffffff";
+}
+
 // Aplica o tema escrevendo as variaveis CSS no :root. O browser repinta
 // automaticamente todos os componentes que usam var(--*).
 export function aplicarTema(id) {
@@ -165,6 +171,7 @@ export function aplicarTema(id) {
   for (const [chave, valor] of Object.entries(tema.cores)) {
     root.style.setProperty(`--${chave}`, valor);
   }
+  root.style.setProperty("--accent-ink", corDeContraste(tema.cores.accent));
   root.dataset.tema = tema.id;
   root.dataset.brilho = tema.claro ? "claro" : "escuro";
 }
@@ -178,10 +185,12 @@ export function aplicarAcento(temaId, acento) {
     // Para botoes primarios (gradient accent->purple) tambem ajustamos purple
     // para combinar — usuario percebe o override como "cor unica".
     root.style.setProperty("--purple", acento);
+    root.style.setProperty("--accent-ink", corDeContraste(acento));
   } else {
     const tema = getTema(temaId);
     root.style.setProperty("--accent", tema.cores.accent);
     root.style.setProperty("--purple", tema.cores.purple);
+    root.style.setProperty("--accent-ink", corDeContraste(tema.cores.accent));
   }
 }
 

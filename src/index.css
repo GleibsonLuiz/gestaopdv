@@ -22,6 +22,7 @@
   --text: #e2e8f0;
   --muted: #64748b;
   --white: #ffffff;
+  --accent-ink: #ffffff;
 }
 
 *, *::before, *::after {

@@ -41,6 +41,22 @@ const FORMAS = [
 
 const FORMA_LABEL = Object.fromEntries(FORMAS.map(f => [f.id, f.label]));
 
+// Formas que representam venda a prazo: o cliente (ou operadora) ainda nao
+// pagou no ato. O modal de pagamento exibe vencimento + parcelas para
+// gerar ContaReceber automatica.
+const FORMAS_GERA_RECEBER = new Set(["CARTAO_CREDITO", "BOLETO", "CREDIARIO"]);
+
+// Hoje + N dias no formato YYYY-MM-DD usando o fuso LOCAL (toISOString usa
+// UTC e pode voltar um dia em fusos negativos como BRT).
+function dataDaqui(diasAFrente) {
+  const d = new Date();
+  d.setDate(d.getDate() + diasAFrente);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dia = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dia}`;
+}
+
 const STATUS_INFO = {
   CONCLUIDA: { label: "Concluída", cor: C.green },
   CANCELADA: { label: "Cancelada", cor: C.red },
@@ -244,6 +260,10 @@ function NovaVenda({ user }) {
   const [formasCustom, setFormasCustom] = useState([]);
   const [formaCustomId, setFormaCustomId] = useState(null); // null = padrao; id = custom
   const [gerenciarFormasAberto, setGerenciarFormasAberto] = useState(false);
+  // Bloco financeiro (gera ContaReceber) — visivel apenas para BOLETO/CREDITO/
+  // CREDIARIO. Default: 30 dias a frente, 1 parcela.
+  const [contaVencimento, setContaVencimento] = useState(() => dataDaqui(30));
+  const [contaParcelas, setContaParcelas] = useState(1);
   const buscaRef = useRef(null);
   const finalizarRef = useRef(null);
   const valorRecebidoRef = useRef(null);
@@ -578,9 +598,18 @@ function NovaVenda({ user }) {
     if (carrinho.length === 0) { setErro("Adicione ao menos um item"); return; }
     if (descontoNum > subtotal) { setErro("Desconto não pode ser maior que o subtotal"); return; }
 
+    const geraReceber = FORMAS_GERA_RECEBER.has(forma) && !formaCustomId;
+    if (geraReceber) {
+      if (!contaVencimento) { setErro("Informe o vencimento da conta a receber"); return; }
+      const p = parseInt(contaParcelas, 10);
+      if (!Number.isFinite(p) || p < 1 || p > 60) {
+        setErro("Numero de parcelas deve estar entre 1 e 60"); return;
+      }
+    }
+
     setSalvando(true);
     try {
-      const venda = await api.criarVenda({
+      const payload = {
         clienteId: clienteId || null,
         formaPagamento: forma,
         desconto: descontoNum,
@@ -590,7 +619,14 @@ function NovaVenda({ user }) {
           quantidade: it.quantidade,
           precoUnitario: it.precoUnitario,
         })),
-      });
+      };
+      if (geraReceber) {
+        payload.gerarContaReceber = {
+          vencimento: contaVencimento,
+          parcelas: parseInt(contaParcelas, 10) || 1,
+        };
+      }
+      const venda = await api.criarVenda(payload);
       // Atualiza estoques locais
       setProdutos(prev => prev.map(p => {
         const it = carrinho.find(c => c.produtoId === p.id);
@@ -1245,6 +1281,54 @@ function NovaVenda({ user }) {
                 <input value={observacoes} onChange={e => setObservacoes(e.target.value)}
                   placeholder="Opcional" className="pdv-field-input" />
               </div>
+
+              {FORMAS_GERA_RECEBER.has(forma) && !formaCustomId && (
+                <div style={{
+                  padding: "12px 14px", borderRadius: 10,
+                  background: "color-mix(in oklab, var(--pdv-c-violet) 10%, var(--pdv-surf-2))",
+                  border: "1px solid color-mix(in oklab, var(--pdv-c-violet) 35%, transparent)",
+                  display: "flex", flexDirection: "column", gap: 10,
+                }}>
+                  <div style={{
+                    color: "var(--pdv-c-violet)", fontSize: 11, fontWeight: 600,
+                    letterSpacing: ".06em", textTransform: "uppercase",
+                  }}>
+                    Conta a receber será gerada
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div>
+                      <label className="pdv-field-label">
+                        {contaParcelas > 1 ? "Vencimento da 1ª parcela" : "Vencimento"}
+                      </label>
+                      <input
+                        type="date"
+                        value={contaVencimento}
+                        onChange={e => setContaVencimento(e.target.value)}
+                        className="pdv-field-input"
+                      />
+                    </div>
+                    <div>
+                      <label className="pdv-field-label">Parcelas</label>
+                      <input
+                        type="number" min="1" max="60" step="1"
+                        value={contaParcelas}
+                        onChange={e => setContaParcelas(e.target.value)}
+                        className="pdv-field-input"
+                      />
+                    </div>
+                  </div>
+                  {total > 0 && contaVencimento && (
+                    <div style={{ fontSize: 12, color: "var(--pdv-t2)" }}>
+                      ✓ {contaParcelas}× {fmtBRL(total / Math.max(1, parseInt(contaParcelas, 10) || 1))}
+                      {parseInt(contaParcelas, 10) > 1 ? (
+                        <> — vencendo no dia {new Date(contaVencimento + "T12:00:00").getDate()} de cada mês a partir de {new Date(contaVencimento + "T12:00:00").toLocaleDateString("pt-BR")}</>
+                      ) : (
+                        <> — vencimento em {new Date(contaVencimento + "T12:00:00").toLocaleDateString("pt-BR")}</>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {mostrarTroco && valorRecebidoNum > 0 && (
                 trocoFalta > 0 ? (

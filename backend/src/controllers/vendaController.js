@@ -1,9 +1,15 @@
 import prisma from "../lib/prisma.js";
 import { exigirCaixaAberto, registrarNoCaixaAberto, calcularTotaisCaixa } from "./caixaController.js";
+import { parseDate, calcularValores, gerarSerieRecorrencia } from "../lib/contas.js";
 
 const FORMAS_VALIDAS = new Set([
   "DINHEIRO", "CARTAO_CREDITO", "CARTAO_DEBITO", "PIX", "BOLETO", "CREDIARIO",
 ]);
+
+// Formas que representam venda a prazo: o cliente (ou a operadora) ainda
+// nao pagou no ato — gera ContaReceber automatica quando o caixa enviar
+// gerarContaReceber no payload.
+const FORMAS_GERA_RECEBER = new Set(["CARTAO_CREDITO", "BOLETO", "CREDIARIO"]);
 
 const INCLUDE_LISTA = {
   cliente: { select: { id: true, nome: true, cpfCnpj: true } },
@@ -18,6 +24,13 @@ const INCLUDE_DETALHE = {
     include: {
       produto: { select: { id: true, codigo: true, nome: true, unidade: true } },
     },
+  },
+  contasReceber: {
+    select: {
+      id: true, descricao: true, valor: true, vencimento: true,
+      status: true, parcelaAtual: true, parcelaTotal: true,
+    },
+    orderBy: { vencimento: "asc" },
   },
 };
 
@@ -68,7 +81,7 @@ export async function obter(req, res, next) {
 
 export async function criar(req, res, next) {
   try {
-    const { clienteId, formaPagamento, observacoes, itens } = req.body;
+    const { clienteId, formaPagamento, observacoes, itens, gerarContaReceber } = req.body;
     const desconto = req.body.desconto !== undefined ? toNumber(req.body.desconto) : 0;
 
     if (!formaPagamento || !FORMAS_VALIDAS.has(formaPagamento)) {
@@ -79,6 +92,33 @@ export async function criar(req, res, next) {
     }
     if (desconto === null || Number.isNaN(desconto) || desconto < 0) {
       return res.status(400).json({ erro: "Desconto invalido" });
+    }
+
+    // Validacao do bloco financeiro (ContaReceber automatica). Feita ANTES
+    // da transacao para falhar rapido sem precisar reverter a venda.
+    let configConta = null;
+    if (gerarContaReceber) {
+      if (!FORMAS_GERA_RECEBER.has(formaPagamento)) {
+        return res.status(400).json({
+          erro: "Forma de pagamento nao permite gerar conta a receber",
+        });
+      }
+      const venc = parseDate(gerarContaReceber.vencimento);
+      if (!venc) return res.status(400).json({ erro: "Vencimento da conta a receber invalido" });
+      const parcelas = parseInt(gerarContaReceber.parcelas, 10) || 1;
+      if (parcelas < 1 || parcelas > 60) {
+        return res.status(400).json({ erro: "Numero de parcelas deve estar entre 1 e 60" });
+      }
+      configConta = {
+        vencimento: venc,
+        parcelas,
+        descricaoCustom: gerarContaReceber.descricao
+          ? String(gerarContaReceber.descricao).trim().toUpperCase().slice(0, 200)
+          : null,
+        observacoesConta: gerarContaReceber.observacoes
+          ? String(gerarContaReceber.observacoes).trim().toUpperCase().slice(0, 500)
+          : null,
+      };
     }
 
     const itensNorm = [];
@@ -189,7 +229,43 @@ export async function criar(req, res, next) {
           });
         }
 
-        return vendaCriada;
+        // ContaReceber automatica: gera 1+ parcelas vinculadas a venda.
+        // Reaproveita o helper de recorrencia do financeiro.
+        if (configConta) {
+          const nomeCliente = vendaCriada.cliente?.nome
+            ? vendaCriada.cliente.nome.toUpperCase()
+            : "CONSUMIDOR";
+          const descricao = configConta.descricaoCustom
+            || `VENDA #${vendaCriada.numero} - ${nomeCliente}`;
+          const calc = calcularValores({
+            valorBruto: total, juros: 0, multa: 0, desconto: 0,
+          });
+          if (!calc.ok) { const e = new Error(calc.erro); e.status = 400; throw e; }
+          const serie = gerarSerieRecorrencia({
+            tipoRecorrencia: configConta.parcelas > 1 ? "PARCELADA" : "NENHUMA",
+            parcelaTotal: configConta.parcelas,
+            valores: calc.valores,
+            vencimento: configConta.vencimento,
+            dadosBase: {
+              descricao,
+              clienteId: clienteId || null,
+              observacoes: configConta.observacoesConta
+                || `GERADA AUTOMATICAMENTE PELA VENDA #${vendaCriada.numero}`,
+            },
+          });
+          if (!serie.ok) {
+            const e = new Error(serie.erro); e.status = 400; throw e;
+          }
+          for (const reg of serie.registros) {
+            await tx.contaReceber.create({ data: { ...reg, vendaId: vendaCriada.id } });
+          }
+        }
+
+        // Recarrega para incluir contasReceber recem-criadas no retorno.
+        return tx.venda.findUnique({
+          where: { id: vendaCriada.id },
+          include: INCLUDE_DETALHE,
+        });
       });
 
       res.status(201).json(venda);
@@ -209,13 +285,36 @@ export async function cancelar(req, res, next) {
       const venda = await prisma.$transaction(async (tx) => {
         const atual = await tx.venda.findUnique({
           where: { id },
-          include: { itens: true },
+          include: { itens: true, contasReceber: true },
         });
         if (!atual) {
           const e = new Error("Venda nao encontrada"); e.status = 404; throw e;
         }
         if (atual.status === "CANCELADA") {
           const e = new Error("Venda ja esta cancelada"); e.status = 400; throw e;
+        }
+
+        // Bloqueia cancelamento se alguma ContaReceber vinculada ja foi
+        // recebida (dinheiro entrou no caixa). Usuario precisa reabrir
+        // a conta no Financeiro antes de estornar a venda.
+        const contasPagas = atual.contasReceber.filter(c => c.status === "PAGA");
+        if (contasPagas.length > 0) {
+          const e = new Error(
+            `Esta venda possui ${contasPagas.length} conta(s) ja recebida(s). ` +
+            `Reabra-a(s) no Financeiro antes de cancelar.`
+          );
+          e.status = 400; throw e;
+        }
+
+        // Cancela contas a receber pendentes/atrasadas vinculadas.
+        const idsCancelar = atual.contasReceber
+          .filter(c => c.status === "PENDENTE" || c.status === "ATRASADA")
+          .map(c => c.id);
+        if (idsCancelar.length > 0) {
+          await tx.contaReceber.updateMany({
+            where: { id: { in: idsCancelar } },
+            data: { status: "CANCELADA" },
+          });
         }
 
         const cancelada = await tx.venda.update({

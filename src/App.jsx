@@ -8,7 +8,7 @@ import Estoque from "./Estoque.jsx";
 import Compras from "./Compras.jsx";
 import Orcamentos from "./Orcamentos.jsx";
 import Funcionarios from "./Funcionarios.jsx";
-import Financeiro from "./Financeiro.jsx";
+import FinanceiroPage from "./pages/financeiro/FinanceiroPage.jsx";
 import Caixa from "./Caixa.jsx";
 import PDV from "./PDV.jsx";
 import Dashboard from "./Dashboard.jsx";
@@ -441,10 +441,7 @@ export default function App() {
             </>
           )}
           {tela === "financeiro" && (
-            <>
-              <PageHeader titulo="Financeiro" subtitulo="Contas a pagar e a receber — fluxo de caixa do negócio" />
-              <Financeiro user={user} />
-            </>
+            <FinanceiroPage user={user} />
           )}
           {tela === "caixa" && (
             <>

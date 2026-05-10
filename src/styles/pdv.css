@@ -71,12 +71,13 @@
 
 /* ─── Header ───────────────────────────────────────────────── */
 .pdv-hdr {
-  display: flex; align-items: center; gap: 16px;
-  padding: 12px 24px;
+  display: flex; align-items: center; gap: clamp(8px, 1.2vw, 16px);
+  padding: clamp(8px, 1vw, 12px) clamp(12px, 2vw, 24px);
   background: var(--pdv-surf);
   border-bottom: 1px solid var(--pdv-line);
   position: sticky; top: 0; z-index: 30;
   backdrop-filter: blur(8px);
+  flex-wrap: wrap;
 }
 .pdv-brand { display: flex; align-items: center; gap: 10px; padding-right: 6px; }
 .pdv-brand-mark {
@@ -141,11 +142,13 @@
 /* ─── App container ────────────────────────────────────────── */
 .pdv-app {
   position: relative; z-index: 1;
-  max-width: 1480px;
+  width: 100%;
+  max-width: min(1680px, 100%);
   margin: 0 auto;
-  padding: 18px 24px 28px;
+  padding: clamp(12px, 1.6vw, 22px) clamp(12px, 2vw, 28px) clamp(16px, 2vw, 32px);
   display: flex; flex-direction: column;
-  gap: 16px;
+  gap: clamp(12px, 1.4vw, 18px);
+  box-sizing: border-box;
 }
 
 /* ─── Dashboard (vendas hoje por forma) ────────────────────── */
@@ -284,8 +287,8 @@
 /* ─── Layout split ─────────────────────────────────────────── */
 .pdv-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) clamp(320px, 26vw, 400px);
+  gap: clamp(12px, 1.2vw, 18px);
   align-items: start;
 }
 
@@ -314,7 +317,7 @@
 .pdv-card-sub { font-size: 11.5px; color: var(--pdv-t3); margin-top: 4px; }
 
 /* ─── Cestinha (cart items) ────────────────────────────────── */
-.pdv-cart-list { max-height: calc(100vh - 320px); overflow-y: auto; }
+.pdv-cart-list { max-height: clamp(320px, calc(100vh - 320px), 720px); overflow-y: auto; }
 .pdv-cart-item {
   display: flex; gap: 14px; align-items: center;
   padding: 12px 18px; border-bottom: 1px solid var(--pdv-line);
@@ -420,11 +423,11 @@
   text-transform: uppercase; font-weight: 500;
 }
 .pdv-total-num {
-  font-size: 36px; font-weight: 600; letter-spacing: -0.03em;
+  font-size: clamp(26px, 2.6vw, 36px); font-weight: 600; letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums; line-height: 1; color: var(--pdv-t1);
 }
-.pdv-total-num .cur { color: var(--pdv-t3); font-size: 16px; font-weight: 500; margin-right: 5px; vertical-align: 7px; }
-.pdv-total-num .cents { color: var(--pdv-t3); font-size: 22px; }
+.pdv-total-num .cur { color: var(--pdv-t3); font-size: clamp(13px, 1.1vw, 16px); font-weight: 500; margin-right: 5px; vertical-align: 7px; }
+.pdv-total-num .cents { color: var(--pdv-t3); font-size: clamp(16px, 1.6vw, 22px); }
 
 .pdv-btn-finalize {
   width: 100%; padding: 16px;
@@ -536,8 +539,8 @@
 
 /* ─── Top sellers grid (cestinha vazia) ────────────────────── */
 .pdv-top-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px;
-  padding: 0 18px 16px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(clamp(140px, 14vw, 180px), 1fr)); gap: 8px;
+  padding: 0 clamp(12px, 1.4vw, 18px) 16px;
 }
 .pdv-top-card {
   position: relative;
@@ -581,9 +584,9 @@
 /* ─── Recent sales (ultimasVendas) ─────────────────────────── */
 .pdv-rec-row {
   display: grid;
-  grid-template-columns: 60px 1fr 110px 130px 70px;
-  gap: 14px; align-items: center;
-  padding: 11px 18px;
+  grid-template-columns: clamp(48px, 5vw, 60px) minmax(0, 1fr) clamp(80px, 9vw, 110px) clamp(100px, 11vw, 130px) clamp(60px, 6vw, 70px);
+  gap: clamp(8px, 1vw, 14px); align-items: center;
+  padding: 11px clamp(12px, 1.4vw, 18px);
   font-size: 12.5px; border-top: 1px solid var(--pdv-line);
   cursor: pointer;
   width: 100%; background: transparent; border-left: 0; border-right: 0; border-bottom: 0;
@@ -744,7 +747,9 @@
 
 /* ─── Histórico (preserva tabela mas com tokens novos) ─────── */
 .pdv-stats-grid {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(clamp(140px, 14vw, 180px), 1fr));
+  gap: 10px; margin-bottom: 16px;
 }
 .pdv-stat-card {
   background: var(--pdv-surf); border: 1px solid var(--pdv-line);
@@ -775,13 +780,94 @@
 }
 
 /* ─── Responsive ───────────────────────────────────────────── */
-@media (max-width: 1180px) {
-  .pdv-main { grid-template-columns: minmax(0, 1fr) 340px; }
+
+/* Ultrawide (>= 1920px): aproveita o espaço extra com painel lateral maior */
+@media (min-width: 1920px) {
+  .pdv-app { max-width: 1820px; }
+  .pdv-main { grid-template-columns: minmax(0, 1fr) 420px; }
+  .pdv-pay-btn { padding: 12px 14px; }
 }
+
+/* Notebook estreito (<= 1180px): painel lateral encolhe */
+@media (max-width: 1180px) {
+  .pdv-main { grid-template-columns: minmax(0, 1fr) 320px; }
+  .pdv-pay-grid { grid-template-columns: repeat(2, 1fr); }
+  .pdv-user-name { max-width: 130px; }
+}
+
+/* Tablet (<= 920px): painel lateral vai pra baixo */
 @media (max-width: 920px) {
   .pdv-main { grid-template-columns: 1fr; }
-  .pdv-side { position: static; max-height: none; }
-  .pdv-top-grid { grid-template-columns: repeat(2, 1fr); }
-  .pdv-rec-row { grid-template-columns: 50px 1fr 90px 70px; }
+  .pdv-side {
+    position: static; max-height: none; overflow: visible;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  }
+  .pdv-totals-card { grid-column: 1 / -1; }
+  .pdv-top-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .pdv-rec-row {
+    grid-template-columns: 50px minmax(0, 1fr) 90px 70px;
+  }
   .pdv-rec-row .pdv-rec-method { display: none; }
+  .pdv-cart-list { max-height: none; }
+  .pdv-pay-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* Celular grande (<= 720px) */
+@media (max-width: 720px) {
+  .pdv-hdr {
+    padding: 10px 14px; gap: 10px;
+  }
+  .pdv-brand-sub { display: none; }
+  .pdv-nav { margin-left: 0; flex: 1 1 100%; order: 3; justify-content: center; }
+  .pdv-nav-btn { flex: 1; justify-content: center; padding: 8px 10px; font-size: 12.5px; }
+  .pdv-user-name { max-width: 110px; font-size: 12px; }
+  .pdv-side { grid-template-columns: 1fr; }
+  .pdv-stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .pdv-scan { padding: 8px 12px; gap: 10px; }
+  .pdv-scan-icon { width: 32px; height: 32px; }
+  .pdv-scan input { font-size: 15px; padding: 11px 0; }
+  .pdv-scan-hint { display: none; }
+  .pdv-scan-sugg { left: 12px; right: 12px; }
+  .pdv-card-hd { padding: 14px 14px 10px; }
+  .pdv-cart-item { padding: 11px 14px; gap: 10px; }
+  .pdv-rec-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "cust total"
+      "id   time";
+    gap: 4px 12px;
+  }
+  .pdv-rec-id { grid-area: id; }
+  .pdv-rec-cust { grid-area: cust; }
+  .pdv-rec-total { grid-area: total; }
+  .pdv-rec-time { grid-area: time; }
+}
+
+/* Celular pequeno (<= 480px) */
+@media (max-width: 480px) {
+  .pdv-app { padding: 10px 10px 18px; gap: 10px; }
+  .pdv-hdr { padding: 8px 10px; }
+  .pdv-brand-mark { width: 30px; height: 30px; font-size: 14px; }
+  .pdv-brand-name { font-size: 13.5px; }
+  .pdv-user-chip { padding: 4px 10px 4px 4px; }
+  .pdv-user-av { width: 26px; height: 26px; font-size: 11px; }
+  .pdv-user-name { max-width: 80px; }
+  .pdv-no-cash { font-size: 12.5px; padding: 12px 14px; }
+  .pdv-pay-grid { grid-template-columns: repeat(2, 1fr); }
+  .pdv-short-grid { grid-template-columns: 1fr; }
+  .pdv-top-grid { grid-template-columns: 1fr; padding: 0 14px 14px; }
+  .pdv-stats-grid { grid-template-columns: 1fr; }
+  .pdv-totals-card { padding: 14px; }
+  .pdv-btn-finalize { padding: 14px; font-size: 13.5px; }
+  .pdv-cart-item-total { font-size: 15px; }
+  .pdv-cart-item-name { font-size: 13px; }
+  .pdv-modal-hd { padding: 18px 18px 12px; }
+  .pdv-modal-body { padding: 0 18px; }
+  .pdv-modal-foot { padding: 14px 18px 18px; }
+}
+
+/* Altura curta (notebooks 13'' / janelas redimensionadas) */
+@media (max-height: 760px) and (min-width: 921px) {
+  .pdv-cart-list { max-height: calc(100vh - 280px); }
+  .pdv-side { max-height: calc(100vh - 80px); top: 70px; }
 }

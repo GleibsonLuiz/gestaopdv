@@ -475,19 +475,23 @@ function RelatorioFinanceiro() {
         <>
           <CampoData label="Vencimento de" value={dataInicio} onChange={setDataInicio} />
           <CampoData label="Vencimento até" value={dataFim} onChange={setDataFim} />
-          <CampoSelect label="Tipo" value={tipo} onChange={setTipo}>
+          <CampoSelect label="Tipo" value={tipo} onChange={(v) => {
+            setTipo(v);
+            if (v !== "receber") setClienteId("");
+            if (v !== "pagar") setFornecedorId("");
+          }}>
             <option value="">Ambos</option>
             <option value="pagar">Apenas a pagar</option>
             <option value="receber">Apenas a receber</option>
           </CampoSelect>
-          {tipo !== "pagar" && (
-            <CampoSelect label="Cliente (a receber)" value={clienteId} onChange={setClienteId}>
+          {tipo === "receber" && (
+            <CampoSelect label="Cliente" value={clienteId} onChange={setClienteId}>
               <option value="">Todos</option>
               {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
             </CampoSelect>
           )}
-          {tipo !== "receber" && (
-            <CampoSelect label="Fornecedor (a pagar)" value={fornecedorId} onChange={setFornecedorId}>
+          {tipo === "pagar" && (
+            <CampoSelect label="Fornecedor" value={fornecedorId} onChange={setFornecedorId}>
               <option value="">Todos</option>
               {fornecedores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
             </CampoSelect>

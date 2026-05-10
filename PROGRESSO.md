@@ -133,6 +133,36 @@ Não existe rota/UI para **cancelar/excluir** uma compra. Hoje, se uma compra é
 
 ## Histórico de sessões
 
+### Sessão — 2026-05-10 (PDV → Conta a Receber automática)
+
+Contraparte do que Compras já fazia com ContaPagar: ao finalizar uma venda no PDV com **BOLETO**, **CARTAO_CREDITO** ou **CREDIARIO**, o caixa pode definir vencimento + parcelas no próprio modal de pagamento e o backend gera a(s) ContaReceber vinculadas à venda na **mesma transação**.
+
+**Schema** ([backend/prisma/schema.prisma](backend/prisma/schema.prisma))
+
+- `ContaReceber` ganhou FK opcional `vendaId` (`ON DELETE SET NULL`) + relação inversa `contasReceber ContaReceber[]` em `Venda`
+- Migration: `20260510_add_venda_conta_receber/migration.sql` (coluna + FK + índice)
+
+**Backend** ([backend/src/controllers/vendaController.js](backend/src/controllers/vendaController.js))
+
+- `criar` aceita `gerarContaReceber?: { vencimento, parcelas, descricao?, observacoes? }` opcional
+- Valida que a forma é uma das `FORMAS_GERA_RECEBER = { CARTAO_CREDITO, BOLETO, CREDIARIO }` antes de aceitar o bloco
+- Reaproveita os mesmos helpers que Compras usa (`parseDate`, `calcularValores`, `gerarSerieRecorrencia`)
+- 1 parcela → `NENHUMA`; >1 → `PARCELADA` (divide o total e gera N contas com `grupoRecorrenciaId` compartilhado)
+- Descrição padrão: `VENDA #N - <CLIENTE>` (ou `CONSUMIDOR`); customizável via body
+- `INCLUDE_DETALHE` agora retorna `contasReceber` junto com a venda
+- `cancelar`: bloqueia se houver ContaReceber ja PAGA (mesmo padrão de Compras × ContaPagar — usuário precisa reabrir no Financeiro antes); senão cancela pendentes/atrasadas vinculadas
+
+**Frontend** ([src/PDV.jsx](src/PDV.jsx))
+
+- Estados novos no `NovaVenda`: `contaVencimento` (default +30 dias), `contaParcelas` (default 1)
+- Bloco violeta dentro do modal de pagamento, condicional em `FORMAS_GERA_RECEBER.has(forma) && !formaCustomId`:
+  - Campo data de vencimento (label muda para "Vencimento da 1ª parcela" se parcelas > 1)
+  - Campo número de parcelas (1–60)
+  - Linha de preview: `"✓ 3× R$ X,XX — vencendo no dia D de cada mês a partir de DD/MM/AAAA"`
+- `confirmarPagamento` valida + envia `gerarContaReceber` no payload quando aplicável
+
+**Validação executada (e limpa):** venda BOLETO 3× R$ 10,00 → 3 ContaReceber pendentes geradas com vencimentos jun/jul/ago; cancelamento da venda cancelou todas. Dados de teste removidos do banco; estoque do produto preservado.
+
 ### Sessão — 2026-05-04 (Compra → Conta a Pagar automática)
 
 Modal de Nova Compra ganhou seção "💰 Gerar conta a pagar no Financeiro" (ativa por padrão). Ao confirmar, a compra e a(s) conta(s) a pagar são criadas na **mesma transação** — se algo falhar, ambas são revertidas.
@@ -930,7 +960,9 @@ Em 2026-05-04, novo refactor profundo: **PDV bipagem por scanner** (cestinha 70%
 
 Em 2026-05-05, **estorno de compra**: nova rota `POST /compras/:id/estornar` (ADMIN/GERENTE) que cria SAIDA reversa para cada item, decrementa o estoque e cancela as contas a pagar PENDENTES/ATRASADAS vinculadas. Schema ganhou `cancelada/canceladaEm/motivoCancelamento` em `Compra` e FK opcional `compraId` em `ContaPagar` (vinculação explícita ao criar). Bloqueia o estorno se houver conta já PAGA — usuário precisa reabrir antes. UI: badge "Estornada" na lista (com total riscado) e modal de detalhe com bloco de confirmação + motivo + lista de contas vinculadas com status.
 
-Estado em 2026-05-05: working tree pronto para commit.
+Em 2026-05-10, **venda a prazo → ContaReceber**: contraparte simétrica de Compras×ContaPagar para o lado das vendas. PDV gera ContaReceber automática (com parcelas opcionais) ao finalizar com BOLETO/CARTAO_CREDITO/CREDIARIO; cancelamento da venda cancela as pendentes e bloqueia se houver alguma já recebida.
+
+Estado em 2026-05-10: commit aplicado e enviado para origin/main.
 
 ### Lacunas conhecidas (polimento opcional)
 

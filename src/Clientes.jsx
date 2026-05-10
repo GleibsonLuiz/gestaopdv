@@ -206,19 +206,6 @@ export default function Clientes({ user }) {
     }
   }
 
-  async function excluirPermanente(cliente) {
-    if (!confirm(
-      `Tem certeza que deseja excluir "${cliente.nome}"?\n\nEsta acao nao pode ser desfeita.`
-    )) return;
-    try {
-      await api.excluirPermanenteCliente(cliente.id);
-      flash("Cliente excluido");
-      carregar();
-    } catch (err) {
-      alert(err.message);
-    }
-  }
-
   return (
     <div>
       <style>{`
@@ -378,13 +365,6 @@ export default function Clientes({ user }) {
                     icon: c.ativo ? "⊘" : "↻",
                     color: c.ativo ? C.yellow : C.green,
                     onClick: () => alternarAtivo(c),
-                    hidden: !podeExcluir,
-                  },
-                  {
-                    label: "Excluir",
-                    icon: "🗑",
-                    color: C.red,
-                    onClick: () => excluirPermanente(c),
                     hidden: !podeExcluir,
                   },
                 ]}

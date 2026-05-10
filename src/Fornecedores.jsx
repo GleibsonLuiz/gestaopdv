@@ -112,19 +112,6 @@ export default function Fornecedores({ user }) {
     }
   }
 
-  async function excluirPermanente(fornecedor) {
-    if (!confirm(
-      `Tem certeza que deseja excluir "${fornecedor.nome}"?\n\nEsta acao nao pode ser desfeita.`
-    )) return;
-    try {
-      await api.excluirPermanenteFornecedor(fornecedor.id);
-      flash("Fornecedor excluido");
-      carregar();
-    } catch (err) {
-      alert(err.message);
-    }
-  }
-
   return (
     <div>
       <div style={{
@@ -225,13 +212,6 @@ export default function Fornecedores({ user }) {
                     icon: f.ativo ? "⊘" : "↻",
                     color: f.ativo ? C.yellow : C.green,
                     onClick: () => alternarAtivo(f),
-                    hidden: !podeExcluir,
-                  },
-                  {
-                    label: "Excluir",
-                    icon: "🗑",
-                    color: C.red,
-                    onClick: () => excluirPermanente(f),
                     hidden: !podeExcluir,
                   },
                 ]}

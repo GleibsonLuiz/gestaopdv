@@ -295,19 +295,6 @@ export default function Produtos({ user }) {
     }
   }
 
-  async function excluirPermanente(p) {
-    if (!confirm(
-      `Tem certeza que deseja excluir "${p.nome}"?\n\nEsta acao nao pode ser desfeita.`
-    )) return;
-    try {
-      await api.excluirPermanenteProduto(p.id);
-      flash("Produto excluido");
-      carregar();
-    } catch (err) {
-      alert(err.message);
-    }
-  }
-
   return (
     <div>
       <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
@@ -469,13 +456,6 @@ export default function Produtos({ user }) {
                       icon: p.ativo ? "⊘" : "↻",
                       color: p.ativo ? C.yellow : C.green,
                       onClick: () => alternarAtivo(p),
-                      hidden: !podeExcluir,
-                    },
-                    {
-                      label: "Excluir",
-                      icon: "🗑",
-                      color: C.red,
-                      onClick: () => excluirPermanente(p),
                       hidden: !podeExcluir,
                     },
                   ]}

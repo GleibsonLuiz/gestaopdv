@@ -226,7 +226,7 @@ export async function relatorioCompras(req, res, next) {
 
 export async function relatorioFinanceiro(req, res, next) {
   try {
-    const { dataInicio, dataFim, tipo } = req.query;
+    const { dataInicio, dataFim, tipo, clienteId, fornecedorId } = req.query;
     const di = parseDataInicio(dataInicio);
     const df = parseDataFim(dataFim);
 
@@ -244,6 +244,8 @@ export async function relatorioFinanceiro(req, res, next) {
         whereReceber.vencimento.lte = df;
       }
     }
+    if (fornecedorId) wherePagar.fornecedorId = fornecedorId;
+    if (clienteId) whereReceber.clienteId = clienteId;
 
     const incluirPagar = !tipo || tipo === "pagar";
     const incluirReceber = !tipo || tipo === "receber";
@@ -295,6 +297,8 @@ export async function relatorioFinanceiro(req, res, next) {
         dataInicio: di ? di.toISOString() : null,
         dataFim: df ? df.toISOString() : null,
         tipo: tipo || "ambos",
+        clienteId: clienteId || null,
+        fornecedorId: fornecedorId || null,
       },
       resumo: {
         pagar: resumoPagar,

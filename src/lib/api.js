@@ -261,11 +261,13 @@ export const api = {
     const q = qs.toString();
     return request(`/relatorios/compras${q ? `?${q}` : ""}`);
   },
-  relatorioFinanceiro: ({ dataInicio = "", dataFim = "", tipo = "" } = {}) => {
+  relatorioFinanceiro: ({ dataInicio = "", dataFim = "", tipo = "", clienteId = "", fornecedorId = "" } = {}) => {
     const qs = new URLSearchParams();
     if (dataInicio) qs.set("dataInicio", dataInicio);
     if (dataFim) qs.set("dataFim", dataFim);
     if (tipo) qs.set("tipo", tipo);
+    if (clienteId) qs.set("clienteId", clienteId);
+    if (fornecedorId) qs.set("fornecedorId", fornecedorId);
     const q = qs.toString();
     return request(`/relatorios/financeiro${q ? `?${q}` : ""}`);
   },

@@ -373,18 +373,27 @@ function RelatorioFinanceiro() {
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
   const [tipo, setTipo] = useState("");
+  const [clienteId, setClienteId] = useState("");
+  const [fornecedorId, setFornecedorId] = useState("");
+  const [clientes, setClientes] = useState([]);
+  const [fornecedores, setFornecedores] = useState([]);
   const [dados, setDados] = useState(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
 
+  useEffect(() => {
+    api.listarClientes({ ativo: "true" }).then(setClientes).catch(() => {});
+    api.listarFornecedores({ ativo: "true" }).then(setFornecedores).catch(() => {});
+  }, []);
+
   const gerar = useCallback(async () => {
     setCarregando(true); setErro("");
     try {
-      const r = await api.relatorioFinanceiro({ dataInicio, dataFim, tipo });
+      const r = await api.relatorioFinanceiro({ dataInicio, dataFim, tipo, clienteId, fornecedorId });
       setDados(r);
     } catch (err) { setErro(err.message); }
     finally { setCarregando(false); }
-  }, [dataInicio, dataFim, tipo]);
+  }, [dataInicio, dataFim, tipo, clienteId, fornecedorId]);
 
   async function exportar() {
     if (!dados) return;
@@ -471,6 +480,18 @@ function RelatorioFinanceiro() {
             <option value="pagar">Apenas a pagar</option>
             <option value="receber">Apenas a receber</option>
           </CampoSelect>
+          {tipo !== "pagar" && (
+            <CampoSelect label="Cliente (a receber)" value={clienteId} onChange={setClienteId}>
+              <option value="">Todos</option>
+              {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </CampoSelect>
+          )}
+          {tipo !== "receber" && (
+            <CampoSelect label="Fornecedor (a pagar)" value={fornecedorId} onChange={setFornecedorId}>
+              <option value="">Todos</option>
+              {fornecedores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
+            </CampoSelect>
+          )}
         </>
       }
       onGerar={gerar} onExportar={exportar} carregando={carregando}

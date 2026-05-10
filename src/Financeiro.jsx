@@ -487,7 +487,7 @@ function CardKpi({ icone, rotulo, valor, detalhe, cor }) {
   );
 }
 
-function ContaModal({ tipo, conta, entidades, onCancelar, onSalvar }) {
+export function ContaModal({ tipo, conta, entidades, onCancelar, onSalvar }) {
   const ehPagar = tipo === "pagar";
   const editar = !!conta;
   const [descricao, setDescricao] = useState(conta?.descricao || "");
@@ -754,7 +754,7 @@ function hojeLocal() {
   return `${d.getFullYear()}-${m}-${dd}`;
 }
 
-function PagarReceberModal({ tipo, conta, podeEditar, onCancelar, onConfirmar }) {
+export function PagarReceberModal({ tipo, conta, podeEditar, onCancelar, onConfirmar }) {
   const ehPagar = tipo === "pagar";
   const [data, setData] = useState(hojeLocal());
   const [ajustar, setAjustar] = useState(false);
@@ -974,7 +974,7 @@ function PagarReceberModal({ tipo, conta, podeEditar, onCancelar, onConfirmar })
   );
 }
 
-function AnexosModal({ tipo, conta, podeEditar, onFechar }) {
+export function AnexosModal({ tipo, conta, podeEditar, onFechar }) {
   const ehPagar = tipo === "pagar";
   const [anexos, setAnexos] = useState(conta.anexos || []);
   const [enviando, setEnviando] = useState(false);

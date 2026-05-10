@@ -402,10 +402,7 @@ export default function App() {
 
         <div style={{ padding: "24px" }}>
           {tela === "dashboard" && (
-            <>
-              <PageHeader titulo="Dashboard" subtitulo="Visão geral do negócio — vendas, estoque e financeiro" />
-              <Dashboard user={user} />
-            </>
+            <Dashboard user={user} />
           )}
           {tela === "clientes" && (
             <>

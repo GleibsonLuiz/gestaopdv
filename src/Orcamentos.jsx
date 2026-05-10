@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { C } from "./lib/theme.js";
 import { api, BASE_URL } from "./lib/api.js";
+import ActionsMenu from "./components/ActionsMenu.jsx";
 
 // URL absoluta do logotipo da empresa (replicado de Configuracoes.jsx para
 // evitar import cruzado). Backend devolve um caminho relativo do tipo
@@ -211,7 +212,7 @@ export default function Orcamentos({ user }) {
 
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
         <div style={{
-          display: "grid", gridTemplateColumns: "90px 110px 1.6fr 130px 90px 130px 130px",
+          display: "grid", gridTemplateColumns: "90px 110px 1.6fr 130px 90px 130px 80px",
           padding: "12px 16px", background: C.surface,
           borderBottom: `1px solid ${C.border}`, fontSize: 12, fontWeight: 700,
           color: C.muted, textTransform: "uppercase", letterSpacing: 0.5,
@@ -236,7 +237,7 @@ export default function Orcamentos({ user }) {
           const nomeCliente = o.cliente?.nome || o.descricaoCliente || "—";
           return (
             <div key={o.id} style={{
-              display: "grid", gridTemplateColumns: "90px 110px 1.6fr 130px 90px 130px 130px",
+              display: "grid", gridTemplateColumns: "90px 110px 1.6fr 130px 90px 130px 80px",
               padding: "12px 16px", borderBottom: `1px solid ${C.border}`,
               alignItems: "center", fontSize: 13,
             }}>
@@ -265,11 +266,24 @@ export default function Orcamentos({ user }) {
               <div style={{ textAlign: "right", color: C.green, fontWeight: 700, fontSize: 14 }}>
                 {fmtBRL(o.total)}
               </div>
-              <div style={{ textAlign: "right", display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                <button onClick={() => abrirDetalhe(o.id)} style={btnIcone(C.accent)}>Ver</button>
-                {(o.status === "RASCUNHO" || o.status === "AGUARDANDO_APROVACAO") && podeCriar && (
-                  <button onClick={() => abrirEdicao(o.id)} style={btnIcone(C.yellow)}>Editar</button>
-                )}
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <ActionsMenu
+                  items={[
+                    {
+                      label: "Ver detalhes",
+                      icon: "👁",
+                      color: C.accent,
+                      onClick: () => abrirDetalhe(o.id),
+                    },
+                    {
+                      label: "Editar",
+                      icon: "✎",
+                      color: C.yellow,
+                      onClick: () => abrirEdicao(o.id),
+                      hidden: !((o.status === "RASCUNHO" || o.status === "AGUARDANDO_APROVACAO") && podeCriar),
+                    },
+                  ]}
+                />
               </div>
             </div>
           );

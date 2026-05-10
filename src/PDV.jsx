@@ -5,6 +5,7 @@ import { useConfiguracaoEmpresa, formatarEndereco } from "./HeaderRelatorio.jsx"
 import { urlLogotipo } from "./Configuracoes.jsx";
 import { GerenciarFormasModal } from "./Financeiro.jsx";
 import { useModalKeys } from "./lib/modalKeys.js";
+import ActionsMenu from "./components/ActionsMenu.jsx";
 
 function urlImagem(imagem) {
   if (!imagem) return null;
@@ -1996,7 +1997,7 @@ function Historico({ user }) {
 
       <div className="pdv-card">
         <div style={{
-          display: "grid", gridTemplateColumns: "150px 80px 1.5fr 120px 100px 90px 130px 150px",
+          display: "grid", gridTemplateColumns: "150px 80px 1.5fr 120px 100px 90px 130px 80px",
           padding: "12px 18px", background: "var(--pdv-surf-2)",
           borderBottom: "1px solid var(--pdv-line)", fontSize: 10.5, fontWeight: 500,
           color: "var(--pdv-t3)", textTransform: "uppercase", letterSpacing: ".06em",
@@ -2019,7 +2020,7 @@ function Historico({ user }) {
           const st = STATUS_INFO[v.status] || STATUS_INFO.CONCLUIDA;
           return (
             <div key={v.id} style={{
-              display: "grid", gridTemplateColumns: "150px 80px 1.5fr 120px 100px 90px 130px 150px",
+              display: "grid", gridTemplateColumns: "150px 80px 1.5fr 120px 100px 90px 130px 80px",
               padding: "12px 18px", borderBottom: "1px solid var(--pdv-line)",
               alignItems: "center", fontSize: 13,
               opacity: v.status === "CANCELADA" ? 0.55 : 1,
@@ -2045,16 +2046,24 @@ function Historico({ user }) {
               </div>
               <div style={{ textAlign: "right", color: "var(--pdv-t2)", fontVariantNumeric: "tabular-nums" }}>{v._count?.itens || 0}</div>
               <div style={{ textAlign: "right", color: "var(--pdv-t1)", fontWeight: 600, fontSize: 14, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em" }}>{fmtBRL(v.total)}</div>
-              <div style={{ textAlign: "right", display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                <button onClick={() => abrirDetalhe(v.id)} className="pdv-btn-ghost" style={{ padding: "6px 12px", fontSize: 12 }}>Ver</button>
-                {v.status === "CONCLUIDA" && (
-                  <button
-                    onClick={() => abrirReimpressao(v.id)}
-                    className="pdv-btn-ghost"
-                    style={{ padding: "6px 10px", fontSize: 12, color: "var(--pdv-accent)", borderColor: "rgba(52,211,153,.35)" }}
-                    title="Reimprimir cupom (2ª via)"
-                  >🖨️</button>
-                )}
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <ActionsMenu
+                  items={[
+                    {
+                      label: "Ver detalhes",
+                      icon: "👁",
+                      color: C.accent,
+                      onClick: () => abrirDetalhe(v.id),
+                    },
+                    {
+                      label: "Reimprimir cupom",
+                      icon: "🖨",
+                      color: C.green,
+                      onClick: () => abrirReimpressao(v.id),
+                      hidden: v.status !== "CONCLUIDA",
+                    },
+                  ]}
+                />
               </div>
             </div>
           );

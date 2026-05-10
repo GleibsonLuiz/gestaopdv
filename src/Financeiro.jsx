@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { C } from "./lib/theme.js";
 import { api, BASE_URL } from "./lib/api.js";
+import ActionsMenu from "./components/ActionsMenu.jsx";
 
 
 const fmtBRL = (v) => {
@@ -283,7 +284,7 @@ function ListaContas({ tipo, podeEditar }) {
       {/* Lista */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
         <div style={{
-          display: "grid", gridTemplateColumns: "2fr 1.3fr 110px 130px 110px 260px",
+          display: "grid", gridTemplateColumns: "2fr 1.3fr 110px 130px 110px 80px",
           padding: "12px 16px", background: C.surface,
           borderBottom: `1px solid ${C.border}`, fontSize: 11, fontWeight: 700,
           color: C.muted, textTransform: "uppercase", letterSpacing: 0.5,
@@ -316,7 +317,7 @@ function ListaContas({ tipo, podeEditar }) {
 
           return (
             <div key={c.id} style={{
-              display: "grid", gridTemplateColumns: "2fr 1.3fr 110px 130px 110px 260px",
+              display: "grid", gridTemplateColumns: "2fr 1.3fr 110px 130px 110px 80px",
               padding: "12px 16px", borderBottom: `1px solid ${C.border}`,
               alignItems: "center", fontSize: 13,
               opacity: c.status === "CANCELADA" ? 0.55 : 1,
@@ -387,30 +388,45 @@ function ListaContas({ tipo, podeEditar }) {
                   fontSize: 11, fontWeight: 700, textTransform: "uppercase",
                 }}>{info.label}</span>
               </div>
-              <div style={{ display: "flex", gap: 4, justifyContent: "flex-end", flexWrap: "wrap" }}>
-                <button onClick={() => setAnexandoEm(c)} style={btnAcao(C.yellow)}>
-                  📎 {qtdAnexos || ""}
-                </button>
-                {!ehFinalizada && podeEditar && (
-                  <button onClick={() => setRecebendoPagando(c)} style={btnAcao(C.green)}>
-                    {ehPagar ? "Pagar" : "Receber"}
-                  </button>
-                )}
-                {!ehFinalizada && podeEditar && (
-                  <button onClick={() => setEditando(c)} style={btnAcao(C.accent)}>
-                    Editar
-                  </button>
-                )}
-                {c.status === "PAGA" && podeEditar && (
-                  <button onClick={() => executarReabrir(c)} style={btnAcao(C.yellow)}>
-                    Reabrir
-                  </button>
-                )}
-                {!ehFinalizada && podeEditar && (
-                  <button onClick={() => executarCancelar(c)} style={btnAcao(C.red)}>
-                    Cancelar
-                  </button>
-                )}
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <ActionsMenu
+                  items={[
+                    {
+                      label: ehPagar ? "Pagar" : "Receber",
+                      icon: "✓",
+                      color: C.green,
+                      onClick: () => setRecebendoPagando(c),
+                      hidden: ehFinalizada || !podeEditar,
+                    },
+                    {
+                      label: qtdAnexos > 0 ? `Anexos (${qtdAnexos})` : "Anexos",
+                      icon: "📎",
+                      color: C.yellow,
+                      onClick: () => setAnexandoEm(c),
+                    },
+                    {
+                      label: "Editar",
+                      icon: "✎",
+                      color: C.accent,
+                      onClick: () => setEditando(c),
+                      hidden: ehFinalizada || !podeEditar,
+                    },
+                    {
+                      label: "Reabrir",
+                      icon: "↺",
+                      color: C.yellow,
+                      onClick: () => executarReabrir(c),
+                      hidden: !(c.status === "PAGA" && podeEditar),
+                    },
+                    {
+                      label: "Cancelar",
+                      icon: "✕",
+                      color: C.red,
+                      onClick: () => executarCancelar(c),
+                      hidden: ehFinalizada || !podeEditar,
+                    },
+                  ]}
+                />
               </div>
             </div>
           );

@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { C } from "./lib/theme.js";
 import { api } from "./lib/api.js";
 import { MODULOS, permissoesPadrao, IDS_MODULOS } from "./lib/permissoes.js";
+import ActionsMenu from "./components/ActionsMenu.jsx";
 
 
 const ROLE_INFO = {
@@ -121,7 +122,7 @@ export default function Funcionarios({ user }) {
 
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
         <div style={{
-          display: "grid", gridTemplateColumns: "2fr 2fr 130px 110px 130px 160px",
+          display: "grid", gridTemplateColumns: "2fr 2fr 130px 110px 130px 80px",
           padding: "12px 16px", background: C.surface,
           borderBottom: `1px solid ${C.border}`, fontSize: 12, fontWeight: 700,
           color: C.muted, textTransform: "uppercase", letterSpacing: 0.5,
@@ -143,7 +144,7 @@ export default function Funcionarios({ user }) {
           const ehVoce = f.id === user.id;
           return (
             <div key={f.id} style={{
-              display: "grid", gridTemplateColumns: "2fr 2fr 130px 110px 130px 160px",
+              display: "grid", gridTemplateColumns: "2fr 2fr 130px 110px 130px 80px",
               padding: "12px 16px", borderBottom: `1px solid ${C.border}`,
               alignItems: "center", fontSize: 13,
             }}>
@@ -175,11 +176,24 @@ export default function Funcionarios({ user }) {
                 }}>{f.ativo ? "Ativo" : "Inativo"}</span>
               </div>
               <div style={{ color: C.muted, fontSize: 12 }}>{fmtData(f.createdAt)}</div>
-              <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                <button onClick={() => setEditando(f)} style={btnIcone(C.accent)}>Editar</button>
-                {!ehVoce && f.ativo && (
-                  <button onClick={() => excluir(f)} style={btnIcone(C.red)}>Desativar</button>
-                )}
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <ActionsMenu
+                  items={[
+                    {
+                      label: "Editar",
+                      icon: "✎",
+                      color: C.accent,
+                      onClick: () => setEditando(f),
+                    },
+                    {
+                      label: "Desativar",
+                      icon: "⊘",
+                      color: C.red,
+                      onClick: () => excluir(f),
+                      hidden: ehVoce || !f.ativo,
+                    },
+                  ]}
+                />
               </div>
             </div>
           );

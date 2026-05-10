@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { C } from "./lib/theme.js";
 import { api, BASE_URL } from "./lib/api.js";
 import MovimentarEstoqueModal from "./MovimentarEstoqueModal.jsx";
+import ActionsMenu from "./components/ActionsMenu.jsx";
 
 
 const VAZIO = {
@@ -317,7 +318,7 @@ export default function Produtos({ user }) {
         background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden",
       }}>
         <div style={{
-          display: "grid", gridTemplateColumns: "100px 1.6fr 1.2fr 110px 110px 90px 100px 240px",
+          display: "grid", gridTemplateColumns: "100px 1.6fr 1.2fr 110px 110px 90px 100px 80px",
           padding: "12px 16px", background: C.surface,
           borderBottom: `1px solid ${C.border}`, fontSize: 12, fontWeight: 700,
           color: C.muted, textTransform: "uppercase", letterSpacing: 0.5,
@@ -341,7 +342,7 @@ export default function Produtos({ user }) {
           const baixo = !ehServico && p.estoque <= p.estoqueMinimo;
           return (
             <div key={p.id} style={{
-              display: "grid", gridTemplateColumns: "100px 1.6fr 1.2fr 110px 110px 90px 100px 240px",
+              display: "grid", gridTemplateColumns: "100px 1.6fr 1.2fr 110px 110px 90px 100px 80px",
               padding: "12px 16px", borderBottom: `1px solid ${C.border}`,
               alignItems: "center", fontSize: 13, opacity: p.ativo ? 1 : 0.55,
             }}>
@@ -406,23 +407,39 @@ export default function Produtos({ user }) {
                   border: `1px solid ${p.ativo ? C.green + "55" : C.muted + "55"}`,
                 }}>{p.ativo ? "ATIVO" : "INATIVO"}</span>
               </div>
-              <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", flexWrap: "wrap" }}>
-                {podeEditar && !ehServico && (
-                  <button onClick={() => setModalEstoqueProduto(p)} style={btnIcone(C.yellow)} title="Movimentar estoque">📊</button>
-                )}
-                {podeEditar && (
-                  <button onClick={() => abrirEdicao(p)} style={btnIcone(C.accent)}>Editar</button>
-                )}
-                {podeExcluir && (
-                  <button onClick={() => alternarAtivo(p)} style={btnIcone(p.ativo ? C.yellow : C.green)}>
-                    {p.ativo ? "Inativar" : "Reativar"}
-                  </button>
-                )}
-                {podeExcluir && (
-                  <button onClick={() => excluirPermanente(p)} style={btnIconeSolido(C.red)} title="Excluir permanentemente">
-                    🗑 Excluir
-                  </button>
-                )}
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <ActionsMenu
+                  items={[
+                    {
+                      label: "Movimentar estoque",
+                      icon: "📊",
+                      color: C.yellow,
+                      onClick: () => setModalEstoqueProduto(p),
+                      hidden: !podeEditar || ehServico,
+                    },
+                    {
+                      label: "Editar",
+                      icon: "✎",
+                      color: C.accent,
+                      onClick: () => abrirEdicao(p),
+                      hidden: !podeEditar,
+                    },
+                    {
+                      label: p.ativo ? "Inativar" : "Reativar",
+                      icon: p.ativo ? "⊘" : "↻",
+                      color: p.ativo ? C.yellow : C.green,
+                      onClick: () => alternarAtivo(p),
+                      hidden: !podeExcluir,
+                    },
+                    {
+                      label: "Excluir",
+                      icon: "🗑",
+                      color: C.red,
+                      onClick: () => excluirPermanente(p),
+                      hidden: !podeExcluir,
+                    },
+                  ]}
+                />
               </div>
             </div>
           );

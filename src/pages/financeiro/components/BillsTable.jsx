@@ -1,7 +1,7 @@
-import Icon from './icons';
 import StatusPill from './StatusPill';
 import DueCell from './DueCell';
 import AmountCell from './AmountCell';
+import ActionsMenu from '../../../components/ActionsMenu';
 
 const SUPPLIER_TONES = {
   c1: 'linear-gradient(135deg, oklch(0.45 0.10 200), oklch(0.30 0.06 240))',
@@ -163,68 +163,45 @@ function BillRow({ bill, ehPagar, podeEditar, onPay, onEdit, onAttach, onReabrir
       </td>
 
       <td className="p-[16px_18px] align-middle text-right whitespace-nowrap pr-[18px]">
-        <span className="inline-flex items-center gap-1 transition opacity-0 translate-x-1.5 group-hover:opacity-100 group-hover:translate-x-0">
-          {bill.attachments > 0 && (
-            <ActBtn icon onClick={() => onAttach?.(bill)} title={`${bill.attachments} anexo(s)`}>
-              <Icon name="paperclip" />
-              <span className="ml-0.5 font-mono text-[10px]">{bill.attachments}</span>
-            </ActBtn>
-          )}
-          {bill.attachments === 0 && podeEditar && !isCanceled && (
-            <ActBtn icon onClick={() => onAttach?.(bill)} title="Anexos">
-              <Icon name="paperclip" />
-            </ActBtn>
-          )}
-          {!isFinal && podeEditar && (
-            <>
-              <ActBtn primary onClick={() => onPay?.(bill)}>
-                {ehPagar ? 'Pagar' : 'Receber'}
-              </ActBtn>
-              <ActBtn onClick={() => onEdit?.(bill)}>Editar</ActBtn>
-              <ActBtn onClick={() => onCancelar?.(bill)}>Cancelar</ActBtn>
-            </>
-          )}
-          {isPaid && podeEditar && (
-            <ActBtn onClick={() => onReabrir?.(bill)}>Reabrir</ActBtn>
-          )}
-        </span>
+        <ActionsMenu
+          items={[
+            {
+              label: ehPagar ? 'Pagar' : 'Receber',
+              icon: '✓',
+              color: 'oklch(0.78 0.15 158)',
+              onClick: () => onPay?.(bill),
+              hidden: isFinal || !podeEditar,
+            },
+            {
+              label: bill.attachments > 0 ? `Anexos (${bill.attachments})` : 'Anexos',
+              icon: '📎',
+              onClick: () => onAttach?.(bill),
+              hidden: !(bill.attachments > 0 || (podeEditar && !isCanceled)),
+            },
+            {
+              label: 'Editar',
+              icon: '✎',
+              onClick: () => onEdit?.(bill),
+              hidden: isFinal || !podeEditar,
+            },
+            {
+              label: 'Reabrir',
+              icon: '↺',
+              color: 'oklch(0.82 0.14 78)',
+              onClick: () => onReabrir?.(bill),
+              hidden: !(isPaid && podeEditar),
+            },
+            {
+              label: 'Cancelar',
+              icon: '✕',
+              color: 'oklch(0.72 0.18 22)',
+              onClick: () => onCancelar?.(bill),
+              hidden: isFinal || !podeEditar,
+            },
+          ]}
+        />
       </td>
     </tr>
   );
 }
 
-function ActBtn({ primary, icon, children, onClick, title }) {
-  if (icon) {
-    return (
-      <button
-        onClick={onClick}
-        title={title}
-        className="h-7 px-2 inline-flex items-center justify-center rounded-[7px] border border-hairline-soft bg-white/[.02] text-fg-faint hover:bg-white/[.06] hover:text-fg transition"
-      >
-        {children}
-      </button>
-    );
-  }
-  if (primary) {
-    return (
-      <button
-        onClick={onClick}
-        className="h-7 px-2.5 rounded-[7px] text-[11.5px] font-medium text-emerald2 border transition"
-        style={{
-          background: 'linear-gradient(180deg, oklch(0.32 0.10 158 / .55), oklch(0.26 0.08 158 / .35))',
-          borderColor: 'oklch(0.50 0.10 158 / .35)',
-        }}
-      >
-        {children}
-      </button>
-    );
-  }
-  return (
-    <button
-      onClick={onClick}
-      className="h-7 px-2.5 rounded-[7px] border border-hairline-soft bg-white/[.02] text-fg-soft text-[11.5px] font-medium hover:bg-white/[.06] hover:text-fg transition"
-    >
-      {children}
-    </button>
-  );
-}

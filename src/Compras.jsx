@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { C } from "./lib/theme.js";
 import { api } from "./lib/api.js";
+import ActionsMenu from "./components/ActionsMenu.jsx";
 
 
 const fmtBRL = (v) => {
@@ -133,7 +134,7 @@ export default function Compras({ user }) {
 
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
         <div style={{
-          display: "grid", gridTemplateColumns: "150px 90px 2fr 100px 130px 120px",
+          display: "grid", gridTemplateColumns: "150px 90px 2fr 100px 130px 80px",
           padding: "12px 16px", background: C.surface,
           borderBottom: `1px solid ${C.border}`, fontSize: 12, fontWeight: 700,
           color: C.muted, textTransform: "uppercase", letterSpacing: 0.5,
@@ -152,7 +153,7 @@ export default function Compras({ user }) {
           <div style={{ padding: 30, textAlign: "center", color: C.muted, fontSize: 13 }}>Nenhuma compra encontrada.</div>
         ) : compras.map(c => (
           <div key={c.id} style={{
-            display: "grid", gridTemplateColumns: "150px 90px 2fr 100px 130px 120px",
+            display: "grid", gridTemplateColumns: "150px 90px 2fr 100px 130px 80px",
             padding: "12px 16px", borderBottom: `1px solid ${C.border}`,
             alignItems: "center", fontSize: 13,
             opacity: c.cancelada ? 0.55 : 1,
@@ -180,8 +181,17 @@ export default function Compras({ user }) {
               fontWeight: 700, fontSize: 14,
               textDecoration: c.cancelada ? "line-through" : "none",
             }}>{fmtBRL(c.total)}</div>
-            <div style={{ textAlign: "right" }}>
-              <button onClick={() => abrirDetalhe(c.id)} style={btnIcone(C.accent)}>Ver detalhes</button>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <ActionsMenu
+                items={[
+                  {
+                    label: "Ver detalhes",
+                    icon: "👁",
+                    color: C.accent,
+                    onClick: () => abrirDetalhe(c.id),
+                  },
+                ]}
+              />
             </div>
           </div>
         ))}

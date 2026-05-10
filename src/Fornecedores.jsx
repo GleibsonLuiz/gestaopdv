@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { C } from "./lib/theme.js";
 import { api } from "./lib/api.js";
+import ActionsMenu from "./components/ActionsMenu.jsx";
 
 
 const VAZIO = {
@@ -173,7 +174,7 @@ export default function Fornecedores({ user }) {
         background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden",
       }}>
         <div style={{
-          display: "grid", gridTemplateColumns: "2fr 1.2fr 1.5fr 1fr 100px 250px",
+          display: "grid", gridTemplateColumns: "2fr 1.2fr 1.5fr 1fr 100px 80px",
           padding: "12px 16px", background: C.surface,
           borderBottom: `1px solid ${C.border}`, fontSize: 12, fontWeight: 700,
           color: C.muted, textTransform: "uppercase", letterSpacing: 0.5,
@@ -192,7 +193,7 @@ export default function Fornecedores({ user }) {
           <div style={{ padding: 30, textAlign: "center", color: C.muted, fontSize: 13 }}>Nenhum fornecedor encontrado.</div>
         ) : fornecedores.map(f => (
           <div key={f.id} style={{
-            display: "grid", gridTemplateColumns: "2fr 1.2fr 1.5fr 1fr 100px 250px",
+            display: "grid", gridTemplateColumns: "2fr 1.2fr 1.5fr 1fr 100px 80px",
             padding: "12px 16px", borderBottom: `1px solid ${C.border}`,
             alignItems: "center", fontSize: 13,
             opacity: f.ativo ? 1 : 0.55,
@@ -209,20 +210,32 @@ export default function Fornecedores({ user }) {
                 border: `1px solid ${f.ativo ? C.green + "55" : C.muted + "55"}`,
               }}>{f.ativo ? "ATIVO" : "INATIVO"}</span>
             </div>
-            <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-              {podeEditar && (
-                <button onClick={() => abrirEdicao(f)} style={btnIcone(C.accent)}>Editar</button>
-              )}
-              {podeExcluir && (
-                <button onClick={() => alternarAtivo(f)} style={btnIcone(f.ativo ? C.yellow : C.green)}>
-                  {f.ativo ? "Inativar" : "Reativar"}
-                </button>
-              )}
-              {podeExcluir && (
-                <button onClick={() => excluirPermanente(f)} style={btnIconeSolido(C.red)} title="Excluir permanentemente">
-                  🗑 Excluir
-                </button>
-              )}
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <ActionsMenu
+                items={[
+                  {
+                    label: "Editar",
+                    icon: "✎",
+                    color: C.accent,
+                    onClick: () => abrirEdicao(f),
+                    hidden: !podeEditar,
+                  },
+                  {
+                    label: f.ativo ? "Inativar" : "Reativar",
+                    icon: f.ativo ? "⊘" : "↻",
+                    color: f.ativo ? C.yellow : C.green,
+                    onClick: () => alternarAtivo(f),
+                    hidden: !podeExcluir,
+                  },
+                  {
+                    label: "Excluir",
+                    icon: "🗑",
+                    color: C.red,
+                    onClick: () => excluirPermanente(f),
+                    hidden: !podeExcluir,
+                  },
+                ]}
+              />
             </div>
           </div>
         ))}

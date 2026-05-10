@@ -1,0 +1,141 @@
+/* login.css — estilos custom usados pela <LoginPage />.
+   Importado uma vez em main.jsx. */
+
+/* Floating-label inputs ───────────────────────────────────────── */
+.field { position: relative; }
+.field input {
+  width: 100%;
+  height: 56px;
+  padding: 22px 14px 8px;
+  background: rgba(15,18,32,.55);
+  border: 1px solid #2a304d;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color .18s, background .18s, box-shadow .18s;
+  outline: none;
+}
+.field input.with-icon  { padding-left: 44px; }
+.field input.with-trail { padding-right: 44px; }
+.field input:hover { border-color: #363d5e; }
+.field input:focus {
+  border-color: #8b5cf6;
+  background: rgba(22,26,46,.85);
+  box-shadow: 0 0 0 4px rgba(139,92,246,.18);
+}
+.field.invalid input {
+  border-color: #f87171;
+  box-shadow: 0 0 0 4px rgba(248,113,113,.15);
+}
+.field label {
+  position: absolute; left: 14px; top: 18px;
+  color: #7a82a8; font-size: 14px;
+  pointer-events: none;
+  transition: top .15s ease, font-size .15s ease, color .15s ease, left .15s ease;
+}
+.field input.with-icon ~ label { left: 44px; }
+.field input:focus ~ label,
+.field input:not(:placeholder-shown) ~ label {
+  top: 8px; font-size: 11px; color: #a8aecc; left: 14px !important;
+  font-weight: 500; letter-spacing: .02em;
+}
+.field .lead, .field .trail {
+  position: absolute; top: 0; height: 56px; width: 44px;
+  display: flex; align-items: center; justify-content: center;
+  color: #7a82a8;
+}
+.field .lead  { left: 0; }
+.field .trail { right: 0; background: transparent; border: 0; padding: 0; cursor: pointer; transition: color .15s; }
+.field .trail:hover { color: #fff; }
+
+/* Botão primário ─────────────────────────────────────────────── */
+.btn-primary {
+  position: relative;
+  width: 100%; height: 52px;
+  border: 0; border-radius: 12px;
+  color: white; font-weight: 600; font-size: 14.5px;
+  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 50%, #60a5fa 100%);
+  background-size: 200% 100%;
+  box-shadow: 0 1px 0 rgba(255,255,255,.18) inset, 0 8px 28px -10px rgba(99,102,241,.6);
+  transition: transform .08s, box-shadow .2s, background-position .6s;
+  overflow: hidden;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn-primary:hover {
+  background-position: 100% 0;
+  box-shadow: 0 1px 0 rgba(255,255,255,.18) inset, 0 12px 32px -8px rgba(139,92,246,.7);
+}
+.btn-primary:active { transform: translateY(1px); }
+.btn-primary:disabled { opacity: .65; cursor: not-allowed; }
+.btn-primary .spinner {
+  width: 18px; height: 18px;
+  border: 2px solid rgba(255,255,255,.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Checkbox custom ────────────────────────────────────────────── */
+.check {
+  display: inline-flex; align-items: center; gap: 8px;
+  color: #a8aecc; font-size: 13px; cursor: pointer; user-select: none;
+}
+.check input { position: absolute; opacity: 0; pointer-events: none; }
+.check-box {
+  width: 16px; height: 16px;
+  border: 1px solid #444c72;
+  border-radius: 4px;
+  background: rgba(15,18,32,.7);
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background .15s, border-color .15s;
+}
+.check input:checked + .check-box {
+  background: #8b5cf6; border-color: #8b5cf6;
+}
+.check input:checked + .check-box::after {
+  content: ''; width: 8px; height: 4px;
+  border-left: 2px solid #fff; border-bottom: 2px solid #fff;
+  transform: rotate(-45deg) translate(1px,-1px);
+}
+
+/* Mesh blobs e grain ─────────────────────────────────────────── */
+.blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  will-change: transform;
+}
+.grain {
+  position: absolute; inset: 0;
+  background-image: radial-gradient(rgba(255,255,255,.03) 1px, transparent 1px);
+  background-size: 3px 3px;
+  mix-blend-mode: overlay;
+  opacity: .55;
+  pointer-events: none;
+}
+
+/* Quote crossfade ────────────────────────────────────────────── */
+.quote-stack { position: relative; min-height: 240px; }
+.quote-item {
+  position: absolute; inset: 0;
+  transition: opacity .9s ease, transform .9s cubic-bezier(.2,.7,.3,1);
+  opacity: 0;
+  transform: translateY(8px);
+}
+.quote-item.is-active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Status pill ────────────────────────────────────────────────── */
+.pulse-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 12px #34d399;
+  animation: pulseSoft 2.4s ease-in-out infinite;
+}
+@keyframes pulseSoft { 0%,100% { opacity: 1; } 50% { opacity: .5; } }

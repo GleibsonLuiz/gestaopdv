@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
   font-family: 'Segoe UI', system-ui, Roboto, sans-serif;
   color-scheme: dark;

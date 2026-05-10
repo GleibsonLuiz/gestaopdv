@@ -53,21 +53,75 @@ const fmtBRL = (v) => {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 };
 
+// Quebra "1234.56" em { int: "1.234", dec: "56" } pra renderizar o R$ com
+// rítmo tipográfico (símbolo + inteiros grandes + centavos menores).
+const fmtPartes = (v) => {
+  const n = Math.max(0, Number(v) || 0);
+  const [int, dec] = n.toFixed(2).split(".");
+  return {
+    int: int.replace(/\B(?=(\d{3})+(?!\d))/g, "."),
+    dec,
+  };
+};
+
+// Animated counter — interpolação cubic-out para o total mudar suave
+function useCountUp(target, duration = 380) {
+  const [v, setV] = useState(target);
+  const startRef = useRef(target);
+  useEffect(() => {
+    const from = startRef.current;
+    const to = target;
+    if (from === to) return;
+    let raf, t0;
+    const step = (t) => {
+      if (!t0) t0 = t;
+      const p = Math.min(1, (t - t0) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setV(from + (to - from) * eased);
+      if (p < 1) raf = requestAnimationFrame(step);
+      else startRef.current = to;
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+  return v;
+}
+
 const fmtData = (iso) => {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 };
 
+// Mapeamento de cor (CSS var name) por forma de pagamento — usado em pílulas
+// e no dashboard de "vendas hoje por forma".
+const FORMA_COR_VAR = {
+  DINHEIRO: "var(--pdv-c-lime)",
+  PIX: "var(--pdv-accent)",
+  CARTAO_DEBITO: "var(--pdv-c-sky)",
+  CARTAO_CREDITO: "var(--pdv-c-violet)",
+  BOLETO: "var(--pdv-c-amber)",
+  CREDIARIO: "var(--pdv-c-rose)",
+};
+
+const FORMA_COR_CLASSE = {
+  DINHEIRO: "pdv-pay-c-lime",
+  PIX: "pdv-pay-c-emerald",
+  CARTAO_DEBITO: "pdv-pay-c-sky",
+  CARTAO_CREDITO: "pdv-pay-c-violet",
+  BOLETO: "pdv-pay-c-amber",
+  CREDIARIO: "pdv-pay-c-rose",
+};
+
 export default function PDV({ user, onSair, sair }) {
   const [aba, setAba] = useState("nova");
   return (
-    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+    <div className="pdv-redesign" style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
       <PDVHeader
         user={user}
         aba={aba} setAba={setAba}
         onSair={onSair} sairConta={sair}
       />
-      <div style={{ padding: "18px 24px", flex: 1 }}>
+      <div className="pdv-app">
         {aba === "nova" ? <NovaVenda user={user} /> : <Historico user={user} />}
       </div>
     </div>
@@ -92,24 +146,36 @@ function PDVHeader({ user, aba, setAba, onSair, sairConta }) {
     return () => document.removeEventListener("mousedown", onClickFora);
   }, [menuAberto]);
 
+  const iniciais = (user.nome || "?")
+    .split(" ").filter(Boolean).slice(0, 2)
+    .map(p => p.charAt(0).toUpperCase()).join("") || "?";
+
   return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 16,
-      padding: "10px 24px", borderBottom: `1px solid ${C.border}`,
-      background: C.surface, position: "sticky", top: 0, zIndex: 30,
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={{ fontSize: 22 }}>🏪</div>
+    <header className="pdv-hdr">
+      <div className="pdv-brand">
+        <div className="pdv-brand-mark">G</div>
         <div>
-          <div style={{ color: C.white, fontWeight: 800, fontSize: 15, lineHeight: 1.1 }}>GestãoPRO</div>
-          <div style={{ color: C.muted, fontSize: 10 }}>Ponto de Venda</div>
+          <div className="pdv-brand-name">GestãoPRO</div>
+          <div className="pdv-brand-sub">Ponto de Venda</div>
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 6, marginLeft: 12 }}>
-        <button onClick={() => setAba("nova")} style={tabBtn(aba === "nova")}>🛒 Nova Venda</button>
-        <button onClick={() => setAba("historico")} style={tabBtn(aba === "historico")}>📜 Histórico</button>
-      </div>
+      <nav className="pdv-nav">
+        <button
+          onClick={() => setAba("nova")}
+          className={`pdv-nav-btn ${aba === "nova" ? "is-active" : ""}`}
+        >
+          {aba === "nova" && <span className="dot" />}
+          Nova venda
+        </button>
+        <button
+          onClick={() => setAba("historico")}
+          className={`pdv-nav-btn ${aba === "historico" ? "is-active" : ""}`}
+        >
+          {aba === "historico" && <span className="dot" />}
+          Histórico
+        </button>
+      </nav>
 
       <div style={{ flex: 1 }} />
 
@@ -117,64 +183,37 @@ function PDVHeader({ user, aba, setAba, onSair, sairConta }) {
         <button
           onClick={() => setMenuAberto(v => !v)}
           title="Menu / Sair do PDV"
-          style={{
-            display: "flex", alignItems: "center", gap: 8,
-            background: C.card, border: `1px solid ${C.border}`,
-            borderRadius: 10, padding: "6px 10px 6px 6px", cursor: "pointer",
-            color: C.text, fontSize: 12,
-          }}
+          className="pdv-user-chip"
         >
-          <div style={{
-            width: 28, height: 28, borderRadius: "50%",
-            background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-            color: C.white, display: "flex", alignItems: "center", justifyContent: "center",
-            fontWeight: 800, fontSize: 13,
-          }}>{(user.nome || "?").charAt(0)}</div>
-          <div style={{ textAlign: "left", lineHeight: 1.2, maxWidth: 180, overflow: "hidden" }}>
-            <div style={{ color: C.white, fontWeight: 700, fontSize: 12, whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}>
-              {user.nome}
-            </div>
-            <div style={{ color: C.muted, fontSize: 10 }}>{user.role}</div>
+          <div className="pdv-user-av">{iniciais}</div>
+          <div style={{ textAlign: "left" }}>
+            <div className="pdv-user-name">{user.nome}</div>
+            <div className="pdv-user-role">{user.role}</div>
           </div>
-          <span style={{ color: C.muted, fontSize: 10 }}>▾</span>
+          <span style={{ color: "var(--pdv-t3)", fontSize: 10, marginLeft: 2 }}>▾</span>
         </button>
 
         {menuAberto && (
-          <div style={{
-            position: "absolute", top: "calc(100% + 6px)", right: 0, minWidth: 220,
-            background: C.card, border: `1px solid ${C.border}`, borderRadius: 10,
-            boxShadow: "0 8px 24px rgba(0,0,0,0.4)", overflow: "hidden", zIndex: 50,
-          }}>
+          <div className="pdv-user-menu">
             <button
               onClick={() => { setMenuAberto(false); onSair?.(); }}
-              style={menuItemStyle}
-              onMouseEnter={e => e.currentTarget.style.background = C.surface}
-              onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+              className="pdv-user-menu-item"
             >
               <span>🏠</span><span>Menu principal</span>
             </button>
-            <div style={{ borderTop: `1px solid ${C.border}` }} />
+            <div style={{ borderTop: "1px solid var(--pdv-line)" }} />
             <button
               onClick={() => { setMenuAberto(false); sairConta?.(); }}
-              style={{ ...menuItemStyle, color: C.red }}
-              onMouseEnter={e => e.currentTarget.style.background = C.red + "11"}
-              onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+              className="pdv-user-menu-item is-danger"
             >
               <span>🚪</span><span>Sair da conta</span>
             </button>
           </div>
         )}
       </div>
-    </div>
+    </header>
   );
 }
-
-const menuItemStyle = {
-  display: "flex", alignItems: "center", gap: 10, width: "100%",
-  background: "transparent", border: "none", color: C.text,
-  padding: "10px 14px", fontSize: 13, cursor: "pointer", textAlign: "left",
-  fontFamily: "inherit",
-};
 
 
 // ==================== NOVA VENDA ====================
@@ -593,31 +632,20 @@ function NovaVenda({ user }) {
     permitirEnter: true,
   });
 
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <style>{`
-        @keyframes pdv-flash-novo {
-          0%   { background: ${C.green}33; transform: translateX(-2px); }
-          100% { background: transparent; transform: translateX(0); }
-        }
-        .pdv-item-novo { animation: pdv-flash-novo 0.7s ease-out; }
-        .pdv-sugestao:hover { background: ${C.accent}22 !important; }
-        .pdv-cancel-row:hover { background: ${C.red}22 !important; }
-      `}</style>
+  const [scanFocused, setScanFocused] = useState(false);
 
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {/* TOPO: alerta quando nao ha caixa aberto OU resumo de vendas do dia
           por forma de pagamento (info financeira detalhada — saldo, sangria,
           suprimento — fica restrita a tela do Caixa). */}
       {!caixaCarregando && (
         semCaixa ? (
-          <div style={{
-            background: C.red + "22", border: `1px solid ${C.red}66`, borderRadius: 10,
-            padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between",
-            gap: 12, flexWrap: "wrap",
-          }}>
-            <div style={{ color: C.red, fontWeight: 700, fontSize: 14 }}>
-              🔒 <b>Nenhum caixa aberto.</b> Você não pode registrar vendas sem caixa.
-              Vá em <b style={{ color: C.white }}>Caixa → Abrir Caixa</b>.
+          <div className="pdv-no-cash">
+            <span style={{ fontSize: 18 }}>🔒</span>
+            <div>
+              <b>Nenhum caixa aberto.</b> Você não pode registrar vendas sem caixa.
+              Vá em <b>Caixa → Abrir Caixa</b>.
             </div>
           </div>
         ) : (
@@ -626,140 +654,116 @@ function NovaVenda({ user }) {
       )}
 
       {/* BARRA DE BIPAGEM CENTRAL — autofocus permanente */}
-      <div style={{
-        position: "relative",
-        background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14,
-        boxShadow: "0 2px 12px rgba(0,0,0,0.2)",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontSize: 24 }}>📡</div>
-          <input
-            ref={buscaRef}
-            placeholder="Bipe um produto ou digite código/nome — pressione Enter para adicionar"
-            value={busca}
-            onChange={e => { setBusca(e.target.value); setSugestaoIdx(0); }}
-            onKeyDown={e => {
-              if (e.key === "ArrowDown") {
-                if (sugestoes.length > 0) {
-                  e.preventDefault();
-                  setSugestaoIdx(i => (i + 1) % sugestoes.length);
-                }
-                return;
-              }
-              if (e.key === "ArrowUp") {
-                if (sugestoes.length > 0) {
-                  e.preventDefault();
-                  setSugestaoIdx(i => (i - 1 + sugestoes.length) % sugestoes.length);
-                }
-                return;
-              }
-              if (e.key === "Enter") { e.preventDefault(); biparOuConfirmar(); }
-              if (e.key === "Escape") { e.preventDefault(); setBusca(""); }
-            }}
-            onBlur={() => {
-              // Refoco automático em ~120ms — só aplica quando nenhuma modal
-              // está aberta (evita roubar foco de inputs do checkout/cancelar).
-              setTimeout(() => {
-                if (!algumaModalAberta && document.activeElement === document.body) {
-                  buscaRef.current?.focus();
-                }
-              }, 120);
-            }}
-            style={{
-              flex: 1, background: C.surface, border: `2px solid ${C.accent}55`,
-              borderRadius: 10, padding: "16px 18px",
-              color: C.white, fontSize: 18, fontWeight: 600, outline: "none",
-              letterSpacing: 0.5,
-            }}
-          />
+      <div className={`pdv-scan ${scanFocused ? "is-focused" : ""}`}>
+        <div className="pdv-scan-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 7V5a1 1 0 0 1 1-1h2"/>
+            <path d="M20 7V5a1 1 0 0 0-1-1h-2"/>
+            <path d="M4 17v2a1 1 0 0 0 1 1h2"/>
+            <path d="M20 17v2a1 1 0 0 1-1 1h-2"/>
+            <path d="M4 12h16"/>
+          </svg>
         </div>
+        <input
+          ref={buscaRef}
+          placeholder="Bipe um produto ou digite código/nome — pressione Enter para adicionar"
+          value={busca}
+          onChange={e => { setBusca(e.target.value); setSugestaoIdx(0); }}
+          onFocus={() => setScanFocused(true)}
+          onKeyDown={e => {
+            if (e.key === "ArrowDown") {
+              if (sugestoes.length > 0) {
+                e.preventDefault();
+                setSugestaoIdx(i => (i + 1) % sugestoes.length);
+              }
+              return;
+            }
+            if (e.key === "ArrowUp") {
+              if (sugestoes.length > 0) {
+                e.preventDefault();
+                setSugestaoIdx(i => (i - 1 + sugestoes.length) % sugestoes.length);
+              }
+              return;
+            }
+            if (e.key === "Enter") { e.preventDefault(); biparOuConfirmar(); }
+            if (e.key === "Escape") { e.preventDefault(); setBusca(""); }
+          }}
+          onBlur={() => {
+            setScanFocused(false);
+            // Refoco automático em ~120ms — só aplica quando nenhuma modal
+            // está aberta (evita roubar foco de inputs do checkout/cancelar).
+            setTimeout(() => {
+              if (!algumaModalAberta && document.activeElement === document.body) {
+                buscaRef.current?.focus();
+              }
+            }, 120);
+          }}
+        />
+        <span className="pdv-scan-hint">
+          <span className="pdv-kbd">/</span> focar &nbsp;·&nbsp;
+          <span className="pdv-kbd is-accent">Enter</span> adicionar
+        </span>
 
         {/* Sugestões dropdown — só aparece quando há texto digitado */}
         {sugestoes.length > 0 && (
-          <div style={{
-            position: "absolute", left: 14, right: 14, top: "100%", marginTop: 4,
-            background: C.card, border: `1px solid ${C.accent}55`, borderRadius: 10,
-            zIndex: 5, overflow: "hidden",
-            boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
-          }}>
+          <div className="pdv-scan-sugg">
             {sugestoes.map((p, idx) => {
               const ativo = idx === sugestaoSelecionada;
               return (
-              <div
-                key={p.id}
-                onMouseEnter={() => setSugestaoIdx(idx)}
-                onMouseDown={e => { e.preventDefault(); abrirQtdModal(p); }}
-                style={{
-                  display: "flex", alignItems: "center", gap: 12,
-                  padding: "10px 14px", cursor: "pointer",
-                  borderTop: idx === 0 ? "none" : `1px solid ${C.border}`,
-                  // C.accent e var(--accent); concatenar `+ "55"` gera tokens
-                  // separados que o parser de cor descarta no background.
-                  // color-mix mistura com transparente preservando a CSS var
-                  // (e segue o tema escolhido pelo usuario automaticamente).
-                  background: ativo
-                    ? `color-mix(in srgb, ${C.accent} 38%, transparent)`
-                    : "transparent",
-                  borderLeft: ativo ? `4px solid ${C.accent}` : "4px solid transparent",
-                  boxShadow: ativo
-                    ? `inset 0 0 0 1px color-mix(in srgb, ${C.accent} 60%, transparent)`
-                    : "none",
-                  transition: "background 0.12s ease, box-shadow 0.12s ease",
-                }}
-              >
-                <FotoProduto url={p.imagem} nome={p.nome} tamanho={40} servico={p.tipoItem === "SERVICO"} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ color: C.white, fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
-                    {p.nome}
-                    {p.tipoItem === "SERVICO" && (
-                      <span style={{
-                        fontSize: 9, fontWeight: 800, padding: "1px 5px", borderRadius: 4,
-                        background: C.purple + "33", color: C.purple, letterSpacing: 0.4,
-                      }}>SERVIÇO</span>
-                    )}
+                <div
+                  key={p.id}
+                  onMouseEnter={() => setSugestaoIdx(idx)}
+                  onMouseDown={e => { e.preventDefault(); abrirQtdModal(p); }}
+                  className={`pdv-scan-sugg-row ${ativo ? "is-active" : ""}`}
+                >
+                  <FotoProduto url={p.imagem} nome={p.nome} tamanho={38} servico={p.tipoItem === "SERVICO"} />
+                  <div className="pdv-scan-sugg-name">
+                    <div className="nm">
+                      {p.nome}
+                      {p.tipoItem === "SERVICO" && <span className="pdv-srv-tag">SERVIÇO</span>}
+                    </div>
+                    <div className="meta">
+                      {p.codigo}
+                      {p.codigoBarras && <> · 📊 {p.codigoBarras}</>}
+                      {" · "}{p.tipoItem === "SERVICO" ? "♾ disponível" : `${p.estoque} ${p.unidade}`}
+                    </div>
                   </div>
-                  <div style={{ color: C.muted, fontFamily: "monospace", fontSize: 11 }}>
-                    {p.codigo}
-                    {p.codigoBarras && <span style={{ color: C.accent }}> · 📊 {p.codigoBarras}</span>}
-                    {" · "}{p.tipoItem === "SERVICO" ? "♾ disponível" : `${p.estoque} ${p.unidade}`}
-                  </div>
+                  <div className="pdv-scan-sugg-price">{fmtBRL(p.precoVenda)}</div>
+                  {ativo && <span className="pdv-kbd is-accent">↵</span>}
                 </div>
-                <div style={{ color: C.green, fontWeight: 700, fontSize: 14 }}>{fmtBRL(p.precoVenda)}</div>
-              </div>
               );
             })}
           </div>
         )}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 7fr) minmax(280px, 3fr)", gap: 14, alignItems: "start" }}>
-        {/* CESTINHA — 70% — fotos, novos no topo */}
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
-          <div style={{
-            padding: "14px 18px", background: C.surface, borderBottom: `1px solid ${C.border}`,
-            display: "flex", justifyContent: "space-between", alignItems: "center",
-          }}>
-            <div style={{ color: C.white, fontWeight: 700, fontSize: 16 }}>
-              🛒 Cestinha — {carrinho.length} {carrinho.length === 1 ? "item" : "itens"}
+      <div className="pdv-main">
+        {/* CESTINHA — fotos, novos no topo */}
+        <div className="pdv-card">
+          <div className="pdv-card-hd" style={{ borderBottom: "1px solid var(--pdv-line)" }}>
+            <div className="pdv-card-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="9" cy="20" r="1.4"/>
+                <circle cx="17" cy="20" r="1.4"/>
+                <path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.6a2 2 0 0 0 2-1.5L21 8H6"/>
+              </svg>
+              Cestinha
+              <span className="pill">{carrinho.length} {carrinho.length === 1 ? "item" : "itens"}</span>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               {carrinho.length > 0 && (
                 <button
                   type="button"
                   onClick={() => setCancelarAberto(true)}
-                  style={{
-                    background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red,
-                    borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 700,
-                    cursor: "pointer",
-                  }}
+                  className="pdv-btn-rm"
+                  style={{ color: "var(--pdv-c-rose)", borderColor: "rgba(251,113,133,.35)" }}
                   title="F8"
-                >🗑 Cancelar item (F8)</button>
+                >Cancelar item · F8</button>
               )}
               {carrinho.length > 0 && (
-                <button onClick={limparCarrinho} style={{
-                  background: "transparent", border: `1px solid ${C.border}`, color: C.muted,
-                  borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer",
-                }}>Limpar tudo</button>
+                <button onClick={limparCarrinho} className="pdv-btn-rm">
+                  Limpar tudo
+                </button>
               )}
             </div>
           </div>
@@ -783,72 +787,50 @@ function NovaVenda({ user }) {
               }}
             />
           ) : (
-            <div style={{ maxHeight: "calc(100vh - 320px)", overflowY: "auto" }}>
+            <div className="pdv-cart-list">
               {carrinho.map(it => (
                 <div
                   key={it.produtoId}
-                  className={destacado === it.produtoId ? "pdv-item-novo" : ""}
-                  style={{
-                    display: "flex", gap: 14, alignItems: "center",
-                    padding: "14px 18px", borderBottom: `1px solid ${C.border}`,
-                  }}
+                  className={`pdv-cart-item ${destacado === it.produtoId ? "is-new" : ""}`}
                 >
-                  <FotoProduto url={it.imagem} nome={it.nome} tamanho={64} servico={it.tipoItem === "SERVICO"} />
+                  <FotoProduto url={it.imagem} nome={it.nome} tamanho={56} servico={it.tipoItem === "SERVICO"} />
 
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ color: C.white, fontSize: 15, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 8 }}>
+                    <div className="pdv-cart-item-name">
                       {it.nome}
                       {it.tipoItem === "SERVICO" && (
-                        <span style={{
-                          fontSize: 10, fontWeight: 800, padding: "2px 6px", borderRadius: 4,
-                          background: C.purple + "22", color: C.purple, border: `1px solid ${C.purple}55`,
-                          letterSpacing: 0.4,
-                        }}>♾ SERVIÇO</span>
+                        <span className="pdv-srv-tag">♾ SERVIÇO</span>
                       )}
                     </div>
-                    <div style={{ color: C.muted, fontFamily: "monospace", fontSize: 11, marginTop: 2 }}>
-                      {it.codigo}
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <button onClick={() => alterarQuantidade(it.produtoId, -1)} style={btnQtd}>−</button>
+                    <div className="pdv-cart-item-code">{it.codigo}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+                      <div className="pdv-qty">
+                        <button onClick={() => alterarQuantidade(it.produtoId, -1)}>−</button>
                         <input
                           type="number" min="1"
                           max={Number.isFinite(it.estoque) ? it.estoque : undefined}
                           value={it.quantidade}
                           onChange={e => definirQuantidade(it.produtoId, e.target.value)}
-                          style={{
-                            width: 54, textAlign: "center",
-                            background: C.surface, border: `1px solid ${C.border}`,
-                            borderRadius: 6, padding: "5px 6px", color: C.text, fontSize: 13, outline: "none",
-                          }}
                         />
-                        <button onClick={() => alterarQuantidade(it.produtoId, +1)} style={btnQtd}>+</button>
+                        <button onClick={() => alterarQuantidade(it.produtoId, +1)}>+</button>
                       </div>
-                      <div style={{ color: C.muted, fontSize: 12 }}>×</div>
+                      <span style={{ color: "var(--pdv-t3)", fontSize: 12 }}>×</span>
                       <input
                         type="number" step="0.01" min="0" value={it.precoUnitario}
                         onChange={e => alterarPreco(it.produtoId, e.target.value)}
-                        style={{
-                          width: 96, textAlign: "right",
-                          background: C.surface, border: `1px solid ${C.border}`,
-                          borderRadius: 6, padding: "5px 8px", color: C.text, fontSize: 13, outline: "none",
-                        }}
+                        className="pdv-input-preco"
                       />
                     </div>
                   </div>
 
-                  <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-                    <div style={{ color: C.green, fontWeight: 800, fontSize: 18 }}>
+                  <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+                    <div className="pdv-cart-item-total">
                       {fmtBRL(it.quantidade * it.precoUnitario)}
                     </div>
                     <button
                       onClick={() => removerItem(it.produtoId)}
                       title="Remover este item"
-                      style={{
-                        background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red,
-                        borderRadius: 6, padding: "4px 10px", fontSize: 12, cursor: "pointer", fontWeight: 700,
-                      }}
+                      className="pdv-btn-rm"
                     >× Remover</button>
                   </div>
                 </div>
@@ -857,150 +839,118 @@ function NovaVenda({ user }) {
           )}
         </div>
 
-        {/* PAINEL DIREITO — totais + botão Finalizar */}
-        <div style={{
-          display: "flex", flexDirection: "column", gap: 12,
-          position: "sticky", top: 14,
-          maxHeight: "calc(100vh - 32px)", overflowY: "auto",
-        }}>
+        {/* PAINEL DIREITO — totais + botão Finalizar + atalhos */}
+        <div className="pdv-side">
           {carrinho.length > 0 && (
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <Linha label={`Itens (${carrinho.reduce((acc, it) => acc + it.quantidade, 0)})`} valor={fmtBRL(subtotal)} />
+            <div className="pdv-totals-card">
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div className="pdv-totals-row">
+                  <span>Subtotal · {carrinho.reduce((acc, it) => acc + it.quantidade, 0)} {carrinho.reduce((acc, it) => acc + it.quantidade, 0) === 1 ? "item" : "itens"}</span>
+                  <strong>{fmtBRL(subtotal)}</strong>
+                </div>
                 {descontoNum > 0 && (
-                  <Linha label="Desconto" valor={`− ${fmtBRL(descontoNum)}`} cor={C.red} />
+                  <div className="pdv-totals-row">
+                    <span>Desconto</span>
+                    <strong style={{ color: "var(--pdv-c-rose)" }}>− {fmtBRL(descontoNum)}</strong>
+                  </div>
                 )}
-                <div style={{
-                  display: "flex", justifyContent: "space-between", alignItems: "center",
-                  marginTop: 6, padding: "16px 16px",
-                  background: C.surface, borderRadius: 10,
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
-                }}>
-                  <div style={{ color: C.muted, fontSize: 12, fontWeight: 700, letterSpacing: 0.4 }}>TOTAL</div>
-                  <div style={{ color: C.green, fontSize: 28, fontWeight: 800 }}>{fmtBRL(total)}</div>
+                <div className="pdv-total-block">
+                  <div className="pdv-total-lbl">Total</div>
+                  <TotalAnimado valor={total} />
                 </div>
               </div>
 
               {erro && !algumaModalAberta && (
-                <div style={{
-                  padding: "8px 12px", borderRadius: 8,
-                  background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red, fontSize: 12,
-                }}>{erro}</div>
+                <div className="pdv-erro-inline">{erro}</div>
               )}
 
               <button
                 onClick={abrirPagamento}
                 disabled={semCaixa}
                 title={semCaixa ? "Abra um caixa antes de finalizar" : ""}
-                style={{
-                  background: semCaixa ? C.surface : `linear-gradient(135deg, ${C.green}, #15803d)`,
-                  color: C.white, border: "none", borderRadius: 10,
-                  padding: "16px", fontWeight: 800, fontSize: 16,
-                  cursor: semCaixa ? "not-allowed" : "pointer",
-                  opacity: semCaixa ? 0.5 : 1,
-                  boxShadow: semCaixa ? "none" : `0 4px 14px ${C.green}55`,
-                  letterSpacing: 0.3,
-                }}>
-                {semCaixa ? "🔒 CAIXA FECHADO" : `✓ FINALIZAR — ${fmtBRL(total)}`}
-                <div style={{ fontSize: 10, marginTop: 2, opacity: 0.85, fontWeight: 700 }}>F10</div>
+                className="pdv-btn-finalize"
+              >
+                {semCaixa ? <>🔒 Caixa fechado</> : <>Finalizar venda</>}
+                <span className="pdv-kbd">F10</span>
+                <span style={{ fontSize: 16 }}>→</span>
               </button>
             </div>
           )}
 
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
-            <div style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 10 }}>
-              Atalhos rápidos
+          <div className="pdv-pay-card">
+            <div className="pdv-shortcuts-label">F1 – F6 forma de pagamento</div>
+            <div className="pdv-pay-grid">
+              {FORMAS.map(f => {
+                const ativo = forma === f.id && !formaCustomId;
+                const cor = FORMA_COR_CLASSE[f.id] || "pdv-pay-c-emerald";
+                return (
+                  <button
+                    key={f.id} type="button"
+                    onClick={() => selecionarFormaPadrao(f.id)}
+                    title={`${f.atalho} • ${f.label}`}
+                    className={`pdv-pay-btn ${cor} ${ativo ? "is-active" : ""}`}
+                  >
+                    <div className="pay-row">
+                      <div className="pay-icon">{f.icone}</div>
+                      <span className="pay-key">{f.atalho}</span>
+                    </div>
+                    <div className="pay-lbl">{f.label}</div>
+                  </button>
+                );
+              })}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+            {formasCustom.length > 0 && (
+              <>
+                <div className="pdv-shortcuts-label" style={{ marginTop: 12 }}>Personalizadas</div>
+                <div className="pdv-pay-grid">
+                  {formasCustom.map(c => {
+                    const ativo = formaCustomId === c.id;
+                    const cor = FORMA_COR_CLASSE[c.baseFormaPagamento] || "pdv-pay-c-violet";
+                    return (
+                      <button
+                        key={c.id} type="button"
+                        onClick={() => selecionarFormaCustom(c)}
+                        title={`${c.nome} (${c.baseFormaPagamento})`}
+                        className={`pdv-pay-btn ${cor} ${ativo ? "is-active" : ""}`}
+                      >
+                        <div className="pay-row">
+                          <div className="pay-icon">{c.icone || "•"}</div>
+                          <span className="pay-key">CST</span>
+                        </div>
+                        <div className="pay-lbl">{c.nome}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="pdv-shortcuts">
+            <div className="pdv-shortcuts-label">Atalhos rápidos</div>
+            <div className="pdv-short-grid">
               <BotaoAtalho
-                tecla="F8" cor={C.red} label="Cancelar item"
+                tecla="F8" tom="warn" label="Cancelar item"
                 disabled={carrinho.length === 0}
                 onClick={() => carrinho.length > 0 && setCancelarAberto(true)}
               />
               <BotaoAtalho
-                tecla="F10" cor={C.green} label="Finalizar"
+                tecla="F10" tom="ok" label="Finalizar"
                 disabled={carrinho.length === 0 || semCaixa}
                 onClick={abrirPagamento}
               />
               <BotaoAtalho
-                tecla="Esc" cor={C.text} label="Limpar busca"
+                tecla="Esc" tom="mut" label="Limpar busca"
                 onClick={() => { setBusca(""); focarBusca(); }}
               />
               <BotaoAtalho
-                tecla="Enter" cor={C.accent} label="Adicionar bipado"
+                tecla="Enter" tom="ok" label="Adicionar bipado"
                 onClick={() => { biparOuConfirmar(); focarBusca(); }}
               />
             </div>
-            <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}` }}>
-              <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>
-                F1–F6 forma de pagamento
-              </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                {FORMAS.map(f => {
-                  const ativo = forma === f.id && !formaCustomId;
-                  return (
-                    <button
-                      key={f.id} type="button"
-                      onClick={() => selecionarFormaPadrao(f.id)}
-                      title={`${f.atalho} • ${f.label}`}
-                      style={{
-                        flex: "1 1 calc(33% - 4px)", minWidth: 0,
-                        background: ativo ? C.accent + "33" : C.surface,
-                        border: `1px solid ${ativo ? C.accent + "88" : C.border}`,
-                        color: ativo ? C.white : C.text,
-                        borderRadius: 6, padding: "5px 4px",
-                        fontSize: 10, fontWeight: 700, cursor: "pointer",
-                        display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
-                        lineHeight: 1.2,
-                      }}
-                    >
-                      <span style={{ fontSize: 13 }}>{f.icone}</span>
-                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>
-                        {f.label}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              {formasCustom.length > 0 && (
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ color: C.muted, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 }}>
-                    Personalizadas
-                  </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                    {formasCustom.map(c => {
-                      const ativo = formaCustomId === c.id;
-                      return (
-                        <button
-                          key={c.id} type="button"
-                          onClick={() => selecionarFormaCustom(c)}
-                          title={`${c.nome} (${c.baseFormaPagamento})`}
-                          style={{
-                            flex: "1 1 calc(50% - 4px)", minWidth: 0,
-                            background: ativo ? C.purple + "33" : C.surface,
-                            border: `1px solid ${ativo ? C.purple + "88" : C.border}`,
-                            color: ativo ? C.white : C.text,
-                            borderRadius: 6, padding: "5px 4px",
-                            fontSize: 10, fontWeight: 700, cursor: "pointer",
-                            display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
-                            lineHeight: 1.2,
-                          }}
-                        >
-                          <span style={{ fontSize: 13 }}>{c.icone || "•"}</span>
-                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>
-                            {c.nome}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+            <div style={{ color: "var(--pdv-t3)", fontSize: 11, textAlign: "center", marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--pdv-line)" }}>
+              Vendedor: <span style={{ color: "var(--pdv-t1)", fontWeight: 500 }}>{user.nome}</span>
             </div>
-          </div>
-
-          <div style={{ color: C.muted, fontSize: 11, textAlign: "center" }}>
-            Vendedor: <span style={{ color: C.text, fontWeight: 600 }}>{user.nome}</span>
           </div>
         </div>
       </div>
@@ -1009,98 +959,69 @@ function NovaVenda({ user }) {
       {cancelarAberto && (
         <div
           onClick={() => { setCancelarAberto(false); focarBusca(); }}
-          style={{
-            position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            padding: 20, zIndex: 100,
-          }}
+          className="pdv-modal-bg"
         >
           <div
             onClick={e => e.stopPropagation()}
-            style={{
-              background: C.card, border: `1px solid ${C.red}55`, borderRadius: 14,
-              width: "100%", maxWidth: 560, maxHeight: "85vh", overflowY: "auto",
-              padding: 20,
-            }}
+            className="pdv-modal"
+            style={{ width: "min(560px, calc(100vw - 32px))" }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div className="pdv-modal-hd">
               <div>
-                <div style={{ color: C.white, fontWeight: 800, fontSize: 18 }}>🗑 Cancelar item</div>
-                <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>
-                  Clique no item para remover da venda atual.
-                </div>
+                <div className="pdv-modal-title">Cancelar item</div>
+                <div className="pdv-modal-sub">Clique no item para remover da venda atual.</div>
               </div>
               <button
                 type="button"
                 onClick={() => { setCancelarAberto(false); focarBusca(); }}
-                style={{
-                  background: "transparent", border: "none", color: C.muted,
-                  fontSize: 22, cursor: "pointer",
-                }}
+                className="pdv-modal-x"
               >×</button>
             </div>
 
-            {carrinho.length === 0 ? (
-              <div style={{ padding: 30, textAlign: "center", color: C.muted, fontSize: 13 }}>
-                Carrinho vazio.
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {carrinho.map(it => (
-                  <button
-                    key={it.produtoId}
-                    type="button"
-                    className="pdv-cancel-row"
-                    onClick={() => {
-                      removerItem(it.produtoId);
-                      // Se foi o último item, fecha o modal automaticamente.
-                      if (carrinho.length === 1) setCancelarAberto(false);
-                      focarBusca();
-                    }}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 12,
-                      padding: "10px 12px", background: C.surface,
-                      border: `1px solid ${C.border}`, borderRadius: 10,
-                      cursor: "pointer", textAlign: "left",
-                      transition: "background 0.12s ease",
-                    }}
-                  >
-                    <FotoProduto url={it.imagem} nome={it.nome} tamanho={48} servico={it.tipoItem === "SERVICO"} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ color: C.white, fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {it.nome}
+            <div className="pdv-modal-body">
+              {carrinho.length === 0 ? (
+                <div style={{ padding: "30px 0", textAlign: "center", color: "var(--pdv-t3)", fontSize: 13 }}>
+                  Carrinho vazio.
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingBottom: 16 }}>
+                  {carrinho.map(it => (
+                    <button
+                      key={it.produtoId}
+                      type="button"
+                      className="pdv-cancel-item"
+                      onClick={() => {
+                        removerItem(it.produtoId);
+                        // Se foi o último item, fecha o modal automaticamente.
+                        if (carrinho.length === 1) setCancelarAberto(false);
+                        focarBusca();
+                      }}
+                    >
+                      <FotoProduto url={it.imagem} nome={it.nome} tamanho={44} servico={it.tipoItem === "SERVICO"} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ color: "var(--pdv-t1)", fontSize: 13.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {it.nome}
+                        </div>
+                        <div style={{ color: "var(--pdv-t3)", fontSize: 11, fontFamily: "'Geist Mono', monospace", marginTop: 2 }}>
+                          {it.codigo} · {it.quantidade} × {fmtBRL(it.precoUnitario)}
+                        </div>
                       </div>
-                      <div style={{ color: C.muted, fontSize: 11, fontFamily: "monospace" }}>
-                        {it.codigo} · {it.quantidade} × {fmtBRL(it.precoUnitario)}
+                      <div style={{ color: "var(--pdv-accent)", fontWeight: 600, fontSize: 13.5, fontVariantNumeric: "tabular-nums" }}>
+                        {fmtBRL(it.quantidade * it.precoUnitario)}
                       </div>
-                    </div>
-                    <div style={{ color: C.green, fontWeight: 700, fontSize: 14 }}>
-                      {fmtBRL(it.quantidade * it.precoUnitario)}
-                    </div>
-                    <div style={{
-                      background: C.red, color: C.white, fontSize: 12, fontWeight: 800,
-                      padding: "5px 10px", borderRadius: 6,
-                    }}>Remover</div>
-                  </button>
-                ))}
-              </div>
-            )}
+                      <div className="pdv-cancel-item-tag">Remover</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
+            <div className="pdv-modal-foot" style={{ justifyContent: "flex-end" }}>
               <button
                 type="button"
                 onClick={() => { setCancelarAberto(false); focarBusca(); }}
-                style={{
-                  background: C.surface, border: `1px solid ${C.border}`, color: C.text,
-                  borderRadius: 8, padding: "10px 18px", fontWeight: 600, fontSize: 13, cursor: "pointer",
-                }}
-              >Fechar</button>
-            </div>
-            <div style={{
-              marginTop: 8, color: C.muted, fontSize: 10, textAlign: "center",
-              fontFamily: "monospace", letterSpacing: 0.3,
-            }}>
-              Esc fecha · clique no item para remover
+                className="pdv-btn-ghost"
+              >Fechar <span className="pdv-kbd is-warn">Esc</span></button>
             </div>
           </div>
         </div>
@@ -1110,104 +1031,85 @@ function NovaVenda({ user }) {
       {qtdModalProduto && (
         <div
           onClick={fecharQtdModal}
-          style={{
-            position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            padding: 20, zIndex: 110,
-          }}
+          className="pdv-modal-bg"
+          style={{ zIndex: 110 }}
         >
           <div
             onClick={e => e.stopPropagation()}
-            style={{
-              background: C.card, border: `1px solid ${C.accent}66`, borderRadius: 14,
-              width: "100%", maxWidth: 460, padding: 22,
-              boxShadow: `0 12px 40px rgba(0,0,0,0.5)`,
-            }}
+            className="pdv-modal"
+            style={{ width: "min(460px, calc(100vw - 32px))" }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-              <FotoProduto
-                url={qtdModalProduto.imagem}
-                nome={qtdModalProduto.nome}
-                tamanho={56}
-                servico={qtdModalProduto.tipoItem === "SERVICO"}
-              />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ color: C.white, fontWeight: 700, fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {qtdModalProduto.nome}
-                </div>
-                <div style={{ color: C.muted, fontFamily: "monospace", fontSize: 11, marginTop: 2 }}>
-                  {qtdModalProduto.codigo}
-                  {" · "}
-                  {qtdModalProduto.tipoItem === "SERVICO"
-                    ? "♾ disponível"
-                    : `${qtdModalProduto.estoque} ${qtdModalProduto.unidade || "un"}`}
-                </div>
-                <div style={{ color: C.green, fontWeight: 700, fontSize: 14, marginTop: 2 }}>
-                  {fmtBRL(qtdModalProduto.precoVenda)}
+            <div className="pdv-modal-hd">
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
+                <FotoProduto
+                  url={qtdModalProduto.imagem}
+                  nome={qtdModalProduto.nome}
+                  tamanho={48}
+                  servico={qtdModalProduto.tipoItem === "SERVICO"}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="pdv-modal-title" style={{ fontSize: 15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {qtdModalProduto.nome}
+                  </div>
+                  <div className="pdv-modal-sub" style={{ fontFamily: "'Geist Mono', monospace" }}>
+                    {qtdModalProduto.codigo}
+                    {" · "}
+                    {qtdModalProduto.tipoItem === "SERVICO"
+                      ? "♾ disponível"
+                      : `${qtdModalProduto.estoque} ${qtdModalProduto.unidade || "un"}`}
+                    {" · "}
+                    <span style={{ color: "var(--pdv-accent)", fontWeight: 600 }}>{fmtBRL(qtdModalProduto.precoVenda)}</span>
+                  </div>
                 </div>
               </div>
+              <button type="button" onClick={fecharQtdModal} className="pdv-modal-x">×</button>
             </div>
 
-            <label style={{ display: "block", color: C.muted, fontSize: 11, fontWeight: 700, letterSpacing: 0.4, marginBottom: 6 }}>
-              QUANTIDADE
-            </label>
-            <input
-              ref={qtdInputRef}
-              type="number"
-              min="1"
-              max={qtdModalProduto.tipoItem === "SERVICO" ? undefined : qtdModalProduto.estoque}
-              value={qtdModalValor}
-              onChange={e => setQtdModalValor(e.target.value)}
-              style={{
-                width: "100%", background: C.surface, border: `2px solid ${C.accent}66`,
-                borderRadius: 10, padding: "16px 18px", color: C.white,
-                fontSize: 28, fontWeight: 800, textAlign: "center", outline: "none",
-                letterSpacing: 1,
-              }}
-            />
+            <div className="pdv-modal-body" style={{ paddingBottom: 12 }}>
+              <label className="pdv-field-label">Quantidade</label>
+              <input
+                ref={qtdInputRef}
+                type="number"
+                min="1"
+                max={qtdModalProduto.tipoItem === "SERVICO" ? undefined : qtdModalProduto.estoque}
+                value={qtdModalValor}
+                onChange={e => setQtdModalValor(e.target.value)}
+                className="pdv-qty-input"
+              />
 
-            {(() => {
-              const n = Math.max(1, parseInt(qtdModalValor, 10) || 0);
-              const sub = n * Number(qtdModalProduto.precoVenda);
-              return (
-                <div style={{
-                  marginTop: 12, padding: "10px 14px",
-                  background: C.surface, borderRadius: 8,
-                  display: "flex", justifyContent: "space-between", alignItems: "center",
-                }}>
-                  <span style={{ color: C.muted, fontSize: 12, fontWeight: 700 }}>SUBTOTAL</span>
-                  <span style={{ color: C.green, fontSize: 20, fontWeight: 800 }}>{fmtBRL(sub)}</span>
-                </div>
-              );
-            })()}
+              {(() => {
+                const n = Math.max(1, parseInt(qtdModalValor, 10) || 0);
+                const sub = n * Number(qtdModalProduto.precoVenda);
+                return (
+                  <div className="pdv-modal-amount" style={{ margin: "12px 0 0" }}>
+                    <div>
+                      <div className="pdv-modal-amount-lbl">Subtotal</div>
+                      <div className="pdv-modal-amount-sub">{n} × {fmtBRL(qtdModalProduto.precoVenda)}</div>
+                    </div>
+                    <div className="pdv-modal-amount-num">
+                      {(() => { const { int, dec } = fmtPartes(sub); return <><span className="cur">R$</span>{int}<span className="cents">,{dec}</span></>; })()}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
 
-            <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+            <div className="pdv-modal-foot">
               <button
                 type="button"
                 onClick={fecharQtdModal}
-                style={{
-                  flex: 1, background: "transparent", border: `1px solid ${C.border}`,
-                  color: C.text, borderRadius: 10, padding: "12px", fontWeight: 700,
-                  fontSize: 14, cursor: "pointer",
-                }}
-              >Cancelar</button>
+                className="pdv-btn-ghost"
+              >Cancelar <span className="pdv-kbd is-warn">Esc</span></button>
               <button
                 ref={qtdConfirmarRef}
                 type="button"
                 onClick={confirmarQtdModal}
-                style={{
-                  flex: 1, background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-                  color: C.white, border: "none", borderRadius: 10,
-                  padding: "12px", fontWeight: 800, fontSize: 14, cursor: "pointer",
-                  boxShadow: `0 4px 14px ${C.accent}55`,
-                }}
-              >✓ Adicionar (Enter)</button>
-            </div>
-            <div style={{
-              marginTop: 8, color: C.muted, fontSize: 10, textAlign: "center",
-              fontFamily: "monospace", letterSpacing: 0.3,
-            }}>
-              Esc cancela · Enter adiciona à cestinha
+                className="pdv-btn-finalize"
+                style={{ flex: 1 }}
+              >
+                Adicionar à cestinha
+                <span className="pdv-kbd">Enter</span>
+              </button>
             </div>
           </div>
         </div>
@@ -1216,214 +1118,189 @@ function NovaVenda({ user }) {
       {pagamentoAberto && (
         <div
           onClick={() => !salvando && setPagamentoAberto(false)}
-          style={{
-            position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            padding: 20, zIndex: 100,
-          }}
+          className="pdv-modal-bg"
         >
           <div
             onClick={e => e.stopPropagation()}
-            style={{
-              background: C.card, border: `1px solid ${C.border}`, borderRadius: 14,
-              width: "100%", maxWidth: 520, maxHeight: "92vh", overflowY: "auto",
-              padding: 22, display: "flex", flexDirection: "column", gap: 12,
-            }}
+            className="pdv-modal"
+            style={{ width: "min(560px, calc(100vw - 32px))" }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ color: C.white, fontWeight: 800, fontSize: 18 }}>
-                💰 Pagamento
+            <div className="pdv-modal-hd">
+              <div>
+                <div className="pdv-modal-title">Finalizar venda</div>
+                <div className="pdv-modal-sub">
+                  {carrinho.length} {carrinho.length === 1 ? "item" : "itens"} · revise o total e selecione a forma de pagamento
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => { if (!salvando) { setPagamentoAberto(false); focarBusca(); } }}
-                style={{
-                  background: "transparent", border: "none", color: C.muted,
-                  fontSize: 22, cursor: salvando ? "default" : "pointer",
-                }}
+                className="pdv-modal-x"
               >×</button>
             </div>
 
-            <div>
-              <label style={labelStyle}>Cliente (opcional)</label>
-              <select value={clienteId} onChange={e => setClienteId(e.target.value)} style={inputStyle}>
-                <option value="">— Consumidor —</option>
-                {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-              </select>
-            </div>
-
-            <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                <label style={labelStyle}>Forma de pagamento</label>
-                <button
-                  type="button"
-                  onClick={() => setGerenciarFormasAberto(true)}
-                  title="Cadastrar/editar formas de pagamento"
-                  style={{
-                    background: "transparent", border: "none", color: C.accent,
-                    fontSize: 11, fontWeight: 700, cursor: "pointer", padding: 0,
-                  }}
-                >⚙ Gerenciar</button>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
-                {FORMAS.map(f => {
-                  const ativo = forma === f.id && !formaCustomId;
-                  return (
-                    <button key={f.id} onClick={() => selecionarFormaPadrao(f.id)} type="button" style={{
-                      cursor: "pointer", padding: "10px 4px", borderRadius: 8,
-                      background: ativo ? C.accent : C.surface,
-                      border: ativo ? `1px solid ${C.accent}` : `1px solid ${C.border}`,
-                      color: ativo ? C.white : C.muted,
-                      fontSize: 12, fontWeight: 700, textAlign: "center",
-                    }}>
-                      <div style={{ fontSize: 18 }}>{f.icone}</div>
-                      <div>{f.label}</div>
-                      <div style={{ fontSize: 9, opacity: 0.7 }}>{f.atalho}</div>
-                    </button>
-                  );
-                })}
-              </div>
-              {formasCustom.length > 0 && (
-                <>
-                  <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, marginTop: 10, marginBottom: 4 }}>
-                    Personalizadas
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
-                    {formasCustom.map(c => {
-                      const ativo = formaCustomId === c.id;
-                      return (
-                        <button key={c.id} onClick={() => selecionarFormaCustom(c)} type="button" style={{
-                          cursor: "pointer", padding: "10px 4px", borderRadius: 8,
-                          background: ativo ? C.purple : C.surface,
-                          border: ativo ? `1px solid ${C.purple}` : `1px solid ${C.border}`,
-                          color: ativo ? C.white : C.muted,
-                          fontSize: 12, fontWeight: 700, textAlign: "center",
-                        }}>
-                          <div style={{ fontSize: 18 }}>{c.icone || "•"}</div>
-                          <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nome}</div>
-                          <div style={{ fontSize: 9, opacity: 0.7 }}>{c.baseFormaPagamento === "CARTAO_DEBITO" ? "Débito" : c.baseFormaPagamento === "CARTAO_CREDITO" ? "Crédito" : c.baseFormaPagamento.charAt(0) + c.baseFormaPagamento.slice(1).toLowerCase()}</div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <div>
-                <label style={labelStyle}>Desconto (R$)</label>
-                <input type="number" step="0.01" min="0" value={desconto}
-                  onChange={e => setDesconto(e.target.value)} style={inputStyle} />
-              </div>
-              {forma === "DINHEIRO" && (
+            <div className="pdv-modal-body" style={{ display: "flex", flexDirection: "column", gap: 14, paddingBottom: 16 }}>
+              <div className="pdv-modal-amount" style={{ margin: 0 }}>
                 <div>
-                  <label style={labelStyle}>Valor recebido (R$)</label>
-                  <input
-                    ref={valorRecebidoRef}
-                    type="number" step="0.01" min="0"
-                    value={valorRecebido}
-                    onChange={e => setValorRecebido(e.target.value)}
-                    placeholder="0,00"
-                    style={inputStyle}
-                    autoFocus
-                  />
+                  <div className="pdv-modal-amount-lbl">Total a receber</div>
+                  <div className="pdv-modal-amount-sub">
+                    {carrinho.reduce((a,it)=>a+it.quantidade,0)} produtos
+                    {descontoNum > 0 && <> · desconto {fmtBRL(descontoNum)}</>}
+                  </div>
                 </div>
-              )}
-            </div>
-
-            <div>
-              <label style={labelStyle}>Observações</label>
-              <input value={observacoes} onChange={e => setObservacoes(e.target.value)}
-                placeholder="Opcional" style={inputStyle} />
-            </div>
-
-            <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
-              <Linha label="Subtotal" valor={fmtBRL(subtotal)} />
-              <Linha label="Desconto" valor={`− ${fmtBRL(descontoNum)}`} cor={C.red} />
-              <div style={{
-                display: "flex", justifyContent: "space-between", alignItems: "center",
-                marginTop: 6, padding: "12px 14px",
-                background: C.surface, borderRadius: 8,
-                boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
-              }}>
-                <div style={{ color: C.muted, fontSize: 12, fontWeight: 700 }}>TOTAL</div>
-                <div style={{ color: C.green, fontSize: 24, fontWeight: 800 }}>{fmtBRL(total)}</div>
+                <div className="pdv-modal-amount-num">
+                  {(() => { const { int, dec } = fmtPartes(total); return <><span className="cur">R$</span>{int}<span className="cents">,{dec}</span></>; })()}
+                </div>
               </div>
+
+              <div>
+                <label className="pdv-field-label">Cliente (opcional)</label>
+                <select value={clienteId} onChange={e => setClienteId(e.target.value)} className="pdv-field-select">
+                  <option value="">— Consumidor —</option>
+                  {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <label className="pdv-field-label" style={{ marginBottom: 0 }}>Forma de pagamento</label>
+                  <button
+                    type="button"
+                    onClick={() => setGerenciarFormasAberto(true)}
+                    title="Cadastrar/editar formas de pagamento"
+                    style={{
+                      background: "transparent", border: "none", color: "var(--pdv-accent)",
+                      fontSize: 11.5, fontWeight: 500, cursor: "pointer", padding: 0,
+                      fontFamily: "inherit",
+                    }}
+                  >⚙ Gerenciar</button>
+                </div>
+                <div className="pdv-pay-grid">
+                  {FORMAS.map(f => {
+                    const ativo = forma === f.id && !formaCustomId;
+                    const cor = FORMA_COR_CLASSE[f.id] || "pdv-pay-c-emerald";
+                    return (
+                      <button
+                        key={f.id} onClick={() => selecionarFormaPadrao(f.id)} type="button"
+                        className={`pdv-pay-btn ${cor} ${ativo ? "is-active" : ""}`}
+                      >
+                        <div className="pay-row">
+                          <div className="pay-icon">{f.icone}</div>
+                          <span className="pay-key">{f.atalho}</span>
+                        </div>
+                        <div className="pay-lbl">{f.label}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+                {formasCustom.length > 0 && (
+                  <>
+                    <div className="pdv-shortcuts-label" style={{ marginTop: 12 }}>Personalizadas</div>
+                    <div className="pdv-pay-grid">
+                      {formasCustom.map(c => {
+                        const ativo = formaCustomId === c.id;
+                        const cor = FORMA_COR_CLASSE[c.baseFormaPagamento] || "pdv-pay-c-violet";
+                        return (
+                          <button
+                            key={c.id} onClick={() => selecionarFormaCustom(c)} type="button"
+                            className={`pdv-pay-btn ${cor} ${ativo ? "is-active" : ""}`}
+                          >
+                            <div className="pay-row">
+                              <div className="pay-icon">{c.icone || "•"}</div>
+                              <span className="pay-key">CST</span>
+                            </div>
+                            <div className="pay-lbl">{c.nome}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <label className="pdv-field-label">Desconto (R$)</label>
+                  <input type="number" step="0.01" min="0" value={desconto}
+                    onChange={e => setDesconto(e.target.value)} className="pdv-field-input" />
+                </div>
+                {forma === "DINHEIRO" && (
+                  <div>
+                    <label className="pdv-field-label">Valor recebido (R$)</label>
+                    <input
+                      ref={valorRecebidoRef}
+                      type="number" step="0.01" min="0"
+                      value={valorRecebido}
+                      onChange={e => setValorRecebido(e.target.value)}
+                      placeholder="0,00"
+                      className="pdv-field-input"
+                      autoFocus
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="pdv-field-label">Observações</label>
+                <input value={observacoes} onChange={e => setObservacoes(e.target.value)}
+                  placeholder="Opcional" className="pdv-field-input" />
+              </div>
+
               {mostrarTroco && valorRecebidoNum > 0 && (
                 trocoFalta > 0 ? (
                   <div style={{
                     display: "flex", justifyContent: "space-between", alignItems: "center",
-                    padding: "10px 12px", borderRadius: 8,
-                    background: C.yellow + "22", border: `1px solid ${C.yellow}66`,
+                    padding: "12px 14px", borderRadius: 10,
+                    background: "rgba(245,158,11,.10)", border: "1px solid rgba(245,158,11,.35)",
                   }}>
-                    <div style={{ color: C.yellow, fontSize: 11, fontWeight: 800, letterSpacing: 0.3 }}>
-                      FALTA RECEBER
+                    <div style={{ color: "var(--pdv-c-amber)", fontSize: 11, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase" }}>
+                      Falta receber
                     </div>
-                    <div style={{ color: C.yellow, fontSize: 18, fontWeight: 800 }}>
+                    <div style={{ color: "var(--pdv-c-amber)", fontSize: 20, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
                       {fmtBRL(trocoFalta)}
                     </div>
                   </div>
                 ) : (
                   <div style={{
                     display: "flex", justifyContent: "space-between", alignItems: "center",
-                    padding: "10px 12px", borderRadius: 8,
-                    background: `linear-gradient(135deg, ${C.green}33, ${C.green}11)`,
-                    border: `1px solid ${C.green}88`,
+                    padding: "12px 14px", borderRadius: 10,
+                    background: "color-mix(in oklab, var(--pdv-accent) 14%, var(--pdv-surf-2))",
+                    border: "1px solid var(--pdv-accent-glow)",
                   }}>
-                    <div style={{ color: C.green, fontSize: 11, fontWeight: 800, letterSpacing: 0.3 }}>
-                      TROCO
+                    <div style={{ color: "var(--pdv-accent)", fontSize: 11, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase" }}>
+                      Troco
                     </div>
-                    <div style={{ color: C.green, fontSize: 20, fontWeight: 800 }}>
+                    <div style={{ color: "var(--pdv-accent)", fontSize: 22, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
                       {fmtBRL(troco)}
                     </div>
                   </div>
                 )
               )}
+
+              {erro && (
+                <div className="pdv-erro-inline">{erro}</div>
+              )}
             </div>
 
-            {erro && (
-              <div style={{
-                padding: "8px 12px", borderRadius: 8,
-                background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red, fontSize: 12,
-              }}>{erro}</div>
-            )}
-
-            <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
+            <div className="pdv-modal-foot">
               <button
                 type="button"
                 onClick={() => { if (!salvando) { setPagamentoAberto(false); focarBusca(); } }}
                 disabled={salvando}
-                style={{
-                  flex: "0 0 auto",
-                  background: "transparent", border: `1px solid ${C.border}`, color: C.muted,
-                  borderRadius: 10, padding: "13px 22px", fontWeight: 600, fontSize: 13,
-                  cursor: salvando ? "default" : "pointer",
-                }}
+                className="pdv-btn-ghost"
               >
-                Cancelar
+                Cancelar <span className="pdv-kbd is-warn">Esc</span>
               </button>
               <button
                 ref={finalizarRef}
                 onClick={confirmarPagamento}
                 disabled={salvando}
-                style={{
-                  flex: 1,
-                  background: salvando ? C.muted : `linear-gradient(135deg, ${C.green}, #15803d)`,
-                  color: C.white, border: "none", borderRadius: 10,
-                  padding: "13px", fontWeight: 800, fontSize: 15,
-                  cursor: salvando ? "default" : "pointer",
-                  boxShadow: salvando ? "none" : `0 4px 14px ${C.green}55`,
-                }}
+                className="pdv-btn-finalize"
+                style={{ flex: 1 }}
               >
-                {salvando ? "Confirmando..." : `✓ Confirmar Pagamento — ${fmtBRL(total)}`}
+                {salvando ? "Confirmando…" : <>Confirmar pagamento · {fmtBRL(total)}</>}
+                {!salvando && <span className="pdv-kbd">F10</span>}
               </button>
-            </div>
-            <div style={{
-              marginTop: 4, color: C.muted, fontSize: 10, textAlign: "right",
-              fontFamily: "monospace", letterSpacing: 0.3,
-            }}>
-              Esc cancela · F10 confirma
             </div>
           </div>
         </div>
@@ -1458,15 +1335,6 @@ function NovaVenda({ user }) {
   );
 }
 
-function Linha({ label, valor, cor }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-      <div style={{ color: C.muted }}>{label}</div>
-      <div style={{ color: cor || C.text, fontWeight: 600 }}>{valor}</div>
-    </div>
-  );
-}
-
 // ============== TOPO DO PDV: VENDAS DE HOJE POR FORMA DE PAGAMENTO ==============
 // Substitui o antigo CaixaStatusCard. Saldo, sangria, suprimento e faturamento
 // total deixam de aparecer aqui — tudo isso fica restrito a tela do Caixa,
@@ -1476,80 +1344,45 @@ function Linha({ label, valor, cor }) {
 function FormasPagamentoTopo({ resumo }) {
   const r = resumo || { porForma: [] };
   const totalPagamentos = r.porForma.reduce((acc, f) => acc + f.total, 0) || 1;
-  const FORMA_COR = {
-    DINHEIRO: C.green, PIX: C.accent, CARTAO_DEBITO: "#0ea5e9",
-    CARTAO_CREDITO: C.purple, BOLETO: C.yellow, CREDIARIO: C.muted,
-  };
   const dataLabel = new Date().toLocaleDateString("pt-BR", {
     weekday: "short", day: "2-digit", month: "short",
   });
 
   return (
-    <div style={{
-      background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
-      padding: "12px 16px",
-    }}>
-      <div style={{
-        display: "flex", justifyContent: "space-between", alignItems: "baseline",
-        marginBottom: r.porForma.length > 0 ? 10 : 8,
-      }}>
-        <div style={{
-          color: C.muted, fontSize: 11, fontWeight: 700,
-          letterSpacing: 0.4, textTransform: "uppercase",
-        }}>
-          📊 Vendas de hoje por forma de pagamento
+    <div className="pdv-dash">
+      <div className="pdv-dash-hd">
+        <div className="pdv-dash-title">
+          <span style={{ color: "var(--pdv-accent)", fontSize: 13 }}>◆</span>
+          Vendas de hoje por forma de pagamento
         </div>
-        <div style={{ color: C.muted, fontSize: 10 }}>{dataLabel}</div>
+        <div className="pdv-dash-date">{dataLabel}</div>
       </div>
 
       {r.porForma.length === 0 ? (
-        <div style={{
-          padding: "10px 12px", textAlign: "center", color: C.muted, fontSize: 12,
-          background: C.surface, borderRadius: 8, border: `1px dashed ${C.border}`,
-        }}>
+        <div className="pdv-dash-empty">
           Nenhuma venda finalizada hoje ainda.
         </div>
       ) : (
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: `repeat(${Math.min(r.porForma.length, 6)}, 1fr)`,
-          gap: 16,
-        }}>
+        <div
+          className="pdv-dash-grid"
+          style={{ gridTemplateColumns: `repeat(${Math.min(r.porForma.length, 6)}, minmax(0, 1fr))` }}
+        >
           {r.porForma.map(f => {
             const pct = (f.total / totalPagamentos) * 100;
-            const cor = FORMA_COR[f.formaPagamento] || C.accent;
+            const cor = FORMA_COR_VAR[f.formaPagamento] || "var(--pdv-accent)";
             return (
-              <div key={f.formaPagamento} style={{ minWidth: 0 }}>
-                <div style={{
-                  display: "flex", justifyContent: "space-between",
-                  alignItems: "baseline", gap: 6,
-                }}>
-                  <span style={{
-                    color: C.text, fontSize: 11, fontWeight: 600,
-                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                  }}>
+              <div key={f.formaPagamento} className="pdv-dash-block">
+                <div className="pdv-dash-row">
+                  <span className="pdv-dash-label-mut">
                     {FORMA_LABEL[f.formaPagamento] || f.formaPagamento}
                   </span>
-                  <span style={{
-                    color: cor, fontSize: 11, fontWeight: 700, fontFamily: "monospace",
-                  }}>
-                    {pct.toFixed(0)}%
-                  </span>
+                  <span className="pdv-dash-pct" style={{ color: cor }}>{pct.toFixed(0)}%</span>
                 </div>
-                <div style={{
-                  color: cor, fontSize: 16, fontWeight: 800,
-                  fontFamily: "monospace", marginTop: 2,
-                }}>
+                <div className="pdv-dash-num" style={{ color: cor }}>
                   {fmtBRL(f.total)}
                 </div>
-                <div style={{
-                  height: 4, background: C.surface, borderRadius: 4,
-                  overflow: "hidden", marginTop: 4,
-                }}>
-                  <div style={{
-                    width: `${pct}%`, height: "100%", background: cor,
-                    transition: "width 0.3s ease",
-                  }} />
+                <div className="pdv-dash-bar">
+                  <span style={{ width: `${pct}%`, background: cor }} />
                 </div>
               </div>
             );
@@ -1568,31 +1401,29 @@ function AcessoRapido({ topProdutos, ultimasVendas, onAdicionar, onAbrirVenda })
 
   if (semDados) {
     return (
-      <div style={{
-        padding: "60px 30px", textAlign: "center", color: C.muted, fontSize: 14,
-        display: "flex", flexDirection: "column", alignItems: "center", gap: 12,
-      }}>
-        <div style={{ fontSize: 48, opacity: 0.5 }}>🛒</div>
-        <div style={{ fontWeight: 600 }}>Cestinha vazia</div>
-        <div style={{ fontSize: 12 }}>Bipe um produto ou digite o código no campo acima.</div>
+      <div className="pdv-cart-empty">
+        <div className="pdv-cart-empty-mark">🛒</div>
+        <div>
+          <div className="pdv-cart-empty-title">Cestinha vazia</div>
+          <div className="pdv-cart-empty-sub">Bipe um produto, digite o código no campo acima ou escolha um dos mais vendidos.</div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 16 }}>
+    <div>
       {topProdutos?.length > 0 && (
         <div>
-          <div style={{
-            display: "flex", justifyContent: "space-between", alignItems: "baseline",
-            marginBottom: 8,
-          }}>
-            <div style={{ color: C.text, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4 }}>
-              ⚡ Mais vendidos (30 dias)
+          <div className="pdv-section-hd">
+            <div className="pdv-card-title">
+              <span style={{ color: "var(--pdv-accent)" }}>⚡</span>
+              Mais vendidos · 30 dias
+              <span className="pill">{topProdutos.length}</span>
             </div>
-            <div style={{ color: C.muted, fontSize: 11 }}>clique para adicionar</div>
+            <div className="helper">clique para adicionar</div>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 8 }}>
+          <div className="pdv-top-grid">
             {topProdutos.map(p => {
               const semEstoque = p.tipoItem !== "SERVICO" && p.estoque <= 0;
               return (
@@ -1601,27 +1432,14 @@ function AcessoRapido({ topProdutos, ultimasVendas, onAdicionar, onAbrirVenda })
                   onClick={() => !semEstoque && onAdicionar(p)}
                   disabled={semEstoque}
                   title={semEstoque ? "Sem estoque" : `Adicionar ${p.nome}`}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 10,
-                    padding: 8, background: C.surface,
-                    border: `1px solid ${semEstoque ? C.red + "33" : C.border}`,
-                    borderRadius: 10, cursor: semEstoque ? "not-allowed" : "pointer",
-                    textAlign: "left", opacity: semEstoque ? 0.5 : 1,
-                    transition: "transform 0.1s, border-color 0.1s",
-                  }}
-                  onMouseEnter={e => { if (!semEstoque) e.currentTarget.style.borderColor = C.accent + "88"; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = semEstoque ? C.red + "33" : C.border; }}
+                  className="pdv-top-card"
                 >
                   <FotoProduto url={p.imagem} nome={p.nome} tamanho={42} servico={p.tipoItem === "SERVICO"} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{
-                      color: C.white, fontWeight: 600, fontSize: 12, lineHeight: 1.3,
-                      overflow: "hidden", textOverflow: "ellipsis",
-                      display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
-                    }}>{p.nome}</div>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 3 }}>
-                      <span style={{ color: C.green, fontWeight: 700, fontSize: 12 }}>{fmtBRL(p.precoVenda)}</span>
-                      <span style={{ color: C.muted, fontSize: 10 }}>
+                  <div className="pdv-top-card-info">
+                    <div className="pdv-top-card-name">{p.nome}</div>
+                    <div className="pdv-top-card-foot">
+                      <span className="pdv-top-card-price">{fmtBRL(p.precoVenda)}</span>
+                      <span className="pdv-top-card-stock">
                         {p.tipoItem === "SERVICO" ? "♾" : `${p.estoque} ${p.unidade}`}
                       </span>
                     </div>
@@ -1635,45 +1453,36 @@ function AcessoRapido({ topProdutos, ultimasVendas, onAdicionar, onAbrirVenda })
 
       {ultimasVendas?.length > 0 && (
         <div>
-          <div style={{
-            color: C.text, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4,
-            marginBottom: 8,
-          }}>
-            🧾 Últimas vendas deste caixa
+          <div className="pdv-section-hd" style={{ marginTop: 8 }}>
+            <div className="pdv-card-title">
+              <span style={{ color: "var(--pdv-t3)" }}>⏱</span>
+              Últimas vendas deste caixa
+            </div>
           </div>
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}>
-            {ultimasVendas.map((v, i) => (
-              <button
-                key={v.id} type="button"
-                onClick={() => onAbrirVenda(v.id)}
-                className="pdv-sugestao"
-                style={{
-                  display: "grid", gridTemplateColumns: "70px 1fr 90px 100px 70px",
-                  alignItems: "center", gap: 10,
-                  width: "100%", padding: "10px 12px",
-                  background: "transparent",
-                  border: "none", borderTop: i === 0 ? "none" : `1px solid ${C.border}`,
-                  cursor: "pointer", color: C.text, textAlign: "left",
-                  transition: "background 0.1s",
-                }}
-              >
-                <div style={{ color: C.white, fontFamily: "monospace", fontWeight: 700, fontSize: 13 }}>
-                  #{v.numero}
-                </div>
-                <div style={{ color: C.text, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {v.cliente?.nome || <span style={{ color: C.muted, fontStyle: "italic" }}>Consumidor</span>}
-                </div>
-                <div style={{ color: C.muted, fontSize: 11 }}>
-                  {FORMA_LABEL[v.formaPagamento] || v.formaPagamento}
-                </div>
-                <div style={{ color: C.green, fontWeight: 700, fontSize: 13, textAlign: "right" }}>
-                  {fmtBRL(v.total)}
-                </div>
-                <div style={{ color: C.muted, fontSize: 10, textAlign: "right" }}>
-                  {new Date(v.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                </div>
-              </button>
-            ))}
+          <div>
+            {ultimasVendas.map((v) => {
+              const cor = FORMA_COR_VAR[v.formaPagamento] || "var(--pdv-accent)";
+              return (
+                <button
+                  key={v.id} type="button"
+                  onClick={() => onAbrirVenda(v.id)}
+                  className="pdv-rec-row"
+                >
+                  <div className="pdv-rec-id">#{v.numero}</div>
+                  <div className={`pdv-rec-cust ${!v.cliente?.nome ? "is-empty" : ""}`}>
+                    {v.cliente?.nome || "Consumidor"}
+                  </div>
+                  <div className="pdv-rec-method">
+                    <span className="pdv-rec-method-dot" style={{ background: cor }} />
+                    {FORMA_LABEL[v.formaPagamento] || v.formaPagamento}
+                  </div>
+                  <div className="pdv-rec-total">{fmtBRL(v.total)}</div>
+                  <div className="pdv-rec-time">
+                    {new Date(v.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -1682,33 +1491,30 @@ function AcessoRapido({ topProdutos, ultimasVendas, onAdicionar, onAbrirVenda })
 }
 
 // ============== ATALHO CLICAVEL ==============
-function BotaoAtalho({ tecla, label, cor, disabled, onClick }) {
+function BotaoAtalho({ tecla, label, tom = "mut", disabled, onClick }) {
+  const klass = tom === "warn" ? "k-warn" : tom === "ok" ? "k-ok" : tom === "info" ? "k-info" : "k-mut";
   return (
     <button
       type="button" onClick={onClick} disabled={disabled}
       title={`Pressione ${tecla}`}
-      style={{
-        display: "flex", flexDirection: "column", alignItems: "flex-start",
-        background: C.surface, border: `1px solid ${C.border}`,
-        borderRadius: 8, padding: "8px 10px",
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.4 : 1,
-        textAlign: "left", lineHeight: 1.2,
-        transition: "border-color 0.1s, background 0.1s",
-      }}
-      onMouseEnter={e => { if (!disabled) e.currentTarget.style.borderColor = cor + "88"; }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; }}
+      className="pdv-short-btn"
     >
-      <span style={{ color: cor, fontWeight: 800, fontSize: 11, fontFamily: "monospace" }}>{tecla}</span>
-      <span style={{ color: C.text, fontSize: 11, marginTop: 2 }}>{label}</span>
+      <span className={`pdv-short-key ${klass}`}>{tecla}</span>
+      <span className="pdv-short-lbl">{label}</span>
     </button>
   );
 }
 
-const btnQtd = {
-  background: "#1a1d27", border: "1px solid #2e3354", color: "#e2e8f0",
-  borderRadius: 6, width: 26, height: 26, fontSize: 14, fontWeight: 700, cursor: "pointer",
-};
+// ============== TOTAL ANIMADO (cart sidebar) ==============
+function TotalAnimado({ valor }) {
+  const v = useCountUp(valor);
+  const { int, dec } = fmtPartes(v);
+  return (
+    <span className="pdv-total-num">
+      <span className="cur">R$</span>{int}<span className="cents">,{dec}</span>
+    </span>
+  );
+}
 
 // ==================== RECIBO ====================
 
@@ -1768,7 +1574,7 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpr
         }
         .recibo-nova-venda:focus,
         .recibo-nova-venda:focus-visible {
-          box-shadow: 0 0 0 3px ${C.accent}aa, 0 4px 14px ${C.accent}66;
+          box-shadow: 0 0 0 3px var(--pdv-accent-glow), 0 6px 18px -6px var(--pdv-accent-glow), 0 1px 0 rgba(255,255,255,.2) inset;
           transform: translateY(-1px);
         }
         .cupom-imprimivel .cupom-linha {
@@ -1781,91 +1587,97 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpr
         .cupom-imprimivel .cupom-grande { font-size: 14px; font-weight: 700; }
       `}</style>
 
-      <div onClick={onFechar} style={modalOverlay}>
-        <div onClick={e => e.stopPropagation()} style={{ ...modalCard, maxWidth: 480 }}>
-          <div style={{ textAlign: "center", marginBottom: 16 }}>
-            <div style={{ fontSize: 48 }}>{modoReimpressao ? "🖨️" : "✅"}</div>
-            <div style={{ color: C.white, fontSize: 22, fontWeight: 800, marginTop: 4 }}>
-              {modoReimpressao ? "Reimpressão de Cupom" : "Venda Concluída!"}
-            </div>
-            <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>
-              Venda #{venda.numero} · {fmtData(venda.createdAt)}
-            </div>
-          </div>
-
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 14, marginBottom: 14 }}>
-            <div style={{ color: C.muted, fontSize: 11, fontWeight: 700, marginBottom: 8 }}>ITENS</div>
-            {venda.itens?.map(it => (
-              <div key={it.id} style={{
-                display: "flex", justifyContent: "space-between", padding: "6px 0",
-                borderBottom: `1px solid ${C.border}`, fontSize: 13,
-              }}>
-                <div>
-                  <div style={{ color: C.white }}>{it.produto?.nome}</div>
-                  <div style={{ color: C.muted, fontSize: 11 }}>
-                    {it.quantidade} × {fmtBRL(it.precoUnitario)}
-                  </div>
-                </div>
-                <div style={{ color: C.green, fontWeight: 700 }}>{fmtBRL(it.subtotal)}</div>
+      <div onClick={onFechar} className="pdv-modal-bg">
+        <div onClick={e => e.stopPropagation()} className="pdv-modal" style={{ width: "min(500px, calc(100vw - 32px))" }}>
+          {!modoReimpressao ? (
+            <div className="pdv-success" style={{ paddingBottom: 16 }}>
+              <div className="pdv-success-mark">✓</div>
+              <div className="pdv-success-title">Venda concluída</div>
+              <div className="pdv-success-sub">
+                {fmtBRL(venda.total)} via {FORMA_LABEL[venda.formaPagamento]} · #{venda.numero}
               </div>
-            ))}
-          </div>
-
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 14, marginBottom: 14 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
-              <span style={{ color: C.muted }}>Forma de pagamento:</span>
-              <span style={{ color: C.white, fontWeight: 600 }}>{FORMA_LABEL[venda.formaPagamento]}</span>
             </div>
-            {Number(venda.desconto) > 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
-                <span style={{ color: C.muted }}>Desconto:</span>
-                <span style={{ color: C.red, fontWeight: 600 }}>− {fmtBRL(venda.desconto)}</span>
+          ) : (
+            <div className="pdv-modal-hd">
+              <div>
+                <div className="pdv-modal-title">Reimpressão de cupom</div>
+                <div className="pdv-modal-sub">Venda #{venda.numero} · {fmtData(venda.createdAt)}</div>
               </div>
-            )}
-            {mostrarRecebidoTroco && (
-              <>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
-                  <span style={{ color: C.muted }}>Valor recebido:</span>
-                  <span style={{ color: C.text, fontWeight: 600 }}>{fmtBRL(valorRecebido)}</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
-                  <span style={{ color: C.muted }}>Troco:</span>
-                  <span style={{ color: C.green, fontWeight: 700 }}>{fmtBRL(troco)}</span>
-                </div>
-              </>
-            )}
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, fontWeight: 800, marginTop: 6, paddingTop: 6, borderTop: `1px solid ${C.border}` }}>
-              <span style={{ color: C.muted }}>TOTAL</span>
-              <span style={{ color: C.green }}>{fmtBRL(venda.total)}</span>
+              <button type="button" onClick={onFechar} className="pdv-modal-x">×</button>
             </div>
-          </div>
+          )}
 
-          <div style={{ display: "flex", gap: 10 }}>
-            <button onClick={imprimir} style={{
-              flex: 1, background: C.surface, border: `1px solid ${C.accent}55`, color: C.accent,
-              borderRadius: 10, padding: "12px", fontWeight: 700, fontSize: 14, cursor: "pointer",
+          <div className="pdv-modal-body" style={{ paddingBottom: 8 }}>
+            <div style={{
+              background: "var(--pdv-surf-2)", border: "1px solid var(--pdv-line)",
+              borderRadius: 12, padding: 14, marginBottom: 12,
             }}>
-              🖨️ Imprimir Cupom
+              <div style={{ color: "var(--pdv-t3)", fontSize: 10.5, fontWeight: 500, letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 8 }}>Itens</div>
+              {venda.itens?.map((it, i) => (
+                <div key={it.id} style={{
+                  display: "flex", justifyContent: "space-between", padding: "8px 0",
+                  borderTop: i === 0 ? "none" : "1px solid var(--pdv-line)", fontSize: 13,
+                }}>
+                  <div>
+                    <div style={{ color: "var(--pdv-t1)", fontWeight: 500 }}>{it.produto?.nome}</div>
+                    <div style={{ color: "var(--pdv-t3)", fontSize: 11.5, marginTop: 2, fontVariantNumeric: "tabular-nums" }}>
+                      {it.quantidade} × {fmtBRL(it.precoUnitario)}
+                    </div>
+                  </div>
+                  <div style={{ color: "var(--pdv-t1)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtBRL(it.subtotal)}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{
+              background: "var(--pdv-surf-2)", border: "1px solid var(--pdv-line)",
+              borderRadius: 12, padding: 14, marginBottom: 16,
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6 }}>
+                <span style={{ color: "var(--pdv-t3)" }}>Forma de pagamento</span>
+                <span style={{ color: "var(--pdv-t1)", fontWeight: 500 }}>{FORMA_LABEL[venda.formaPagamento]}</span>
+              </div>
+              {Number(venda.desconto) > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6 }}>
+                  <span style={{ color: "var(--pdv-t3)" }}>Desconto</span>
+                  <span style={{ color: "var(--pdv-c-rose)", fontWeight: 500 }}>− {fmtBRL(venda.desconto)}</span>
+                </div>
+              )}
+              {mostrarRecebidoTroco && (
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6 }}>
+                    <span style={{ color: "var(--pdv-t3)" }}>Valor recebido</span>
+                    <span style={{ color: "var(--pdv-t1)", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{fmtBRL(valorRecebido)}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6 }}>
+                    <span style={{ color: "var(--pdv-t3)" }}>Troco</span>
+                    <span style={{ color: "var(--pdv-accent)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtBRL(troco)}</span>
+                  </div>
+                </>
+              )}
+              <div style={{
+                display: "flex", justifyContent: "space-between", alignItems: "baseline",
+                marginTop: 10, paddingTop: 10, borderTop: "1px dashed var(--pdv-line-2)",
+              }}>
+                <span style={{ color: "var(--pdv-t3)", fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", fontWeight: 500 }}>Total</span>
+                <span style={{ color: "var(--pdv-accent)", fontSize: 24, fontWeight: 600, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.02em" }}>{fmtBRL(venda.total)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="pdv-modal-foot">
+            <button onClick={imprimir} className="pdv-btn-ghost" style={{ flex: 1, justifyContent: "center" }}>
+              🖨️ Imprimir cupom
             </button>
             <button
               ref={novaVendaBtnRef}
               onClick={onFechar}
-              className="recibo-nova-venda"
-              style={{
-                flex: 1, background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-                color: C.white, border: "none", borderRadius: 10,
-                padding: "12px", fontWeight: 700, fontSize: 14, cursor: "pointer",
-                outline: "none",
-              }}
+              className="pdv-btn-finalize recibo-nova-venda"
+              style={{ flex: 1 }}
             >
-              {modoReimpressao ? "Fechar" : "Nova Venda"}
+              {modoReimpressao ? "Fechar" : "Nova venda"}
+              <span className="pdv-kbd">Enter</span>
             </button>
-          </div>
-          <div style={{
-            marginTop: 8, color: C.muted, fontSize: 10, textAlign: "center",
-            fontFamily: "monospace", letterSpacing: 0.3,
-          }}>
-            Esc fecha
           </div>
         </div>
       </div>
@@ -2058,52 +1870,52 @@ function Historico({ user }) {
 
   return (
     <div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 16 }}>
-        <Card titulo="Total" valor={stats.total} cor={C.text} />
-        <Card titulo="Concluídas" valor={stats.concluidas} cor={C.green} />
-        <Card titulo="Canceladas" valor={stats.canceladas} cor={C.red} />
-        <Card titulo="Faturamento" valor={fmtBRL(stats.totalVendido)} cor={C.accent} />
+      <div className="pdv-stats-grid">
+        <Card titulo="Total" valor={stats.total} cor="var(--pdv-t1)" />
+        <Card titulo="Concluídas" valor={stats.concluidas} cor="var(--pdv-accent)" />
+        <Card titulo="Canceladas" valor={stats.canceladas} cor="var(--pdv-c-rose)" />
+        <Card titulo="Faturamento" valor={fmtBRL(stats.totalVendido)} cor="var(--pdv-accent)" />
       </div>
 
-      <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-        <select value={filtroForma} onChange={e => setFiltroForma(e.target.value)} style={selectCompacto}>
+      <div className="pdv-filter-bar">
+        <select value={filtroForma} onChange={e => setFiltroForma(e.target.value)} className="pdv-field-select" style={{ width: "auto", minWidth: 160 }}>
           <option value="">Todas as formas</option>
           {FORMAS.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
         </select>
-        <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)} style={selectCompacto}>
+        <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)} className="pdv-field-select" style={{ width: "auto", minWidth: 160 }}>
           <option value="">Todos os status</option>
           <option value="CONCLUIDA">Concluídas</option>
           <option value="CANCELADA">Canceladas</option>
         </select>
-        <input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} style={selectCompacto} />
-        <input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} style={selectCompacto} />
+        <input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} className="pdv-field-input" style={{ width: "auto" }} />
+        <input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} className="pdv-field-input" style={{ width: "auto" }} />
         {(filtroForma || filtroStatus || dataInicio || dataFim) && (
-          <button onClick={() => { setFiltroForma(""); setFiltroStatus(""); setDataInicio(""); setDataFim(""); }} style={{
-            background: C.surface, border: `1px solid ${C.border}`, color: C.muted,
-            borderRadius: 8, padding: "8px 14px", fontSize: 12, cursor: "pointer",
-          }}>Limpar filtros</button>
+          <button onClick={() => { setFiltroForma(""); setFiltroStatus(""); setDataInicio(""); setDataFim(""); }} className="pdv-btn-ghost" style={{ padding: "10px 16px" }}>
+            Limpar filtros
+          </button>
         )}
       </div>
 
       {mensagem && (
         <div style={{
-          marginBottom: 12, padding: "10px 14px", borderRadius: 8,
-          background: C.green + "22", border: `1px solid ${C.green}55`, color: C.green, fontSize: 13,
+          marginBottom: 12, padding: "10px 14px", borderRadius: 10,
+          background: "color-mix(in oklab, var(--pdv-accent) 14%, transparent)",
+          border: "1px solid var(--pdv-accent-glow)",
+          color: "var(--pdv-accent)", fontSize: 13,
         }}>{mensagem}</div>
       )}
       {erro && (
-        <div style={{
-          marginBottom: 12, padding: "10px 14px", borderRadius: 8,
-          background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red, fontSize: 13,
-        }}>{erro}</div>
+        <div style={{ marginBottom: 12 }}>
+          <div className="pdv-erro-inline">{erro}</div>
+        </div>
       )}
 
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
+      <div className="pdv-card">
         <div style={{
           display: "grid", gridTemplateColumns: "150px 80px 1.5fr 120px 100px 90px 130px 150px",
-          padding: "12px 16px", background: C.surface,
-          borderBottom: `1px solid ${C.border}`, fontSize: 12, fontWeight: 700,
-          color: C.muted, textTransform: "uppercase", letterSpacing: 0.5,
+          padding: "12px 18px", background: "var(--pdv-surf-2)",
+          borderBottom: "1px solid var(--pdv-line)", fontSize: 10.5, fontWeight: 500,
+          color: "var(--pdv-t3)", textTransform: "uppercase", letterSpacing: ".06em",
         }}>
           <div>Data</div>
           <div>Nº</div>
@@ -2116,41 +1928,46 @@ function Historico({ user }) {
         </div>
 
         {carregando ? (
-          <div style={{ padding: 30, textAlign: "center", color: C.muted, fontSize: 13 }}>Carregando...</div>
+          <div style={{ padding: 36, textAlign: "center", color: "var(--pdv-t3)", fontSize: 13 }}>Carregando…</div>
         ) : vendas.length === 0 ? (
-          <div style={{ padding: 30, textAlign: "center", color: C.muted, fontSize: 13 }}>Nenhuma venda encontrada.</div>
+          <div style={{ padding: 36, textAlign: "center", color: "var(--pdv-t3)", fontSize: 13 }}>Nenhuma venda encontrada.</div>
         ) : vendas.map(v => {
           const st = STATUS_INFO[v.status] || STATUS_INFO.CONCLUIDA;
           return (
             <div key={v.id} style={{
               display: "grid", gridTemplateColumns: "150px 80px 1.5fr 120px 100px 90px 130px 150px",
-              padding: "12px 16px", borderBottom: `1px solid ${C.border}`,
+              padding: "12px 18px", borderBottom: "1px solid var(--pdv-line)",
               alignItems: "center", fontSize: 13,
-              opacity: v.status === "CANCELADA" ? 0.6 : 1,
+              opacity: v.status === "CANCELADA" ? 0.55 : 1,
             }}>
-              <div style={{ color: C.muted, fontSize: 12 }}>{fmtData(v.createdAt)}</div>
-              <div style={{ color: C.white, fontFamily: "monospace", fontWeight: 700 }}>#{v.numero}</div>
+              <div style={{ color: "var(--pdv-t3)", fontSize: 11.5, fontVariantNumeric: "tabular-nums" }}>{fmtData(v.createdAt)}</div>
+              <div style={{ color: "var(--pdv-t3)", fontFamily: "'Geist Mono', monospace", fontSize: 12 }}>#{v.numero}</div>
               <div>
-                <div style={{ color: C.white, fontWeight: 600, fontSize: 13 }}>
-                  {v.cliente?.nome || "— Consumidor —"}
+                <div style={{ color: "var(--pdv-t1)", fontWeight: 500, fontSize: 13 }}>
+                  {v.cliente?.nome || <span style={{ color: "var(--pdv-t3)", fontStyle: "italic", fontWeight: 400 }}>Consumidor</span>}
                 </div>
-                <div style={{ color: C.muted, fontSize: 11 }}>por {v.user?.nome}</div>
+                <div style={{ color: "var(--pdv-t3)", fontSize: 11 }}>por {v.user?.nome}</div>
               </div>
-              <div style={{ color: C.text, fontSize: 12 }}>{FORMA_LABEL[v.formaPagamento] || v.formaPagamento}</div>
+              <div style={{ color: "var(--pdv-t2)", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <span className="pdv-rec-method-dot" style={{ background: FORMA_COR_VAR[v.formaPagamento] || "var(--pdv-accent)" }} />
+                {FORMA_LABEL[v.formaPagamento] || v.formaPagamento}
+              </div>
               <div>
                 <span style={{
-                  fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 6,
-                  background: st.cor + "22", color: st.cor, border: `1px solid ${st.cor}55`,
+                  fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 99,
+                  background: `color-mix(in srgb, ${st.cor} 18%, transparent)`,
+                  color: st.cor, border: `1px solid color-mix(in srgb, ${st.cor} 35%, transparent)`,
                 }}>{st.label}</span>
               </div>
-              <div style={{ textAlign: "right", color: C.text }}>{v._count?.itens || 0}</div>
-              <div style={{ textAlign: "right", color: C.green, fontWeight: 700, fontSize: 14 }}>{fmtBRL(v.total)}</div>
+              <div style={{ textAlign: "right", color: "var(--pdv-t2)", fontVariantNumeric: "tabular-nums" }}>{v._count?.itens || 0}</div>
+              <div style={{ textAlign: "right", color: "var(--pdv-t1)", fontWeight: 600, fontSize: 14, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em" }}>{fmtBRL(v.total)}</div>
               <div style={{ textAlign: "right", display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                <button onClick={() => abrirDetalhe(v.id)} style={btnIcone(C.accent)}>Ver</button>
+                <button onClick={() => abrirDetalhe(v.id)} className="pdv-btn-ghost" style={{ padding: "6px 12px", fontSize: 12 }}>Ver</button>
                 {v.status === "CONCLUIDA" && (
                   <button
                     onClick={() => abrirReimpressao(v.id)}
-                    style={btnIcone(C.green)}
+                    className="pdv-btn-ghost"
+                    style={{ padding: "6px 10px", fontSize: 12, color: "var(--pdv-accent)", borderColor: "rgba(52,211,153,.35)" }}
                     title="Reimprimir cupom (2ª via)"
                   >🖨️</button>
                 )}
@@ -2185,9 +2002,9 @@ function Historico({ user }) {
 
 function Card({ titulo, valor, cor }) {
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
-      <div style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase" }}>{titulo}</div>
-      <div style={{ color: cor, fontSize: 20, fontWeight: 800, marginTop: 6 }}>{valor}</div>
+    <div className="pdv-stat-card">
+      <div className="pdv-stat-label">{titulo}</div>
+      <div className="pdv-stat-value" style={{ color: cor }}>{valor}</div>
     </div>
   );
 }
@@ -2195,121 +2012,117 @@ function Card({ titulo, valor, cor }) {
 function DetalheVendaModal({ venda, onFechar, onCancelar, onReimprimir }) {
   const st = STATUS_INFO[venda.status] || STATUS_INFO.CONCLUIDA;
   return (
-    <div onClick={onFechar} style={modalOverlay}>
-      <div onClick={e => e.stopPropagation()} style={{ ...modalCard, maxWidth: 720 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
+    <div onClick={onFechar} className="pdv-modal-bg">
+      <div onClick={e => e.stopPropagation()} className="pdv-modal" style={{ width: "min(720px, calc(100vw - 32px))" }}>
+        <div className="pdv-modal-hd">
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ color: C.white, fontWeight: 700, fontSize: 18 }}>Venda #{venda.numero}</div>
+              <div className="pdv-modal-title">Venda #{venda.numero}</div>
               <span style={{
-                fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 6,
-                background: st.cor + "22", color: st.cor, border: `1px solid ${st.cor}55`,
+                fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 99,
+                background: `color-mix(in srgb, ${st.cor} 18%, transparent)`,
+                color: st.cor, border: `1px solid color-mix(in srgb, ${st.cor} 35%, transparent)`,
+                letterSpacing: ".02em",
               }}>{st.label}</span>
             </div>
-            <div style={{ color: C.muted, fontSize: 12, marginTop: 4 }}>{fmtData(venda.createdAt)}</div>
+            <div className="pdv-modal-sub">{fmtData(venda.createdAt)}</div>
           </div>
-          <button type="button" onClick={onFechar} style={{
-            background: "transparent", border: "none", color: C.muted, fontSize: 22, cursor: "pointer",
-          }}>×</button>
+          <button type="button" onClick={onFechar} className="pdv-modal-x">×</button>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-          <Bloco titulo="Cliente">
-            {venda.cliente ? (
-              <>
-                <div style={{ color: C.white, fontSize: 13, fontWeight: 600 }}>{venda.cliente.nome}</div>
-                {venda.cliente.cpfCnpj && <div style={{ color: C.muted, fontSize: 11 }}>{venda.cliente.cpfCnpj}</div>}
-              </>
-            ) : (
-              <div style={{ color: C.muted, fontSize: 13 }}>— Consumidor —</div>
-            )}
-          </Bloco>
-          <Bloco titulo="Vendedor">
-            <div style={{ color: C.white, fontSize: 13, fontWeight: 600 }}>{venda.user?.nome}</div>
-            <div style={{ color: C.muted, fontSize: 11 }}>{venda.user?.role}</div>
-          </Bloco>
-        </div>
+        <div className="pdv-modal-body" style={{ paddingBottom: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+            <Bloco titulo="Cliente">
+              {venda.cliente ? (
+                <>
+                  <div style={{ color: "var(--pdv-t1)", fontSize: 13.5, fontWeight: 500 }}>{venda.cliente.nome}</div>
+                  {venda.cliente.cpfCnpj && <div style={{ color: "var(--pdv-t3)", fontSize: 11.5, marginTop: 2 }}>{venda.cliente.cpfCnpj}</div>}
+                </>
+              ) : (
+                <div style={{ color: "var(--pdv-t3)", fontSize: 13, fontStyle: "italic" }}>— Consumidor —</div>
+              )}
+            </Bloco>
+            <Bloco titulo="Vendedor">
+              <div style={{ color: "var(--pdv-t1)", fontSize: 13.5, fontWeight: 500 }}>{venda.user?.nome}</div>
+              <div style={{ color: "var(--pdv-t3)", fontSize: 11.5, marginTop: 2 }}>{venda.user?.role}</div>
+            </Bloco>
+          </div>
 
-        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", marginBottom: 14 }}>
           <div style={{
-            display: "grid", gridTemplateColumns: "2.5fr 80px 130px 130px",
-            padding: "10px 14px", background: C.bg, borderBottom: `1px solid ${C.border}`,
-            fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase",
+            background: "var(--pdv-surf-2)", border: "1px solid var(--pdv-line)",
+            borderRadius: 12, overflow: "hidden", marginBottom: 14,
           }}>
-            <div>Produto</div>
-            <div style={{ textAlign: "right" }}>Qtd</div>
-            <div style={{ textAlign: "right" }}>Preço unit.</div>
-            <div style={{ textAlign: "right" }}>Subtotal</div>
-          </div>
-          {venda.itens?.map(it => (
-            <div key={it.id} style={{
+            <div style={{
               display: "grid", gridTemplateColumns: "2.5fr 80px 130px 130px",
-              padding: "10px 14px", borderBottom: `1px solid ${C.border}`,
-              alignItems: "center", fontSize: 13,
+              padding: "10px 16px", background: "var(--pdv-bg-2)", borderBottom: "1px solid var(--pdv-line)",
+              fontSize: 10.5, fontWeight: 500, color: "var(--pdv-t3)", textTransform: "uppercase", letterSpacing: ".06em",
             }}>
-              <div>
-                <div style={{ color: C.white, fontWeight: 600 }}>{it.produto?.nome}</div>
-                <div style={{ color: C.muted, fontFamily: "monospace", fontSize: 11 }}>{it.produto?.codigo}</div>
+              <div>Produto</div>
+              <div style={{ textAlign: "right" }}>Qtd</div>
+              <div style={{ textAlign: "right" }}>Preço unit.</div>
+              <div style={{ textAlign: "right" }}>Subtotal</div>
+            </div>
+            {venda.itens?.map(it => (
+              <div key={it.id} style={{
+                display: "grid", gridTemplateColumns: "2.5fr 80px 130px 130px",
+                padding: "10px 16px", borderBottom: "1px solid var(--pdv-line)",
+                alignItems: "center", fontSize: 13,
+              }}>
+                <div>
+                  <div style={{ color: "var(--pdv-t1)", fontWeight: 500 }}>{it.produto?.nome}</div>
+                  <div style={{ color: "var(--pdv-t3)", fontFamily: "'Geist Mono', monospace", fontSize: 11 }}>{it.produto?.codigo}</div>
+                </div>
+                <div style={{ textAlign: "right", color: "var(--pdv-t2)", fontVariantNumeric: "tabular-nums" }}>{it.quantidade} {it.produto?.unidade || ""}</div>
+                <div style={{ textAlign: "right", color: "var(--pdv-t2)", fontVariantNumeric: "tabular-nums" }}>{fmtBRL(it.precoUnitario)}</div>
+                <div style={{ textAlign: "right", color: "var(--pdv-t1)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtBRL(it.subtotal)}</div>
               </div>
-              <div style={{ textAlign: "right", color: C.text }}>{it.quantidade} {it.produto?.unidade || ""}</div>
-              <div style={{ textAlign: "right", color: C.text }}>{fmtBRL(it.precoUnitario)}</div>
-              <div style={{ textAlign: "right", color: C.green, fontWeight: 600 }}>{fmtBRL(it.subtotal)}</div>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 14 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
-            <span style={{ color: C.muted }}>Forma de pagamento:</span>
-            <span style={{ color: C.white, fontWeight: 600 }}>{FORMA_LABEL[venda.formaPagamento]}</span>
+            ))}
           </div>
-          {Number(venda.desconto) > 0 && (
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
-              <span style={{ color: C.muted }}>Desconto:</span>
-              <span style={{ color: C.red, fontWeight: 600 }}>− {fmtBRL(venda.desconto)}</span>
-            </div>
-          )}
-          {venda.observacoes && (
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
-              <span style={{ color: C.muted }}>Obs:</span>
-              <span style={{ color: C.text }}>{venda.observacoes}</span>
-            </div>
-          )}
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 18, fontWeight: 800, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.border}` }}>
-            <span style={{ color: C.muted }}>TOTAL</span>
-            <span style={{ color: C.green }}>{fmtBRL(venda.total)}</span>
-          </div>
-        </div>
 
-        <div style={{ display: "flex", gap: 10, justifyContent: "space-between", marginTop: 18 }}>
-          {onCancelar ? (
-            <button onClick={onCancelar} style={{
-              background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red,
-              borderRadius: 8, padding: "10px 16px", fontWeight: 700, fontSize: 13, cursor: "pointer",
+          <div style={{
+            background: "var(--pdv-surf-2)", border: "1px solid var(--pdv-line)",
+            borderRadius: 12, padding: 14,
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6 }}>
+              <span style={{ color: "var(--pdv-t3)" }}>Forma de pagamento</span>
+              <span style={{ color: "var(--pdv-t1)", fontWeight: 500 }}>{FORMA_LABEL[venda.formaPagamento]}</span>
+            </div>
+            {Number(venda.desconto) > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6 }}>
+                <span style={{ color: "var(--pdv-t3)" }}>Desconto</span>
+                <span style={{ color: "var(--pdv-c-rose)", fontWeight: 500 }}>− {fmtBRL(venda.desconto)}</span>
+              </div>
+            )}
+            {venda.observacoes && (
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6 }}>
+                <span style={{ color: "var(--pdv-t3)" }}>Obs.</span>
+                <span style={{ color: "var(--pdv-t2)" }}>{venda.observacoes}</span>
+              </div>
+            )}
+            <div style={{
+              display: "flex", justifyContent: "space-between", alignItems: "baseline",
+              marginTop: 10, paddingTop: 10, borderTop: "1px dashed var(--pdv-line-2)",
             }}>
+              <span style={{ color: "var(--pdv-t3)", fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", fontWeight: 500 }}>Total</span>
+              <span style={{ color: "var(--pdv-accent)", fontSize: 26, fontWeight: 600, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.02em" }}>{fmtBRL(venda.total)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="pdv-modal-foot" style={{ justifyContent: "space-between" }}>
+          {onCancelar ? (
+            <button onClick={onCancelar} className="pdv-btn-ghost" style={{ color: "var(--pdv-c-rose)", borderColor: "rgba(251,113,133,.35)" }}>
               Cancelar venda (estornar estoque)
             </button>
           ) : <div />}
           <div style={{ display: "flex", gap: 10 }}>
             {onReimprimir && (
-              <button onClick={onReimprimir} style={{
-                background: C.green + "22", border: `1px solid ${C.green}55`, color: C.green,
-                borderRadius: 8, padding: "10px 16px", fontWeight: 700, fontSize: 13, cursor: "pointer",
-              }}>
+              <button onClick={onReimprimir} className="pdv-btn-ghost" style={{ color: "var(--pdv-accent)", borderColor: "rgba(52,211,153,.35)" }}>
                 🖨️ Reimprimir cupom
               </button>
             )}
-            <button onClick={onFechar} style={{
-              background: C.surface, border: `1px solid ${C.border}`, color: C.text,
-              borderRadius: 8, padding: "10px 18px", fontWeight: 600, fontSize: 13, cursor: "pointer",
-            }}>Fechar</button>
+            <button onClick={onFechar} className="pdv-btn-ghost">Fechar <span className="pdv-kbd is-warn" style={{ marginLeft: 4 }}>Esc</span></button>
           </div>
-        </div>
-        <div style={{
-          marginTop: 8, color: C.muted, fontSize: 10, textAlign: "right",
-          fontFamily: "monospace", letterSpacing: 0.3,
-        }}>
-          Esc fecha
         </div>
       </div>
     </div>
@@ -2318,55 +2131,16 @@ function DetalheVendaModal({ venda, onFechar, onCancelar, onReimprimir }) {
 
 function Bloco({ titulo, children }) {
   return (
-    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 12 }}>
-      <div style={{ color: C.muted, fontSize: 11, fontWeight: 700, marginBottom: 4 }}>{titulo.toUpperCase()}</div>
+    <div style={{
+      background: "var(--pdv-surf-2)", border: "1px solid var(--pdv-line)",
+      borderRadius: 12, padding: 12,
+    }}>
+      <div style={{
+        color: "var(--pdv-t3)", fontSize: 10.5, fontWeight: 500, marginBottom: 6,
+        textTransform: "uppercase", letterSpacing: ".06em",
+      }}>{titulo}</div>
       {children}
     </div>
   );
 }
 
-// ==================== ESTILOS COMUNS ====================
-
-function tabBtn(ativo) {
-  return {
-    padding: "10px 18px", borderRadius: 8, border: "none", cursor: "pointer",
-    fontWeight: 700, fontSize: 13,
-    background: ativo ? C.accent : C.card,
-    color: ativo ? C.white : C.muted,
-  };
-}
-
-const labelStyle = {
-  display: "block", color: "#64748b", fontSize: 11, marginBottom: 4, fontWeight: 700,
-  textTransform: "uppercase", letterSpacing: 0.3,
-};
-
-const inputStyle = {
-  width: "100%", boxSizing: "border-box",
-  background: "#1a1d27", border: "1px solid #2e3354",
-  borderRadius: 8, padding: "9px 12px", color: "#e2e8f0", fontSize: 13, outline: "none",
-};
-
-const selectCompacto = {
-  background: "#1a1d27", border: "1px solid #2e3354", borderRadius: 8,
-  padding: "9px 12px", color: "#e2e8f0", fontSize: 13, outline: "none",
-};
-
-const modalOverlay = {
-  position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)",
-  display: "flex", alignItems: "center", justifyContent: "center",
-  padding: 20, zIndex: 100,
-};
-
-const modalCard = {
-  background: C.card, border: `1px solid ${C.border}`, borderRadius: 14,
-  width: "100%", maxHeight: "92vh", overflowY: "auto", padding: 24,
-};
-
-function btnIcone(cor) {
-  return {
-    background: cor + "22", border: `1px solid ${cor}55`, color: cor,
-    borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 600,
-    cursor: "pointer",
-  };
-}

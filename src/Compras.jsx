@@ -751,21 +751,21 @@ function DetalheCompraModal({ compra, podeEstornar, onFechar, onEstornado }) {
 function Campo({ label, children }) {
   return (
     <div>
-      <label style={{ display: "block", color: "#64748b", fontSize: 12, marginBottom: 6, fontWeight: 600 }}>{label}</label>
+      <label style={{ display: "block", color: C.muted, fontSize: 12, marginBottom: 6, fontWeight: 600 }}>{label}</label>
       {children}
     </div>
   );
 }
 
 const inputStyle = {
-  width: "100%", background: "#1a1d27", border: "1px solid #2e3354",
-  borderRadius: 8, padding: "9px 12px", color: "#e2e8f0", fontSize: 13,
+  width: "100%", background: C.surface, border: `1px solid ${C.border}`,
+  borderRadius: 8, padding: "9px 12px", color: C.text, fontSize: 13,
   outline: "none", boxSizing: "border-box",
 };
 
 const inputCompacto = {
-  background: "#1a1d27", border: "1px solid #2e3354", borderRadius: 8,
-  padding: "9px 12px", color: "#e2e8f0", fontSize: 13, outline: "none",
+  background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8,
+  padding: "9px 12px", color: C.text, fontSize: 13, outline: "none",
 };
 
 const modalOverlay = {

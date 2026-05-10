@@ -321,7 +321,7 @@ export default function Fornecedores({ user }) {
 function Campo({ label, col2, children }) {
   return (
     <div style={{ gridColumn: col2 ? "1 / -1" : "auto" }}>
-      <label style={{ display: "block", color: "#64748b", fontSize: 12, marginBottom: 6, fontWeight: 600 }}>
+      <label style={{ display: "block", color: C.muted, fontSize: 12, marginBottom: 6, fontWeight: 600 }}>
         {label}
       </label>
       {children}
@@ -330,8 +330,8 @@ function Campo({ label, col2, children }) {
 }
 
 const inputStyle = {
-  width: "100%", background: "#1a1d27", border: "1px solid #2e3354",
-  borderRadius: 8, padding: "9px 12px", color: "#e2e8f0", fontSize: 13,
+  width: "100%", background: C.surface, border: `1px solid ${C.border}`,
+  borderRadius: 8, padding: "9px 12px", color: C.text, fontSize: 13,
   outline: "none", boxSizing: "border-box",
 };
 
@@ -345,7 +345,7 @@ function btnIcone(cor) {
 
 function btnIconeSolido(cor) {
   return {
-    background: cor, border: `1px solid ${cor}`, color: "#ffffff",
+    background: cor, border: `1px solid ${cor}`, color: C.white,
     borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 700,
     cursor: "pointer",
   };

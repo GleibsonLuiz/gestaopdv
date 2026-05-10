@@ -28,6 +28,21 @@ const fmtBRL = (v) => {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 };
 
+// Sugere o proximo codigo numerico com base nos produtos existentes.
+// Considera apenas codigos puramente numericos; pad para no minimo 4 digitos.
+// Em caso de conflito (criacao concorrente), o backend responde 409 e o
+// usuario ajusta manualmente.
+function proximoCodigoSugerido(produtos) {
+  const numericos = produtos
+    .map(p => String(p.codigo || "").match(/^(\d+)$/))
+    .filter(Boolean)
+    .map(m => parseInt(m[1], 10))
+    .filter(n => Number.isFinite(n));
+  const proximo = numericos.length === 0 ? 1 : Math.max(...numericos) + 1;
+  const len = Math.max(4, String(proximo).length);
+  return String(proximo).padStart(len, "0");
+}
+
 export default function Produtos({ user }) {
   const [produtos, setProdutos] = useState([]);
   const [categorias, setCategorias] = useState([]);
@@ -49,6 +64,11 @@ export default function Produtos({ user }) {
 
   const [novaCategoria, setNovaCategoria] = useState("");
   const [modalEstoqueProduto, setModalEstoqueProduto] = useState(null);
+
+  // Auxiliares de calculo de markup (nao persistidos no banco — apenas
+  // ajudam a sugerir o preco de venda no formulario).
+  const MARKUP_VAZIO = { impostos: "", taxasCartao: "", margemLucro: "" };
+  const [markup, setMarkup] = useState(MARKUP_VAZIO);
 
   // Upload de imagem: arquivo selecionado (File|null), preview local (objectURL
   // ou URL ja persistida no backend) e flag "remover atual ao salvar".
@@ -101,13 +121,32 @@ export default function Produtos({ user }) {
     if (inputImagemRef.current) inputImagemRef.current.value = "";
   }
 
-  function abrirNovo() {
+  async function abrirNovo() {
     setEditando(null);
-    setForm(VAZIO);
     setErroForm("");
     setNovaCategoria("");
+    setMarkup(MARKUP_VAZIO);
     resetarImagem();
+    // Busca lista completa (sem filtros) para sugerir codigo correto mesmo
+    // quando a tela esta filtrada. Cai para a lista local se o backend falhar.
+    let codigo = "";
+    try {
+      const todos = await api.listarProdutos({});
+      codigo = proximoCodigoSugerido(todos);
+    } catch {
+      codigo = proximoCodigoSugerido(produtos);
+    }
+    setForm({ ...VAZIO, codigo });
     setModalAberto(true);
+  }
+
+  async function sugerirCodigo() {
+    try {
+      const todos = await api.listarProdutos({});
+      setForm(f => ({ ...f, codigo: proximoCodigoSugerido(todos) }));
+    } catch {
+      setForm(f => ({ ...f, codigo: proximoCodigoSugerido(produtos) }));
+    }
   }
 
   function abrirEdicao(p) {
@@ -129,6 +168,7 @@ export default function Produtos({ user }) {
     });
     setErroForm("");
     setNovaCategoria("");
+    setMarkup(MARKUP_VAZIO);
     setImagemArquivo(null);
     setImagemPreview(p.imagem ? urlImagem(p.imagem) : null);
     setRemoverImagem(false);
@@ -480,8 +520,16 @@ export default function Produtos({ user }) {
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
               <Campo label="Código *">
-                <input value={form.codigo} onChange={e => setForm({ ...form, codigo: e.target.value })}
-                  required style={inputStyle} autoFocus />
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input value={form.codigo} onChange={e => setForm({ ...form, codigo: e.target.value })}
+                    required style={{ ...inputStyle, flex: 1 }} autoFocus />
+                  <button type="button" onClick={sugerirCodigo} title="Sugerir próximo código"
+                    style={{
+                      background: C.surface, border: `1px solid ${C.border}`,
+                      color: C.accent, borderRadius: 8, padding: "0 10px",
+                      fontSize: 14, cursor: "pointer", fontWeight: 600,
+                    }}>↻</button>
+                </div>
               </Campo>
               <Campo label="Nome *" span={2}>
                 <input value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })}
@@ -518,20 +566,28 @@ export default function Produtos({ user }) {
                   onMudar={t => setForm(f => ({ ...f, tipoItem: t }))}
                 />
               </Campo>
-              <Campo label="Preço de Venda *">
-                <input type="number" step="0.01" min="0" value={form.precoVenda}
-                  onChange={e => setForm({ ...form, precoVenda: e.target.value })}
-                  required style={inputStyle} />
-              </Campo>
-              <Campo label="Preço de Custo">
+              <Campo label="Preço de Custo (R$)">
                 <input type="number" step="0.01" min="0" value={form.precoCusto}
                   onChange={e => setForm({ ...form, precoCusto: e.target.value })}
-                  style={inputStyle} />
+                  style={inputStyle} placeholder="0,00" />
+              </Campo>
+              <Campo label="Preço de Venda Praticado *">
+                <input type="number" step="0.01" min="0" value={form.precoVenda}
+                  onChange={e => setForm({ ...form, precoVenda: e.target.value })}
+                  required style={inputStyle} placeholder="0,00" />
               </Campo>
               <Campo label="Unidade">
                 <input value={form.unidade}
                   onChange={e => setForm({ ...form, unidade: e.target.value.toUpperCase().slice(0, 6) })}
                   style={inputStyle} placeholder="UN, KG, LT..." />
+              </Campo>
+              <Campo label="Cálculo de Markup" span={3}>
+                <CalculoMarkup
+                  precoCusto={form.precoCusto}
+                  markup={markup}
+                  onChange={setMarkup}
+                  onAplicar={(valor) => setForm(f => ({ ...f, precoVenda: valor }))}
+                />
               </Campo>
               <Campo label={form.tipoItem === "SERVICO" ? "Estoque atual (n/a — serviço)" : "Estoque atual"}>
                 <input type="number" min="0"
@@ -614,7 +670,7 @@ export default function Produtos({ user }) {
 function Campo({ label, span = 1, children }) {
   return (
     <div style={{ gridColumn: `span ${span}` }}>
-      <label style={{ display: "block", color: "#64748b", fontSize: 12, marginBottom: 6, fontWeight: 600 }}>
+      <label style={{ display: "block", color: C.muted, fontSize: 12, marginBottom: 6, fontWeight: 600 }}>
         {label}
       </label>
       {children}
@@ -623,20 +679,20 @@ function Campo({ label, span = 1, children }) {
 }
 
 const inputStyle = {
-  width: "100%", background: "#1a1d27", border: "1px solid #2e3354",
-  borderRadius: 8, padding: "9px 12px", color: "#e2e8f0", fontSize: 13,
+  width: "100%", background: C.surface, border: `1px solid ${C.border}`,
+  borderRadius: 8, padding: "9px 12px", color: C.text, fontSize: 13,
   outline: "none", boxSizing: "border-box",
 };
 
 const inputDisabled = {
   ...inputStyle,
-  background: "#0f1117", color: "#64748b",
+  background: C.bg, color: C.muted,
   cursor: "not-allowed", borderStyle: "dashed",
 };
 
 const selectStyle = {
-  background: "#1a1d27", border: "1px solid #2e3354", borderRadius: 8,
-  padding: "10px 12px", color: "#e2e8f0", fontSize: 13, cursor: "pointer",
+  background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8,
+  padding: "10px 12px", color: C.text, fontSize: 13, cursor: "pointer",
 };
 
 function btnIcone(cor) {
@@ -649,7 +705,7 @@ function btnIcone(cor) {
 
 function btnIconeSolido(cor) {
   return {
-    background: cor, border: `1px solid ${cor}`, color: "#ffffff",
+    background: cor, border: `1px solid ${cor}`, color: C.white,
     borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 700,
     cursor: "pointer",
   };
@@ -714,6 +770,97 @@ function SeletorTipoItem({ valor, onMudar }) {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function CalculoMarkup({ precoCusto, markup, onChange, onAplicar }) {
+  const custo = Number(precoCusto) || 0;
+  const impostos = Number(markup.impostos) || 0;
+  const taxas = Number(markup.taxasCartao) || 0;
+  const margem = Number(markup.margemLucro) || 0;
+  const totalPct = impostos + taxas + margem;
+
+  // Formula: Preco = Custo / (1 - (Total% / 100))
+  // Soma >= 100 torna a divisao invalida (custo nunca seria recuperado).
+  const valido = custo > 0 && totalPct > 0 && totalPct < 100;
+  const sugerido = valido ? custo / (1 - totalPct / 100) : 0;
+
+  const set = (campo) => (e) => onChange({ ...markup, [campo]: e.target.value });
+
+  return (
+    <div style={{
+      background: C.surface, border: `1px solid ${C.border}`,
+      borderRadius: 10, padding: 14,
+    }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+        <SubCampo label="Impostos sobre Venda (%)">
+          <input type="number" step="0.01" min="0" value={markup.impostos}
+            onChange={set("impostos")} style={inputStyle} placeholder="0,00" />
+        </SubCampo>
+        <SubCampo label="Taxas de Cartão (%)">
+          <input type="number" step="0.01" min="0" value={markup.taxasCartao}
+            onChange={set("taxasCartao")} style={inputStyle} placeholder="0,00" />
+        </SubCampo>
+        <SubCampo label="Margem de Lucro Desejada (%)">
+          <input type="number" step="0.01" min="0" value={markup.margemLucro}
+            onChange={set("margemLucro")} style={inputStyle} placeholder="0,00" />
+        </SubCampo>
+      </div>
+
+      <div style={{
+        marginTop: 12, padding: "10px 12px", borderRadius: 8,
+        background: C.bg, border: `1px solid ${C.border}`,
+        display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+      }}>
+        <div style={{ flex: 1, minWidth: 180 }}>
+          <div style={{ color: C.muted, fontSize: 11, fontWeight: 600, marginBottom: 2 }}>
+            Preço Sugerido (somatório: {totalPct.toFixed(2)}%)
+          </div>
+          <div style={{
+            color: valido ? C.green : C.muted,
+            fontSize: 18, fontWeight: 800, letterSpacing: 0.3,
+          }}>
+            {valido ? fmtBRL(sugerido) : "—"}
+          </div>
+        </div>
+        <button type="button" disabled={!valido}
+          onClick={() => onAplicar(sugerido.toFixed(2))}
+          style={{
+            background: valido ? `linear-gradient(135deg, ${C.accent}, ${C.purple})` : C.muted,
+            color: C.white, border: "none", borderRadius: 8,
+            padding: "10px 16px", fontWeight: 700, fontSize: 12,
+            cursor: valido ? "pointer" : "not-allowed",
+          }}>
+          Aplicar ao preço de venda
+        </button>
+      </div>
+
+      {custo > 0 && totalPct >= 100 && (
+        <div style={{
+          marginTop: 10, padding: "8px 12px", borderRadius: 8,
+          background: C.red + "22", border: `1px solid ${C.red}55`,
+          color: C.red, fontSize: 12,
+        }}>
+          ⚠ A soma dos percentuais ({totalPct.toFixed(2)}%) deve ser menor que 100%.
+        </div>
+      )}
+      {custo === 0 && totalPct > 0 && (
+        <div style={{ marginTop: 10, color: C.muted, fontSize: 12 }}>
+          ℹ Informe o Preço de Custo para calcular a sugestão.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SubCampo({ label, children }) {
+  return (
+    <div>
+      <label style={{ display: "block", color: C.muted, fontSize: 11, marginBottom: 6, fontWeight: 600 }}>
+        {label}
+      </label>
+      {children}
     </div>
   );
 }

@@ -366,7 +366,7 @@ export default function App() {
                 🔐 Trocar senha
               </button>
               <button onClick={() => { setMenuUsuario(false); sair(); }} style={{ ...menuItem, color: C.text }}>
-                <span style={{ color: "#ef4444" }}>↩ Sair</span>
+                <span style={{ color: C.red }}>↩ Sair</span>
               </button>
             </div>
           )}

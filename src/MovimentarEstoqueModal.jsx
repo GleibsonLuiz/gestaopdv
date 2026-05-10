@@ -166,7 +166,7 @@ export default function MovimentarEstoqueModal({ produtos, produtoInicial, onCan
 function Campo({ label, children }) {
   return (
     <div style={{ marginBottom: 14 }}>
-      <label style={{ display: "block", color: "#64748b", fontSize: 12, marginBottom: 6, fontWeight: 600 }}>
+      <label style={{ display: "block", color: C.muted, fontSize: 12, marginBottom: 6, fontWeight: 600 }}>
         {label}
       </label>
       {children}
@@ -175,7 +175,7 @@ function Campo({ label, children }) {
 }
 
 const inputStyle = {
-  width: "100%", background: "#1a1d27", border: "1px solid #2e3354",
-  borderRadius: 8, padding: "9px 12px", color: "#e2e8f0", fontSize: 13,
+  width: "100%", background: C.surface, border: `1px solid ${C.border}`,
+  borderRadius: 8, padding: "9px 12px", color: C.text, fontSize: 13,
   outline: "none", boxSizing: "border-box",
 };

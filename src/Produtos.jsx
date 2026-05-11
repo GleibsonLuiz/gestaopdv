@@ -451,7 +451,6 @@ export default function Produtos({ user }) {
                       icon: "🏷️",
                       color: C.purple,
                       onClick: () => setModalEtiquetaProduto(p),
-                      hidden: ehServico,
                     },
                     {
                       label: "Editar",

@@ -212,6 +212,7 @@ export function FormularioLuxuoso({
         .lux-row.cols-1 { grid-template-columns: 1fr; }
         .lux-row.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
         .lux-row.three-tilt { grid-template-columns: 1.2fr 0.6fr 1fr; }
+        .lux-row.addr-tilt { grid-template-columns: 130px 1fr 110px; }
 
         .lux-field {
           display: flex; flex-direction: column; gap: 6px;
@@ -337,6 +338,8 @@ export function FormularioLuxuoso({
           .lux-row.cols-3 { grid-template-columns: 1fr 1fr; }
           .lux-row.three-tilt { grid-template-columns: 1fr 1fr; }
           .lux-row.three-tilt .lux-field:first-child { grid-column: 1 / -1; }
+          .lux-row.addr-tilt { grid-template-columns: 1fr 1fr; }
+          .lux-row.addr-tilt .lux-field:last-child { grid-column: 1 / -1; }
           .lux-head { padding-top: 22px; }
           .lux-foot { flex-direction: column-reverse; align-items: stretch; gap: 10px; }
           .lux-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -430,11 +433,13 @@ export function Secao({ legenda, children }) {
   );
 }
 
-export function Linha({ cols = 2, tilt = false, children }) {
-  const cls = tilt
-    ? "lux-row three-tilt"
-    : `lux-row cols-${cols}`;
-  return <div className={cls}>{children}</div>;
+export function Linha({ cols = 2, tilt = false, variant, style, children }) {
+  const cls = variant
+    ? `lux-row ${variant}`
+    : tilt
+      ? "lux-row three-tilt"
+      : `lux-row cols-${cols}`;
+  return <div className={cls} style={style}>{children}</div>;
 }
 
 export function Campo({ label, obrigatorio, hint, erro, span, children }) {

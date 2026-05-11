@@ -182,11 +182,7 @@ export default function Login({ onSuccess }) {
           </div>
         </div>
 
-        <div className="hidden lg:flex justify-end p-6 lg:p-8">
-          <a href="#" onClick={(e) => e.preventDefault()} className="text-sm text-mist-400 hover:text-white transition-colors">
-            Precisa de ajuda? <span className="text-white">Falar com suporte →</span>
-          </a>
-        </div>
+
 
         <div className="flex-1 flex items-center justify-center px-6 lg:px-12 py-8">
           <form onSubmit={submit} className="w-full max-w-[400px] animate-fade-up" style={{ animationDelay: '.15s' }}>
@@ -247,16 +243,7 @@ export default function Login({ onSuccess }) {
               </div>
             )}
 
-            <div className="mt-4 mb-6 flex items-center justify-between">
-              <label className="check">
-                <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-                <span className="check-box" />
-                Manter conectado
-              </label>
-              <a href="#" onClick={(e) => e.preventDefault()} className="text-[13px] text-mist-300 hover:text-brand-violet transition-colors">
-                Esqueci minha senha
-              </a>
-            </div>
+
 
             <button type="submit" className="btn-primary" disabled={status === 'loading' || status === 'success'}>
               {status === 'loading' && (<><span className="spinner" /><span>Entrando...</span></>)}

@@ -204,16 +204,15 @@ export async function atualizar(req, res, next) {
   }
 }
 
+// Soft-delete apenas: marca ativo=false. Hard-delete foi removido para
+// preservar a integridade historica de itens de venda/compra/orcamento e
+// movimentacoes de estoque que referenciam o produto.
 export async function excluir(req, res, next) {
   try {
-    if (req.query.permanente === "true") {
-      await prisma.produto.delete({ where: { id: req.params.id } });
-    } else {
-      await prisma.produto.update({
-        where: { id: req.params.id },
-        data: { ativo: false },
-      });
-    }
+    await prisma.produto.update({
+      where: { id: req.params.id },
+      data: { ativo: false },
+    });
     res.status(204).end();
   } catch (err) {
     if (err.code === "P2025") return res.status(404).json({ erro: "Produto nao encontrado" });

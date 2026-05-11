@@ -89,16 +89,15 @@ export async function atualizar(req, res, next) {
   }
 }
 
+// Soft-delete apenas: marca ativo=false. Hard-delete foi removido para
+// preservar a integridade historica de produtos, compras e contas a pagar
+// que referenciam o fornecedor.
 export async function excluir(req, res, next) {
   try {
-    if (req.query.permanente === "true") {
-      await prisma.fornecedor.delete({ where: { id: req.params.id } });
-    } else {
-      await prisma.fornecedor.update({
-        where: { id: req.params.id },
-        data: { ativo: false },
-      });
-    }
+    await prisma.fornecedor.update({
+      where: { id: req.params.id },
+      data: { ativo: false },
+    });
     res.status(204).end();
   } catch (err) {
     if (err.code === "P2025") return res.status(404).json({ erro: "Fornecedor nao encontrado" });

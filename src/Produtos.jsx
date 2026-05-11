@@ -3,6 +3,7 @@ import { C } from "./lib/theme.js";
 import { api, BASE_URL } from "./lib/api.js";
 import MovimentarEstoqueModal from "./MovimentarEstoqueModal.jsx";
 import ActionsMenu from "./components/ActionsMenu.jsx";
+import EtiquetaPrecoModal from "./components/EtiquetaPrecoModal.jsx";
 
 
 const VAZIO = {
@@ -64,6 +65,7 @@ export default function Produtos({ user }) {
 
   const [novaCategoria, setNovaCategoria] = useState("");
   const [modalEstoqueProduto, setModalEstoqueProduto] = useState(null);
+  const [modalEtiquetaProduto, setModalEtiquetaProduto] = useState(null);
 
   // Auxiliares de calculo de markup (nao persistidos no banco — apenas
   // ajudam a sugerir o preco de venda no formulario).
@@ -445,6 +447,13 @@ export default function Produtos({ user }) {
                       hidden: !podeEditar || ehServico,
                     },
                     {
+                      label: "Imprimir etiqueta",
+                      icon: "🏷️",
+                      color: C.purple,
+                      onClick: () => setModalEtiquetaProduto(p),
+                      hidden: ehServico,
+                    },
+                    {
                       label: "Editar",
                       icon: "✎",
                       color: C.accent,
@@ -476,6 +485,13 @@ export default function Produtos({ user }) {
             flash(`Estoque atualizado: ${mov.estoqueAntes} → ${mov.estoqueDepois}`);
             carregar();
           }}
+        />
+      )}
+
+      {modalEtiquetaProduto && (
+        <EtiquetaPrecoModal
+          produto={modalEtiquetaProduto}
+          onFechar={() => setModalEtiquetaProduto(null)}
         />
       )}
 

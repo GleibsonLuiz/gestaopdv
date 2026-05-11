@@ -13,6 +13,7 @@
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",
     "react": "^19.2.5",
+    "react-barcode": "^1.6.1",
     "react-dom": "^19.2.5",
     "recharts": "^3.8.1"
   },

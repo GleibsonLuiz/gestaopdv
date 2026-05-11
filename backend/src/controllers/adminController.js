@@ -25,42 +25,50 @@ export async function resetarSistema(req, res, next) {
     }
 
     const removidos = await prisma.$transaction(async (tx) => {
-      // 1. Filhos diretos de Venda (itensVenda) e movimentacoes vinculadas
-      //    a venda/caixa precisam sair antes das vendas e dos caixas.
+      // 1. Filhos diretos de Venda e Orcamento que referenciam Produto —
+      //    precisam sair antes de Venda, Orcamento e Produto.
       const itensVenda = await tx.itemVenda.deleteMany();
+      const itensOrcamento = await tx.itemOrcamento.deleteMany();
+
+      // 2. MovimentacoesCaixa referenciam Venda, Caixa, ContaPagar e
+      //    ContaReceber — deletar antes de todos eles.
       const movimentacoesCaixa = await tx.movimentacaoCaixa.deleteMany();
 
-      // 2. Vendas referenciam Caixa via Venda.caixaId — deletar antes do Caixa.
+      // 3. Vendas referenciam Caixa via caixaId — deletar antes do Caixa.
       const vendas = await tx.venda.deleteMany();
 
-      // 3. Caixas (depois das vendas + movimentacoes que apontam pra ele).
+      // 4. Orcamentos referenciam Cliente — deletar antes de Cliente.
+      const orcamentos = await tx.orcamento.deleteMany();
+
+      // 5. Caixas (depois das vendas + movimentacoes).
       const caixas = await tx.caixa.deleteMany();
 
-      // 4. Compras
+      // 6. Compras
       const itensCompra = await tx.itemCompra.deleteMany();
       const compras = await tx.compra.deleteMany();
 
-      // 5. Estoque (movimentacoes sao filhas de produto + user)
+      // 7. Estoque (movimentacoes sao filhas de produto + user)
       const movimentacoesEstoque = await tx.movimentacaoEstoque.deleteMany();
 
-      // 6. Financeiro (anexos sao filhos de conta)
+      // 8. Financeiro (anexos sao filhos de conta)
       const anexos = await tx.anexo.deleteMany();
       const contasPagar = await tx.contaPagar.deleteMany();
       const contasReceber = await tx.contaReceber.deleteMany();
 
-      // 7. Cadastros (produtos antes de categorias e fornecedores por causa
+      // 9. Cadastros (produtos antes de categorias e fornecedores por causa
       //    das FKs categoriaId e fornecedorId)
       const produtos = await tx.produto.deleteMany();
       const categorias = await tx.categoria.deleteMany();
       const fornecedores = await tx.fornecedor.deleteMany();
       const clientes = await tx.cliente.deleteMany();
 
-      // 8. Formas de pagamento personalizadas (sem FKs — vendas/contas guardam
-      //    apenas o enum base FormaPagamento, nao referenciam o custom).
+      // 10. Formas de pagamento personalizadas (sem FKs — vendas/contas guardam
+      //     apenas o enum base FormaPagamento, nao referenciam o custom).
       const formasPagamentoCustom = await tx.formaPagamentoCustom.deleteMany();
 
       return {
-        itensVenda: itensVenda.count, vendas: vendas.count,
+        itensVenda: itensVenda.count, itensOrcamento: itensOrcamento.count,
+        vendas: vendas.count, orcamentos: orcamentos.count,
         movimentacoesCaixa: movimentacoesCaixa.count, caixas: caixas.count,
         itensCompra: itensCompra.count, compras: compras.count,
         movimentacoesEstoque: movimentacoesEstoque.count,

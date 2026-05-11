@@ -7,6 +7,7 @@ const PALAVRA_CHAVE = "CONFIRMAR_RESET";
 
 const TABELAS_LIMPAS = [
   ["🛒", "Vendas e itens de venda"],
+  ["📋", "Orçamentos e ordens de serviço"],
   ["💵", "Caixas (abertura/fechamento + extrato)"],
   ["🔄", "Movimentações de caixa (sangria, suprimento, estorno)"],
   ["🛍", "Compras e itens de compra"],

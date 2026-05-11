@@ -22,6 +22,7 @@ enum StatusVenda {
   PENDENTE
   CONCLUIDA
   CANCELADA
+  EM_EDICAO
 }
 
 enum StatusConta {

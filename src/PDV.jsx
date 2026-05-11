@@ -62,6 +62,7 @@ const STATUS_INFO = {
   CONCLUIDA: { label: "Concluída", cor: C.green },
   CANCELADA: { label: "Cancelada", cor: C.red },
   PENDENTE:  { label: "Pendente",  cor: C.yellow },
+  EM_EDICAO: { label: "Em edição", cor: C.yellow },
 };
 
 const fmtBRL = (v) => {
@@ -1878,12 +1879,15 @@ function Historico({ user }) {
   const [dataFim, setDataFim] = useState("");
   const [detalhe, setDetalhe] = useState(null);
   const [reimpressao, setReimpressao] = useState(null);
+  const [refinalizar, setRefinalizar] = useState(null);
   const [mensagem, setMensagem] = useState("");
 
   const podeCancelar = user.role === "ADMIN" || user.role === "GERENTE";
+  const podeReabrir = user.role === "ADMIN" || user.role === "GERENTE";
 
   useModalKeys(!!detalhe, { onClose: () => setDetalhe(null) });
   useModalKeys(!!reimpressao, { onClose: () => setReimpressao(null) });
+  useModalKeys(!!refinalizar, { onClose: () => setRefinalizar(null) });
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -1935,6 +1939,35 @@ function Historico({ user }) {
       await api.cancelarVenda(v.id);
       flash(`Venda #${v.numero} cancelada — estoque estornado.`);
       setDetalhe(null);
+      carregar();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  async function reabrir(v) {
+    const msg =
+      `Reabrir venda #${v.numero} para alterar a forma de pagamento?\n\n` +
+      `• O lançamento no caixa será estornado.\n` +
+      `• Contas a receber pendentes serão canceladas.\n` +
+      `• O estoque NÃO será mexido (o cliente já levou a mercadoria).`;
+    if (!confirm(msg)) return;
+    try {
+      const reaberta = await api.reabrirVenda(v.id);
+      flash(`Venda #${v.numero} reaberta — selecione a nova forma de pagamento.`);
+      setDetalhe(null);
+      setRefinalizar(reaberta);
+      carregar();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  async function aplicarRefinalizacao(payload) {
+    try {
+      await api.refinalizarVenda(refinalizar.id, payload);
+      flash(`Venda #${refinalizar.numero} refinalizada com ${FORMA_LABEL[payload.formaPagamento]}.`);
+      setRefinalizar(null);
       carregar();
     } catch (err) {
       alert(err.message);
@@ -2062,6 +2095,25 @@ function Historico({ user }) {
                       onClick: () => abrirReimpressao(v.id),
                       hidden: v.status !== "CONCLUIDA",
                     },
+                    {
+                      label: "Alterar forma de pagamento",
+                      icon: "💱",
+                      color: C.yellow,
+                      onClick: () => reabrir(v),
+                      hidden: !podeReabrir || v.status !== "CONCLUIDA",
+                    },
+                    {
+                      label: "Continuar refinalização",
+                      icon: "▶",
+                      color: C.yellow,
+                      onClick: async () => {
+                        try {
+                          const completa = await api.obterVenda(v.id);
+                          setRefinalizar(completa);
+                        } catch (err) { alert(err.message); }
+                      },
+                      hidden: !podeReabrir || v.status !== "EM_EDICAO",
+                    },
                   ]}
                 />
               </div>
@@ -2075,6 +2127,11 @@ function Historico({ user }) {
           venda={detalhe}
           onFechar={() => setDetalhe(null)}
           onCancelar={podeCancelar && detalhe.status === "CONCLUIDA" ? () => cancelar(detalhe) : null}
+          onReabrir={podeReabrir && detalhe.status === "CONCLUIDA" ? () => reabrir(detalhe) : null}
+          onContinuarRefinalizacao={podeReabrir && detalhe.status === "EM_EDICAO" ? () => {
+            setRefinalizar(detalhe);
+            setDetalhe(null);
+          } : null}
           onReimprimir={detalhe.status === "CONCLUIDA" ? () => {
             setReimpressao(detalhe);
             setDetalhe(null);
@@ -2087,6 +2144,14 @@ function Historico({ user }) {
           venda={reimpressao}
           modoReimpressao
           onFechar={() => setReimpressao(null)}
+        />
+      )}
+
+      {refinalizar && (
+        <RefinalizarVendaModal
+          venda={refinalizar}
+          onFechar={() => setRefinalizar(null)}
+          onAplicar={aplicarRefinalizacao}
         />
       )}
     </div>
@@ -2102,7 +2167,7 @@ function Card({ titulo, valor, cor }) {
   );
 }
 
-function DetalheVendaModal({ venda, onFechar, onCancelar, onReimprimir }) {
+function DetalheVendaModal({ venda, onFechar, onCancelar, onReimprimir, onReabrir, onContinuarRefinalizacao }) {
   const st = STATUS_INFO[venda.status] || STATUS_INFO.CONCLUIDA;
   return (
     <div onClick={onFechar} className="pdv-modal-bg">
@@ -2209,6 +2274,16 @@ function DetalheVendaModal({ venda, onFechar, onCancelar, onReimprimir }) {
             </button>
           ) : <div />}
           <div style={{ display: "flex", gap: 10 }}>
+            {onReabrir && (
+              <button onClick={onReabrir} className="pdv-btn-ghost" style={{ color: C.yellow, borderColor: "rgba(245,158,11,.35)" }}>
+                💱 Alterar forma de pagamento
+              </button>
+            )}
+            {onContinuarRefinalizacao && (
+              <button onClick={onContinuarRefinalizacao} className="pdv-btn-ghost" style={{ color: C.yellow, borderColor: "rgba(245,158,11,.35)" }}>
+                ▶ Continuar refinalização
+              </button>
+            )}
             {onReimprimir && (
               <button onClick={onReimprimir} className="pdv-btn-ghost" style={{ color: "var(--pdv-accent)", borderColor: "rgba(52,211,153,.35)" }}>
                 🖨️ Reimprimir cupom
@@ -2216,6 +2291,134 @@ function DetalheVendaModal({ venda, onFechar, onCancelar, onReimprimir }) {
             )}
             <button onClick={onFechar} className="pdv-btn-ghost">Fechar <span className="pdv-kbd is-warn" style={{ marginLeft: 4 }}>Esc</span></button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RefinalizarVendaModal({ venda, onFechar, onAplicar }) {
+  const [forma, setForma] = useState(venda.formaPagamento);
+  const [gerarConta, setGerarConta] = useState(false);
+  const [vencimento, setVencimento] = useState(dataDaqui(30));
+  const [parcelas, setParcelas] = useState(1);
+  const [descricaoConta, setDescricaoConta] = useState("");
+  const [observacoesConta, setObservacoesConta] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  const aPrazo = FORMAS_GERA_RECEBER.has(forma);
+
+  useEffect(() => {
+    if (!aPrazo && gerarConta) setGerarConta(false);
+  }, [aPrazo, gerarConta]);
+
+  useModalKeys(true, { onClose: onFechar });
+
+  async function aplicar() {
+    if (!forma) return;
+    setSalvando(true);
+    const payload = { formaPagamento: forma };
+    if (aPrazo && gerarConta) {
+      payload.gerarContaReceber = {
+        vencimento,
+        parcelas: Number(parcelas) || 1,
+        descricao: descricaoConta || undefined,
+        observacoes: observacoesConta || undefined,
+      };
+    }
+    try {
+      await onAplicar(payload);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div onClick={onFechar} className="pdv-modal-bg">
+      <div onClick={e => e.stopPropagation()} className="pdv-modal" style={{ width: "min(560px, calc(100vw - 32px))" }}>
+        <div className="pdv-modal-hd">
+          <div>
+            <div className="pdv-modal-title">Refinalizar venda #{venda.numero}</div>
+            <div className="pdv-modal-sub">
+              Total {fmtBRL(venda.total)} · forma original: {FORMA_LABEL[venda.formaPagamento]}
+            </div>
+          </div>
+          <button type="button" onClick={onFechar} className="pdv-modal-x">×</button>
+        </div>
+
+        <div className="pdv-modal-body" style={{ paddingBottom: 14 }}>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ color: "var(--pdv-t3)", fontSize: 10.5, fontWeight: 500, marginBottom: 8, textTransform: "uppercase", letterSpacing: ".06em" }}>
+              Nova forma de pagamento
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+              {FORMAS.map(f => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setForma(f.id)}
+                  className="pdv-btn-ghost"
+                  style={{
+                    padding: "12px 10px",
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+                    background: forma === f.id ? "color-mix(in oklab, var(--pdv-accent) 16%, transparent)" : undefined,
+                    borderColor: forma === f.id ? "var(--pdv-accent-glow)" : undefined,
+                    color: forma === f.id ? "var(--pdv-accent)" : "var(--pdv-t2)",
+                  }}
+                >
+                  <span style={{ fontSize: 18 }}>{f.icone}</span>
+                  <span style={{ fontSize: 12, fontWeight: 500 }}>{f.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {aPrazo && (
+            <div style={{
+              background: "var(--pdv-surf-2)", border: "1px solid var(--pdv-line)",
+              borderRadius: 12, padding: 14, marginBottom: 14,
+            }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13 }}>
+                <input type="checkbox" checked={gerarConta} onChange={e => setGerarConta(e.target.checked)} />
+                <span style={{ color: "var(--pdv-t1)" }}>Gerar conta a receber para a nova forma</span>
+              </label>
+              {gerarConta && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
+                  <label style={{ fontSize: 11, color: "var(--pdv-t3)" }}>
+                    Vencimento
+                    <input type="date" value={vencimento} onChange={e => setVencimento(e.target.value)} className="pdv-field-input" />
+                  </label>
+                  <label style={{ fontSize: 11, color: "var(--pdv-t3)" }}>
+                    Parcelas
+                    <input type="number" min="1" max="60" value={parcelas} onChange={e => setParcelas(e.target.value)} className="pdv-field-input" />
+                  </label>
+                  <label style={{ fontSize: 11, color: "var(--pdv-t3)", gridColumn: "1 / -1" }}>
+                    Descrição (opcional)
+                    <input type="text" value={descricaoConta} onChange={e => setDescricaoConta(e.target.value)} className="pdv-field-input" placeholder="Padrão: VENDA #N - CLIENTE" />
+                  </label>
+                  <label style={{ fontSize: 11, color: "var(--pdv-t3)", gridColumn: "1 / -1" }}>
+                    Observações (opcional)
+                    <input type="text" value={observacoesConta} onChange={e => setObservacoesConta(e.target.value)} className="pdv-field-input" />
+                  </label>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div style={{
+            background: "color-mix(in oklab, var(--pdv-c-amber, #f59e0b) 10%, transparent)",
+            border: "1px solid rgba(245,158,11,.30)", borderRadius: 10,
+            padding: "10px 14px", fontSize: 12, color: "var(--pdv-t2)",
+          }}>
+            ⚠ Ao confirmar, a venda volta para CONCLUIDA com a nova forma e o caixa (se aberto) é re-lançado.
+          </div>
+        </div>
+
+        <div className="pdv-modal-foot" style={{ justifyContent: "flex-end", gap: 10 }}>
+          <button onClick={onFechar} disabled={salvando} className="pdv-btn-ghost">Cancelar <span className="pdv-kbd is-warn" style={{ marginLeft: 4 }}>Esc</span></button>
+          <button onClick={aplicar} disabled={salvando || !forma} className="pdv-btn-primary" style={{ padding: "10px 18px" }}>
+            {salvando ? "Aplicando…" : `Confirmar (${FORMA_LABEL[forma] || ""})`}
+          </button>
         </div>
       </div>
     </div>

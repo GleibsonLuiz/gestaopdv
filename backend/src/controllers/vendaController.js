@@ -278,6 +278,224 @@ export async function criar(req, res, next) {
   }
 }
 
+// Reabre uma venda CONCLUIDA para que ADMIN/GERENTE altere a forma de
+// pagamento. Estorna o lancamento no caixa (se aberto) e cancela as contas
+// a receber PENDENTE/ATRASADA vinculadas. NAO mexe no estoque — o cliente
+// ja saiu com a mercadoria; estamos apenas trocando como ele paga.
+// Bloqueia se houver ContaReceber ja PAGA (precisa reabrir no Financeiro
+// antes), mesma regra de cancelar().
+export async function reabrir(req, res, next) {
+  try {
+    const id = req.params.id;
+    try {
+      const venda = await prisma.$transaction(async (tx) => {
+        const atual = await tx.venda.findUnique({
+          where: { id },
+          include: { contasReceber: true },
+        });
+        if (!atual) {
+          const e = new Error("Venda nao encontrada"); e.status = 404; throw e;
+        }
+        if (atual.status !== "CONCLUIDA") {
+          const e = new Error(
+            `So e possivel reabrir vendas CONCLUIDAS (status atual: ${atual.status})`
+          );
+          e.status = 400; throw e;
+        }
+
+        const contasPagas = atual.contasReceber.filter(c => c.status === "PAGA");
+        if (contasPagas.length > 0) {
+          const e = new Error(
+            `Esta venda possui ${contasPagas.length} conta(s) ja recebida(s). ` +
+            `Reabra-a(s) no Financeiro antes de alterar a forma de pagamento.`
+          );
+          e.status = 400; throw e;
+        }
+
+        const idsCancelar = atual.contasReceber
+          .filter(c => c.status === "PENDENTE" || c.status === "ATRASADA")
+          .map(c => c.id);
+        if (idsCancelar.length > 0) {
+          await tx.contaReceber.updateMany({
+            where: { id: { in: idsCancelar } },
+            data: { status: "CANCELADA" },
+          });
+        }
+
+        // Estorno no caixa: so reverte se o caixa de origem ainda esta aberto.
+        if (atual.caixaId) {
+          const caixaVenda = await tx.caixa.findUnique({
+            where: { id: atual.caixaId },
+            select: { status: true, saldoInicial: true },
+          });
+          if (caixaVenda?.status === "ABERTO") {
+            const totais = await calcularTotaisCaixa(atual.caixaId, Number(caixaVenda.saldoInicial), tx);
+            const saldoAntes = Math.round(totais.saldoEsperadoDinheiro * 100) / 100;
+            const ehDinheiro = atual.formaPagamento === "DINHEIRO";
+            const saldoDepois = Math.round((saldoAntes - (ehDinheiro ? Number(atual.total) : 0)) * 100) / 100;
+            await tx.movimentacaoCaixa.create({
+              data: {
+                caixaId: atual.caixaId,
+                userId: req.user.sub,
+                tipo: "ESTORNO_VENDA",
+                formaPagamento: atual.formaPagamento,
+                valor: Number(atual.total),
+                descricao: `REABERTURA VENDA #${atual.numero} (TROCA DE FORMA)`,
+                saldoAntes,
+                saldoDepois,
+                vendaId: atual.id,
+              },
+            });
+          }
+        }
+
+        return tx.venda.update({
+          where: { id },
+          data: { status: "EM_EDICAO" },
+          include: INCLUDE_DETALHE,
+        });
+      });
+
+      res.json(venda);
+    } catch (err) {
+      if (err.status) return res.status(err.status).json({ erro: err.message });
+      throw err;
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Refinaliza uma venda EM_EDICAO com (eventualmente) nova forma de pagamento.
+// Body: { formaPagamento, gerarContaReceber? }. Re-registra a venda no caixa
+// de origem (se aberto) e gera nova ContaReceber quando a forma a prazo
+// for selecionada. Volta o status para CONCLUIDA.
+export async function refinalizar(req, res, next) {
+  try {
+    const id = req.params.id;
+    const { formaPagamento, gerarContaReceber } = req.body;
+
+    if (!formaPagamento || !FORMAS_VALIDAS.has(formaPagamento)) {
+      return res.status(400).json({ erro: "Forma de pagamento invalida" });
+    }
+
+    let configConta = null;
+    if (gerarContaReceber) {
+      if (!FORMAS_GERA_RECEBER.has(formaPagamento)) {
+        return res.status(400).json({
+          erro: "Forma de pagamento nao permite gerar conta a receber",
+        });
+      }
+      const venc = parseDate(gerarContaReceber.vencimento);
+      if (!venc) return res.status(400).json({ erro: "Vencimento da conta a receber invalido" });
+      const parcelas = parseInt(gerarContaReceber.parcelas, 10) || 1;
+      if (parcelas < 1 || parcelas > 60) {
+        return res.status(400).json({ erro: "Numero de parcelas deve estar entre 1 e 60" });
+      }
+      configConta = {
+        vencimento: venc,
+        parcelas,
+        descricaoCustom: gerarContaReceber.descricao
+          ? String(gerarContaReceber.descricao).trim().toUpperCase().slice(0, 200)
+          : null,
+        observacoesConta: gerarContaReceber.observacoes
+          ? String(gerarContaReceber.observacoes).trim().toUpperCase().slice(0, 500)
+          : null,
+      };
+    }
+
+    try {
+      const venda = await prisma.$transaction(async (tx) => {
+        const atual = await tx.venda.findUnique({
+          where: { id },
+          include: { cliente: { select: { nome: true } } },
+        });
+        if (!atual) {
+          const e = new Error("Venda nao encontrada"); e.status = 404; throw e;
+        }
+        if (atual.status !== "EM_EDICAO") {
+          const e = new Error(
+            `So e possivel refinalizar vendas EM_EDICAO (status atual: ${atual.status})`
+          );
+          e.status = 400; throw e;
+        }
+
+        const atualizada = await tx.venda.update({
+          where: { id },
+          data: { formaPagamento, status: "CONCLUIDA" },
+        });
+
+        // Re-registra a venda no caixa de origem se ele ainda esta aberto.
+        if (atual.caixaId) {
+          const caixaVenda = await tx.caixa.findUnique({
+            where: { id: atual.caixaId },
+            select: { status: true, saldoInicial: true },
+          });
+          if (caixaVenda?.status === "ABERTO") {
+            const totais = await calcularTotaisCaixa(atual.caixaId, Number(caixaVenda.saldoInicial), tx);
+            const saldoAntes = Math.round(totais.saldoEsperadoDinheiro * 100) / 100;
+            const ehDinheiro = formaPagamento === "DINHEIRO";
+            const saldoDepois = Math.round((saldoAntes + (ehDinheiro ? Number(atual.total) : 0)) * 100) / 100;
+            await tx.movimentacaoCaixa.create({
+              data: {
+                caixaId: atual.caixaId,
+                userId: req.user.sub,
+                tipo: "VENDA",
+                formaPagamento,
+                valor: Number(atual.total),
+                descricao: `REFINALIZACAO VENDA #${atual.numero} (NOVA FORMA)`,
+                saldoAntes,
+                saldoDepois,
+                vendaId: atual.id,
+              },
+            });
+          }
+        }
+
+        if (configConta) {
+          const nomeCliente = atual.cliente?.nome
+            ? atual.cliente.nome.toUpperCase()
+            : "CONSUMIDOR";
+          const descricao = configConta.descricaoCustom
+            || `VENDA #${atual.numero} - ${nomeCliente}`;
+          const calc = calcularValores({
+            valorBruto: Number(atual.total), juros: 0, multa: 0, desconto: 0,
+          });
+          if (!calc.ok) { const e = new Error(calc.erro); e.status = 400; throw e; }
+          const serie = gerarSerieRecorrencia({
+            tipoRecorrencia: configConta.parcelas > 1 ? "PARCELADA" : "NENHUMA",
+            parcelaTotal: configConta.parcelas,
+            valores: calc.valores,
+            vencimento: configConta.vencimento,
+            dadosBase: {
+              descricao,
+              clienteId: atual.clienteId || null,
+              observacoes: configConta.observacoesConta
+                || `GERADA NA REFINALIZACAO DA VENDA #${atual.numero}`,
+            },
+          });
+          if (!serie.ok) { const e = new Error(serie.erro); e.status = 400; throw e; }
+          for (const reg of serie.registros) {
+            await tx.contaReceber.create({ data: { ...reg, vendaId: atual.id } });
+          }
+        }
+
+        return tx.venda.findUnique({
+          where: { id: atualizada.id },
+          include: INCLUDE_DETALHE,
+        });
+      });
+
+      res.json(venda);
+    } catch (err) {
+      if (err.status) return res.status(err.status).json({ erro: err.message });
+      throw err;
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function cancelar(req, res, next) {
   try {
     const id = req.params.id;

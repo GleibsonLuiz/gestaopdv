@@ -398,7 +398,7 @@ export default function Clientes({ user }) {
               />
             </Campo>
           </Linha>
-          <Linha>
+          <Linha style={{ gridTemplateColumns: "185px 160px 1fr" }}>
             <Campo label="CPF / CNPJ">
               <input
                 className="lux-input"
@@ -419,8 +419,6 @@ export default function Clientes({ user }) {
                 autoComplete="tel"
               />
             </Campo>
-          </Linha>
-          <Linha cols={1}>
             <Campo label="E-mail">
               <input
                 className="lux-input"
@@ -435,7 +433,7 @@ export default function Clientes({ user }) {
         </Secao>
 
         <Secao legenda="Endereço">
-          <Linha>
+          <Linha variant="addr-tilt">
             <Campo
               label="CEP"
               hint={
@@ -457,32 +455,6 @@ export default function Clientes({ user }) {
                 autoComplete="postal-code"
               />
             </Campo>
-            <Campo label="Estado">
-              <select
-                className="lux-select"
-                value={form.estado}
-                onChange={e => setForm({ ...form, estado: e.target.value })}
-                autoComplete="address-level1"
-              >
-                <option value="">Selecione…</option>
-                {ESTADOS_BR.map(uf => (
-                  <option key={uf} value={uf}>{uf}</option>
-                ))}
-              </select>
-            </Campo>
-          </Linha>
-          <Linha cols={1}>
-            <Campo label="Logradouro">
-              <input
-                className="lux-input"
-                value={form.endereco}
-                onChange={e => setForm({ ...form, endereco: e.target.value })}
-                placeholder="Rua, avenida ou alameda"
-                autoComplete="street-address"
-              />
-            </Campo>
-          </Linha>
-          <Linha tilt>
             <Campo label="Cidade">
               <input
                 className="lux-input"
@@ -490,6 +462,30 @@ export default function Clientes({ user }) {
                 onChange={e => setForm({ ...form, cidade: e.target.value })}
                 placeholder="São Paulo"
                 autoComplete="address-level2"
+              />
+            </Campo>
+            <Campo label="Estado">
+              <select
+                className="lux-select"
+                value={form.estado}
+                onChange={e => setForm({ ...form, estado: e.target.value })}
+                autoComplete="address-level1"
+              >
+                <option value="">UF</option>
+                {ESTADOS_BR.map(uf => (
+                  <option key={uf} value={uf}>{uf}</option>
+                ))}
+              </select>
+            </Campo>
+          </Linha>
+          <Linha style={{ gridTemplateColumns: "1fr 120px" }}>
+            <Campo label="Logradouro">
+              <input
+                className="lux-input"
+                value={form.endereco}
+                onChange={e => setForm({ ...form, endereco: e.target.value })}
+                placeholder="Rua, avenida ou alameda"
+                autoComplete="street-address"
               />
             </Campo>
             <Campo label="Número">
@@ -501,6 +497,8 @@ export default function Clientes({ user }) {
                 inputMode="numeric"
               />
             </Campo>
+          </Linha>
+          <Linha cols={1}>
             <Campo label="Complemento">
               <input
                 className="lux-input"

@@ -354,7 +354,8 @@ const cssLoteImpressao = `
   }
 
   .etiqueta-area-impressao .etiqueta-preco {
-    border: none !important;
+    border: 0.2mm solid #000 !important;
+    border-radius: 0 !important;
     page-break-inside: avoid;
     break-inside: avoid;
   }

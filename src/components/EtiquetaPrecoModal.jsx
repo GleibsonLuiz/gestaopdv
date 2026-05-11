@@ -132,18 +132,20 @@ export default function EtiquetaPrecoModal({ produto, onFechar }) {
 }
 
 // CSS de impressao:
-// - @page define o tamanho fisico do papel (60x40mm) e zera margens, o que
-//   tambem remove cabecalho/rodape do navegador na maioria dos casos.
+// - @page A4 com margem fina; etiquetas sao dispostas em grid de 3 colunas
+//   de 60mm cada (3 x 60 = 180mm, cabe na largura util de A4 ~190mm).
+// - O browser quebra a pagina sozinho quando as etiquetas excedem a altura
+//   da folha; page-break-inside: avoid evita que uma etiqueta fique
+//   partida no meio.
 // - Em tela, a area-impressao fica escondida; ao imprimir, escondemos
 //   TUDO exceto ela.
-// - body com background branco evita que a cor de fundo do tema apareca.
 const cssEtiqueta = `
 .etiqueta-area-impressao { display: none; }
 
 @media print {
   @page {
-    size: 60mm 40mm;
-    margin: 0;
+    size: A4;
+    margin: 5mm;
   }
 
   html, body {
@@ -158,7 +160,10 @@ const cssEtiqueta = `
   .etiqueta-area-impressao * { visibility: visible !important; }
 
   .etiqueta-area-impressao {
-    display: block !important;
+    display: grid !important;
+    grid-template-columns: repeat(3, 60mm);
+    grid-auto-rows: 40mm;
+    gap: 0;
     position: absolute;
     top: 0;
     left: 0;
@@ -166,13 +171,8 @@ const cssEtiqueta = `
 
   .etiqueta-area-impressao .etiqueta-preco {
     border: none !important;
-    page-break-after: always;
-    break-after: page;
-  }
-
-  .etiqueta-area-impressao .etiqueta-preco:last-child {
-    page-break-after: auto;
-    break-after: auto;
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
 }
 `;

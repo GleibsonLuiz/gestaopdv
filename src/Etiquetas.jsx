@@ -318,15 +318,17 @@ const botaoSecundario = {
   cursor: "pointer",
 };
 
-// CSS de impressao igual ao do modal individual: esconde a UI e mostra
-// somente a area-impressao em paginas 60x40mm.
+// CSS de impressao em lote: A4 com grid de 3 colunas de 60mm.
+// O navegador quebra para a proxima pagina automaticamente quando enche
+// a folha; page-break-inside:avoid garante que nenhuma etiqueta seja
+// cortada no meio entre paginas.
 const cssLoteImpressao = `
 .etiqueta-area-impressao { display: none; }
 
 @media print {
   @page {
-    size: 60mm 40mm;
-    margin: 0;
+    size: A4;
+    margin: 5mm;
   }
 
   html, body {
@@ -341,7 +343,10 @@ const cssLoteImpressao = `
   .etiqueta-area-impressao * { visibility: visible !important; }
 
   .etiqueta-area-impressao {
-    display: block !important;
+    display: grid !important;
+    grid-template-columns: repeat(3, 60mm);
+    grid-auto-rows: 40mm;
+    gap: 0;
     position: absolute;
     top: 0;
     left: 0;
@@ -349,13 +354,8 @@ const cssLoteImpressao = `
 
   .etiqueta-area-impressao .etiqueta-preco {
     border: none !important;
-    page-break-after: always;
-    break-after: page;
-  }
-
-  .etiqueta-area-impressao .etiqueta-preco:last-child {
-    page-break-after: auto;
-    break-after: auto;
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
 }
 `;

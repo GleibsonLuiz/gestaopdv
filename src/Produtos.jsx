@@ -563,34 +563,35 @@ export default function Produtos({ user }) {
               />
             </CampoLux>
           </Linha>
-          <Linha cols={2}>
-            <CampoLux label="Código de barras">
-              <input
-                className="lux-input"
-                value={form.codigoBarras}
-                onChange={e => setForm({ ...form, codigoBarras: e.target.value.replace(/\s/g, "") })}
-                placeholder="EAN-13, EAN-8, GTIN…"
-                inputMode="numeric"
-                style={{ fontFamily: "ui-monospace, monospace" }}
-              />
-            </CampoLux>
-            <CampoLux label="Referência">
-              <input
-                className="lux-input"
-                value={form.referencia}
-                onChange={e => setForm({ ...form, referencia: e.target.value.toUpperCase() })}
-                placeholder="Código do fabricante / fornecedor"
-              />
-            </CampoLux>
-          </Linha>
-          <Linha cols={1}>
+          <Linha style={{ gridTemplateColumns: "1fr 2fr", alignItems: "stretch" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <CampoLux label="Código de barras">
+                <input
+                  className="lux-input"
+                  value={form.codigoBarras}
+                  onChange={e => setForm({ ...form, codigoBarras: e.target.value.replace(/\s/g, "") })}
+                  placeholder="EAN-13, EAN-8, GTIN…"
+                  inputMode="numeric"
+                  style={{ fontFamily: "ui-monospace, monospace" }}
+                />
+              </CampoLux>
+              <CampoLux label="Referência">
+                <input
+                  className="lux-input"
+                  value={form.referencia}
+                  onChange={e => setForm({ ...form, referencia: e.target.value.toUpperCase() })}
+                  placeholder="Código do fabricante / fornecedor"
+                />
+              </CampoLux>
+            </div>
             <CampoLux label="Descrição">
               <textarea
                 className="lux-textarea"
                 value={form.descricao}
                 onChange={e => setForm({ ...form, descricao: e.target.value })}
-                rows={2}
+                rows={4}
                 placeholder="Detalhes complementares do produto…"
+                style={{ height: "100%", minHeight: 90, resize: "vertical" }}
               />
             </CampoLux>
           </Linha>
@@ -616,7 +617,29 @@ export default function Produtos({ user }) {
         </Secao>
 
         <Secao legenda="Preços e estoque">
-          <Linha cols={3}>
+          <Linha style={{ gridTemplateColumns: "80px 80px 1fr 1fr 70px", alignItems: "end" }}>
+            <CampoLux label={form.tipoItem === "SERVICO" ? "Estoque (n/a)" : "Estoque atual"}>
+              <input
+                className="lux-input"
+                type="number" min="0"
+                value={form.tipoItem === "SERVICO" ? "" : form.estoque}
+                onChange={e => setForm({ ...form, estoque: e.target.value })}
+                disabled={form.tipoItem === "SERVICO"}
+                placeholder={form.tipoItem === "SERVICO" ? "♾" : "0"}
+                style={form.tipoItem === "SERVICO" ? { background: C.bg, color: C.muted, borderStyle: "dashed", cursor: "not-allowed" } : undefined}
+              />
+            </CampoLux>
+            <CampoLux label={form.tipoItem === "SERVICO" ? "Mínimo (n/a)" : "Estoque mínimo"}>
+              <input
+                className="lux-input"
+                type="number" min="0"
+                value={form.tipoItem === "SERVICO" ? "" : form.estoqueMinimo}
+                onChange={e => setForm({ ...form, estoqueMinimo: e.target.value })}
+                disabled={form.tipoItem === "SERVICO"}
+                placeholder={form.tipoItem === "SERVICO" ? "—" : "0"}
+                style={form.tipoItem === "SERVICO" ? { background: C.bg, color: C.muted, borderStyle: "dashed", cursor: "not-allowed" } : undefined}
+              />
+            </CampoLux>
             <CampoLux label="Preço de custo (R$)">
               <input
                 className="lux-input"
@@ -651,30 +674,6 @@ export default function Produtos({ user }) {
                 markup={markup}
                 onChange={setMarkup}
                 onAplicar={(valor) => setForm(f => ({ ...f, precoVenda: valor }))}
-              />
-            </CampoLux>
-          </Linha>
-          <Linha>
-            <CampoLux label={form.tipoItem === "SERVICO" ? "Estoque atual (n/a — serviço)" : "Estoque atual"}>
-              <input
-                className="lux-input"
-                type="number" min="0"
-                value={form.tipoItem === "SERVICO" ? "" : form.estoque}
-                onChange={e => setForm({ ...form, estoque: e.target.value })}
-                disabled={form.tipoItem === "SERVICO"}
-                placeholder={form.tipoItem === "SERVICO" ? "♾ Ilimitado" : ""}
-                style={form.tipoItem === "SERVICO" ? { background: C.bg, color: C.muted, borderStyle: "dashed", cursor: "not-allowed" } : undefined}
-              />
-            </CampoLux>
-            <CampoLux label={form.tipoItem === "SERVICO" ? "Estoque mínimo (n/a — serviço)" : "Estoque mínimo"}>
-              <input
-                className="lux-input"
-                type="number" min="0"
-                value={form.tipoItem === "SERVICO" ? "" : form.estoqueMinimo}
-                onChange={e => setForm({ ...form, estoqueMinimo: e.target.value })}
-                disabled={form.tipoItem === "SERVICO"}
-                placeholder={form.tipoItem === "SERVICO" ? "—" : ""}
-                style={form.tipoItem === "SERVICO" ? { background: C.bg, color: C.muted, borderStyle: "dashed", cursor: "not-allowed" } : undefined}
               />
             </CampoLux>
           </Linha>

@@ -124,6 +124,20 @@ enum TabelaPreco {
   AT
 }
 
+// Comissionamento por vendedor. Uma configuracao por User (1:1).
+// tipo + valor formam a regra principal: PORCENTAGEM (valor = aliquota %)
+// ou VALOR_FIXO (valor = R$ por venda). base controla se a aliquota incide
+// sobre o total bruto da venda ou sobre a margem (preco venda - preco custo).
+enum TipoComissao {
+  PORCENTAGEM
+  VALOR_FIXO
+}
+
+enum BaseComissao {
+  VALOR_BRUTO
+  LUCRO_LIQUIDO
+}
+
 // ============ USUARIOS ============
 
 model User {
@@ -143,8 +157,35 @@ model User {
   movimentacoesCaixa  MovimentacaoCaixa[]
   orcamentos          Orcamento[] @relation("OrcamentoCriador")
   orcamentosResponsavel Orcamento[] @relation("OrcamentoResponsavel")
+  configuracaoComissao ConfiguracaoComissao?
 
   @@map("users")
+}
+
+// ============ COMISSAO ============
+//
+// Configuracao do plano de comissionamento de cada vendedor. Persistido por
+// User (1:1) — quando role muda ou usuario e desativado, a config fica
+// atrelada. Calculo no front e mero auxilio visual; o backend nao gera
+// lancamentos de comissao automaticamente (vira em uma etapa futura).
+model ConfiguracaoComissao {
+  id           String       @id @default(uuid())
+  tipo         TipoComissao @default(PORCENTAGEM)
+  base         BaseComissao @default(VALOR_BRUTO)
+  // valor da aliquota (em % quando tipo=PORCENTAGEM) ou valor fixo (em R$
+  // quando tipo=VALOR_FIXO).
+  valor        Decimal      @db.Decimal(10, 2)
+  metaMensal   Decimal      @default(0) @db.Decimal(10, 2)
+  bonusPorMeta Decimal      @default(0) @db.Decimal(5, 2)
+  ativo        Boolean      @default(true)
+  observacoes  String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("configuracoes_comissao")
 }
 
 // ============ CADASTROS ============

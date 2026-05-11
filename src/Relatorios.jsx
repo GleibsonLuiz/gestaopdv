@@ -41,6 +41,7 @@ const ABAS = [
   { id: "financeiro", label: "💰 Financeiro", cor: C.green },
   { id: "estoque", label: "📦 Estoque", cor: C.purple },
   { id: "caixas", label: "💵 Caixas (DRE)", cor: C.red },
+  { id: "comissoes", label: "🏆 Comissões", cor: C.purple },
 ];
 
 export default function Relatorios() {
@@ -68,6 +69,7 @@ export default function Relatorios() {
       {aba === "financeiro" && <RelatorioFinanceiro key="f" />}
       {aba === "estoque" && <RelatorioEstoque key="e" />}
       {aba === "caixas" && <RelatorioCaixas key="x" />}
+      {aba === "comissoes" && <RelatorioComissoesLista key="m" />}
     </div>
   );
 }
@@ -788,6 +790,156 @@ function RelatorioCaixas() {
               c.diferenca > 0 ? `+${fmtBRL(c.diferenca)}` : fmtBRL(c.diferenca),
             ])}
             vazioTexto="Nenhum caixa fechado no período."
+          />
+        </>
+      )}
+    </BlocoRelatorio>
+  );
+}
+
+// ============ RELATÓRIO DE COMISSÕES ============
+function RelatorioComissoesLista() {
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+  const [userId, setUserId] = useState("");
+  const [usuarios, setUsuarios] = useState([]);
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
+  }, []);
+
+  const gerar = useCallback(async () => {
+    setCarregando(true); setErro("");
+    try {
+      const r = await api.relatorioComissoes({ dataInicio, dataFim, userId });
+      setDados(r);
+    } catch (err) { setErro(err.message); }
+    finally { setCarregando(false); }
+  }, [dataInicio, dataFim, userId]);
+
+  async function exportar() {
+    if (!dados) return;
+    const doc = await criarPDF("Relatório de Comissões");
+    addPeriodo(doc, dataInicio, dataFim);
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 4,
+      head: [["Indicador", "Valor"]],
+      body: [
+        ["Faturamento", fmtBRL(dados.resumo.totalVendas)],
+        ["Comissão total", fmtBRL(dados.resumo.totalComissao)],
+        ["Vendas concluídas", fmtNum(dados.resumo.totalVendasCount)],
+        ["Vendedores", fmtNum(dados.resumo.vendedoresCount)],
+        ["Top vendedor", dados.resumo.melhorVendedor || "—"],
+      ],
+      theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+      styles: { fontSize: 10 },
+    });
+
+    if (dados.vendedores.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["#", "Vendedor", "Vendas", "Faturamento", "Ticket médio", "Comissão", "Meses ≥ meta"]],
+        body: dados.vendedores.map((v, i) => [
+          i + 1,
+          v.nome,
+          fmtNum(v.vendasCount),
+          fmtBRL(v.totalVendas),
+          fmtBRL(v.ticketMedio),
+          fmtBRL(v.totalComissao),
+          v.configuracao?.metaMensal > 0
+            ? `${v.mesesAcimaDaMeta}/${v.mesesNoPeriodo}`
+            : "—",
+        ]),
+        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        styles: { fontSize: 9 },
+      });
+    }
+
+    if (dados.vendas.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["#", "Data", "Vendedor", "Cliente", "Pgto", "Total", "Comissão"]],
+        body: dados.vendas.map(v => [
+          v.numero,
+          fmtDataHora(v.createdAt),
+          v.vendedor,
+          v.cliente || "Avulso",
+          ROTULO_PAGAMENTO[v.formaPagamento] || v.formaPagamento,
+          fmtBRL(v.total),
+          fmtBRL(v.comissao),
+        ]),
+        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        styles: { fontSize: 8 },
+      });
+    }
+
+    doc.save(`relatorio-comissoes-${hoje()}.pdf`);
+  }
+
+  return (
+    <BlocoRelatorio
+      titulo="Relatório de Comissões" cor={C.purple}
+      filtros={
+        <>
+          <CampoData label="De" value={dataInicio} onChange={setDataInicio} />
+          <CampoData label="Até" value={dataFim} onChange={setDataFim} />
+          <CampoSelect label="Vendedor" value={userId} onChange={setUserId}>
+            <option value="">Todos</option>
+            {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+          </CampoSelect>
+        </>
+      }
+      onGerar={gerar} onExportar={exportar} carregando={carregando}
+      erro={erro} dados={dados}
+    >
+      {dados && (
+        <>
+          <Resumo cards={[
+            { rotulo: "Comissão total", valor: fmtBRL(dados.resumo.totalComissao), cor: C.green },
+            { rotulo: "Faturamento",    valor: fmtBRL(dados.resumo.totalVendas),    cor: C.accent },
+            { rotulo: "Vendas",         valor: fmtNum(dados.resumo.totalVendasCount), cor: C.purple },
+            { rotulo: "Top vendedor",   valor: dados.resumo.melhorVendedor || "—",    cor: C.yellow },
+          ]} />
+
+          {dados.vendedores.length > 0 && (
+            <Tabela
+              titulo="Resumo por vendedor"
+              colunas={["#", "Vendedor", "Vendas", "Faturamento", "Ticket médio", "Comissão", "Meses ≥ meta"]}
+              alinhamentos={["center", "left", "right", "right", "right", "right", "center"]}
+              linhas={dados.vendedores.map((v, i) => [
+                i + 1,
+                v.nome,
+                fmtNum(v.vendasCount),
+                fmtBRL(v.totalVendas),
+                fmtBRL(v.ticketMedio),
+                fmtBRL(v.totalComissao),
+                v.configuracao?.metaMensal > 0
+                  ? `${v.mesesAcimaDaMeta}/${v.mesesNoPeriodo}`
+                  : "—",
+              ])}
+              vazioTexto="Nenhum vendedor no período."
+            />
+          )}
+
+          <Tabela
+            titulo={`Detalhamento de vendas (${dados.vendas.length} venda${dados.vendas.length === 1 ? "" : "s"})`}
+            colunas={["#", "Data", "Vendedor", "Cliente", "Pgto", "Regra", "Total", "Comissão"]}
+            alinhamentos={["center", "left", "left", "left", "left", "left", "right", "right"]}
+            linhas={dados.vendas.map(v => [
+              `#${v.numero}`,
+              fmtDataHora(v.createdAt),
+              v.vendedor,
+              v.cliente || "Avulso",
+              ROTULO_PAGAMENTO[v.formaPagamento] || v.formaPagamento,
+              v.regra,
+              fmtBRL(v.total),
+              fmtBRL(v.comissao),
+            ])}
+            vazioTexto="Nenhuma venda no período."
           />
         </>
       )}

@@ -115,7 +115,6 @@ export const api = {
   criarCliente: (data) => request("/clientes", { method: "POST", body: data }),
   atualizarCliente: (id, data) => request(`/clientes/${id}`, { method: "PUT", body: data }),
   excluirCliente: (id) => request(`/clientes/${id}`, { method: "DELETE" }),
-  excluirPermanenteCliente: (id) => request(`/clientes/${id}?permanente=true`, { method: "DELETE" }),
 
   listarFornecedores: ({ search = "", ativo = "" } = {}) => {
     const qs = new URLSearchParams();
@@ -128,7 +127,6 @@ export const api = {
   criarFornecedor: (data) => request("/fornecedores", { method: "POST", body: data }),
   atualizarFornecedor: (id, data) => request(`/fornecedores/${id}`, { method: "PUT", body: data }),
   excluirFornecedor: (id) => request(`/fornecedores/${id}`, { method: "DELETE" }),
-  excluirPermanenteFornecedor: (id) => request(`/fornecedores/${id}?permanente=true`, { method: "DELETE" }),
 
   listarCategorias: () => request("/categorias"),
   criarCategoria: (data) => request("/categorias", { method: "POST", body: data }),
@@ -159,7 +157,6 @@ export const api = {
   criarProduto: (data) => request("/produtos", { method: "POST", body: data }),
   atualizarProduto: (id, data) => request(`/produtos/${id}`, { method: "PUT", body: data }),
   excluirProduto: (id) => request(`/produtos/${id}`, { method: "DELETE" }),
-  excluirPermanenteProduto: (id) => request(`/produtos/${id}?permanente=true`, { method: "DELETE" }),
   enviarImagemProduto: (id, file) => {
     const fd = new FormData();
     fd.append("imagem", file);
@@ -391,4 +388,24 @@ export const api = {
     }),
   suprimentoCaixa: (id, { valor, descricao }) =>
     request(`/caixas/${id}/suprimento`, { method: "POST", body: { valor, descricao } }),
+
+  // Comissoes
+  listarComissoes: ({ ativo = "" } = {}) => {
+    const q = ativo ? `?ativo=${ativo}` : "";
+    return request(`/comissoes${q}`);
+  },
+  listarVendedoresComissao: () => request("/comissoes/vendedores"),
+  obterComissao: (userId) => request(`/comissoes/${userId}`),
+  salvarComissao: (userId, dados) =>
+    request(`/comissoes/${userId}`, { method: "PUT", body: dados }),
+  excluirComissao: (userId) =>
+    request(`/comissoes/${userId}`, { method: "DELETE" }),
+  relatorioComissoes: ({ dataInicio = "", dataFim = "", userId = "" } = {}) => {
+    const params = new URLSearchParams();
+    if (dataInicio) params.set("dataInicio", dataInicio);
+    if (dataFim) params.set("dataFim", dataFim);
+    if (userId) params.set("userId", userId);
+    const q = params.toString();
+    return request(`/comissoes/relatorio${q ? `?${q}` : ""}`);
+  },
 };

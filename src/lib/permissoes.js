@@ -11,6 +11,7 @@ export const MODULOS = [
   { id: "ORCAMENTOS",    label: "Orçamentos",    icone: "📝" },
   { id: "FINANCEIRO",    label: "Financeiro",    icone: "💰" },
   { id: "RELATORIOS",    label: "Relatórios",    icone: "📑" },
+  { id: "COMISSOES",     label: "Comissões",     icone: "🏆" },
   { id: "FUNCIONARIOS",  label: "Funcionários",  icone: "🧑‍💼" },
 ];
 
@@ -30,7 +31,7 @@ export function permissoesPadrao(role) {
   if (role === "ADMIN") return IDS_MODULOS;
   if (role === "GERENTE") {
     return ["PDV","DASHBOARD","CAIXA","CLIENTES","FORNECEDORES","PRODUTOS",
-            "ESTOQUE","COMPRAS","ORCAMENTOS","FINANCEIRO","RELATORIOS"];
+            "ESTOQUE","COMPRAS","ORCAMENTOS","FINANCEIRO","RELATORIOS","COMISSOES"];
   }
   return ["PDV","CAIXA","CLIENTES","PRODUTOS","ORCAMENTOS"];
 }

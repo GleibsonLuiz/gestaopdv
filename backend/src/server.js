@@ -23,6 +23,7 @@ import configuracaoRoutes from "./routes/configuracao.js";
 import pdvRoutes from "./routes/pdv.js";
 import formasPagamentoRoutes from "./routes/formas-pagamento.js";
 import orcamentosRoutes from "./routes/orcamentos.js";
+import comissoesRoutes from "./routes/comissoes.js";
 
 dotenv.config();
 
@@ -78,6 +79,7 @@ app.use("/configuracao", configuracaoRoutes);
 app.use("/pdv", pdvRoutes);
 app.use("/formas-pagamento", formasPagamentoRoutes);
 app.use("/orcamentos", orcamentosRoutes);
+app.use("/comissoes", comissoesRoutes);
 
 app.use((err, req, res, _next) => {
   console.error(err);

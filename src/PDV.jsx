@@ -6,6 +6,7 @@ import { urlLogotipo } from "./Configuracoes.jsx";
 import { GerenciarFormasModal } from "./Financeiro.jsx";
 import { useModalKeys } from "./lib/modalKeys.js";
 import ActionsMenu from "./components/ActionsMenu.jsx";
+import SelectBusca from "./components/SelectBusca.jsx";
 
 function urlImagem(imagem) {
   if (!imagem) return null;
@@ -1193,10 +1194,13 @@ function NovaVenda({ user }) {
 
               <div>
                 <label className="pdv-field-label">Cliente (opcional)</label>
-                <select value={clienteId} onChange={e => setClienteId(e.target.value)} className="pdv-field-select">
-                  <option value="">— Consumidor —</option>
-                  {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                </select>
+                <SelectBusca
+                  opcoes={clientes}
+                  value={clienteId}
+                  onChange={setClienteId}
+                  placeholder="— Consumidor —"
+                  className="pdv-field-input"
+                />
               </div>
 
               <div>

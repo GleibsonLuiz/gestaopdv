@@ -5,6 +5,7 @@ import MovimentarEstoqueModal from "./MovimentarEstoqueModal.jsx";
 import ActionsMenu from "./components/ActionsMenu.jsx";
 import EtiquetaPrecoModal from "./components/EtiquetaPrecoModal.jsx";
 import { FormularioLuxuoso, Secao, Linha, Campo as CampoLux } from "./components/FormularioLuxuoso.jsx";
+import SelectBusca from "./components/SelectBusca.jsx";
 
 
 const VAZIO = {
@@ -325,14 +326,21 @@ export default function Produtos({ user }) {
           <option value="true">Apenas ativos</option>
           <option value="false">Apenas inativos</option>
         </select>
-        <select value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)} style={selectStyle}>
-          <option value="">Todas categorias</option>
-          {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-        </select>
-        <select value={filtroFornecedor} onChange={e => setFiltroFornecedor(e.target.value)} style={selectStyle}>
-          <option value="">Todos fornecedores</option>
-          {fornecedores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
-        </select>
+        <SelectBusca
+          opcoes={categorias}
+          value={filtroCategoria}
+          onChange={setFiltroCategoria}
+          placeholder="Todas categorias"
+          style={{ ...selectStyle, minWidth: 160 }}
+        />
+        <SelectBusca
+          opcoes={fornecedores}
+          value={filtroFornecedor}
+          onChange={setFiltroFornecedor}
+          subLabelFn={f => f.cnpj}
+          placeholder="Todos fornecedores"
+          style={{ ...selectStyle, minWidth: 160 }}
+        />
         <label style={{ color: C.muted, fontSize: 13, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
           <input type="checkbox" checked={estoqueBaixo} onChange={e => setEstoqueBaixo(e.target.checked)} />
           Estoque baixo
@@ -528,7 +536,7 @@ export default function Produtos({ user }) {
         larguraMax={860}
       >
         <Secao legenda="Identificação">
-          <Linha cols={3}>
+          <Linha style={{ gridTemplateColumns: "150px 1fr" }}>
             <CampoLux label="Código" obrigatorio>
               <div style={{ display: "flex", gap: 6 }}>
                 <input
@@ -546,7 +554,7 @@ export default function Produtos({ user }) {
                   }}>↻</button>
               </div>
             </CampoLux>
-            <CampoLux label="Nome" obrigatorio span={2}>
+            <CampoLux label="Nome" obrigatorio>
               <input
                 className="lux-input"
                 value={form.nome}
@@ -555,7 +563,7 @@ export default function Produtos({ user }) {
               />
             </CampoLux>
           </Linha>
-          <Linha cols={3}>
+          <Linha cols={2}>
             <CampoLux label="Código de barras">
               <input
                 className="lux-input"
@@ -566,7 +574,7 @@ export default function Produtos({ user }) {
                 style={{ fontFamily: "ui-monospace, monospace" }}
               />
             </CampoLux>
-            <CampoLux label="Referência" span={2}>
+            <CampoLux label="Referência">
               <input
                 className="lux-input"
                 value={form.referencia}
@@ -588,8 +596,8 @@ export default function Produtos({ user }) {
           </Linha>
         </Secao>
 
-        <Secao legenda="Imagem">
-          <Linha cols={1}>
+        <Secao legenda="Imagem e tipo do item">
+          <Linha style={{ gridTemplateColumns: "1fr 1fr", alignItems: "stretch" }}>
             <CampoLux label="Foto do produto" hint="JPG, PNG ou WEBP · máx 2 MB">
               <DropzoneImagem
                 preview={imagemPreview}
@@ -598,12 +606,7 @@ export default function Produtos({ user }) {
                 inputRef={inputImagemRef}
               />
             </CampoLux>
-          </Linha>
-        </Secao>
-
-        <Secao legenda="Tipo do item">
-          <Linha cols={1}>
-            <CampoLux>
+            <CampoLux label="Tipo do item">
               <SeletorTipoItem
                 valor={form.tipoItem}
                 onMudar={t => setForm(f => ({ ...f, tipoItem: t }))}
@@ -678,29 +681,30 @@ export default function Produtos({ user }) {
         </Secao>
 
         <Secao legenda="Categorização">
-          <Linha cols={1}>
+          <Linha cols={2}>
             <CampoLux label="Fornecedor">
-              <select
-                className="lux-select"
+              <SelectBusca
+                opcoes={fornecedores}
                 value={form.fornecedorId}
-                onChange={e => setForm({ ...form, fornecedorId: e.target.value })}
-              >
-                <option value="">— Sem fornecedor —</option>
-                {fornecedores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
-              </select>
+                onChange={v => setForm({ ...form, fornecedorId: v })}
+                subLabelFn={f => f.cnpj}
+                placeholder="— Sem fornecedor —"
+                className="lux-input"
+              />
+            </CampoLux>
+            <CampoLux label="Categoria">
+              <SelectBusca
+                opcoes={categorias}
+                value={form.categoriaId}
+                onChange={v => setForm({ ...form, categoriaId: v })}
+                placeholder="— Sem categoria —"
+                className="lux-input"
+              />
             </CampoLux>
           </Linha>
           <Linha cols={1}>
-            <CampoLux label="Categoria">
-              <select
-                className="lux-select"
-                value={form.categoriaId}
-                onChange={e => setForm({ ...form, categoriaId: e.target.value })}
-              >
-                <option value="">— Sem categoria —</option>
-                {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-              </select>
-              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <CampoLux label="Nova categoria">
+              <div style={{ display: "flex", gap: 8 }}>
                 <input
                   className="lux-input"
                   value={novaCategoria}
@@ -774,7 +778,7 @@ function SeletorTipoItem({ valor, onMudar }) {
     { id: "SERVICO", icone: "🛠", label: "Serviço / digital", desc: "Sem estoque. Sempre disponível para venda (impressão, 2ª via...)." },
   ];
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
       {opcoes.map(opt => {
         const ativo = valor === opt.id;
         return (
@@ -906,7 +910,7 @@ function DropzoneImagem({ preview, onSelecionar, onLimpar, inputRef }) {
   }
 
   return (
-    <div style={{ display: "flex", gap: 12, alignItems: "stretch" }}>
+    <div style={{ display: "flex", gap: 12, alignItems: "stretch", flex: 1 }}>
       <div
         onDragEnter={aoArrastar}
         onDragOver={aoArrastar}

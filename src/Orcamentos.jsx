@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { C } from "./lib/theme.js";
 import { api, BASE_URL } from "./lib/api.js";
 import ActionsMenu from "./components/ActionsMenu.jsx";
+import SelectBusca from "./components/SelectBusca.jsx";
 
 // URL absoluta do logotipo da empresa (replicado de Configuracoes.jsx para
 // evitar import cruzado). Backend devolve um caminho relativo do tipo
@@ -581,10 +582,13 @@ function FormularioOrcamentoModal({ modo, orcamento, clientes, produtos, funcion
           <div style={secaoTitulo}>👤 Cliente</div>
           <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr 160px", gap: 12, marginBottom: 10 }}>
             <Campo label="Cliente cadastrado">
-              <select value={clienteId} onChange={e => preencherDoCliente(e.target.value)} style={inputStyle}>
-                <option value="">— Sem vínculo (digite manualmente) —</option>
-                {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-              </select>
+              <SelectBusca
+                opcoes={clientes}
+                value={clienteId}
+                onChange={preencherDoCliente}
+                placeholder="— Sem vínculo (digite manualmente) —"
+                style={inputStyle}
+              />
             </Campo>
             <Campo label="Nome do contato / outros">
               <input value={contato} onChange={e => setContato(e.target.value)} style={inputStyle}
@@ -659,10 +663,13 @@ function FormularioOrcamentoModal({ modo, orcamento, clientes, produtos, funcion
             {funcionarios.length > 0 && (
               <div style={{ marginTop: 10 }}>
                 <Campo label="Responsável (técnico/comercial)">
-                  <select value={responsavelId} onChange={e => setResponsavelId(e.target.value)} style={inputStyle}>
-                    <option value="">— Nenhum —</option>
-                    {funcionarios.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
-                  </select>
+                  <SelectBusca
+                    opcoes={funcionarios}
+                    value={responsavelId}
+                    onChange={setResponsavelId}
+                    placeholder="— Nenhum —"
+                    style={inputStyle}
+                  />
                 </Campo>
               </div>
             )}
@@ -749,15 +756,15 @@ function ItemFormulario({ indice, item, produtos, tabelaPreco, onAtualizar, onRe
           {indice + 1}
         </div>
         <Campo label="Produto / Serviço *" noMargin>
-          <select value={item.produtoId} onChange={e => onAtualizar("produtoId", e.target.value)}
-            required style={{ ...inputStyle, padding: "6px 8px" }}>
-            <option value="">— Selecione —</option>
-            {produtos.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.codigo} — {p.nome} {p.tipoItem === "SERVICO" ? "🔧" : ""} ({p.unidade})
-              </option>
-            ))}
-          </select>
+          <SelectBusca
+            opcoes={produtos}
+            value={item.produtoId}
+            onChange={v => onAtualizar("produtoId", v)}
+            labelFn={p => `${p.codigo} — ${p.nome}${p.tipoItem === "SERVICO" ? " 🔧" : ""} (${p.unidade})`}
+            placeholder="Buscar produto..."
+            required
+            style={{ ...inputStyle, padding: "6px 8px" }}
+          />
         </Campo>
         <Campo label="Largura" noMargin>
           <input type="number" step="0.001" min="0" value={item.largura}

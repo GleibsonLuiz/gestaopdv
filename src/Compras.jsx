@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { C } from "./lib/theme.js";
 import { api } from "./lib/api.js";
 import ActionsMenu from "./components/ActionsMenu.jsx";
+import SelectBusca from "./components/SelectBusca.jsx";
 
 
 const fmtBRL = (v) => {
@@ -92,13 +93,20 @@ export default function Compras({ user }) {
   return (
     <div>
       <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-        <select value={filtroFornecedor} onChange={e => setFiltroFornecedor(e.target.value)} style={{
-          flex: "1 1 240px", background: C.surface, border: `1px solid ${C.border}`,
-          borderRadius: 8, padding: "10px 12px", color: C.text, fontSize: 13, cursor: "pointer",
-        }}>
-          <option value="">Todos os fornecedores</option>
-          {fornecedores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
-        </select>
+        <div style={{ flex: "1 1 240px" }}>
+          <SelectBusca
+            opcoes={fornecedores}
+            value={filtroFornecedor}
+            onChange={setFiltroFornecedor}
+            subLabelFn={f => f.cnpj}
+            placeholder="Todos os fornecedores"
+            style={{
+              width: "100%", background: C.surface, border: `1px solid ${C.border}`,
+              borderRadius: 8, padding: "10px 12px", color: C.text, fontSize: 13,
+              outline: "none", boxSizing: "border-box",
+            }}
+          />
+        </div>
         <input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} style={inputCompacto} />
         <input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} style={inputCompacto} />
         {(dataInicio || dataFim || filtroFornecedor) && (
@@ -357,10 +365,15 @@ function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }) {
             />
           </Campo>
           <Campo label="Fornecedor *">
-            <select value={fornecedorId} onChange={e => setFornecedorId(e.target.value)} required style={inputStyle}>
-              <option value="">— Selecione —</option>
-              {fornecedores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
-            </select>
+            <SelectBusca
+              opcoes={fornecedores}
+              value={fornecedorId}
+              onChange={setFornecedorId}
+              subLabelFn={f => f.cnpj}
+              placeholder="Buscar fornecedor..."
+              required
+              style={inputStyle}
+            />
           </Campo>
           <Campo label="Observações">
             <input value={observacoes} onChange={e => setObservacoes(e.target.value)} style={inputStyle}
@@ -400,13 +413,15 @@ function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }) {
                 padding: "8px 12px", borderBottom: `1px solid ${C.border}`,
                 alignItems: "center", gap: 8,
               }}>
-                <select value={it.produtoId} onChange={e => atualizarItem(idx, "produtoId", e.target.value)}
-                  required style={{ ...inputStyle, padding: "6px 8px" }}>
-                  <option value="">— Selecione —</option>
-                  {produtos.map(p => (
-                    <option key={p.id} value={p.id}>{p.codigo} — {p.nome}</option>
-                  ))}
-                </select>
+                <SelectBusca
+                  opcoes={produtos}
+                  value={it.produtoId}
+                  onChange={v => atualizarItem(idx, "produtoId", v)}
+                  labelFn={p => `${p.codigo} — ${p.nome}`}
+                  placeholder="Buscar produto..."
+                  required
+                  style={{ ...inputStyle, padding: "6px 8px" }}
+                />
                 <input type="number" min="1" value={it.quantidade}
                   onChange={e => atualizarItem(idx, "quantidade", e.target.value)}
                   required style={{ ...inputStyle, padding: "6px 8px", textAlign: "right" }} />

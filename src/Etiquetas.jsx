@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { C } from "./lib/theme.js";
 import { api } from "./lib/api.js";
 import EtiquetaPreco from "./components/EtiquetaPreco.jsx";
+import SelectBusca from "./components/SelectBusca.jsx";
 
 // Pagina de impressao de etiquetas em lote.
 // Fluxo:
@@ -114,16 +115,13 @@ export default function Etiquetas() {
         }}>
           <div>
             <div style={labelStyle}>Categoria</div>
-            <select
+            <SelectBusca
+              opcoes={categorias}
               value={filtroCategoria}
-              onChange={(e) => setFiltroCategoria(e.target.value)}
+              onChange={setFiltroCategoria}
+              placeholder="Todas categorias"
               style={inputStyle}
-            >
-              <option value="">Todas categorias</option>
-              {categorias.map((c) => (
-                <option key={c.id} value={c.id}>{c.nome}</option>
-              ))}
-            </select>
+            />
           </div>
           <div>
             <div style={labelStyle}>Buscar</div>

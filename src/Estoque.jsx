@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { C } from "./lib/theme.js";
 import { api } from "./lib/api.js";
 import MovimentarEstoqueModal from "./MovimentarEstoqueModal.jsx";
+import SelectBusca from "./components/SelectBusca.jsx";
 
 
 const TIPO_INFO = {
@@ -71,13 +72,18 @@ export default function Estoque({ user }) {
   return (
     <div>
       <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-        <select value={filtroProduto} onChange={e => setFiltroProduto(e.target.value)} style={{
-          flex: "1 1 240px", background: C.surface, border: `1px solid ${C.border}`,
-          borderRadius: 8, padding: "10px 12px", color: C.text, fontSize: 13, cursor: "pointer",
-        }}>
-          <option value="">Todos os produtos</option>
-          {produtos.map(p => <option key={p.id} value={p.id}>{p.codigo} — {p.nome}</option>)}
-        </select>
+        <SelectBusca
+          opcoes={produtos}
+          value={filtroProduto}
+          onChange={setFiltroProduto}
+          labelFn={p => `${p.codigo} — ${p.nome}`}
+          placeholder="Todos os produtos"
+          style={{
+            flex: "1 1 240px", background: C.surface, border: `1px solid ${C.border}`,
+            borderRadius: 8, padding: "10px 12px", color: C.text, fontSize: 13,
+            outline: "none", boxSizing: "border-box",
+          }}
+        />
         <select value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)} style={{
           background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8,
           padding: "10px 12px", color: C.text, fontSize: 13, cursor: "pointer",

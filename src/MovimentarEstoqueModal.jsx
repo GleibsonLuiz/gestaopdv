@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { C } from "./lib/theme.js";
 import { api } from "./lib/api.js";
+import SelectBusca from "./components/SelectBusca.jsx";
 
 
 export default function MovimentarEstoqueModal({ produtos, produtoInicial, onCancelar, onSalvar }) {
@@ -71,17 +72,17 @@ export default function MovimentarEstoqueModal({ produtos, produtoInicial, onCan
         </div>
 
         <Campo label="Produto *">
-          <select value={produtoId} onChange={e => setProdutoId(e.target.value)}
-            disabled={!!produtoInicial} required style={inputStyle}>
-            <option value="">— Selecione —</option>
-            {produtos
-              .filter(p => p.tipoItem !== "SERVICO")
-              .map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.codigo} — {p.nome} (estoque: {p.estoque})
-                </option>
-              ))}
-          </select>
+          <SelectBusca
+            opcoes={produtos}
+            value={produtoId}
+            onChange={setProdutoId}
+            labelFn={p => `${p.codigo} — ${p.nome} (estoque: ${p.estoque})`}
+            filtroOpcoes={p => p.tipoItem !== "SERVICO"}
+            placeholder="Buscar produto..."
+            disabled={!!produtoInicial}
+            required
+            style={inputStyle}
+          />
         </Campo>
 
         <Campo label="Tipo de movimentação *">

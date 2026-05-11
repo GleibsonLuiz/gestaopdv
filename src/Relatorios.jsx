@@ -4,6 +4,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { api, BASE_URL } from "./lib/api.js";
 import { useConfiguracaoEmpresa, formatarEndereco, obterConfiguracaoCache } from "./HeaderRelatorio.jsx";
+import SelectBusca from "./components/SelectBusca.jsx";
 
 
 const fmtBRL = (v) => {
@@ -179,10 +180,7 @@ function RelatorioVendas() {
             <option value="">Todas</option>
             {Object.entries(ROTULO_PAGAMENTO).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </CampoSelect>
-          <CampoSelect label="Vendedor" value={userId} onChange={setUserId}>
-            <option value="">Todos</option>
-            {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
-          </CampoSelect>
+          <CampoSelectBusca label="Vendedor" opcoes={usuarios} value={userId} onChange={setUserId} placeholder="Todos" />
         </>
       }
       onGerar={gerar} onExportar={exportar} carregando={carregando}
@@ -327,10 +325,7 @@ function RelatorioCompras() {
         <>
           <CampoData label="De" value={dataInicio} onChange={setDataInicio} />
           <CampoData label="Até" value={dataFim} onChange={setDataFim} />
-          <CampoSelect label="Fornecedor" value={fornecedorId} onChange={setFornecedorId}>
-            <option value="">Todos</option>
-            {fornecedores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
-          </CampoSelect>
+          <CampoSelectBusca label="Fornecedor" opcoes={fornecedores} value={fornecedorId} onChange={setFornecedorId} subLabelFn={f => f.cnpj} placeholder="Todos" />
         </>
       }
       onGerar={gerar} onExportar={exportar} carregando={carregando}
@@ -487,16 +482,10 @@ function RelatorioFinanceiro() {
             <option value="receber">Apenas a receber</option>
           </CampoSelect>
           {tipo === "receber" && (
-            <CampoSelect label="Cliente" value={clienteId} onChange={setClienteId}>
-              <option value="">Todos</option>
-              {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-            </CampoSelect>
+            <CampoSelectBusca label="Cliente" opcoes={clientes} value={clienteId} onChange={setClienteId} placeholder="Todos" />
           )}
           {tipo === "pagar" && (
-            <CampoSelect label="Fornecedor" value={fornecedorId} onChange={setFornecedorId}>
-              <option value="">Todos</option>
-              {fornecedores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
-            </CampoSelect>
+            <CampoSelectBusca label="Fornecedor" opcoes={fornecedores} value={fornecedorId} onChange={setFornecedorId} subLabelFn={f => f.cnpj} placeholder="Todos" />
           )}
         </>
       }
@@ -622,14 +611,8 @@ function RelatorioEstoque() {
       titulo="Relatório de Estoque" cor={C.purple}
       filtros={
         <>
-          <CampoSelect label="Categoria" value={categoriaId} onChange={setCategoriaId}>
-            <option value="">Todas</option>
-            {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-          </CampoSelect>
-          <CampoSelect label="Fornecedor" value={fornecedorId} onChange={setFornecedorId}>
-            <option value="">Todos</option>
-            {fornecedores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
-          </CampoSelect>
+          <CampoSelectBusca label="Categoria" opcoes={categorias} value={categoriaId} onChange={setCategoriaId} placeholder="Todas" />
+          <CampoSelectBusca label="Fornecedor" opcoes={fornecedores} value={fornecedorId} onChange={setFornecedorId} subLabelFn={f => f.cnpj} placeholder="Todos" />
           <CampoSelect label="Situação" value={situacao} onChange={setSituacao}>
             <option value="">Todos</option>
             <option value="ok">Estoque OK</option>
@@ -887,10 +870,7 @@ function RelatorioComissoesLista() {
         <>
           <CampoData label="De" value={dataInicio} onChange={setDataInicio} />
           <CampoData label="Até" value={dataFim} onChange={setDataFim} />
-          <CampoSelect label="Vendedor" value={userId} onChange={setUserId}>
-            <option value="">Todos</option>
-            {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
-          </CampoSelect>
+          <CampoSelectBusca label="Vendedor" opcoes={usuarios} value={userId} onChange={setUserId} placeholder="Todos" />
         </>
       }
       onGerar={gerar} onExportar={exportar} carregando={carregando}
@@ -1088,6 +1068,23 @@ function CampoSelect({ label, value, onChange, children }) {
       <select value={value} onChange={e => onChange(e.target.value)} style={inputStyle}>
         {children}
       </select>
+    </div>
+  );
+}
+
+function CampoSelectBusca({ label, opcoes, value, onChange, labelFn, subLabelFn, placeholder }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", minWidth: 160 }}>
+      <label style={labelStyle}>{label}</label>
+      <SelectBusca
+        opcoes={opcoes}
+        value={value}
+        onChange={onChange}
+        labelFn={labelFn}
+        subLabelFn={subLabelFn}
+        placeholder={placeholder || "Todos"}
+        style={inputStyle}
+      />
     </div>
   );
 }

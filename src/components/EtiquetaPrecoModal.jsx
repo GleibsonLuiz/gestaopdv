@@ -82,6 +82,7 @@ export default function EtiquetaPrecoModal({ produto, onFechar }) {
               nomeProduto={produto.nome}
               precoVenda={produto.precoVenda}
               codigoBarras={produto.codigoBarras || produto.codigo}
+              referencia={produto.referencia}
             />
           </div>
 
@@ -122,6 +123,7 @@ export default function EtiquetaPrecoModal({ produto, onFechar }) {
             nomeProduto={produto.nome}
             precoVenda={produto.precoVenda}
             codigoBarras={produto.codigoBarras || produto.codigo}
+            referencia={produto.referencia}
           />
         ))}
       </div>

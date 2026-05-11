@@ -4,6 +4,7 @@ import Login from "./Login.jsx";
 import Clientes from "./Clientes.jsx";
 import Fornecedores from "./Fornecedores.jsx";
 import Produtos from "./Produtos.jsx";
+import Etiquetas from "./Etiquetas.jsx";
 import Estoque from "./Estoque.jsx";
 import Compras from "./Compras.jsx";
 import Orcamentos from "./Orcamentos.jsx";
@@ -148,7 +149,7 @@ export default function App() {
   // "projeto" e ferramenta interna, fica liberada.
   const TELA_MODULO = {
     pdv: "PDV", dashboard: "DASHBOARD", caixa: "CAIXA", clientes: "CLIENTES",
-    fornecedores: "FORNECEDORES", produtos: "PRODUTOS", estoque: "ESTOQUE",
+    fornecedores: "FORNECEDORES", produtos: "PRODUTOS", etiquetas: "PRODUTOS", estoque: "ESTOQUE",
     compras: "COMPRAS", orcamentos: "ORCAMENTOS",
     financeiro: "FINANCEIRO", relatorios: "RELATORIOS",
     comissoes: "COMISSOES",
@@ -165,7 +166,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     if (!podeVer(tela)) {
-      const primeira = ["pdv","dashboard","caixa","clientes","fornecedores","produtos",
+      const primeira = ["pdv","dashboard","caixa","clientes","fornecedores","produtos","etiquetas",
         "estoque","compras","orcamentos","financeiro","relatorios","comissoes","funcionarios","projeto","sistema","empresa"].find(podeVer);
       if (primeira && primeira !== tela) setTela(primeira);
     }
@@ -267,6 +268,9 @@ export default function App() {
           )}
           {podeAcessar(user, "PRODUTOS") && (
             <Item icone="📦" label="Produtos" ativo={tela === "produtos"} onClick={() => navegar("produtos")} />
+          )}
+          {podeAcessar(user, "PRODUTOS") && (
+            <Item icone="🏷️" label="Etiquetas" ativo={tela === "etiquetas"} onClick={() => navegar("etiquetas")} />
           )}
           {(podeAcessar(user, "CAIXA") || podeAcessar(user, "ESTOQUE") || podeAcessar(user, "COMPRAS") || podeAcessar(user, "ORCAMENTOS") || podeAcessar(user, "FINANCEIRO") || podeAcessar(user, "RELATORIOS")) && (
             <Secao>Operação</Secao>
@@ -424,6 +428,12 @@ export default function App() {
             <>
               <PageHeader titulo="Produtos" subtitulo="Cadastro de produtos com preço, estoque e categorização" />
               <Produtos user={user} />
+            </>
+          )}
+          {tela === "etiquetas" && (
+            <>
+              <PageHeader titulo="Etiquetas de Preço" subtitulo="Impressão em lote — selecione produtos por categoria e quantidade de cópias" />
+              <Etiquetas user={user} />
             </>
           )}
           {tela === "estoque" && (

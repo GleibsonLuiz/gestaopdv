@@ -6,12 +6,13 @@ const fmtBRL = (v) => {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 };
 
-// Etiqueta de preco 60mm x 40mm. Recebe os 3 dados minimos via props.
-// Usada tanto na previa em tela (escala manipulada por CSS) quanto
-// impressa via window.print() — o tamanho fisico em mm e o que garante
-// que cabe nas folhas de etiqueta adesiva padrao papelaria.
-export default function EtiquetaPreco({ nomeProduto, precoVenda, codigoBarras }) {
+// Etiqueta de preco 60mm x 40mm. Recebe nome, preco, codigo de barras
+// e referencia via props. O numero do codigo de barras e mostrado tanto
+// como texto (no topo, junto da referencia) quanto sob as barras pelo
+// proprio react-barcode (displayValue).
+export default function EtiquetaPreco({ nomeProduto, precoVenda, codigoBarras, referencia }) {
   const cb = String(codigoBarras || "").trim();
+  const ref = String(referencia || "").trim();
   return (
     <div className="etiqueta-preco" style={{
       width: "60mm",
@@ -28,6 +29,26 @@ export default function EtiquetaPreco({ nomeProduto, precoVenda, codigoBarras })
       overflow: "hidden",
       boxSizing: "border-box",
     }}>
+      {(ref || cb) && (
+        <div style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          fontSize: "6.5pt",
+          fontWeight: 600,
+          color: "#333",
+          gap: 4,
+          minHeight: "3mm",
+        }}>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {ref ? `REF: ${ref}` : ""}
+          </span>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {cb ? `CB: ${cb}` : ""}
+          </span>
+        </div>
+      )}
+
       <div style={{
         fontSize: "8pt",
         fontWeight: 600,
@@ -43,7 +64,7 @@ export default function EtiquetaPreco({ nomeProduto, precoVenda, codigoBarras })
       </div>
 
       <div style={{
-        fontSize: "20pt",
+        fontSize: "18pt",
         fontWeight: 900,
         textAlign: "center",
         lineHeight: 1,
@@ -62,8 +83,8 @@ export default function EtiquetaPreco({ nomeProduto, precoVenda, codigoBarras })
           <Barcode
             value={cb}
             format="CODE128"
-            width={1.2}
-            height={28}
+            width={1.1}
+            height={22}
             displayValue
             fontSize={8}
             margin={0}

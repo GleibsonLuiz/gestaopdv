@@ -1,7 +1,8 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { C } from "./lib/theme.js";
 import { api } from "./lib/api.js";
 import ActionsMenu from "./components/ActionsMenu.jsx";
+import { FormularioLuxuoso, Secao, Linha, Campo } from "./components/FormularioLuxuoso.jsx";
 
 
 const ESTADOS_BR = [
@@ -50,22 +51,41 @@ async function buscarCepViaCEP(cepMascarado) {
 
 const VAZIO = {
   nome: "", cpfCnpj: "", email: "", telefone: "",
-  endereco: "", numero: "", cidade: "", estado: "", cep: "", observacoes: "",
+  endereco: "", numero: "", complemento: "", cidade: "", estado: "", cep: "", observacoes: "",
 };
 
-function dividirEnderecoNumero(enderecoCompleto) {
+const CAMPOS_PROGRESSO = ["nome", "cpfCnpj", "email", "telefone", "cep", "endereco", "numero", "cidade", "estado", "observacoes"];
+
+function dividirEnderecoCompleto(enderecoCompleto) {
   const valor = (enderecoCompleto || "").trim();
-  const m = valor.match(/^(.*),\s*([\dA-Za-z/-]+)\s*$/);
-  if (m) return { endereco: m[1].trim(), numero: m[2].trim() };
-  return { endereco: valor, numero: "" };
+  if (!valor) return { endereco: "", numero: "", complemento: "" };
+  // Formato esperado: "Logradouro, numero - complemento" (todos opcionais).
+  // O complemento e separado por " - " para coexistir com virgulas no logradouro.
+  let endereco = valor;
+  let complemento = "";
+  const idxTraco = endereco.indexOf(" - ");
+  if (idxTraco >= 0) {
+    complemento = endereco.slice(idxTraco + 3).trim();
+    endereco = endereco.slice(0, idxTraco).trim();
+  }
+  let numero = "";
+  const m = endereco.match(/^(.*),\s*([\dA-Za-z/-]+)\s*$/);
+  if (m) {
+    endereco = m[1].trim();
+    numero = m[2].trim();
+  }
+  return { endereco, numero, complemento };
 }
 
-function juntarEnderecoNumero(endereco, numero) {
+function juntarEnderecoCompleto(endereco, numero, complemento) {
   const e = (endereco || "").trim();
   const n = (numero || "").trim();
-  if (!e) return n;
-  if (!n) return e;
-  return `${e}, ${n}`;
+  const c = (complemento || "").trim();
+  let base = e;
+  if (e && n) base = `${e}, ${n}`;
+  else if (!e && n) base = n;
+  if (c) return base ? `${base} - ${c}` : c;
+  return base;
 }
 
 export default function Clientes({ user }) {
@@ -86,6 +106,14 @@ export default function Clientes({ user }) {
 
   const podeEditar = user.role === "ADMIN" || user.role === "GERENTE";
   const podeExcluir = user.role === "ADMIN";
+
+  const progressoForm = useMemo(() => {
+    let preenchidos = 0;
+    for (const k of CAMPOS_PROGRESSO) {
+      if (String(form[k] || "").trim()) preenchidos++;
+    }
+    return Math.round((preenchidos / CAMPOS_PROGRESSO.length) * 100);
+  }, [form]);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -121,7 +149,7 @@ export default function Clientes({ user }) {
 
   function abrirEdicao(cliente) {
     setEditando(cliente);
-    const { endereco, numero } = dividirEnderecoNumero(cliente.endereco);
+    const { endereco, numero, complemento } = dividirEnderecoCompleto(cliente.endereco);
     setForm({
       nome: cliente.nome || "",
       cpfCnpj: mascararCpfCnpj(cliente.cpfCnpj || ""),
@@ -129,6 +157,7 @@ export default function Clientes({ user }) {
       telefone: cliente.telefone || "",
       endereco,
       numero,
+      complemento,
       cidade: cliente.cidade || "",
       estado: cliente.estado || "",
       cep: mascararCep(cliente.cep || ""),
@@ -172,8 +201,8 @@ export default function Clientes({ user }) {
     setNomeInvalido(false);
     setSalvando(true);
     try {
-      const { numero, ...resto } = form;
-      const payload = { ...resto, endereco: juntarEnderecoNumero(form.endereco, numero) };
+      const { numero, complemento, ...resto } = form;
+      const payload = { ...resto, endereco: juntarEnderecoCompleto(form.endereco, numero, complemento) };
       if (editando) {
         await api.atualizarCliente(editando.id, payload);
         flash("Cliente atualizado");
@@ -208,53 +237,6 @@ export default function Clientes({ user }) {
 
   return (
     <div>
-      <style>{`
-        .btn-cliente-primario {
-          background: linear-gradient(135deg, ${C.accent}, ${C.purple});
-          color: ${C.white};
-          border: none;
-          border-radius: 8px;
-          padding: 10px 22px;
-          font-weight: 700;
-          font-size: 13px;
-          cursor: pointer;
-          transition: filter 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
-        }
-        .btn-cliente-primario:hover:not(:disabled) {
-          filter: brightness(1.15);
-          transform: translateY(-1px);
-          box-shadow: 0 4px 12px ${C.accent}55;
-        }
-        .btn-cliente-primario:active:not(:disabled) {
-          transform: translateY(0);
-          filter: brightness(0.95);
-        }
-        .btn-cliente-primario:disabled {
-          background: ${C.muted};
-          cursor: default;
-          opacity: 0.75;
-        }
-        .btn-cliente-secundario {
-          background: transparent;
-          border: 1px solid ${C.border};
-          color: ${C.muted};
-          border-radius: 8px;
-          padding: 10px 18px;
-          font-weight: 500;
-          font-size: 13px;
-          cursor: pointer;
-          transition: color 0.15s ease, border-color 0.15s ease;
-        }
-        .btn-cliente-secundario:hover:not(:disabled) {
-          color: ${C.text};
-          border-color: ${C.accent}88;
-        }
-        .btn-cliente-secundario:disabled {
-          opacity: 0.5;
-          cursor: default;
-        }
-      `}</style>
-
       {/* Toolbar */}
       <div style={{
         display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center",
@@ -374,183 +356,180 @@ export default function Clientes({ user }) {
         ))}
       </div>
 
-      {/* Modal */}
-      {modalAberto && (
-        <div onClick={() => !salvando && setModalAberto(false)} style={{
-          position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          padding: 20, zIndex: 100,
-        }}>
-          <form onSubmit={salvar} onClick={e => e.stopPropagation()} style={{
-            background: C.card, border: `1px solid ${C.border}`, borderRadius: 14,
-            width: "100%", maxWidth: 640, maxHeight: "90vh", overflowY: "auto",
-            padding: 24,
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <div style={{ color: C.white, fontWeight: 700, fontSize: 18 }}>
-                {editando ? "Editar Cliente" : "Novo Cliente"}
-              </div>
-              <button type="button" onClick={() => setModalAberto(false)} style={{
-                background: "transparent", border: "none", color: C.muted, fontSize: 20, cursor: "pointer",
-              }}>×</button>
-            </div>
+      {/* Modal — layout luxuoso */}
+      <FormularioLuxuoso
+        aberto={modalAberto}
+        onFechar={() => setModalAberto(false)}
+        onSubmit={salvar}
+        titulo={editando ? "Editar" : "Novo"}
+        tituloDestaque="Cliente"
+        subtitulo={
+          editando
+            ? "Atualize as informacoes deste cliente. Campos marcados com • sao obrigatorios."
+            : "Cadastre um cliente na sua carteira. Campos marcados com • sao obrigatorios."
+        }
+        numeroLote={editando ? `#${String(editando.id || "").slice(0, 4).toUpperCase()}` : null}
+        data={new Date().toLocaleDateString("pt-BR")}
+        progresso={progressoForm}
+        salvando={salvando}
+        textoSalvar="Criar cliente"
+        editando={!!editando}
+        erro={erroForm}
+        larguraMax={760}
+      >
+        <Secao legenda="Identificação">
+          <Linha cols={1}>
+            <Campo
+              label="Nome completo"
+              obrigatorio
+              erro={nomeInvalido ? "Informe o nome do cliente." : null}
+            >
+              <input
+                className="lux-input"
+                value={form.nome}
+                onChange={e => {
+                  setForm({ ...form, nome: e.target.value });
+                  if (nomeInvalido && e.target.value.trim()) setNomeInvalido(false);
+                }}
+                placeholder="Ex.: Helena Aparecida Martins"
+                autoFocus
+                autoComplete="name"
+                aria-invalid={nomeInvalido ? "true" : undefined}
+              />
+            </Campo>
+          </Linha>
+          <Linha>
+            <Campo label="CPF / CNPJ">
+              <input
+                className="lux-input"
+                value={form.cpfCnpj}
+                onChange={e => setForm({ ...form, cpfCnpj: mascararCpfCnpj(e.target.value) })}
+                placeholder="000.000.000-00"
+                inputMode="numeric"
+                maxLength={18}
+              />
+            </Campo>
+            <Campo label="Telefone">
+              <input
+                className="lux-input"
+                value={form.telefone}
+                onChange={e => setForm({ ...form, telefone: e.target.value })}
+                placeholder="(00) 00000-0000"
+                inputMode="numeric"
+                autoComplete="tel"
+              />
+            </Campo>
+          </Linha>
+          <Linha cols={1}>
+            <Campo label="E-mail">
+              <input
+                className="lux-input"
+                type="email"
+                value={form.email}
+                onChange={e => setForm({ ...form, email: e.target.value })}
+                placeholder="cliente@empresa.com.br"
+                autoComplete="email"
+              />
+            </Campo>
+          </Linha>
+        </Secao>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <Campo label="Nome *" col2>
-                <input
-                  value={form.nome}
-                  onChange={e => {
-                    setForm({ ...form, nome: e.target.value });
-                    if (nomeInvalido && e.target.value.trim()) setNomeInvalido(false);
-                  }}
-                  autoFocus
-                  style={{
-                    ...inputStyle,
-                    border: nomeInvalido ? `1px solid ${C.red}` : `1px solid ${C.border}`,
-                    boxShadow: nomeInvalido ? `0 0 0 2px ${C.red}33` : "none",
-                  }}
-                />
-                {nomeInvalido && (
-                  <div style={{ color: C.red, fontSize: 11, marginTop: 4, fontWeight: 600 }}>
-                    Informe o nome do cliente.
-                  </div>
-                )}
-              </Campo>
-              <Campo label="CPF/CNPJ">
-                <input
-                  value={form.cpfCnpj}
-                  onChange={e => setForm({ ...form, cpfCnpj: mascararCpfCnpj(e.target.value) })}
-                  placeholder="000.000.000-00"
-                  inputMode="numeric"
-                  style={inputStyle}
-                />
-              </Campo>
-              <Campo label="Telefone">
-                <input
-                  value={form.telefone}
-                  onChange={e => setForm({ ...form, telefone: e.target.value })}
-                  placeholder="(00) 00000-0000"
-                  style={inputStyle}
-                />
-              </Campo>
-              <Campo label="Email" col2>
-                <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} style={inputStyle} />
-              </Campo>
-              <Campo label="CEP">
-                <input
-                  value={form.cep}
-                  onChange={e => aplicarCep(e.target.value)}
-                  onBlur={e => aplicarCep(e.target.value)}
-                  placeholder="00000-000"
-                  inputMode="numeric"
-                  style={inputStyle}
-                />
-                {buscandoCep && (
-                  <div style={{ color: C.muted, fontSize: 11, marginTop: 4 }}>
-                    Buscando endereço...
-                  </div>
-                )}
-                {cepNaoEncontrado && !buscandoCep && (
-                  <div style={{ color: C.yellow, fontSize: 11, marginTop: 4 }}>
-                    CEP não encontrado. Preencha manualmente.
-                  </div>
-                )}
-              </Campo>
-              <Campo label="Estado">
-                <select
-                  value={form.estado}
-                  onChange={e => setForm({ ...form, estado: e.target.value })}
-                  style={{ ...inputStyle, cursor: "pointer" }}
-                >
-                  <option value="">—</option>
-                  {ESTADOS_BR.map(uf => (
-                    <option key={uf} value={uf}>{uf}</option>
-                  ))}
-                </select>
-              </Campo>
-              <Campo label="Endereço" col2>
-                <input value={form.endereco} onChange={e => setForm({ ...form, endereco: e.target.value })} style={inputStyle} />
-              </Campo>
-              <Campo label="Número">
-                <input
-                  value={form.numero}
-                  onChange={e => setForm({ ...form, numero: e.target.value })}
-                  placeholder="123"
-                  inputMode="numeric"
-                  style={inputStyle}
-                />
-              </Campo>
-              <Campo label="Cidade">
-                <input value={form.cidade} onChange={e => setForm({ ...form, cidade: e.target.value })} style={inputStyle} />
-              </Campo>
-              <Campo label="Observações" col2>
-                <textarea value={form.observacoes} onChange={e => setForm({ ...form, observacoes: e.target.value })}
-                  rows={3} style={{ ...inputStyle, resize: "vertical", fontFamily: "inherit" }} />
-              </Campo>
-            </div>
-
-            {erroForm && (
-              <div style={{
-                marginTop: 14, padding: "10px 12px", borderRadius: 8,
-                background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red, fontSize: 13,
-              }}>
-                {erroForm}
-              </div>
-            )}
-
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20 }}>
-              <button
-                type="button"
-                onClick={() => setModalAberto(false)}
-                disabled={salvando}
-                className="btn-cliente-secundario"
+        <Secao legenda="Endereço">
+          <Linha>
+            <Campo
+              label="CEP"
+              hint={
+                buscandoCep
+                  ? "Buscando…"
+                  : cepNaoEncontrado
+                    ? "Não encontrado"
+                    : null
+              }
+            >
+              <input
+                className="lux-input"
+                value={form.cep}
+                onChange={e => aplicarCep(e.target.value)}
+                onBlur={e => aplicarCep(e.target.value)}
+                placeholder="00000-000"
+                inputMode="numeric"
+                maxLength={9}
+                autoComplete="postal-code"
+              />
+            </Campo>
+            <Campo label="Estado">
+              <select
+                className="lux-select"
+                value={form.estado}
+                onChange={e => setForm({ ...form, estado: e.target.value })}
+                autoComplete="address-level1"
               >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={salvando}
-                className="btn-cliente-primario"
-              >
-                {salvando ? "Salvando..." : editando ? "Salvar alterações" : "Criar cliente"}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+                <option value="">Selecione…</option>
+                {ESTADOS_BR.map(uf => (
+                  <option key={uf} value={uf}>{uf}</option>
+                ))}
+              </select>
+            </Campo>
+          </Linha>
+          <Linha cols={1}>
+            <Campo label="Logradouro">
+              <input
+                className="lux-input"
+                value={form.endereco}
+                onChange={e => setForm({ ...form, endereco: e.target.value })}
+                placeholder="Rua, avenida ou alameda"
+                autoComplete="street-address"
+              />
+            </Campo>
+          </Linha>
+          <Linha tilt>
+            <Campo label="Cidade">
+              <input
+                className="lux-input"
+                value={form.cidade}
+                onChange={e => setForm({ ...form, cidade: e.target.value })}
+                placeholder="São Paulo"
+                autoComplete="address-level2"
+              />
+            </Campo>
+            <Campo label="Número">
+              <input
+                className="lux-input"
+                value={form.numero}
+                onChange={e => setForm({ ...form, numero: e.target.value })}
+                placeholder="123"
+                inputMode="numeric"
+              />
+            </Campo>
+            <Campo label="Complemento">
+              <input
+                className="lux-input"
+                value={form.complemento || ""}
+                onChange={e => setForm({ ...form, complemento: e.target.value })}
+                placeholder="Apto, sala, bloco"
+              />
+            </Campo>
+          </Linha>
+        </Secao>
+
+        <Secao legenda="Observações">
+          <Linha cols={1}>
+            <Campo
+              label="Notas internas"
+              hint={`${(form.observacoes || "").length} / 500`}
+            >
+              <textarea
+                className="lux-textarea"
+                value={form.observacoes}
+                onChange={e => setForm({ ...form, observacoes: e.target.value.slice(0, 500) })}
+                maxLength={500}
+                placeholder="Preferências de contato, segmento, histórico relevante…"
+                rows={3}
+              />
+            </Campo>
+          </Linha>
+        </Secao>
+      </FormularioLuxuoso>
     </div>
   );
-}
-
-function Campo({ label, col2, children }) {
-  return (
-    <div style={{ gridColumn: col2 ? "1 / -1" : "auto" }}>
-      <label style={{ display: "block", color: C.muted, fontSize: 12, marginBottom: 6, fontWeight: 600 }}>
-        {label}
-      </label>
-      {children}
-    </div>
-  );
-}
-
-const inputStyle = {
-  width: "100%", background: C.surface, border: `1px solid ${C.border}`,
-  borderRadius: 8, padding: "9px 12px", color: C.text, fontSize: 13,
-  outline: "none", boxSizing: "border-box",
-};
-
-function btnIcone(cor) {
-  return {
-    background: cor + "22", border: `1px solid ${cor}55`, color: cor,
-    borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 600,
-    cursor: "pointer",
-  };
-}
-
-function btnIconeSolido(cor) {
-  return {
-    background: cor, border: `1px solid ${cor}`, color: C.white,
-    borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 700,
-    cursor: "pointer",
-  };
 }

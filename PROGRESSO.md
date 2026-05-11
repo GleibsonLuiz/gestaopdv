@@ -133,6 +133,40 @@ Não existe rota/UI para **cancelar/excluir** uma compra. Hoje, se uma compra é
 
 ## Histórico de sessões
 
+### Sessão — 2026-05-11 (Design luxuoso nos modais de cadastro)
+
+Aplicado em Clientes, Fornecedores e Produtos um layout de modal "luxuoso" baseado no protótipo HTML em `CLIENTE/novo-cliente-luxuoso.html`. Mantém o sistema de 6 temas: usa `C.accent / C.bg / C.card / ...` em vez das cores OKLCH champagne fixas do protótipo, então funciona em qualquer tema.
+
+**Novo componente compartilhado** ([src/components/FormularioLuxuoso.jsx](src/components/FormularioLuxuoso.jsx))
+
+- `<FormularioLuxuoso>`: shell de modal com overlay radial-gradient, eyebrow superior em mono uppercase, título em serif Cormorant Garamond com palavra-chave em itálico colorida com `C.accent`, barra de progresso opcional, rodapé com atalho `⏎`/`Esc` e botões gradient (`accent → purple`)
+- `<Secao legenda="...">`: fieldset com legenda em mono uppercase + linha hairline
+- `<Linha cols={1|2|3} tilt>`: grid responsivo (`cols-3` colapsa para 2cols em <720px; `tilt` é o layout 1.2fr/0.6fr/1fr de Cidade/Número/Complemento)
+- `<Campo label obrigatorio hint erro span>`: wrapper com label `+ • `, hint canto-direito, mensagem de erro em mono
+- Classes CSS injetadas: `.lux-input`, `.lux-select`, `.lux-textarea` com hover/focus rings adaptados ao tema via `color-mix(in srgb, var(--accent) X%, transparent)`
+- Carrega Google Font `Cormorant Garamond` via `<link>` injetado no `<head>` na primeira montagem
+- ESC fecha o modal (se não estiver salvando)
+- O overlay clicável fora fecha também
+
+**Adaptações ao tema atual** (vs HTML original)
+
+- HTML usava OKLCH champagne/dourado fixo; agora gradiente `linear-gradient(135deg, C.accent, C.purple)` para botão primário (mesmo dos outros botões do sistema)
+- Border-focus, sombras e tints usam `color-mix(...)` com `var(--accent)`/`var(--red)`/etc — requer Chrome 111+, Safari 16.2+, Firefox 113+
+- Tipografia: serif só no título; corpo continua na fonte herdada (Inter/Segoe UI)
+
+**Refatoração das telas**
+
+- [src/Clientes.jsx](src/Clientes.jsx): modal substituído por `<FormularioLuxuoso>` com 3 seções (Identificação, Endereço, Observações). Adicionado campo **Complemento** (Apto/sala/bloco) — persiste no `endereco` como sufixo `" - <complemento>"` (helpers `dividirEnderecoCompleto`/`juntarEnderecoCompleto`). Progresso 0-100% calculado a partir de 10 campos preenchidos. Removidas CSS classes `.btn-cliente-*` e helpers órfãos.
+- [src/Fornecedores.jsx](src/Fornecedores.jsx): modal substituído com 2 seções (Identificação, Endereço). Adicionadas máscaras `mascararCnpj` (00.000.000/0000-00), `mascararTelefone`, `mascararCep` + busca ViaCEP no blur do CEP + dropdown de Estado com 27 UFs.
+- [src/Produtos.jsx](src/Produtos.jsx): modal substituído com 5 seções (Identificação, Imagem, Tipo do item, Preços e estoque, Categorização). Largura aumentada para 860px. Componentes ricos (SeletorTipoItem, CalculoMarkup, DropzoneImagem) preservados intactos — apenas reembalados em `<Secao>` + `<CampoLux>`. `inputStyle` mantido porque ainda é usado pelos sub-inputs do markup.
+
+**Validação**
+
+- `npx vite build` → ✓ built in 4.27s, sem erros
+- Funcionalidade preservada: máscaras, validação de nome obrigatório, ViaCEP autofill, sugestão de código de produto, cálculo de markup, upload de imagem, criação inline de categoria, atalhos de teclado (ESC)
+
+---
+
 ### Sessão — 2026-05-10 (PDV → Conta a Receber automática)
 
 Contraparte do que Compras já fazia com ContaPagar: ao finalizar uma venda no PDV com **BOLETO**, **CARTAO_CREDITO** ou **CREDIARIO**, o caixa pode definir vencimento + parcelas no próprio modal de pagamento e o backend gera a(s) ContaReceber vinculadas à venda na **mesma transação**.
@@ -962,7 +996,9 @@ Em 2026-05-05, **estorno de compra**: nova rota `POST /compras/:id/estornar` (AD
 
 Em 2026-05-10, **venda a prazo → ContaReceber**: contraparte simétrica de Compras×ContaPagar para o lado das vendas. PDV gera ContaReceber automática (com parcelas opcionais) ao finalizar com BOLETO/CARTAO_CREDITO/CREDIARIO; cancelamento da venda cancela as pendentes e bloqueia se houver alguma já recebida.
 
-Estado em 2026-05-10: commit aplicado e enviado para origin/main.
+Em 2026-05-11, **design luxuoso nos modais de cadastro**: aplicado um layout premium nos modais de Clientes, Fornecedores e Produtos a partir do protótipo HTML em `CLIENTE/`. Novo componente compartilhado `<FormularioLuxuoso>` em `src/components/` com eyebrow superior em mono, título serif Cormorant Garamond com itálico colorido, barra de progresso 0-100%, fieldsets com legenda hairline, rodapé com atalhos `⏎`/`Esc` e botões gradient. Cores derivadas do tema ativo via `color-mix(in srgb, var(--accent), transparent)` — funciona nos 6 temas. Adicionado campo Complemento em Clientes, máscaras CNPJ/CEP/Telefone + ViaCEP em Fornecedores. Componentes ricos do Produtos (SeletorTipoItem, CalculoMarkup, DropzoneImagem) preservados.
+
+Estado em 2026-05-11: design aplicado, `vite build` OK.
 
 ### Lacunas conhecidas (polimento opcional)
 

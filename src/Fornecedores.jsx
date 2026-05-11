@@ -1,13 +1,63 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { C } from "./lib/theme.js";
 import { api } from "./lib/api.js";
 import ActionsMenu from "./components/ActionsMenu.jsx";
+import { FormularioLuxuoso, Secao, Linha, Campo } from "./components/FormularioLuxuoso.jsx";
 
+
+const ESTADOS_BR = [
+  "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO",
+  "MA", "MG", "MS", "MT", "PA", "PB", "PE", "PI", "PR",
+  "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO",
+];
 
 const VAZIO = {
   nome: "", cnpj: "", email: "", telefone: "",
   endereco: "", cidade: "", estado: "", cep: "",
 };
+
+const CAMPOS_PROGRESSO = ["nome", "cnpj", "email", "telefone", "cep", "endereco", "cidade", "estado"];
+
+function mascararCnpj(v) {
+  const d = (v || "").replace(/\D/g, "").slice(0, 14);
+  if (d.length <= 2) return d;
+  if (d.length <= 5) return `${d.slice(0, 2)}.${d.slice(2)}`;
+  if (d.length <= 8) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`;
+  if (d.length <= 12) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8)}`;
+  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+}
+
+function mascararCep(v) {
+  const d = (v || "").replace(/\D/g, "").slice(0, 8);
+  if (d.length <= 5) return d;
+  return `${d.slice(0, 5)}-${d.slice(5)}`;
+}
+
+function mascararTelefone(v) {
+  const d = (v || "").replace(/\D/g, "").slice(0, 11);
+  if (d.length <= 10) {
+    return d.replace(/^(\d{2})(\d)/, "($1) $2").replace(/(\d{4})(\d)/, "$1-$2");
+  }
+  return d.replace(/^(\d{2})(\d)/, "($1) $2").replace(/(\d{5})(\d)/, "$1-$2");
+}
+
+async function buscarCepViaCEP(cepMascarado) {
+  const d = cepMascarado.replace(/\D/g, "");
+  if (d.length !== 8) return null;
+  try {
+    const r = await fetch(`https://viacep.com.br/ws/${d}/json/`);
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (j.erro) return null;
+    return {
+      endereco: [j.logradouro, j.bairro].filter(Boolean).join(", "),
+      cidade: j.localidade || "",
+      estado: j.uf || "",
+    };
+  } catch {
+    return null;
+  }
+}
 
 export default function Fornecedores({ user }) {
   const [fornecedores, setFornecedores] = useState([]);
@@ -21,9 +71,41 @@ export default function Fornecedores({ user }) {
   const [salvando, setSalvando] = useState(false);
   const [erroForm, setErroForm] = useState("");
   const [mensagem, setMensagem] = useState("");
+  const [nomeInvalido, setNomeInvalido] = useState(false);
+  const [buscandoCep, setBuscandoCep] = useState(false);
+  const [cepNaoEncontrado, setCepNaoEncontrado] = useState(false);
 
   const podeEditar = user.role === "ADMIN" || user.role === "GERENTE";
   const podeExcluir = user.role === "ADMIN";
+
+  const progressoForm = useMemo(() => {
+    let preenchidos = 0;
+    for (const k of CAMPOS_PROGRESSO) {
+      if (String(form[k] || "").trim()) preenchidos++;
+    }
+    return Math.round((preenchidos / CAMPOS_PROGRESSO.length) * 100);
+  }, [form]);
+
+  async function aplicarCep(valor) {
+    const masked = mascararCep(valor);
+    setForm(prev => ({ ...prev, cep: masked }));
+    setCepNaoEncontrado(false);
+    const digitos = masked.replace(/\D/g, "");
+    if (digitos.length !== 8) return;
+    setBuscandoCep(true);
+    const dados = await buscarCepViaCEP(masked);
+    setBuscandoCep(false);
+    if (!dados) {
+      setCepNaoEncontrado(true);
+      return;
+    }
+    setForm(prev => ({
+      ...prev,
+      endereco: dados.endereco || prev.endereco,
+      cidade: dados.cidade || prev.cidade,
+      estado: dados.estado || prev.estado,
+    }));
+  }
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -52,6 +134,8 @@ export default function Fornecedores({ user }) {
     setEditando(null);
     setForm(VAZIO);
     setErroForm("");
+    setNomeInvalido(false);
+    setCepNaoEncontrado(false);
     setModalAberto(true);
   }
 
@@ -59,15 +143,17 @@ export default function Fornecedores({ user }) {
     setEditando(fornecedor);
     setForm({
       nome: fornecedor.nome || "",
-      cnpj: fornecedor.cnpj || "",
+      cnpj: mascararCnpj(fornecedor.cnpj || ""),
       email: fornecedor.email || "",
-      telefone: fornecedor.telefone || "",
+      telefone: mascararTelefone(fornecedor.telefone || ""),
       endereco: fornecedor.endereco || "",
       cidade: fornecedor.cidade || "",
       estado: fornecedor.estado || "",
-      cep: fornecedor.cep || "",
+      cep: mascararCep(fornecedor.cep || ""),
     });
     setErroForm("");
+    setNomeInvalido(false);
+    setCepNaoEncontrado(false);
     setModalAberto(true);
   }
 
@@ -75,9 +161,11 @@ export default function Fornecedores({ user }) {
     e.preventDefault();
     setErroForm("");
     if (!form.nome.trim()) {
+      setNomeInvalido(true);
       setErroForm("Nome é obrigatório");
       return;
     }
+    setNomeInvalido(false);
     setSalvando(true);
     try {
       if (editando) {
@@ -221,112 +309,144 @@ export default function Fornecedores({ user }) {
         ))}
       </div>
 
-      {modalAberto && (
-        <div onClick={() => !salvando && setModalAberto(false)} style={{
-          position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          padding: 20, zIndex: 100,
-        }}>
-          <form onSubmit={salvar} onClick={e => e.stopPropagation()} style={{
-            background: C.card, border: `1px solid ${C.border}`, borderRadius: 14,
-            width: "100%", maxWidth: 640, maxHeight: "90vh", overflowY: "auto",
-            padding: 24,
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <div style={{ color: C.white, fontWeight: 700, fontSize: 18 }}>
-                {editando ? "Editar Fornecedor" : "Novo Fornecedor"}
-              </div>
-              <button type="button" onClick={() => setModalAberto(false)} style={{
-                background: "transparent", border: "none", color: C.muted, fontSize: 20, cursor: "pointer",
-              }}>×</button>
-            </div>
+      <FormularioLuxuoso
+        aberto={modalAberto}
+        onFechar={() => setModalAberto(false)}
+        onSubmit={salvar}
+        titulo={editando ? "Editar" : "Novo"}
+        tituloDestaque="Fornecedor"
+        subtitulo={
+          editando
+            ? "Atualize os dados deste fornecedor. Campos marcados com • sao obrigatorios."
+            : "Cadastre um fornecedor no seu catalogo. Campos marcados com • sao obrigatorios."
+        }
+        numeroLote={editando ? `#${String(editando.id || "").slice(0, 4).toUpperCase()}` : null}
+        data={new Date().toLocaleDateString("pt-BR")}
+        progresso={progressoForm}
+        salvando={salvando}
+        textoSalvar="Criar fornecedor"
+        editando={!!editando}
+        erro={erroForm}
+        larguraMax={760}
+      >
+        <Secao legenda="Identificação">
+          <Linha cols={1}>
+            <Campo
+              label="Razão social / Nome"
+              obrigatorio
+              erro={nomeInvalido ? "Informe o nome do fornecedor." : null}
+            >
+              <input
+                className="lux-input"
+                value={form.nome}
+                onChange={e => {
+                  setForm({ ...form, nome: e.target.value });
+                  if (nomeInvalido && e.target.value.trim()) setNomeInvalido(false);
+                }}
+                placeholder="Ex.: Distribuidora Papel & Cia Ltda"
+                autoFocus
+                aria-invalid={nomeInvalido ? "true" : undefined}
+              />
+            </Campo>
+          </Linha>
+          <Linha>
+            <Campo label="CNPJ">
+              <input
+                className="lux-input"
+                value={form.cnpj}
+                onChange={e => setForm({ ...form, cnpj: mascararCnpj(e.target.value) })}
+                placeholder="00.000.000/0000-00"
+                inputMode="numeric"
+                maxLength={18}
+              />
+            </Campo>
+            <Campo label="Telefone">
+              <input
+                className="lux-input"
+                value={form.telefone}
+                onChange={e => setForm({ ...form, telefone: mascararTelefone(e.target.value) })}
+                placeholder="(00) 0000-0000"
+                inputMode="numeric"
+                maxLength={15}
+                autoComplete="tel"
+              />
+            </Campo>
+          </Linha>
+          <Linha cols={1}>
+            <Campo label="E-mail">
+              <input
+                className="lux-input"
+                type="email"
+                value={form.email}
+                onChange={e => setForm({ ...form, email: e.target.value })}
+                placeholder="contato@fornecedor.com.br"
+                autoComplete="email"
+              />
+            </Campo>
+          </Linha>
+        </Secao>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <Campo label="Nome *" col2>
-                <input value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })}
-                  required style={inputStyle} autoFocus />
-              </Campo>
-              <Campo label="CNPJ">
-                <input value={form.cnpj} onChange={e => setForm({ ...form, cnpj: e.target.value })} style={inputStyle} />
-              </Campo>
-              <Campo label="Telefone">
-                <input value={form.telefone} onChange={e => setForm({ ...form, telefone: e.target.value })} style={inputStyle} />
-              </Campo>
-              <Campo label="Email" col2>
-                <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} style={inputStyle} />
-              </Campo>
-              <Campo label="Endereço" col2>
-                <input value={form.endereco} onChange={e => setForm({ ...form, endereco: e.target.value })} style={inputStyle} />
-              </Campo>
-              <Campo label="Cidade">
-                <input value={form.cidade} onChange={e => setForm({ ...form, cidade: e.target.value })} style={inputStyle} />
-              </Campo>
-              <Campo label="Estado">
-                <input value={form.estado} onChange={e => setForm({ ...form, estado: e.target.value.toUpperCase().slice(0, 2) })}
-                  maxLength={2} style={inputStyle} />
-              </Campo>
-              <Campo label="CEP" col2>
-                <input value={form.cep} onChange={e => setForm({ ...form, cep: e.target.value })} style={inputStyle} />
-              </Campo>
-            </div>
-
-            {erroForm && (
-              <div style={{
-                marginTop: 14, padding: "10px 12px", borderRadius: 8,
-                background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red, fontSize: 13,
-              }}>{erroForm}</div>
-            )}
-
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20 }}>
-              <button type="button" onClick={() => setModalAberto(false)} disabled={salvando} style={{
-                background: C.surface, border: `1px solid ${C.border}`, color: C.text,
-                borderRadius: 8, padding: "10px 18px", fontWeight: 600, fontSize: 13, cursor: "pointer",
-              }}>Cancelar</button>
-              <button type="submit" disabled={salvando} style={{
-                background: salvando ? C.muted : `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-                color: C.white, border: "none", borderRadius: 8,
-                padding: "10px 22px", fontWeight: 700, fontSize: 13,
-                cursor: salvando ? "default" : "pointer",
-              }}>
-                {salvando ? "Salvando..." : editando ? "Salvar alterações" : "Criar fornecedor"}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+        <Secao legenda="Endereço">
+          <Linha>
+            <Campo
+              label="CEP"
+              hint={
+                buscandoCep
+                  ? "Buscando…"
+                  : cepNaoEncontrado
+                    ? "Não encontrado"
+                    : null
+              }
+            >
+              <input
+                className="lux-input"
+                value={form.cep}
+                onChange={e => aplicarCep(e.target.value)}
+                onBlur={e => aplicarCep(e.target.value)}
+                placeholder="00000-000"
+                inputMode="numeric"
+                maxLength={9}
+                autoComplete="postal-code"
+              />
+            </Campo>
+            <Campo label="Estado">
+              <select
+                className="lux-select"
+                value={form.estado}
+                onChange={e => setForm({ ...form, estado: e.target.value })}
+                autoComplete="address-level1"
+              >
+                <option value="">Selecione…</option>
+                {ESTADOS_BR.map(uf => (
+                  <option key={uf} value={uf}>{uf}</option>
+                ))}
+              </select>
+            </Campo>
+          </Linha>
+          <Linha cols={1}>
+            <Campo label="Endereço">
+              <input
+                className="lux-input"
+                value={form.endereco}
+                onChange={e => setForm({ ...form, endereco: e.target.value })}
+                placeholder="Rua, avenida, número e bairro"
+                autoComplete="street-address"
+              />
+            </Campo>
+          </Linha>
+          <Linha cols={1}>
+            <Campo label="Cidade">
+              <input
+                className="lux-input"
+                value={form.cidade}
+                onChange={e => setForm({ ...form, cidade: e.target.value })}
+                placeholder="São Paulo"
+                autoComplete="address-level2"
+              />
+            </Campo>
+          </Linha>
+        </Secao>
+      </FormularioLuxuoso>
     </div>
   );
-}
-
-function Campo({ label, col2, children }) {
-  return (
-    <div style={{ gridColumn: col2 ? "1 / -1" : "auto" }}>
-      <label style={{ display: "block", color: C.muted, fontSize: 12, marginBottom: 6, fontWeight: 600 }}>
-        {label}
-      </label>
-      {children}
-    </div>
-  );
-}
-
-const inputStyle = {
-  width: "100%", background: C.surface, border: `1px solid ${C.border}`,
-  borderRadius: 8, padding: "9px 12px", color: C.text, fontSize: 13,
-  outline: "none", boxSizing: "border-box",
-};
-
-function btnIcone(cor) {
-  return {
-    background: cor + "22", border: `1px solid ${cor}55`, color: cor,
-    borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 600,
-    cursor: "pointer",
-  };
-}
-
-function btnIconeSolido(cor) {
-  return {
-    background: cor, border: `1px solid ${cor}`, color: C.white,
-    borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 700,
-    cursor: "pointer",
-  };
 }

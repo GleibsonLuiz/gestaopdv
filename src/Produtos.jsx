@@ -1,9 +1,10 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { C } from "./lib/theme.js";
 import { api, BASE_URL } from "./lib/api.js";
 import MovimentarEstoqueModal from "./MovimentarEstoqueModal.jsx";
 import ActionsMenu from "./components/ActionsMenu.jsx";
 import EtiquetaPrecoModal from "./components/EtiquetaPrecoModal.jsx";
+import { FormularioLuxuoso, Secao, Linha, Campo as CampoLux } from "./components/FormularioLuxuoso.jsx";
 
 
 const VAZIO = {
@@ -81,6 +82,17 @@ export default function Produtos({ user }) {
 
   const podeEditar = user.role === "ADMIN" || user.role === "GERENTE";
   const podeExcluir = user.role === "ADMIN";
+
+  const CAMPOS_PROGRESSO = ["codigo", "nome", "codigoBarras", "referencia", "descricao", "precoCusto", "precoVenda", "estoque", "unidade", "categoriaId", "fornecedorId"];
+  const progressoForm = useMemo(() => {
+    let preenchidos = 0;
+    for (const k of CAMPOS_PROGRESSO) {
+      if (String(form[k] || "").trim()) preenchidos++;
+    }
+    if (imagemPreview) preenchidos++;
+    const total = CAMPOS_PROGRESSO.length + 1;
+    return Math.round((preenchidos / total) * 100);
+  }, [form, imagemPreview]);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -495,181 +507,219 @@ export default function Produtos({ user }) {
         />
       )}
 
-      {modalAberto && (
-        <div onClick={() => !salvando && setModalAberto(false)} style={{
-          position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          padding: 20, zIndex: 100,
-        }}>
-          <form onSubmit={salvar} onClick={e => e.stopPropagation()} style={{
-            background: C.card, border: `1px solid ${C.border}`, borderRadius: 14,
-            width: "100%", maxWidth: 720, maxHeight: "92vh", overflowY: "auto", padding: 24,
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <div style={{ color: C.white, fontWeight: 700, fontSize: 18 }}>
-                {editando ? "Editar Produto" : "Novo Produto"}
+      <FormularioLuxuoso
+        aberto={modalAberto}
+        onFechar={() => setModalAberto(false)}
+        onSubmit={salvar}
+        titulo={editando ? "Editar" : "Novo"}
+        tituloDestaque="Produto"
+        subtitulo={
+          editando
+            ? "Atualize as informacoes deste produto. Campos marcados com • sao obrigatorios."
+            : "Cadastre um produto no seu catalogo. Campos marcados com • sao obrigatorios."
+        }
+        numeroLote={editando ? `#${form.codigo || ""}` : null}
+        data={new Date().toLocaleDateString("pt-BR")}
+        progresso={progressoForm}
+        salvando={salvando}
+        textoSalvar="Criar produto"
+        editando={!!editando}
+        erro={erroForm}
+        larguraMax={860}
+      >
+        <Secao legenda="Identificação">
+          <Linha cols={3}>
+            <CampoLux label="Código" obrigatorio>
+              <div style={{ display: "flex", gap: 6 }}>
+                <input
+                  className="lux-input"
+                  value={form.codigo}
+                  onChange={e => setForm({ ...form, codigo: e.target.value })}
+                  style={{ flex: 1 }}
+                  autoFocus
+                />
+                <button type="button" onClick={sugerirCodigo} title="Sugerir próximo código"
+                  style={{
+                    background: C.surface, border: `1px solid ${C.border}`,
+                    color: C.accent, borderRadius: 10, padding: "0 12px",
+                    fontSize: 16, cursor: "pointer", fontWeight: 600,
+                  }}>↻</button>
               </div>
-              <button type="button" onClick={() => setModalAberto(false)} style={{
-                background: "transparent", border: "none", color: C.muted, fontSize: 20, cursor: "pointer",
-              }}>×</button>
-            </div>
+            </CampoLux>
+            <CampoLux label="Nome" obrigatorio span={2}>
+              <input
+                className="lux-input"
+                value={form.nome}
+                onChange={e => setForm({ ...form, nome: e.target.value })}
+                placeholder="Ex.: Caneta esferográfica azul BIC"
+              />
+            </CampoLux>
+          </Linha>
+          <Linha cols={3}>
+            <CampoLux label="Código de barras">
+              <input
+                className="lux-input"
+                value={form.codigoBarras}
+                onChange={e => setForm({ ...form, codigoBarras: e.target.value.replace(/\s/g, "") })}
+                placeholder="EAN-13, EAN-8, GTIN…"
+                inputMode="numeric"
+                style={{ fontFamily: "ui-monospace, monospace" }}
+              />
+            </CampoLux>
+            <CampoLux label="Referência" span={2}>
+              <input
+                className="lux-input"
+                value={form.referencia}
+                onChange={e => setForm({ ...form, referencia: e.target.value.toUpperCase() })}
+                placeholder="Código do fabricante / fornecedor"
+              />
+            </CampoLux>
+          </Linha>
+          <Linha cols={1}>
+            <CampoLux label="Descrição">
+              <textarea
+                className="lux-textarea"
+                value={form.descricao}
+                onChange={e => setForm({ ...form, descricao: e.target.value })}
+                rows={2}
+                placeholder="Detalhes complementares do produto…"
+              />
+            </CampoLux>
+          </Linha>
+        </Secao>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-              <Campo label="Código *">
-                <div style={{ display: "flex", gap: 6 }}>
-                  <input value={form.codigo} onChange={e => setForm({ ...form, codigo: e.target.value })}
-                    required style={{ ...inputStyle, flex: 1 }} autoFocus />
-                  <button type="button" onClick={sugerirCodigo} title="Sugerir próximo código"
-                    style={{
-                      background: C.surface, border: `1px solid ${C.border}`,
-                      color: C.accent, borderRadius: 8, padding: "0 10px",
-                      fontSize: 14, cursor: "pointer", fontWeight: 600,
-                    }}>↻</button>
-                </div>
-              </Campo>
-              <Campo label="Nome *" span={2}>
-                <input value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })}
-                  required style={inputStyle} />
-              </Campo>
-              <Campo label="Código de barras">
-                <input value={form.codigoBarras}
-                  onChange={e => setForm({ ...form, codigoBarras: e.target.value.replace(/\s/g, "") })}
-                  placeholder="EAN-13, EAN-8, GTIN…"
-                  inputMode="numeric"
-                  style={{ ...inputStyle, fontFamily: "monospace" }} />
-              </Campo>
-              <Campo label="Referência" span={2}>
-                <input value={form.referencia}
-                  onChange={e => setForm({ ...form, referencia: e.target.value.toUpperCase() })}
-                  placeholder="Código do fabricante / fornecedor"
-                  style={inputStyle} />
-              </Campo>
-              <Campo label="Descrição" span={3}>
-                <textarea value={form.descricao} onChange={e => setForm({ ...form, descricao: e.target.value })}
-                  rows={2} style={{ ...inputStyle, resize: "vertical", fontFamily: "inherit" }} />
-              </Campo>
-              <Campo label="Foto do produto" span={3}>
-                <DropzoneImagem
-                  preview={imagemPreview}
-                  onSelecionar={escolherImagem}
-                  onLimpar={limparImagem}
-                  inputRef={inputImagemRef}
+        <Secao legenda="Imagem">
+          <Linha cols={1}>
+            <CampoLux label="Foto do produto" hint="JPG, PNG ou WEBP · máx 2 MB">
+              <DropzoneImagem
+                preview={imagemPreview}
+                onSelecionar={escolherImagem}
+                onLimpar={limparImagem}
+                inputRef={inputImagemRef}
+              />
+            </CampoLux>
+          </Linha>
+        </Secao>
+
+        <Secao legenda="Tipo do item">
+          <Linha cols={1}>
+            <CampoLux>
+              <SeletorTipoItem
+                valor={form.tipoItem}
+                onMudar={t => setForm(f => ({ ...f, tipoItem: t }))}
+              />
+            </CampoLux>
+          </Linha>
+        </Secao>
+
+        <Secao legenda="Preços e estoque">
+          <Linha cols={3}>
+            <CampoLux label="Preço de custo (R$)">
+              <input
+                className="lux-input"
+                type="number" step="0.01" min="0"
+                value={form.precoCusto}
+                onChange={e => setForm({ ...form, precoCusto: e.target.value })}
+                placeholder="0,00"
+              />
+            </CampoLux>
+            <CampoLux label="Preço de venda" obrigatorio>
+              <input
+                className="lux-input"
+                type="number" step="0.01" min="0"
+                value={form.precoVenda}
+                onChange={e => setForm({ ...form, precoVenda: e.target.value })}
+                placeholder="0,00"
+              />
+            </CampoLux>
+            <CampoLux label="Unidade">
+              <input
+                className="lux-input"
+                value={form.unidade}
+                onChange={e => setForm({ ...form, unidade: e.target.value.toUpperCase().slice(0, 6) })}
+                placeholder="UN, KG, LT..."
+              />
+            </CampoLux>
+          </Linha>
+          <Linha cols={1}>
+            <CampoLux label="Cálculo de markup">
+              <CalculoMarkup
+                precoCusto={form.precoCusto}
+                markup={markup}
+                onChange={setMarkup}
+                onAplicar={(valor) => setForm(f => ({ ...f, precoVenda: valor }))}
+              />
+            </CampoLux>
+          </Linha>
+          <Linha>
+            <CampoLux label={form.tipoItem === "SERVICO" ? "Estoque atual (n/a — serviço)" : "Estoque atual"}>
+              <input
+                className="lux-input"
+                type="number" min="0"
+                value={form.tipoItem === "SERVICO" ? "" : form.estoque}
+                onChange={e => setForm({ ...form, estoque: e.target.value })}
+                disabled={form.tipoItem === "SERVICO"}
+                placeholder={form.tipoItem === "SERVICO" ? "♾ Ilimitado" : ""}
+                style={form.tipoItem === "SERVICO" ? { background: C.bg, color: C.muted, borderStyle: "dashed", cursor: "not-allowed" } : undefined}
+              />
+            </CampoLux>
+            <CampoLux label={form.tipoItem === "SERVICO" ? "Estoque mínimo (n/a — serviço)" : "Estoque mínimo"}>
+              <input
+                className="lux-input"
+                type="number" min="0"
+                value={form.tipoItem === "SERVICO" ? "" : form.estoqueMinimo}
+                onChange={e => setForm({ ...form, estoqueMinimo: e.target.value })}
+                disabled={form.tipoItem === "SERVICO"}
+                placeholder={form.tipoItem === "SERVICO" ? "—" : ""}
+                style={form.tipoItem === "SERVICO" ? { background: C.bg, color: C.muted, borderStyle: "dashed", cursor: "not-allowed" } : undefined}
+              />
+            </CampoLux>
+          </Linha>
+        </Secao>
+
+        <Secao legenda="Categorização">
+          <Linha cols={1}>
+            <CampoLux label="Fornecedor">
+              <select
+                className="lux-select"
+                value={form.fornecedorId}
+                onChange={e => setForm({ ...form, fornecedorId: e.target.value })}
+              >
+                <option value="">— Sem fornecedor —</option>
+                {fornecedores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
+              </select>
+            </CampoLux>
+          </Linha>
+          <Linha cols={1}>
+            <CampoLux label="Categoria">
+              <select
+                className="lux-select"
+                value={form.categoriaId}
+                onChange={e => setForm({ ...form, categoriaId: e.target.value })}
+              >
+                <option value="">— Sem categoria —</option>
+                {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select>
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <input
+                  className="lux-input"
+                  value={novaCategoria}
+                  onChange={e => setNovaCategoria(e.target.value)}
+                  placeholder="Nome da nova categoria"
+                  style={{ flex: 1 }}
+                  onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); criarCategoriaInline(); } }}
                 />
-              </Campo>
-              <Campo label="Tipo do item *" span={3}>
-                <SeletorTipoItem
-                  valor={form.tipoItem}
-                  onMudar={t => setForm(f => ({ ...f, tipoItem: t }))}
-                />
-              </Campo>
-              <Campo label="Preço de Custo (R$)">
-                <input type="number" step="0.01" min="0" value={form.precoCusto}
-                  onChange={e => setForm({ ...form, precoCusto: e.target.value })}
-                  style={inputStyle} placeholder="0,00" />
-              </Campo>
-              <Campo label="Preço de Venda Praticado *">
-                <input type="number" step="0.01" min="0" value={form.precoVenda}
-                  onChange={e => setForm({ ...form, precoVenda: e.target.value })}
-                  required style={inputStyle} placeholder="0,00" />
-              </Campo>
-              <Campo label="Unidade">
-                <input value={form.unidade}
-                  onChange={e => setForm({ ...form, unidade: e.target.value.toUpperCase().slice(0, 6) })}
-                  style={inputStyle} placeholder="UN, KG, LT..." />
-              </Campo>
-              <Campo label="Cálculo de Markup" span={3}>
-                <CalculoMarkup
-                  precoCusto={form.precoCusto}
-                  markup={markup}
-                  onChange={setMarkup}
-                  onAplicar={(valor) => setForm(f => ({ ...f, precoVenda: valor }))}
-                />
-              </Campo>
-              <Campo label={form.tipoItem === "SERVICO" ? "Estoque atual (n/a — serviço)" : "Estoque atual"}>
-                <input type="number" min="0"
-                  value={form.tipoItem === "SERVICO" ? "" : form.estoque}
-                  onChange={e => setForm({ ...form, estoque: e.target.value })}
-                  disabled={form.tipoItem === "SERVICO"}
-                  placeholder={form.tipoItem === "SERVICO" ? "♾ Ilimitado" : ""}
-                  style={form.tipoItem === "SERVICO" ? inputDisabled : inputStyle} />
-              </Campo>
-              <Campo label={form.tipoItem === "SERVICO" ? "Estoque mínimo (n/a — serviço)" : "Estoque mínimo"}>
-                <input type="number" min="0"
-                  value={form.tipoItem === "SERVICO" ? "" : form.estoqueMinimo}
-                  onChange={e => setForm({ ...form, estoqueMinimo: e.target.value })}
-                  disabled={form.tipoItem === "SERVICO"}
-                  placeholder={form.tipoItem === "SERVICO" ? "—" : ""}
-                  style={form.tipoItem === "SERVICO" ? inputDisabled : inputStyle} />
-              </Campo>
-              <div />
-              <Campo label="Fornecedor" span={3}>
-                <select value={form.fornecedorId}
-                  onChange={e => setForm({ ...form, fornecedorId: e.target.value })}
-                  style={inputStyle}>
-                  <option value="">— Sem fornecedor —</option>
-                  {fornecedores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
-                </select>
-              </Campo>
-              <Campo label="Categoria" span={3}>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <select value={form.categoriaId}
-                    onChange={e => setForm({ ...form, categoriaId: e.target.value })}
-                    style={{ ...inputStyle, flex: 1 }}>
-                    <option value="">— Sem categoria —</option>
-                    {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                  </select>
-                </div>
-                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                  <input value={novaCategoria}
-                    onChange={e => setNovaCategoria(e.target.value)}
-                    placeholder="Nome da nova categoria"
-                    style={{ ...inputStyle, flex: 1 }}
-                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); criarCategoriaInline(); } }}
-                  />
-                  <button type="button" onClick={criarCategoriaInline} disabled={!novaCategoria.trim()} style={{
-                    background: novaCategoria.trim() ? C.accent : C.muted, color: C.white, border: "none",
-                    borderRadius: 8, padding: "0 14px", fontWeight: 600, fontSize: 12,
-                    cursor: novaCategoria.trim() ? "pointer" : "default",
-                  }}>+ Adicionar</button>
-                </div>
-              </Campo>
-            </div>
-
-            {erroForm && (
-              <div style={{
-                marginTop: 14, padding: "10px 12px", borderRadius: 8,
-                background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red, fontSize: 13,
-              }}>{erroForm}</div>
-            )}
-
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20 }}>
-              <button type="button" onClick={() => setModalAberto(false)} disabled={salvando} style={{
-                background: C.surface, border: `1px solid ${C.border}`, color: C.text,
-                borderRadius: 8, padding: "10px 18px", fontWeight: 600, fontSize: 13, cursor: "pointer",
-              }}>Cancelar</button>
-              <button type="submit" disabled={salvando} style={{
-                background: salvando ? C.muted : `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-                color: C.white, border: "none", borderRadius: 8,
-                padding: "10px 22px", fontWeight: 700, fontSize: 13,
-                cursor: salvando ? "default" : "pointer",
-              }}>
-                {salvando ? "Salvando..." : editando ? "Salvar alterações" : "Criar produto"}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Campo({ label, span = 1, children }) {
-  return (
-    <div style={{ gridColumn: `span ${span}` }}>
-      <label style={{ display: "block", color: C.muted, fontSize: 12, marginBottom: 6, fontWeight: 600 }}>
-        {label}
-      </label>
-      {children}
+                <button type="button" onClick={criarCategoriaInline} disabled={!novaCategoria.trim()} style={{
+                  background: novaCategoria.trim() ? `linear-gradient(135deg, ${C.accent}, ${C.purple})` : C.muted,
+                  color: C.white, border: "none",
+                  borderRadius: 10, padding: "0 16px", fontWeight: 700, fontSize: 12,
+                  cursor: novaCategoria.trim() ? "pointer" : "default",
+                }}>+ Adicionar</button>
+              </div>
+            </CampoLux>
+          </Linha>
+        </Secao>
+      </FormularioLuxuoso>
     </div>
   );
 }
@@ -680,32 +730,10 @@ const inputStyle = {
   outline: "none", boxSizing: "border-box",
 };
 
-const inputDisabled = {
-  ...inputStyle,
-  background: C.bg, color: C.muted,
-  cursor: "not-allowed", borderStyle: "dashed",
-};
-
 const selectStyle = {
   background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8,
   padding: "10px 12px", color: C.text, fontSize: 13, cursor: "pointer",
 };
-
-function btnIcone(cor) {
-  return {
-    background: cor + "22", border: `1px solid ${cor}55`, color: cor,
-    borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 600,
-    cursor: "pointer",
-  };
-}
-
-function btnIconeSolido(cor) {
-  return {
-    background: cor, border: `1px solid ${cor}`, color: C.white,
-    borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 700,
-    cursor: "pointer",
-  };
-}
 
 function alertStyle(cor) {
   return {

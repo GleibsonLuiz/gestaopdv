@@ -6,13 +6,22 @@ const fmtBRL = (v) => {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 };
 
-// Etiqueta de preco 60mm x 40mm. Recebe nome, preco, codigo de barras
-// e referencia via props. O numero do codigo de barras e mostrado tanto
-// como texto (no topo, junto da referencia) quanto sob as barras pelo
-// proprio react-barcode (displayValue).
-export default function EtiquetaPreco({ nomeProduto, precoVenda, codigoBarras, referencia }) {
+// Etiqueta de preco 60mm x 40mm.
+// Conteudo:
+//   Linha 1: codigo do produto + referencia (lado a lado)
+//   Linha 2: nome do produto
+//   Linha 3: preco em destaque
+//   Linha 4: codigo de barras (com o numero abaixo pelo proprio react-barcode)
+export default function EtiquetaPreco({
+  nomeProduto,
+  precoVenda,
+  codigoBarras,
+  referencia,
+  codigo,
+}) {
   const cb = String(codigoBarras || "").trim();
   const ref = String(referencia || "").trim();
+  const cod = String(codigo || "").trim();
   return (
     <div className="etiqueta-preco" style={{
       width: "60mm",
@@ -29,22 +38,22 @@ export default function EtiquetaPreco({ nomeProduto, precoVenda, codigoBarras, r
       overflow: "hidden",
       boxSizing: "border-box",
     }}>
-      {(ref || cb) && (
+      {(cod || ref) && (
         <div style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
           fontSize: "6.5pt",
-          fontWeight: 600,
-          color: "#333",
+          fontWeight: 700,
+          color: "#222",
           gap: 4,
           minHeight: "3mm",
         }}>
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {ref ? `REF: ${ref}` : ""}
+            {cod ? `COD: ${cod}` : ""}
           </span>
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {cb ? `CB: ${cb}` : ""}
+            {ref ? `REF: ${ref}` : ""}
           </span>
         </div>
       )}

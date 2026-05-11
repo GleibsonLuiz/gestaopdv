@@ -295,6 +295,7 @@ export default function Etiquetas() {
               precoVenda={p.precoVenda}
               codigoBarras={p.codigoBarras || p.codigo}
               referencia={p.referencia}
+              codigo={p.codigo}
             />
           ));
         })}

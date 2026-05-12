@@ -3,6 +3,7 @@ import { C } from "./lib/theme.js";
 import { api } from "./lib/api.js";
 import EtiquetaPreco from "./components/EtiquetaPreco.jsx";
 import SelectBusca from "./components/SelectBusca.jsx";
+import "./styles/etiquetas-print.css";
 
 // Pagina de impressao de etiquetas em lote.
 // Fluxo:
@@ -103,8 +104,6 @@ export default function Etiquetas() {
 
   return (
     <>
-      <style>{cssLoteImpressao}</style>
-
       <div className="etiquetas-tela">
         {/* Filtros */}
         <div style={{
@@ -316,46 +315,3 @@ const botaoSecundario = {
   padding: "8px 14px", fontSize: 12, fontWeight: 600,
   cursor: "pointer",
 };
-
-// CSS de impressao em lote: A4 com grid de 3 colunas de 60mm.
-// O navegador quebra para a proxima pagina automaticamente quando enche
-// a folha; page-break-inside:avoid garante que nenhuma etiqueta seja
-// cortada no meio entre paginas.
-const cssLoteImpressao = `
-.etiqueta-area-impressao { display: none; }
-
-@media print {
-  @page {
-    size: A4;
-    margin: 5mm;
-  }
-
-  html, body {
-    background: #ffffff !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-
-  body * { visibility: hidden !important; }
-
-  .etiqueta-area-impressao,
-  .etiqueta-area-impressao * { visibility: visible !important; }
-
-  .etiqueta-area-impressao {
-    display: grid !important;
-    grid-template-columns: repeat(3, 60mm);
-    grid-auto-rows: 40mm;
-    gap: 0;
-    position: absolute;
-    top: 0;
-    left: 0;
-  }
-
-  .etiqueta-area-impressao .etiqueta-preco {
-    border: 0.2mm solid #000 !important;
-    border-radius: 0 !important;
-    page-break-inside: avoid;
-    break-inside: avoid;
-  }
-}
-`;

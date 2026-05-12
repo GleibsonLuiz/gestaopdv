@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Novo Cliente — Cadastro</title>
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="novo-cliente.css" />
+</head>
+<body>
+  <main class="stage">
+    <div class="eyebrow">
+      <span class="dot" aria-hidden="true"></span>
+      <span>Painel · Cadastro</span>
+      <span class="grow"></span>
+      <span>nº 0428 — 11.05.2026</span>
+    </div>
+
+    <section class="card" role="dialog" aria-labelledby="title" aria-modal="false">
+      <header class="card__head">
+        <div>
+          <h1 id="title" class="title">Novo <em>Cliente</em></h1>
+          <p class="subtitle">Cadastre um cliente em sua carteira. Campos marcados com <span style="color:var(--accent)">•</span> são obrigatórios.</p>
+        </div>
+        <button type="button" class="close" aria-label="Fechar">
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </button>
+      </header>
+
+      <div class="progress" aria-hidden="true">
+        <span>Preenchimento</span>
+        <span class="bar"><i id="bar"></i></span>
+        <span class="pct" id="pct">0%</span>
+      </div>
+
+      <form id="form" novalidate autocomplete="on">
+        <fieldset>
+          <legend>Identificação</legend>
+
+          <div class="field">
+            <label for="nome">Nome completo <span class="req" aria-hidden="true">•</span></label>
+            <input class="input" id="nome" name="nome" type="text" placeholder="Ex.: Helena Aparecida Martins" required autocomplete="name" />
+            <span class="error" data-for="nome"></span>
+          </div>
+
+          <div class="row">
+            <div class="field">
+              <label for="doc">CPF / CNPJ <span class="req" aria-hidden="true">•</span></label>
+              <input class="input" id="doc" name="doc" type="text" inputmode="numeric" placeholder="000.000.000-00" maxlength="18" required />
+              <span class="error" data-for="doc"></span>
+            </div>
+            <div class="field">
+              <label for="telefone">Telefone</label>
+              <input class="input" id="telefone" name="telefone" type="tel" inputmode="numeric" placeholder="(11) 99999-0000" maxlength="15" autocomplete="tel" />
+              <span class="error" data-for="telefone"></span>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="email">E-mail <span class="req" aria-hidden="true">•</span></label>
+            <input class="input" id="email" name="email" type="email" placeholder="helena@empresa.com.br" required autocomplete="email" />
+            <span class="error" data-for="email"></span>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Endereço</legend>
+
+          <div class="row">
+            <div class="field">
+              <label for="cep">CEP</label>
+              <span class="hint" id="cep-status"></span>
+              <input class="input" id="cep" name="cep" type="text" inputmode="numeric" placeholder="00000-000" maxlength="9" autocomplete="postal-code" />
+              <span class="error" data-for="cep"></span>
+            </div>
+            <div class="field">
+              <label for="estado">Estado</label>
+              <select class="select" id="estado" name="estado" autocomplete="address-level1">
+                <option value="">Selecione…</option>
+                <option>AC</option><option>AL</option><option>AP</option><option>AM</option>
+                <option>BA</option><option>CE</option><option>DF</option><option>ES</option>
+                <option>GO</option><option>MA</option><option>MT</option><option>MS</option>
+                <option>MG</option><option>PA</option><option>PB</option><option>PR</option>
+                <option>PE</option><option>PI</option><option>RJ</option><option>RN</option>
+                <option>RS</option><option>RO</option><option>RR</option><option>SC</option>
+                <option>SP</option><option>SE</option><option>TO</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="endereco">Logradouro</label>
+            <input class="input" id="endereco" name="endereco" type="text" placeholder="Rua, avenida ou alameda" autocomplete="street-address" />
+          </div>
+
+          <div class="row three">
+            <div class="field">
+              <label for="cidade">Cidade</label>
+              <input class="input" id="cidade" name="cidade" type="text" placeholder="São Paulo" autocomplete="address-level2" />
+            </div>
+            <div class="field">
+              <label for="numero">Número</label>
+              <input class="input" id="numero" name="numero" type="text" inputmode="numeric" placeholder="123" />
+            </div>
+            <div class="field">
+              <label for="complemento">Complemento</label>
+              <input class="input" id="complemento" name="complemento" type="text" placeholder="Apto, sala, bloco" />
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Observações</legend>
+          <div class="field">
+            <label for="obs">Notas internas</label>
+            <span class="hint"><span id="obs-count">0</span> / 500</span>
+            <textarea class="textarea" id="obs" name="obs" maxlength="500" placeholder="Preferências de contato, segmento, histórico relevante…"></textarea>
+          </div>
+        </fieldset>
+
+        <footer class="foot">
+          <span class="foot__note">
+            <span class="key">⏎</span>
+            Enviar com Enter · <span class="key">Esc</span> cancelar
+          </span>
+          <div class="actions">
+            <button type="button" class="btn btn--ghost" id="cancel">Cancelar</button>
+            <button type="submit" class="btn btn--primary" id="submit">
+              <span>Criar cliente</span>
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </footer>
+      </form>
+    </section>
+
+    <div class="meta">
+      <span class="save"><i aria-hidden="true"></i> Rascunho salvo automaticamente</span>
+      <span>ENC · v1.4</span>
+    </div>
+  </main>
+
+  <script src="novo-cliente.js"></script>
+</body>
+</html>

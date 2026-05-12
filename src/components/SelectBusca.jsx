@@ -16,6 +16,7 @@ export default function SelectBusca({
   subLabelFn,
   placeholder = "Buscar...",
   style,
+  containerStyle,
   className,
   disabled,
   required,
@@ -63,7 +64,7 @@ export default function SelectBusca({
   }
 
   return (
-    <div style={{ position: "relative" }}>
+    <div style={{ position: "relative", ...containerStyle }}>
       <input
         type="text"
         value={inputValue}

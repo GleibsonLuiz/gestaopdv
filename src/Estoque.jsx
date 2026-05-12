@@ -78,8 +78,9 @@ export default function Estoque({ user }) {
           onChange={setFiltroProduto}
           labelFn={p => `${p.codigo} — ${p.nome}`}
           placeholder="Todos os produtos"
+          containerStyle={{ flex: "3 1 380px" }}
           style={{
-            flex: "1 1 240px", background: C.surface, border: `1px solid ${C.border}`,
+            width: "100%", background: C.surface, border: `1px solid ${C.border}`,
             borderRadius: 8, padding: "10px 12px", color: C.text, fontSize: 13,
             outline: "none", boxSizing: "border-box",
           }}

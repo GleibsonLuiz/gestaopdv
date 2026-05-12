@@ -349,7 +349,7 @@ export default function Fornecedores({ user }) {
               />
             </Campo>
           </Linha>
-          <Linha>
+          <Linha style={{ gridTemplateColumns: "185px 160px 1fr" }}>
             <Campo label="CNPJ">
               <input
                 className="lux-input"
@@ -371,8 +371,6 @@ export default function Fornecedores({ user }) {
                 autoComplete="tel"
               />
             </Campo>
-          </Linha>
-          <Linha cols={1}>
             <Campo label="E-mail">
               <input
                 className="lux-input"
@@ -387,7 +385,7 @@ export default function Fornecedores({ user }) {
         </Secao>
 
         <Secao legenda="Endereço">
-          <Linha>
+          <Linha variant="addr-tilt">
             <Campo
               label="CEP"
               hint={
@@ -416,11 +414,20 @@ export default function Fornecedores({ user }) {
                 onChange={e => setForm({ ...form, estado: e.target.value })}
                 autoComplete="address-level1"
               >
-                <option value="">Selecione…</option>
+                <option value="">UF</option>
                 {ESTADOS_BR.map(uf => (
                   <option key={uf} value={uf}>{uf}</option>
                 ))}
               </select>
+            </Campo>
+            <Campo label="Cidade">
+              <input
+                className="lux-input"
+                value={form.cidade}
+                onChange={e => setForm({ ...form, cidade: e.target.value })}
+                placeholder="São Paulo"
+                autoComplete="address-level2"
+              />
             </Campo>
           </Linha>
           <Linha cols={1}>
@@ -431,17 +438,6 @@ export default function Fornecedores({ user }) {
                 onChange={e => setForm({ ...form, endereco: e.target.value })}
                 placeholder="Rua, avenida, número e bairro"
                 autoComplete="street-address"
-              />
-            </Campo>
-          </Linha>
-          <Linha cols={1}>
-            <Campo label="Cidade">
-              <input
-                className="lux-input"
-                value={form.cidade}
-                onChange={e => setForm({ ...form, cidade: e.target.value })}
-                placeholder="São Paulo"
-                autoComplete="address-level2"
               />
             </Campo>
           </Linha>

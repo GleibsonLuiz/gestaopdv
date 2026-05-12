@@ -17,7 +17,13 @@ export async function listar(req, res, next) {
   try {
     const { search, status, fornecedorId, dataInicio, dataFim, vencidas } = req.query;
     const where = {};
-    if (status) where.status = status;
+    if (status === 'ATRASADA') {
+      const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+      where.status = 'PENDENTE';
+      where.vencimento = { lt: hoje };
+    } else if (status) {
+      where.status = status;
+    }
     if (fornecedorId) where.fornecedorId = fornecedorId;
     if (search) {
       where.OR = [

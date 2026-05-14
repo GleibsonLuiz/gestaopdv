@@ -168,6 +168,18 @@ enum BaseComissao {
   LUCRO_LIQUIDO
 }
 
+// Etapas do funil de vendas (CRM). LEAD entra no topo; GANHO/PERDIDO sao
+// terminais. A probabilidade default de cada etapa e calculada no controller
+// quando o usuario nao informa.
+enum EtapaFunil {
+  LEAD
+  QUALIFICADO
+  PROPOSTA
+  NEGOCIACAO
+  GANHO
+  PERDIDO
+}
+
 // ============ USUARIOS ============
 
 model User {
@@ -192,6 +204,9 @@ model User {
   tarefasCriadas      Tarefa[]    @relation("TarefaCriador")
   tarefasResponsavel  Tarefa[]    @relation("TarefaResponsavel")
   movimentacoesPontos MovimentacaoPontos[]
+  oportunidadesCriadas    Oportunidade[] @relation("OportunidadeCriador")
+  oportunidadesResponsavel Oportunidade[] @relation("OportunidadeResponsavel")
+  historicoOportunidades  HistoricoOportunidade[]
 
   @@map("users")
 }
@@ -246,6 +261,7 @@ model Cliente {
   tarefas             Tarefa[]
   pontosCliente       PontosCliente?
   movimentacoesPontos MovimentacaoPontos[]
+  oportunidades       Oportunidade[]
 
   @@map("clientes")
 }
@@ -341,6 +357,7 @@ model Venda {
   orcamento           Orcamento?
   contasReceber       ContaReceber[]
   movimentacoesPontos MovimentacaoPontos[]
+  oportunidade        Oportunidade?
 
   @@index([caixaId])
   @@map("vendas")
@@ -823,4 +840,87 @@ model Interacao {
 
   @@index([clienteId, data(sort: Desc)])
   @@map("interacoes")
+}
+
+// ============ CRM — FUNIL DE VENDAS (OPORTUNIDADES) ============
+//
+// Oportunidade representa um lead/negocio em movimento no funil. Diferente
+// de Orcamento (documento formal com itens e valores) ou Venda (transacao
+// concluida), Oportunidade e um conceito leve focado em prospeccao.
+//
+// Ciclo: LEAD -> QUALIFICADO -> PROPOSTA -> NEGOCIACAO -> GANHO/PERDIDO.
+// Quando GANHO, vendaId pode ser preenchido se ja existir venda; nao gera
+// venda automatica (decisao do usuario). Quando PERDIDO, motivoPerda
+// obrigatorio.
+//
+// origem e String livre (INDICACAO, INSTAGRAM, GOOGLE, WALK_IN, etc) — nao
+// e enum para nao engessar; o front oferece os valores comuns no dropdown.
+model Oportunidade {
+  id          String     @id @default(uuid())
+  numero      Int        @unique @default(autoincrement())
+  titulo      String
+  descricao   String?
+  etapa       EtapaFunil @default(LEAD)
+
+  // 0..100. Quando o usuario nao informa, controller aplica default da etapa.
+  probabilidade Int      @default(0)
+
+  // Valor estimado do negocio (R$). Pode mudar conforme a oportunidade
+  // avanca. Distinto de "valor fechado" (que so existe se virou venda).
+  valorEstimado Decimal? @db.Decimal(10, 2)
+
+  // Data prevista de fechamento — usada para forecasting.
+  dataFechamentoPrevista DateTime?
+
+  // Como o lead chegou ate a empresa.
+  origem      String?
+
+  // Datas terminais
+  dataGanho     DateTime?
+  dataPerdida   DateTime?
+  motivoPerda   String?
+
+  clienteId   String?
+  cliente     Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+
+  // Vendedor responsavel (quem trabalha a oportunidade)
+  responsavelId String?
+  responsavel   User?   @relation("OportunidadeResponsavel", fields: [responsavelId], references: [id])
+
+  // Quem criou a oportunidade
+  criadoPorId String
+  criadoPor   User    @relation("OportunidadeCriador", fields: [criadoPorId], references: [id])
+
+  // Quando GANHO, pode vincular a venda gerada (UNIQUE - 1:1 com Venda)
+  vendaId String? @unique
+  venda   Venda?  @relation(fields: [vendaId], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  historico HistoricoOportunidade[]
+
+  @@index([etapa])
+  @@index([responsavelId, etapa])
+  @@index([clienteId])
+  @@map("oportunidades")
+}
+
+// Log de mudancas de etapa — permite calcular tempo medio em cada etapa
+// e exibir timeline no detalhe da oportunidade.
+model HistoricoOportunidade {
+  id            String     @id @default(uuid())
+  etapaAnterior EtapaFunil?
+  etapaNova     EtapaFunil
+  observacao    String?
+  createdAt     DateTime   @default(now())
+
+  oportunidadeId String
+  oportunidade   Oportunidade @relation(fields: [oportunidadeId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([oportunidadeId, createdAt])
+  @@map("historico_oportunidades")
 }

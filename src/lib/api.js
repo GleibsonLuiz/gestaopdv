@@ -243,6 +243,32 @@ export const api = {
     request(`/orcamentos/${id}/converter-venda`, { method: "POST", body: { formaPagamento } }),
   excluirOrcamento: (id) => request(`/orcamentos/${id}`, { method: "DELETE" }),
 
+  // ==================== OPORTUNIDADES (FUNIL CRM) ====================
+  listarOportunidades: ({ etapa = "", responsavelId = "", clienteId = "", origem = "", search = "", minhas = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (etapa) qs.set("etapa", etapa);
+    if (responsavelId) qs.set("responsavelId", responsavelId);
+    if (clienteId) qs.set("clienteId", clienteId);
+    if (origem) qs.set("origem", origem);
+    if (search) qs.set("search", search);
+    if (minhas) qs.set("minhas", minhas);
+    const q = qs.toString();
+    return request(`/oportunidades${q ? `?${q}` : ""}`);
+  },
+  resumoFunilOportunidades: ({ responsavelId = "", minhas = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (responsavelId) qs.set("responsavelId", responsavelId);
+    if (minhas) qs.set("minhas", minhas);
+    const q = qs.toString();
+    return request(`/oportunidades/resumo${q ? `?${q}` : ""}`);
+  },
+  obterOportunidade: (id) => request(`/oportunidades/${id}`),
+  criarOportunidade: (data) => request("/oportunidades", { method: "POST", body: data }),
+  atualizarOportunidade: (id, data) => request(`/oportunidades/${id}`, { method: "PUT", body: data }),
+  moverEtapaOportunidade: (id, etapa, extras = {}) =>
+    request(`/oportunidades/${id}/mover`, { method: "POST", body: { etapa, ...extras } }),
+  excluirOportunidade: (id) => request(`/oportunidades/${id}`, { method: "DELETE" }),
+
   listarTarefas: ({ status = "", prioridade = "", responsavelId = "", clienteId = "", minhas = "", atrasadas = "" } = {}) => {
     const qs = new URLSearchParams();
     if (status) qs.set("status", status);

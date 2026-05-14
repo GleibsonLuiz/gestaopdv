@@ -22,6 +22,7 @@ import TrocarSenhaModal from "./TrocarSenhaModal.jsx";
 import Aparencia from "./Aparencia.jsx";
 import Tarefas from "./Tarefas.jsx";
 import Fidelidade from "./Fidelidade.jsx";
+import Funil from "./Funil.jsx";
 import Alertas from "./Alertas.jsx";
 import { getUser, getToken, clearSession, api } from "./lib/api.js";
 import { podeAcessar } from "./lib/permissoes.js";
@@ -153,6 +154,7 @@ export default function App() {
     pdv: "PDV", dashboard: "DASHBOARD", caixa: "CAIXA", clientes: "CLIENTES",
     fornecedores: "FORNECEDORES", produtos: "PRODUTOS", etiquetas: "PRODUTOS", estoque: "ESTOQUE",
     compras: "COMPRAS", orcamentos: "ORCAMENTOS",
+    funil: "OPORTUNIDADES",
     financeiro: "FINANCEIRO", relatorios: "RELATORIOS",
     comissoes: "COMISSOES",
     funcionarios: "FUNCIONARIOS",
@@ -170,7 +172,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     if (!podeVer(tela)) {
-      const primeira = ["pdv","dashboard","caixa","clientes","tarefas","fidelidade","fornecedores","produtos","etiquetas",
+      const primeira = ["pdv","dashboard","caixa","clientes","tarefas","fidelidade","funil","fornecedores","produtos","etiquetas",
         "estoque","compras","orcamentos","financeiro","relatorios","comissoes","funcionarios","projeto","sistema","empresa"].find(podeVer);
       if (primeira && primeira !== tela) setTela(primeira);
     }
@@ -296,6 +298,9 @@ export default function App() {
           )}
           {podeAcessar(user, "ORCAMENTOS") && (
             <Item icone="📝" label="Orçamentos" ativo={tela === "orcamentos"} onClick={() => navegar("orcamentos")} />
+          )}
+          {podeAcessar(user, "OPORTUNIDADES") && (
+            <Item icone="🎯" label="Funil de Vendas" ativo={tela === "funil"} onClick={() => navegar("funil")} />
           )}
           {podeAcessar(user, "FINANCEIRO") && (
             <Item icone="💰" label="Financeiro" ativo={tela === "financeiro"} onClick={() => navegar("financeiro")} />
@@ -463,6 +468,9 @@ export default function App() {
               <PageHeader titulo="Orçamentos / Ordens de Serviço" subtitulo="Documento comercial pré-venda — vira venda quando aprovado e finalizado" />
               <Orcamentos user={user} />
             </>
+          )}
+          {tela === "funil" && (
+            <Funil user={user} />
           )}
           {tela === "financeiro" && (
             <FinanceiroPage user={user} />

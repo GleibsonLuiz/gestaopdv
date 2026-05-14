@@ -856,23 +856,29 @@ function NovaVenda({ user }) {
               }}
             />
           ) : (
-            <div className="pdv-cart-list">
-              {carrinho.map(it => (
-                <div
-                  key={it.produtoId}
-                  className={`pdv-cart-item ${destacado === it.produtoId ? "is-new" : ""}`}
-                >
-                  <FotoProduto url={it.imagem} nome={it.nome} tamanho={56} servico={it.tipoItem === "SERVICO"} />
-
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="pdv-cart-item-name">
-                      {it.nome}
-                      {it.tipoItem === "SERVICO" && (
-                        <span className="pdv-srv-tag">♾ SERVIÇO</span>
-                      )}
+            <div className="pdv-cupom-outer">
+              <div className="pdv-cart-list">
+                {carrinho.map((it, idx) => (
+                  <div
+                    key={it.produtoId}
+                    className={`pdv-cupom-item ${destacado === it.produtoId ? "is-new" : ""}`}
+                  >
+                    <div className="pdv-cupom-hd">
+                      <span className="pdv-cupom-idx">{String(idx + 1).padStart(3, "0")}</span>
+                      <span className="pdv-cupom-name">
+                        {it.nome}
+                        {it.tipoItem === "SERVICO" && (
+                          <span className="pdv-cupom-srv-tag">SVC</span>
+                        )}
+                      </span>
+                      <button
+                        onClick={() => removerItem(it.produtoId)}
+                        title="Remover este item"
+                        className="pdv-cupom-rm"
+                      >× Rem</button>
                     </div>
-                    <div className="pdv-cart-item-code">{it.codigo}</div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+
+                    <div className="pdv-cupom-calc">
                       <div className="pdv-qty">
                         <button onClick={() => alterarQuantidade(it.produtoId, -1)}>−</button>
                         <input
@@ -883,29 +889,23 @@ function NovaVenda({ user }) {
                         />
                         <button onClick={() => alterarQuantidade(it.produtoId, +1)}>+</button>
                       </div>
-                      <span style={{ color: "var(--pdv-t3)", fontSize: 12 }}>×</span>
-                      <input
-                        type="number" step="0.01" min="0" value={it.precoUnitario}
-                        onChange={e => alterarPreco(it.produtoId, e.target.value)}
-                        className={`pdv-input-preco${it.tipoItem !== "SERVICO" ? " is-locked" : ""}`}
-                        readOnly={it.tipoItem !== "SERVICO"}
-                        title={it.tipoItem !== "SERVICO" ? "Preço fixo — edite no cadastro do produto" : "Preço editável (serviço)"}
-                      />
+                      <span className="pdv-cupom-op">×</span>
+                      {it.tipoItem === "SERVICO" ? (
+                        <input
+                          type="number" step="0.01" min="0" value={it.precoUnitario}
+                          onChange={e => alterarPreco(it.produtoId, e.target.value)}
+                          className="pdv-cupom-price-input"
+                          title="Preço editável (serviço)"
+                        />
+                      ) : (
+                        <span className="pdv-cupom-price">{fmtBRL(it.precoUnitario)}</span>
+                      )}
+                      <span className="pdv-cupom-op">=</span>
+                      <span className="pdv-cupom-total">{fmtBRL(it.quantidade * it.precoUnitario)}</span>
                     </div>
                   </div>
-
-                  <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
-                    <div className="pdv-cart-item-total">
-                      {fmtBRL(it.quantidade * it.precoUnitario)}
-                    </div>
-                    <button
-                      onClick={() => removerItem(it.produtoId)}
-                      title="Remover este item"
-                      className="pdv-btn-rm"
-                    >× Remover</button>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
         </div>

@@ -341,6 +341,12 @@ export const api = {
   excluirTarefa: (id) => request(`/tarefas/${id}`, { method: "DELETE" }),
 
   obterDashboard: () => request("/dashboard/resumo"),
+  obterDashboardCrm: ({ dias = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (dias) qs.set("dias", String(dias));
+    const q = qs.toString();
+    return request(`/dashboard/crm${q ? `?${q}` : ""}`);
+  },
   obterAlertas: () => request("/alertas"),
 
   relatorioVendas: ({ dataInicio = "", dataFim = "", formaPagamento = "", clienteId = "", userId = "" } = {}) => {

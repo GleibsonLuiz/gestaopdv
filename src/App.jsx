@@ -25,6 +25,7 @@ import Fidelidade from "./Fidelidade.jsx";
 import Funil from "./Funil.jsx";
 import Segmentos from "./Segmentos.jsx";
 import Automacoes from "./Automacoes.jsx";
+import DashboardCrm from "./DashboardCrm.jsx";
 import Alertas from "./Alertas.jsx";
 import { getUser, getToken, clearSession, api } from "./lib/api.js";
 import { podeAcessar } from "./lib/permissoes.js";
@@ -153,7 +154,7 @@ export default function App() {
   // Mapeia cada tela do app para o modulo de permissao correspondente.
   // "projeto" e ferramenta interna, fica liberada.
   const TELA_MODULO = {
-    pdv: "PDV", dashboard: "DASHBOARD", caixa: "CAIXA", clientes: "CLIENTES",
+    pdv: "PDV", dashboard: "DASHBOARD", dashboardcrm: "DASHBOARD", caixa: "CAIXA", clientes: "CLIENTES",
     fornecedores: "FORNECEDORES", produtos: "PRODUTOS", etiquetas: "PRODUTOS", estoque: "ESTOQUE",
     compras: "COMPRAS", orcamentos: "ORCAMENTOS",
     funil: "OPORTUNIDADES",
@@ -176,7 +177,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     if (!podeVer(tela)) {
-      const primeira = ["pdv","dashboard","caixa","clientes","segmentos","tarefas","fidelidade","funil","automacoes","fornecedores","produtos","etiquetas",
+      const primeira = ["pdv","dashboard","dashboardcrm","caixa","clientes","segmentos","tarefas","fidelidade","funil","automacoes","fornecedores","produtos","etiquetas",
         "estoque","compras","orcamentos","financeiro","relatorios","comissoes","funcionarios","projeto","sistema","empresa"].find(podeVer);
       if (primeira && primeira !== tela) setTela(primeira);
     }
@@ -266,6 +267,9 @@ export default function App() {
           )}
           {podeAcessar(user, "DASHBOARD") && (
             <Item icone="📊" label="Dashboard" ativo={tela === "dashboard"} onClick={() => navegar("dashboard")} />
+          )}
+          {podeAcessar(user, "DASHBOARD") && (
+            <Item icone="🎯" label="Dashboard CRM" ativo={tela === "dashboardcrm"} onClick={() => navegar("dashboardcrm")} />
           )}
           {(podeAcessar(user, "CLIENTES") || podeAcessar(user, "FORNECEDORES") || podeAcessar(user, "PRODUTOS")) && (
             <Secao>Cadastros</Secao>
@@ -487,6 +491,9 @@ export default function App() {
           )}
           {tela === "automacoes" && (
             <Automacoes user={user} />
+          )}
+          {tela === "dashboardcrm" && (
+            <DashboardCrm user={user} />
           )}
           {tela === "financeiro" && (
             <FinanceiroPage user={user} />

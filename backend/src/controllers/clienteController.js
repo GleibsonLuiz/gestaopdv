@@ -28,6 +28,69 @@ function classificarSegmento({ qtdCompras, totalGasto, recenciaDias, mediaTotal,
   return qtdCompras > 0 ? "RECORRENTE" : "PROSPECT";
 }
 
+// ============ LEAD SCORING ============
+//
+// Score 0-100 derivado de Recencia (35) + Frequencia (25) + Monetario (25)
+// + Bonus (15). Classifica em FRIO/MORNO/QUENTE/VIP.
+//
+// O calculo e proposital e bem documentado para o usuario entender o que
+// motiva o score — futuras alteracoes devem manter as faixas previsiveis.
+
+function calcularScore({ qtdCompras, totalGasto, recenciaDias, mediaTotal, npsNota, ehVip }) {
+  let recencia = 0;
+  if (recenciaDias != null) {
+    if (recenciaDias <= 7) recencia = 35;
+    else if (recenciaDias <= 30) recencia = 30;
+    else if (recenciaDias <= 60) recencia = 22;
+    else if (recenciaDias <= 90) recencia = 14;
+    else if (recenciaDias <= 180) recencia = 6;
+    else recencia = 0;
+  }
+
+  let frequencia = 0;
+  if (qtdCompras >= 11) frequencia = 25;
+  else if (qtdCompras >= 7) frequencia = 22;
+  else if (qtdCompras >= 4) frequencia = 18;
+  else if (qtdCompras >= 2) frequencia = 12;
+  else if (qtdCompras === 1) frequencia = 5;
+
+  let monetario = 0;
+  if (mediaTotal > 0) {
+    const razao = totalGasto / mediaTotal;
+    if (razao >= 2) monetario = 25;
+    else if (razao >= 1) monetario = 20;
+    else if (razao >= 0.5) monetario = 12;
+    else if (totalGasto > 0) monetario = 5;
+  } else if (totalGasto > 0) {
+    // Sem outros clientes para comparar — entrega o maximo do componente.
+    monetario = 25;
+  }
+
+  let bonus = 0;
+  // Bonus NPS: promotor (9-10) = +10, neutro (7-8) = +5
+  if (npsNota != null) {
+    if (npsNota >= 9) bonus += 10;
+    else if (npsNota >= 7) bonus += 5;
+  }
+  // Bonus tag VIP manual: +5 (caps em 15 total)
+  if (ehVip) bonus += 5;
+  bonus = Math.min(bonus, 15);
+
+  const total = Math.min(100, recencia + frequencia + monetario + bonus);
+  return {
+    score: total,
+    classificacao: classificarScore(total),
+    breakdown: { recencia, frequencia, monetario, bonus },
+  };
+}
+
+function classificarScore(score) {
+  if (score >= 76) return "VIP";
+  if (score >= 51) return "QUENTE";
+  if (score >= 26) return "MORNO";
+  return "FRIO";
+}
+
 export async function listar(req, res, next) {
   try {
     const { search, ativo, segmento, tagId, statusFunil, origem } = req.query;
@@ -108,7 +171,7 @@ export async function segmentos(req, res, next) {
     const dias = parseInt(req.query.dias || "365", 10);
     const desde = new Date(Date.now() - dias * 86400000);
 
-    const [clientes, vendas] = await Promise.all([
+    const [clientes, vendas, npsRespostas] = await Promise.all([
       prisma.cliente.findMany({
         where: { ativo: true },
         select: {
@@ -121,7 +184,19 @@ export async function segmentos(req, res, next) {
         where: { status: "CONCLUIDA", createdAt: { gte: desde }, clienteId: { not: null } },
         select: { clienteId: true, total: true, createdAt: true },
       }),
+      // Para o bonus de score: pega a ultima resposta NPS de cada cliente.
+      prisma.pesquisaNps.findMany({
+        where: { respondidaEm: { not: null }, clienteId: { not: null } },
+        orderBy: { respondidaEm: "desc" },
+        select: { clienteId: true, nota: true, respondidaEm: true },
+      }),
     ]);
+
+    // Mapeia cada clienteId para sua nota NPS mais recente.
+    const npsPorCliente = new Map();
+    for (const r of npsRespostas) {
+      if (!npsPorCliente.has(r.clienteId)) npsPorCliente.set(r.clienteId, r.nota);
+    }
 
     const agg = new Map();
     for (const v of vendas) {
@@ -145,6 +220,13 @@ export async function segmentos(req, res, next) {
       const recenciaDias = a?.ultima ? Math.floor((hoje - a.ultima.getTime()) / 86400000) : null;
       const ticketMedio = qtdCompras > 0 ? totalGasto / qtdCompras : 0;
       const segmento = classificarSegmento({ qtdCompras, totalGasto, recenciaDias, mediaTotal, mediaQtd });
+      const tags = c.tags.map((ct) => ({ id: ct.tag.id, nome: ct.tag.nome, cor: ct.tag.cor }));
+      const ehVip = tags.some((t) => t.nome === "VIP");
+      const scoreInfo = calcularScore({
+        qtdCompras, totalGasto, recenciaDias, mediaTotal,
+        npsNota: npsPorCliente.get(c.id) ?? null,
+        ehVip,
+      });
       return {
         id: c.id,
         nome: c.nome,
@@ -152,7 +234,7 @@ export async function segmentos(req, res, next) {
         email: c.email,
         cidade: c.cidade,
         estado: c.estado,
-        tags: c.tags.map((ct) => ({ id: ct.tag.id, nome: ct.tag.nome, cor: ct.tag.cor })),
+        tags,
         rfm: {
           recenciaDias,
           frequencia: qtdCompras,
@@ -161,6 +243,9 @@ export async function segmentos(req, res, next) {
           ultimaCompra: a?.ultima || null,
         },
         segmento,
+        score: scoreInfo.score,
+        classificacaoScore: scoreInfo.classificacao,
+        scoreBreakdown: scoreInfo.breakdown,
       };
     });
 

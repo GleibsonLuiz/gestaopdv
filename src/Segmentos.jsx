@@ -3,6 +3,7 @@ import { C } from "./lib/theme.js";
 import { api } from "./lib/api.js";
 import BotoesContatoCliente from "./components/BotoesContatoCliente.jsx";
 import ModalGerirTemplates from "./components/ModalGerirTemplates.jsx";
+import { CLASSIFICACOES_SCORE, corDoScore } from "./lib/scoring.js";
 
 // ============ CONFIGURACAO DE SEGMENTOS RFM ============
 
@@ -32,6 +33,7 @@ export default function Segmentos({ user }) {
   const [erro, setErro] = useState("");
   const [filtroSeg, setFiltroSeg] = useState("");
   const [filtroTagId, setFiltroTagId] = useState("");
+  const [filtroScore, setFiltroScore] = useState("");
   const [search, setSearch] = useState("");
   const [janela, setJanela] = useState(365);
   const [tags, setTags] = useState([]);
@@ -68,13 +70,14 @@ export default function Segmentos({ user }) {
     let lista = dados.clientes;
     if (filtroSeg) lista = lista.filter((c) => c.segmento === filtroSeg);
     if (filtroTagId) lista = lista.filter((c) => c.tags.some((t) => t.id === filtroTagId));
+    if (filtroScore) lista = lista.filter((c) => c.classificacaoScore === filtroScore);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       lista = lista.filter((c) => c.nome.toLowerCase().includes(q));
     }
     // Ordena por valor monetário desc
     return [...lista].sort((a, b) => b.rfm.monetario - a.rfm.monetario);
-  }, [dados, filtroSeg, filtroTagId, search]);
+  }, [dados, filtroSeg, filtroTagId, filtroScore, search]);
 
   async function toggleTag(clienteId, tagId, ativa) {
     try {
@@ -170,9 +173,19 @@ export default function Segmentos({ user }) {
             <option key={t.id} value={t.id}>{t.nome} ({t.totalClientes})</option>
           ))}
         </select>
-        {(filtroSeg || filtroTagId || search) && (
+        <select
+          value={filtroScore}
+          onChange={(e) => setFiltroScore(e.target.value)}
+          style={inputFiltro(160)}
+        >
+          <option value="">Todos scores</option>
+          {Object.entries(CLASSIFICACOES_SCORE).map(([id, c]) => (
+            <option key={id} value={id}>{c.icone} {c.label}</option>
+          ))}
+        </select>
+        {(filtroSeg || filtroTagId || filtroScore || search) && (
           <button
-            onClick={() => { setFiltroSeg(""); setFiltroTagId(""); setSearch(""); }}
+            onClick={() => { setFiltroSeg(""); setFiltroTagId(""); setFiltroScore(""); setSearch(""); }}
             style={{
               background: "transparent", color: C.muted, border: `1px solid ${C.border}`,
               padding: "8px 12px", borderRadius: 6, cursor: "pointer", fontSize: 12,
@@ -297,6 +310,7 @@ function TabelaClientes({ clientes, templates, onAbrirTags, podeEditar }) {
           <thead>
             <tr style={{ background: C.bg, color: C.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5 }}>
               <th style={th()}>Cliente</th>
+              <th style={{ ...th(), minWidth: 110 }}>Score</th>
               <th style={th()}>Segmento</th>
               <th style={th()}>Tags</th>
               <th style={{ ...th(), textAlign: "right" }}>Total gasto</th>
@@ -317,6 +331,9 @@ function TabelaClientes({ clientes, templates, onAbrirTags, podeEditar }) {
                       {[c.cidade, c.estado].filter(Boolean).join("/")}
                       {c.telefone && ` · ${c.telefone}`}
                     </div>
+                  </td>
+                  <td style={td()}>
+                    <ScoreBar score={c.score ?? 0} classificacao={c.classificacaoScore} />
                   </td>
                   <td style={td()}>
                     <span style={{
@@ -377,6 +394,33 @@ function TabelaClientes({ clientes, templates, onAbrirTags, podeEditar }) {
             })}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+function ScoreBar({ score, classificacao }) {
+  const cls = CLASSIFICACOES_SCORE[classificacao] || CLASSIFICACOES_SCORE.FRIO;
+  const cor = corDoScore(score);
+  return (
+    <div title={`${cls.icone} ${cls.label} · ${cls.desc}`}>
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        marginBottom: 3, gap: 4,
+      }}>
+        <span style={{ color: cor, fontSize: 11, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 3 }}>
+          {cls.icone} {cls.label}
+        </span>
+        <span style={{ color: cor, fontSize: 12, fontWeight: 800 }}>{score}</span>
+      </div>
+      <div style={{
+        width: "100%", height: 5, background: C.bg, borderRadius: 3, overflow: "hidden",
+        border: `1px solid ${C.border}`,
+      }}>
+        <div style={{
+          width: `${score}%`, height: "100%", background: cor,
+          transition: "width 0.3s ease",
+        }} />
       </div>
     </div>
   );

@@ -245,6 +245,28 @@ export const api = {
     request(`/orcamentos/${id}/converter-venda`, { method: "POST", body: { formaPagamento } }),
   excluirOrcamento: (id) => request(`/orcamentos/${id}`, { method: "DELETE" }),
 
+  // ==================== AUTOMACOES (CRM) ====================
+  listarAutomacoes: ({ ativo = "", tipo = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (ativo !== "") qs.set("ativo", ativo);
+    if (tipo) qs.set("tipo", tipo);
+    const q = qs.toString();
+    return request(`/automacoes${q ? `?${q}` : ""}`);
+  },
+  obterAutomacao: (id) => request(`/automacoes/${id}`),
+  criarAutomacao: (data) => request("/automacoes", { method: "POST", body: data }),
+  atualizarAutomacao: (id, data) => request(`/automacoes/${id}`, { method: "PUT", body: data }),
+  excluirAutomacao: (id) => request(`/automacoes/${id}`, { method: "DELETE" }),
+  executarAutomacao: (id) => request(`/automacoes/${id}/executar`, { method: "POST" }),
+  executarTodasAutomacoes: () => request("/automacoes/executar", { method: "POST" }),
+  listarLogsAutomacao: ({ regraId = "", limite = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (regraId) qs.set("regraId", regraId);
+    if (limite) qs.set("limite", String(limite));
+    const q = qs.toString();
+    return request(`/automacoes/logs${q ? `?${q}` : ""}`);
+  },
+
   // ==================== TEMPLATES DE MENSAGEM ====================
   listarTemplates: ({ tipo = "", ativo = "" } = {}) => {
     const qs = new URLSearchParams();

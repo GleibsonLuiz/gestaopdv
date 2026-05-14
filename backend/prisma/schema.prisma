@@ -188,6 +188,17 @@ enum TipoTemplate {
   SMS
 }
 
+// Tipos de gatilho para regras de automacao do CRM.
+//
+//   CLIENTE_INATIVO     - cliente sem compra ha X dias gera tarefa de reativacao
+//   ORCAMENTO_PARADO    - orcamento em AGUARDANDO_APROVACAO ha X dias gera follow-up
+//   POS_VENDA_FOLLOWUP  - apos venda CONCLUIDA, gera tarefa de acompanhamento
+enum TipoRegraAutomacao {
+  CLIENTE_INATIVO
+  ORCAMENTO_PARADO
+  POS_VENDA_FOLLOWUP
+}
+
 // ============ USUARIOS ============
 
 model User {
@@ -215,6 +226,7 @@ model User {
   oportunidadesCriadas    Oportunidade[] @relation("OportunidadeCriador")
   oportunidadesResponsavel Oportunidade[] @relation("OportunidadeResponsavel")
   historicoOportunidades  HistoricoOportunidade[]
+  regrasAutomacao         RegraAutomacao[] @relation("RegraAutomacaoResponsavel")
 
   @@map("users")
 }
@@ -965,6 +977,80 @@ model TemplateMensagem {
 
   @@index([tipo, ativo])
   @@map("templates_mensagem")
+}
+
+// ============ CRM — REGRAS DE AUTOMACAO ============
+//
+// Cada regra observa um gatilho (tipo) e cria uma Tarefa automaticamente
+// quando o gatilho dispara. Anti-duplicacao via LogAutomacao: uma mesma
+// regra nao cria 2x a tarefa para o mesmo contexto (cliente/orcamento/venda)
+// dentro da mesma janela.
+//
+// Execucao acontece via endpoint POST /automacoes/executar (manual ou cron
+// externo — Vercel Cron, GitHub Actions, etc).
+//
+// Variaveis suportadas em tituloTarefa e descricaoTarefa:
+//   {{nomeCliente}} {{recenciaDias}} {{valorVenda}} {{numeroOrcamento}}
+//   {{diasParado}}  {{descricaoOrcamento}}
+model RegraAutomacao {
+  id          String             @id @default(uuid())
+  nome        String
+  tipo        TipoRegraAutomacao
+  ativo       Boolean            @default(true)
+
+  // Parametros (uso depende do tipo):
+  //   CLIENTE_INATIVO    -> diasGatilho (sem compra ha X dias)
+  //   ORCAMENTO_PARADO   -> diasGatilho (parado AGUARDANDO ha X dias)
+  //   POS_VENDA_FOLLOWUP -> diasGatilho (X dias apos a venda), valorMinimo (opcional)
+  diasGatilho Int?
+  valorMinimo Decimal?           @db.Decimal(10, 2)
+
+  // Acao: criar uma Tarefa
+  tituloTarefa     String
+  descricaoTarefa  String?
+  prioridadeTarefa PrioridadeTarefa @default(MEDIA)
+  prazoEmDias      Int            @default(7)
+
+  // Responsavel da tarefa criada:
+  //   null = ultimo vendedor envolvido (ou criador da venda/orcamento)
+  //   preenchido = sempre esse usuario
+  responsavelId String?
+  responsavel   User?   @relation("RegraAutomacaoResponsavel", fields: [responsavelId], references: [id])
+
+  ultimaExecucao DateTime?
+  totalDisparos  Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  logs LogAutomacao[]
+
+  @@index([tipo, ativo])
+  @@map("regras_automacao")
+}
+
+// Registro de cada disparo da regra. Usado para anti-duplicacao e auditoria.
+model LogAutomacao {
+  id          String   @id @default(uuid())
+  regraId     String
+  regra       RegraAutomacao @relation(fields: [regraId], references: [id], onDelete: Cascade)
+
+  // Contexto que disparou (so um dos tres preenchido por log)
+  clienteId   String?
+  orcamentoId String?
+  vendaId     String?
+
+  // Tarefa criada como resultado (null se houve erro/skip)
+  tarefaId    String?
+  resultado   String   @default("CRIADA") // CRIADA, SKIP_DUPLICADA, SKIP_SEM_RESPONSAVEL, ERRO
+
+  createdAt   DateTime @default(now())
+
+  @@index([regraId, createdAt(sort: Desc)])
+  @@index([clienteId, regraId])
+  @@index([orcamentoId, regraId])
+  @@index([vendaId, regraId])
+  @@map("logs_automacao")
 }
 
 // Log de mudancas de etapa — permite calcular tempo medio em cada etapa

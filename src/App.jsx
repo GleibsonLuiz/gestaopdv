@@ -24,6 +24,7 @@ import Tarefas from "./Tarefas.jsx";
 import Fidelidade from "./Fidelidade.jsx";
 import Funil from "./Funil.jsx";
 import Segmentos from "./Segmentos.jsx";
+import Automacoes from "./Automacoes.jsx";
 import Alertas from "./Alertas.jsx";
 import { getUser, getToken, clearSession, api } from "./lib/api.js";
 import { podeAcessar } from "./lib/permissoes.js";
@@ -156,6 +157,7 @@ export default function App() {
     fornecedores: "FORNECEDORES", produtos: "PRODUTOS", etiquetas: "PRODUTOS", estoque: "ESTOQUE",
     compras: "COMPRAS", orcamentos: "ORCAMENTOS",
     funil: "OPORTUNIDADES",
+    automacoes: "AUTOMACOES",
     financeiro: "FINANCEIRO", relatorios: "RELATORIOS",
     comissoes: "COMISSOES",
     funcionarios: "FUNCIONARIOS",
@@ -174,7 +176,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     if (!podeVer(tela)) {
-      const primeira = ["pdv","dashboard","caixa","clientes","segmentos","tarefas","fidelidade","funil","fornecedores","produtos","etiquetas",
+      const primeira = ["pdv","dashboard","caixa","clientes","segmentos","tarefas","fidelidade","funil","automacoes","fornecedores","produtos","etiquetas",
         "estoque","compras","orcamentos","financeiro","relatorios","comissoes","funcionarios","projeto","sistema","empresa"].find(podeVer);
       if (primeira && primeira !== tela) setTela(primeira);
     }
@@ -306,6 +308,9 @@ export default function App() {
           )}
           {podeAcessar(user, "OPORTUNIDADES") && (
             <Item icone="🎯" label="Funil de Vendas" ativo={tela === "funil"} onClick={() => navegar("funil")} />
+          )}
+          {podeAcessar(user, "AUTOMACOES") && (
+            <Item icone="⚡" label="Automações" ativo={tela === "automacoes"} onClick={() => navegar("automacoes")} />
           )}
           {podeAcessar(user, "FINANCEIRO") && (
             <Item icone="💰" label="Financeiro" ativo={tela === "financeiro"} onClick={() => navegar("financeiro")} />
@@ -479,6 +484,9 @@ export default function App() {
           )}
           {tela === "segmentos" && (
             <Segmentos user={user} />
+          )}
+          {tela === "automacoes" && (
+            <Automacoes user={user} />
           )}
           {tela === "financeiro" && (
             <FinanceiroPage user={user} />

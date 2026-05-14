@@ -161,12 +161,12 @@
   background: var(--pdv-surf);
   border: 1px solid var(--pdv-line);
   border-radius: var(--pdv-r-xl);
-  padding: 16px 22px;
+  padding: 10px 18px 12px;
   box-shadow: var(--pdv-shadow-1);
 }
 .pdv-dash-hd {
   display: flex; justify-content: space-between; align-items: baseline;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 .pdv-dash-title {
   color: var(--pdv-t3); font-size: 11px; font-weight: 500;
@@ -197,7 +197,7 @@
 .pdv-dash-bar > span { display: block; height: 100%; transition: width .4s; border-radius: 99px; }
 
 .pdv-dash-empty {
-  padding: 14px; text-align: center; color: var(--pdv-t3); font-size: 12.5px;
+  padding: 8px 14px; text-align: center; color: var(--pdv-t3); font-size: 12px;
   background: var(--pdv-surf-2); border-radius: var(--pdv-r-md);
   border: 1px dashed var(--pdv-line-2);
 }
@@ -219,8 +219,8 @@
   background: var(--pdv-surf);
   border: 1px solid var(--pdv-line);
   border-radius: var(--pdv-r-xl);
-  padding: 10px 16px 10px 18px;
-  display: flex; align-items: center; gap: 14px;
+  padding: 6px 16px 6px 14px;
+  display: flex; align-items: center; gap: 12px;
   transition: border-color .2s, box-shadow .2s;
   box-shadow: var(--pdv-shadow-1);
 }
@@ -229,14 +229,14 @@
   box-shadow: var(--pdv-shadow-glow);
 }
 .pdv-scan-icon {
-  width: 38px; height: 38px; border-radius: 10px;
+  width: 32px; height: 32px; border-radius: 8px;
   background: var(--pdv-surf-2); display: grid; place-items: center; color: var(--pdv-accent);
   flex-shrink: 0;
 }
 .pdv-scan input {
   flex: 1; min-width: 0;
   border: 0; background: transparent; outline: 0;
-  font-size: 17px; color: var(--pdv-t1); padding: 14px 0;
+  font-size: 15px; color: var(--pdv-t1); padding: 9px 0;
   letter-spacing: -0.01em;
   font-family: inherit;
 }
@@ -322,7 +322,11 @@
 .pdv-card-sub { font-size: 11.5px; color: var(--pdv-t3); margin-top: 4px; }
 
 /* ─── Cestinha (cart items) ────────────────────────────────── */
-.pdv-cart-list { max-height: clamp(320px, calc(100vh - 320px), 720px); overflow-y: auto; }
+/* O paper agora tem header (~150px) + footer (~140px) dentro dele, e
+   ainda há ~250px acima (header app + vendas-hoje + scan + hd cestinha).
+   Total a reservar fora da lista: ~540px. Em tela 800px sobra ~260px;
+   em tela 1080px sobra ~540px. */
+.pdv-cart-list { max-height: clamp(220px, calc(100vh - 540px), 900px); overflow-y: auto; }
 .pdv-cart-item {
   display: flex; gap: 14px; align-items: center;
   padding: 12px 18px; border-bottom: 1px solid var(--pdv-line);
@@ -420,7 +424,7 @@
 
 .pdv-cupom-outer {
   position: relative;
-  padding: 18px 14px 22px;
+  padding: 12px 14px 16px;
   background:
     radial-gradient(ellipse at center top, rgba(0,0,0,.55), transparent 70%),
     linear-gradient(180deg, rgba(0,0,0,.25), rgba(0,0,0,.05));
@@ -429,7 +433,7 @@
 /* Serrilha superior — recorta o papel */
 .pdv-cupom-outer::before {
   content: '';
-  position: absolute; top: 14px; left: 14px; right: 14px;
+  position: absolute; top: 8px; left: 14px; right: 14px;
   height: 10px; z-index: 4; pointer-events: none;
   background:
     radial-gradient(circle at 7px 10px, transparent 5.5px, var(--pdv-surf) 6px)
@@ -438,7 +442,7 @@
 /* Serrilha inferior — recorta o papel */
 .pdv-cupom-outer::after {
   content: '';
-  position: absolute; bottom: 18px; left: 14px; right: 14px;
+  position: absolute; bottom: 12px; left: 14px; right: 14px;
   height: 10px; z-index: 4; pointer-events: none;
   background:
     radial-gradient(circle at 7px 0, transparent 5.5px, var(--pdv-surf) 6px)
@@ -463,11 +467,11 @@
     inset 0 -4px 8px rgba(0,0,0,.08),
     0 2px 0 rgba(0,0,0,.15),
     0 8px 22px rgba(0,0,0,.45);
-  padding: 18px 0 14px;
+  padding: 14px 0 10px;
   font-family: 'Courier New', Courier, monospace;
   font-size: 13px;
   color: #1a1a1a;
-  line-height: 1.5;
+  line-height: 1.45;
 }
 
 /* Vinco vertical sutil — papel ondulando */
@@ -517,7 +521,10 @@
   font-weight: bold;
   color: #1a1a1a;
   letter-spacing: 0.04em;
-  padding: 2px 0;
+  padding: 4px 0;
+  margin: 3px 0;
+  border-top: 1px dashed #6a5340;
+  border-bottom: 1px dashed #6a5340;
 }
 .pdv-cupom-hd-meta {
   display: flex;
@@ -577,43 +584,28 @@
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 900;
   color: #0d0d0d;
-  padding: 4px 0;
+  padding: 6px 0 4px;
+  margin-top: 4px;
   letter-spacing: 0.04em;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 0 1px rgba(0,0,0,.2);
+  border-top: 2px solid #1a1a1a;
 }
 .pdv-cupom-ft-aviso {
   text-align: center;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: bold;
   color: #b04020;
-  letter-spacing: 0.06em;
-  margin-top: 6px;
+  letter-spacing: 0.04em;
+  margin-top: 4px;
   animation: pdv-cupom-blink 2.5s ease-in-out infinite;
 }
 @keyframes pdv-cupom-blink {
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.55; }
-}
-.pdv-cupom-ft-hint {
-  text-align: center;
-  font-size: 11px;
-  color: #4a4a4a;
-  margin-top: 4px;
-  font-family: 'Segoe UI', sans-serif;
-  letter-spacing: 0;
-}
-.pdv-cupom-ft-hint b {
-  font-family: 'Courier New', Courier, monospace;
-  background: #1a1a1a;
-  color: #fffde7;
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-size: 10.5px;
-  letter-spacing: 0.04em;
 }
 
 /* Item */

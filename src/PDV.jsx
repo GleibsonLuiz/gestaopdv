@@ -706,7 +706,7 @@ function NovaVenda({ user }) {
   const [scanFocused, setScanFocused] = useState(false);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {/* TOPO: alerta quando nao ha caixa aberto OU resumo de vendas do dia
           por forma de pagamento (info financeira detalhada — saldo, sangria,
           suprimento — fica restrita a tela do Caixa). */}
@@ -889,18 +889,14 @@ function NovaVenda({ user }) {
                 {/* === HEADER DO CUPOM === */}
                 <div className="pdv-cupom-hd">
                   <div className="pdv-cupom-hd-store">GESTÃO PRO</div>
-                  <div className="pdv-cupom-hd-sub">PAPELARIA E SERVIÇOS</div>
-                  <div className="pdv-cupom-hd-sub">CNPJ 00.000.000/0001-00</div>
-                  <div className="pdv-cupom-hd-divider">================================</div>
-                  <div className="pdv-cupom-hd-tag">CUPOM DE VENDA — NÃO FISCAL</div>
-                  <div className="pdv-cupom-hd-divider">================================</div>
+                  <div className="pdv-cupom-hd-sub">PAPELARIA E SERVIÇOS · CNPJ 00.000.000/0001-00</div>
+                  <div className="pdv-cupom-hd-tag">— CUPOM DE VENDA · NÃO FISCAL —</div>
                   <div className="pdv-cupom-hd-meta">
-                    <span>{new Date().toLocaleDateString("pt-BR")}</span>
-                    <span>{new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+                    <span>{new Date().toLocaleDateString("pt-BR")} {new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+                    <span>CX#{caixaAtual?.id ? String(caixaAtual.id).slice(-4) : "—"}</span>
                   </div>
                   <div className="pdv-cupom-hd-meta">
-                    <span>OPERADOR: {(user.nome || "—").toUpperCase().slice(0, 18)}</span>
-                    <span>CX#{caixaAtual?.id ?? "—"}</span>
+                    <span>OPERADOR: {(user.nome || "—").toUpperCase().slice(0, 22)}</span>
                   </div>
                   <div className="pdv-cupom-hd-cols">
                     <span>ITEM  DESCRIÇÃO</span>
@@ -973,16 +969,12 @@ function NovaVenda({ user }) {
                       <span>- {fmtBRL(descontoFidelidade)}</span>
                     </div>
                   )}
-                  <div className="pdv-cupom-ft-dashes">================================</div>
                   <div className="pdv-cupom-ft-total">
                     <span>TOTAL R$</span>
                     <span>{fmtBRL(total).replace("R$", "").trim()}</span>
                   </div>
                   <div className="pdv-cupom-ft-dashes">================================</div>
-                  <div className="pdv-cupom-ft-aviso">* VENDA EM ANDAMENTO *</div>
-                  <div className="pdv-cupom-ft-hint">
-                    Pressione <b>F10</b> para finalizar
-                  </div>
+                  <div className="pdv-cupom-ft-aviso">* VENDA EM ANDAMENTO · F10 para finalizar *</div>
                 </div>
               </div>
             </div>

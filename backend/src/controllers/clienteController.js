@@ -179,6 +179,156 @@ export async function segmentos(req, res, next) {
   }
 }
 
+// ============ ANIVERSARIANTES ============
+//
+// Retorna clientes aniversariantes do mes (ou periodo) com idade calculada.
+// Query params:
+//   mes  - 1-12 (default: mes atual)
+//   dia  - opcional: filtra apenas esse dia
+//
+// Compatibilidade com Postgres: usamos extract() via raw query porque o
+// Prisma nao tem helper nativo para "mes da data".
+
+export async function aniversariantes(req, res, next) {
+  try {
+    const hoje = new Date();
+    const mes = parseInt(req.query.mes || (hoje.getMonth() + 1), 10);
+    const dia = req.query.dia ? parseInt(req.query.dia, 10) : null;
+
+    if (mes < 1 || mes > 12) {
+      return res.status(400).json({ erro: "Mes invalido (1-12)" });
+    }
+
+    const condDia = dia ? `AND EXTRACT(DAY FROM "dataNascimento") = ${dia}` : "";
+
+    const linhas = await prisma.$queryRawUnsafe(`
+      SELECT id, nome, telefone, email, cidade, estado, "dataNascimento",
+             "statusFunil", origem
+      FROM clientes
+      WHERE ativo = true
+        AND "dataNascimento" IS NOT NULL
+        AND EXTRACT(MONTH FROM "dataNascimento") = ${mes}
+        ${condDia}
+      ORDER BY EXTRACT(DAY FROM "dataNascimento") ASC, nome ASC
+    `);
+
+    // Carrega tags em uma segunda query
+    const ids = linhas.map((l) => l.id);
+    const tagsRows = ids.length === 0 ? [] : await prisma.clienteTag.findMany({
+      where: { clienteId: { in: ids } },
+      include: { tag: true },
+    });
+    const tagsPorCliente = new Map();
+    for (const ct of tagsRows) {
+      const lista = tagsPorCliente.get(ct.clienteId) || [];
+      lista.push({ id: ct.tag.id, nome: ct.tag.nome, cor: ct.tag.cor });
+      tagsPorCliente.set(ct.clienteId, lista);
+    }
+
+    const enriquecidos = linhas.map((c) => {
+      const d = new Date(c.dataNascimento);
+      const diaNasc = d.getUTCDate();
+      const mesNasc = d.getUTCMonth() + 1;
+      const anoNasc = d.getUTCFullYear();
+      // Idade no ano atual (assumindo aniversario ja passou no caso de mes < atual)
+      const idade = hoje.getFullYear() - anoNasc;
+      return {
+        ...c,
+        tags: tagsPorCliente.get(c.id) || [],
+        diaNascimento: diaNasc,
+        mesNascimento: mesNasc,
+        anoNascimento: anoNasc,
+        idade,
+      };
+    });
+
+    res.json({ mes, dia, total: enriquecidos.length, clientes: enriquecidos });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ============ REATIVACAO ============
+//
+// Retorna clientes ativos sem compra ha X dias (default 90), ordenados
+// por LTV decrescente para priorizar.
+
+export async function reativacao(req, res, next) {
+  try {
+    const diasMin = parseInt(req.query.diasMin || "90", 10);
+    const limite = new Date(Date.now() - diasMin * 86400000);
+
+    // Clientes ativos que tem ao menos uma venda CONCLUIDA, e cuja ultima
+    // venda foi antes de `limite`. (Quem nunca comprou nao entra — sao leads.)
+    const clientes = await prisma.cliente.findMany({
+      where: {
+        ativo: true,
+        vendas: {
+          some: { status: "CONCLUIDA" },
+          none: { status: "CONCLUIDA", createdAt: { gte: limite } },
+        },
+      },
+      include: {
+        tags: { include: { tag: true } },
+        vendas: {
+          where: { status: "CONCLUIDA" },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { createdAt: true, total: true, userId: true },
+        },
+      },
+    });
+
+    // Calcula LTV (soma) numa segunda query agregada
+    const ids = clientes.map((c) => c.id);
+    const agregados = ids.length === 0 ? [] : await prisma.venda.groupBy({
+      by: ["clienteId"],
+      where: { status: "CONCLUIDA", clienteId: { in: ids } },
+      _sum: { total: true },
+      _count: { id: true },
+    });
+    const ltvPorCliente = new Map();
+    for (const a of agregados) {
+      ltvPorCliente.set(a.clienteId, {
+        ltv: Number(a._sum.total || 0),
+        qtd: a._count.id,
+      });
+    }
+
+    const hoje = Date.now();
+    const enriquecidos = clientes.map((c) => {
+      const ult = c.vendas[0];
+      const recenciaDias = ult ? Math.floor((hoje - new Date(ult.createdAt).getTime()) / 86400000) : null;
+      const stats = ltvPorCliente.get(c.id) || { ltv: 0, qtd: 0 };
+      return {
+        id: c.id,
+        nome: c.nome,
+        telefone: c.telefone,
+        email: c.email,
+        cidade: c.cidade,
+        estado: c.estado,
+        statusFunil: c.statusFunil,
+        origem: c.origem,
+        ultimaCompra: ult?.createdAt || null,
+        recenciaDias,
+        ltv: stats.ltv,
+        qtdCompras: stats.qtd,
+        ultimoVendedorId: ult?.userId || null,
+        tags: c.tags.map((ct) => ({ id: ct.tag.id, nome: ct.tag.nome, cor: ct.tag.cor })),
+      };
+    }).sort((a, b) => b.ltv - a.ltv);
+
+    res.json({
+      diasMin,
+      total: enriquecidos.length,
+      totalLtv: enriquecidos.reduce((s, c) => s + c.ltv, 0),
+      clientes: enriquecidos,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function obter(req, res, next) {
   try {
     const cliente = await prisma.cliente.findUnique({
@@ -217,6 +367,7 @@ export async function criar(req, res, next) {
         observacoes: norm(req.body.observacoes),
         origem: norm(req.body.origem),
         statusFunil: req.body.statusFunil || "LEAD",
+        dataNascimento: req.body.dataNascimento ? new Date(req.body.dataNascimento) : null,
       },
     });
     res.status(201).json(cliente);
@@ -245,6 +396,9 @@ export async function atualizar(req, res, next) {
         return res.status(400).json({ erro: "Status do funil invalido" });
       }
       data.statusFunil = req.body.statusFunil;
+    }
+    if (req.body.dataNascimento !== undefined) {
+      data.dataNascimento = req.body.dataNascimento ? new Date(req.body.dataNascimento) : null;
     }
 
     const cliente = await prisma.cliente.update({

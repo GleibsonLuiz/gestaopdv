@@ -289,6 +289,9 @@ model Cliente {
   // CRM — distincao Lead vs Cliente
   origem      String?
   statusFunil StatusClienteFunil @default(LEAD)
+  // Data de nascimento (PF) ou data de fundacao (PJ). Armazenado como
+  // DateTime para simplicidade — front trabalha apenas com YYYY-MM-DD.
+  dataNascimento DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

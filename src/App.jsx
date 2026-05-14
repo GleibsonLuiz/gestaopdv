@@ -26,6 +26,7 @@ import Funil from "./Funil.jsx";
 import Segmentos from "./Segmentos.jsx";
 import Automacoes from "./Automacoes.jsx";
 import DashboardCrm from "./DashboardCrm.jsx";
+import Reativacao from "./Reativacao.jsx";
 import Alertas from "./Alertas.jsx";
 import { getUser, getToken, clearSession, api } from "./lib/api.js";
 import { podeAcessar } from "./lib/permissoes.js";
@@ -165,6 +166,7 @@ export default function App() {
     tarefas: "CLIENTES",
     fidelidade: "CLIENTES",
     segmentos: "CLIENTES",
+    reativacao: "CLIENTES",
   };
 
   function podeVer(t) {
@@ -177,7 +179,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     if (!podeVer(tela)) {
-      const primeira = ["pdv","dashboard","dashboardcrm","caixa","clientes","segmentos","tarefas","fidelidade","funil","automacoes","fornecedores","produtos","etiquetas",
+      const primeira = ["pdv","dashboard","dashboardcrm","caixa","clientes","segmentos","reativacao","tarefas","fidelidade","funil","automacoes","fornecedores","produtos","etiquetas",
         "estoque","compras","orcamentos","financeiro","relatorios","comissoes","funcionarios","projeto","sistema","empresa"].find(podeVer);
       if (primeira && primeira !== tela) setTela(primeira);
     }
@@ -279,6 +281,9 @@ export default function App() {
           )}
           {podeAcessar(user, "CLIENTES") && (
             <Item icone="📊" label="Segmentos" ativo={tela === "segmentos"} onClick={() => navegar("segmentos")} />
+          )}
+          {podeAcessar(user, "CLIENTES") && (
+            <Item icone="🎂" label="Aniversários" ativo={tela === "reativacao"} onClick={() => navegar("reativacao")} />
           )}
           {podeAcessar(user, "CLIENTES") && (
             <Item icone="✅" label="Tarefas" ativo={tela === "tarefas"} onClick={() => navegar("tarefas")} />
@@ -494,6 +499,9 @@ export default function App() {
           )}
           {tela === "dashboardcrm" && (
             <DashboardCrm user={user} />
+          )}
+          {tela === "reativacao" && (
+            <Reativacao user={user} />
           )}
           {tela === "financeiro" && (
             <FinanceiroPage user={user} />

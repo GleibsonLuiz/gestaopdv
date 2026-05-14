@@ -297,6 +297,19 @@ export const api = {
     const q = qs.toString();
     return request(`/clientes/segmentos${q ? `?${q}` : ""}`);
   },
+  aniversariantes: ({ mes = "", dia = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (mes) qs.set("mes", String(mes));
+    if (dia) qs.set("dia", String(dia));
+    const q = qs.toString();
+    return request(`/clientes/aniversariantes${q ? `?${q}` : ""}`);
+  },
+  clientesReativacao: ({ diasMin = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (diasMin) qs.set("diasMin", String(diasMin));
+    const q = qs.toString();
+    return request(`/clientes/reativacao${q ? `?${q}` : ""}`);
+  },
 
   // ==================== OPORTUNIDADES (FUNIL CRM) ====================
   listarOportunidades: ({ etapa = "", responsavelId = "", clienteId = "", origem = "", search = "", minhas = "" } = {}) => {

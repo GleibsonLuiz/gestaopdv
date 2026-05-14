@@ -53,7 +53,7 @@ async function buscarCepViaCEP(cepMascarado) {
 const VAZIO = {
   nome: "", cpfCnpj: "", email: "", telefone: "",
   endereco: "", numero: "", complemento: "", cidade: "", estado: "", cep: "", observacoes: "",
-  origem: "", statusFunil: "LEAD",
+  origem: "", statusFunil: "LEAD", dataNascimento: "",
 };
 
 const STATUS_FUNIL = [
@@ -186,6 +186,7 @@ export default function Clientes({ user }) {
       observacoes: cliente.observacoes || "",
       origem: cliente.origem || "",
       statusFunil: cliente.statusFunil || "LEAD",
+      dataNascimento: cliente.dataNascimento ? new Date(cliente.dataNascimento).toISOString().slice(0, 10) : "",
     });
     setErroForm("");
     setNomeInvalido(false);
@@ -611,6 +612,16 @@ export default function Clientes({ user }) {
                   <option key={o} value={o}>{o}</option>
                 ))}
               </select>
+            </Campo>
+          </Linha>
+          <Linha cols={1}>
+            <Campo label="Data de nascimento / fundação" hint="Usada na tela de Aniversariantes">
+              <input
+                type="date"
+                className="lux-input"
+                value={form.dataNascimento}
+                onChange={e => setForm({ ...form, dataNascimento: e.target.value })}
+              />
             </Campo>
           </Linha>
         </Secao>

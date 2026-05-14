@@ -815,28 +815,50 @@ function NovaVenda({ user }) {
       <div className="pdv-main">
         {/* CESTINHA — fotos, novos no topo */}
         <div className="pdv-card">
-          <div className="pdv-card-hd" style={{ borderBottom: "1px solid var(--pdv-line)" }}>
+          <div
+            className={`pdv-card-hd pdv-cestinha-hd ${carrinho.length > 0 ? "is-cupom" : ""}`}
+            style={{ borderBottom: carrinho.length > 0 ? "0" : "1px solid var(--pdv-line)" }}
+          >
             <div className="pdv-card-title">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="9" cy="20" r="1.4"/>
                 <circle cx="17" cy="20" r="1.4"/>
                 <path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.6a2 2 0 0 0 2-1.5L21 8H6"/>
               </svg>
-              Cestinha
-              <span className="pill">{carrinho.length} {carrinho.length === 1 ? "item" : "itens"}</span>
+              {carrinho.length === 0 ? (
+                <>Cestinha<span className="pill">vazia</span></>
+              ) : (
+                <>
+                  <span className="pdv-cestinha-hd-lbl">Cupom em andamento</span>
+                  <span className="pill pdv-pill-live">
+                    <span className="pdv-pill-dot" />
+                    {carrinho.length} {carrinho.length === 1 ? "item" : "itens"}
+                  </span>
+                </>
+              )}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               {carrinho.length > 0 && (
                 <button
                   type="button"
                   onClick={() => setCancelarAberto(true)}
-                  className="pdv-btn-rm"
-                  style={{ color: "var(--pdv-c-rose)", borderColor: "rgba(251,113,133,.35)" }}
-                  title="F8"
-                >Cancelar item · F8</button>
+                  className="pdv-btn-rm pdv-btn-rm-danger"
+                  title="Cancelar item (F8)"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                  </svg>
+                  Cancelar item
+                  <span className="pdv-kbd">F8</span>
+                </button>
               )}
               {carrinho.length > 0 && (
-                <button onClick={limparCarrinho} className="pdv-btn-rm">
+                <button onClick={limparCarrinho} className="pdv-btn-rm" title="Limpar carrinho">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    <line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>
+                  </svg>
                   Limpar tudo
                 </button>
               )}
@@ -863,7 +885,31 @@ function NovaVenda({ user }) {
             />
           ) : (
             <div className="pdv-cupom-outer">
-              <div className="pdv-cart-list">
+              <div className="pdv-cupom-paper">
+                {/* === HEADER DO CUPOM === */}
+                <div className="pdv-cupom-hd">
+                  <div className="pdv-cupom-hd-store">GESTÃO PRO</div>
+                  <div className="pdv-cupom-hd-sub">PAPELARIA E SERVIÇOS</div>
+                  <div className="pdv-cupom-hd-sub">CNPJ 00.000.000/0001-00</div>
+                  <div className="pdv-cupom-hd-divider">================================</div>
+                  <div className="pdv-cupom-hd-tag">CUPOM DE VENDA — NÃO FISCAL</div>
+                  <div className="pdv-cupom-hd-divider">================================</div>
+                  <div className="pdv-cupom-hd-meta">
+                    <span>{new Date().toLocaleDateString("pt-BR")}</span>
+                    <span>{new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+                  </div>
+                  <div className="pdv-cupom-hd-meta">
+                    <span>OPERADOR: {(user.nome || "—").toUpperCase().slice(0, 18)}</span>
+                    <span>CX#{caixaAtual?.id ?? "—"}</span>
+                  </div>
+                  <div className="pdv-cupom-hd-cols">
+                    <span>ITEM  DESCRIÇÃO</span>
+                    <span>VALOR</span>
+                  </div>
+                  <div className="pdv-cupom-hd-dashes">--------------------------------</div>
+                </div>
+
+                <div className="pdv-cart-list">
                 {carrinho.map((it, idx) => (
                   <div
                     key={it.produtoId}
@@ -902,6 +948,42 @@ function NovaVenda({ user }) {
                     </div>
                   </div>
                 ))}
+                </div>
+
+                {/* === FOOTER DO CUPOM === */}
+                <div className="pdv-cupom-ft">
+                  <div className="pdv-cupom-ft-dashes">--------------------------------</div>
+                  <div className="pdv-cupom-ft-row">
+                    <span>QTD. ITENS</span>
+                    <span>{carrinho.reduce((acc, it) => acc + it.quantidade, 0)}</span>
+                  </div>
+                  <div className="pdv-cupom-ft-row">
+                    <span>SUBTOTAL</span>
+                    <span>{fmtBRL(subtotal)}</span>
+                  </div>
+                  {descontoNum > 0 && (
+                    <div className="pdv-cupom-ft-row pdv-cupom-ft-desc">
+                      <span>(-) DESCONTO</span>
+                      <span>- {fmtBRL(descontoNum)}</span>
+                    </div>
+                  )}
+                  {descontoFidelidade > 0 && (
+                    <div className="pdv-cupom-ft-row pdv-cupom-ft-desc">
+                      <span>(-) PONTOS</span>
+                      <span>- {fmtBRL(descontoFidelidade)}</span>
+                    </div>
+                  )}
+                  <div className="pdv-cupom-ft-dashes">================================</div>
+                  <div className="pdv-cupom-ft-total">
+                    <span>TOTAL R$</span>
+                    <span>{fmtBRL(total).replace("R$", "").trim()}</span>
+                  </div>
+                  <div className="pdv-cupom-ft-dashes">================================</div>
+                  <div className="pdv-cupom-ft-aviso">* VENDA EM ANDAMENTO *</div>
+                  <div className="pdv-cupom-ft-hint">
+                    Pressione <b>F10</b> para finalizar
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -911,27 +993,9 @@ function NovaVenda({ user }) {
         <div className="pdv-side">
           {carrinho.length > 0 && (
             <div className="pdv-totals-card">
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <div className="pdv-totals-row">
-                  <span>Subtotal · {carrinho.reduce((acc, it) => acc + it.quantidade, 0)} {carrinho.reduce((acc, it) => acc + it.quantidade, 0) === 1 ? "item" : "itens"}</span>
-                  <strong>{fmtBRL(subtotal)}</strong>
-                </div>
-                {descontoNum > 0 && (
-                  <div className="pdv-totals-row">
-                    <span>Desconto</span>
-                    <strong style={{ color: "var(--pdv-c-rose)" }}>− {fmtBRL(descontoNum)}</strong>
-                  </div>
-                )}
-                {descontoFidelidade > 0 && (
-                  <div className="pdv-totals-row">
-                    <span>⭐ Pontos</span>
-                    <strong style={{ color: "var(--pdv-c-amber)" }}>− {fmtBRL(descontoFidelidade)}</strong>
-                  </div>
-                )}
-                <div className="pdv-total-block">
-                  <div className="pdv-total-lbl">Total</div>
-                  <TotalAnimado valor={total} />
-                </div>
+              <div className="pdv-total-block pdv-total-block-lg">
+                <div className="pdv-total-lbl">Total a pagar</div>
+                <TotalAnimado valor={total} />
               </div>
 
               {erro && !algumaModalAberta && (

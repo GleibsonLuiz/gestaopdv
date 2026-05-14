@@ -2,6 +2,8 @@ import prisma from "../lib/prisma.js";
 
 const norm = (v) => (v === undefined || v === null || v === "" ? null : v);
 
+const STATUS_FUNIL = ["LEAD", "CLIENTE_ATIVO", "CLIENTE_INATIVO", "PERDIDO"];
+
 // ============ HELPERS DE SEGMENTACAO RFM ============
 //
 // Classifica clientes em segmentos com base em Recencia/Frequencia/Monetario.
@@ -28,10 +30,12 @@ function classificarSegmento({ qtdCompras, totalGasto, recenciaDias, mediaTotal,
 
 export async function listar(req, res, next) {
   try {
-    const { search, ativo, segmento, tagId } = req.query;
+    const { search, ativo, segmento, tagId, statusFunil, origem } = req.query;
     const where = {};
     if (ativo === "true") where.ativo = true;
     if (ativo === "false") where.ativo = false;
+    if (statusFunil && STATUS_FUNIL.includes(statusFunil)) where.statusFunil = statusFunil;
+    if (origem) where.origem = origem;
     if (search) {
       where.OR = [
         { nome: { contains: search, mode: "insensitive" } },
@@ -197,6 +201,9 @@ export async function criar(req, res, next) {
     if (!nome || !String(nome).trim()) {
       return res.status(400).json({ erro: "Nome e obrigatorio" });
     }
+    if (req.body.statusFunil && !STATUS_FUNIL.includes(req.body.statusFunil)) {
+      return res.status(400).json({ erro: "Status do funil invalido" });
+    }
     const cliente = await prisma.cliente.create({
       data: {
         nome: String(nome).trim(),
@@ -208,6 +215,8 @@ export async function criar(req, res, next) {
         estado: norm(req.body.estado),
         cep: norm(req.body.cep),
         observacoes: norm(req.body.observacoes),
+        origem: norm(req.body.origem),
+        statusFunil: req.body.statusFunil || "LEAD",
       },
     });
     res.status(201).json(cliente);
@@ -227,10 +236,16 @@ export async function atualizar(req, res, next) {
       if (!n) return res.status(400).json({ erro: "Nome nao pode ser vazio" });
       data.nome = n;
     }
-    for (const campo of ["cpfCnpj", "email", "telefone", "endereco", "cidade", "estado", "cep", "observacoes"]) {
+    for (const campo of ["cpfCnpj", "email", "telefone", "endereco", "cidade", "estado", "cep", "observacoes", "origem"]) {
       if (req.body[campo] !== undefined) data[campo] = norm(req.body[campo]);
     }
     if (req.body.ativo !== undefined) data.ativo = !!req.body.ativo;
+    if (req.body.statusFunil !== undefined) {
+      if (!STATUS_FUNIL.includes(req.body.statusFunil)) {
+        return res.status(400).json({ erro: "Status do funil invalido" });
+      }
+      data.statusFunil = req.body.statusFunil;
+    }
 
     const cliente = await prisma.cliente.update({
       where: { id: req.params.id },

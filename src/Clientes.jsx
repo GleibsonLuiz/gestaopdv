@@ -53,7 +53,21 @@ async function buscarCepViaCEP(cepMascarado) {
 const VAZIO = {
   nome: "", cpfCnpj: "", email: "", telefone: "",
   endereco: "", numero: "", complemento: "", cidade: "", estado: "", cep: "", observacoes: "",
+  origem: "", statusFunil: "LEAD",
 };
+
+const STATUS_FUNIL = [
+  { id: "LEAD",            label: "Lead",            cor: "#7c3aed", icone: "🌱" },
+  { id: "CLIENTE_ATIVO",   label: "Cliente ativo",   cor: "#22c55e", icone: "✅" },
+  { id: "CLIENTE_INATIVO", label: "Cliente inativo", cor: "#64748b", icone: "💤" },
+  { id: "PERDIDO",         label: "Perdido",         cor: "#ef4444", icone: "💔" },
+];
+const STATUS_MAP = Object.fromEntries(STATUS_FUNIL.map((s) => [s.id, s]));
+
+const ORIGENS = [
+  "INDICACAO", "INSTAGRAM", "FACEBOOK", "GOOGLE",
+  "WHATSAPP", "WALK_IN", "SITE", "TELEFONE", "OUTROS",
+];
 
 const CAMPOS_PROGRESSO = ["nome", "cpfCnpj", "email", "telefone", "cep", "endereco", "numero", "cidade", "estado", "observacoes"];
 
@@ -95,6 +109,8 @@ export default function Clientes({ user }) {
   const [erro, setErro] = useState("");
   const [search, setSearch] = useState("");
   const [filtroAtivo, setFiltroAtivo] = useState("");
+  const [filtroStatusFunil, setFiltroStatusFunil] = useState("");
+  const [filtroOrigem, setFiltroOrigem] = useState("");
   const [modalAberto, setModalAberto] = useState(false);
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState(VAZIO);
@@ -121,14 +137,18 @@ export default function Clientes({ user }) {
     setCarregando(true);
     setErro("");
     try {
-      const data = await api.listarClientes({ search, ativo: filtroAtivo });
+      const data = await api.listarClientes({
+        search, ativo: filtroAtivo,
+        statusFunil: filtroStatusFunil,
+        origem: filtroOrigem,
+      });
       setClientes(data);
     } catch (err) {
       setErro(err.message);
     } finally {
       setCarregando(false);
     }
-  }, [search, filtroAtivo]);
+  }, [search, filtroAtivo, filtroStatusFunil, filtroOrigem]);
 
   useEffect(() => {
     const t = setTimeout(carregar, 250);
@@ -164,6 +184,8 @@ export default function Clientes({ user }) {
       estado: cliente.estado || "",
       cep: mascararCep(cliente.cep || ""),
       observacoes: cliente.observacoes || "",
+      origem: cliente.origem || "",
+      statusFunil: cliente.statusFunil || "LEAD",
     });
     setErroForm("");
     setNomeInvalido(false);
@@ -260,6 +282,24 @@ export default function Clientes({ user }) {
           <option value="true">Apenas ativos</option>
           <option value="false">Apenas inativos</option>
         </select>
+        <select value={filtroStatusFunil} onChange={e => setFiltroStatusFunil(e.target.value)} style={{
+          background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8,
+          padding: "10px 12px", color: C.text, fontSize: 13, cursor: "pointer",
+        }}>
+          <option value="">Todos os status</option>
+          {STATUS_FUNIL.map(s => (
+            <option key={s.id} value={s.id}>{s.icone} {s.label}</option>
+          ))}
+        </select>
+        <select value={filtroOrigem} onChange={e => setFiltroOrigem(e.target.value)} style={{
+          background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8,
+          padding: "10px 12px", color: C.text, fontSize: 13, cursor: "pointer",
+        }}>
+          <option value="">Todas as origens</option>
+          {ORIGENS.map(o => (
+            <option key={o} value={o}>{o}</option>
+          ))}
+        </select>
         <button onClick={abrirNovo} style={{
           background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
           color: C.white, border: "none", borderRadius: 8,
@@ -322,17 +362,33 @@ export default function Clientes({ user }) {
           }}>
             <div>
               <div style={{ color: C.white, fontWeight: 600 }}>{c.nome}</div>
-              {c.tags && c.tags.length > 0 && (
-                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>
-                  {c.tags.map((t) => (
-                    <span key={t.id} style={{
-                      background: t.cor + "22", color: t.cor,
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>
+                {c.statusFunil && STATUS_MAP[c.statusFunil] && (() => {
+                  const s = STATUS_MAP[c.statusFunil];
+                  return (
+                    <span style={{
+                      background: s.cor + "22", color: s.cor,
                       padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700,
-                      border: `1px solid ${t.cor}55`,
-                    }}>{t.nome}</span>
-                  ))}
-                </div>
-              )}
+                      border: `1px solid ${s.cor}55`,
+                      display: "inline-flex", alignItems: "center", gap: 3,
+                    }}>{s.icone} {s.label}</span>
+                  );
+                })()}
+                {c.origem && (
+                  <span style={{
+                    background: C.bg, color: C.muted,
+                    padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 600,
+                    border: `1px solid ${C.border}`,
+                  }}>📍 {c.origem}</span>
+                )}
+                {c.tags && c.tags.map((t) => (
+                  <span key={t.id} style={{
+                    background: t.cor + "22", color: t.cor,
+                    padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700,
+                    border: `1px solid ${t.cor}55`,
+                  }}>{t.nome}</span>
+                ))}
+              </div>
             </div>
             <div style={{ color: C.text }}>{c.cpfCnpj || "—"}</div>
             <div style={{ color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.email || "—"}</div>
@@ -527,6 +583,34 @@ export default function Clientes({ user }) {
                 onChange={e => setForm({ ...form, complemento: e.target.value })}
                 placeholder="Apto, sala, bloco"
               />
+            </Campo>
+          </Linha>
+        </Secao>
+
+        <Secao legenda="CRM / Funil">
+          <Linha cols={2}>
+            <Campo label="Status no funil">
+              <select
+                className="lux-select"
+                value={form.statusFunil}
+                onChange={e => setForm({ ...form, statusFunil: e.target.value })}
+              >
+                {STATUS_FUNIL.map(s => (
+                  <option key={s.id} value={s.id}>{s.icone} {s.label}</option>
+                ))}
+              </select>
+            </Campo>
+            <Campo label="Origem (como nos conheceu)">
+              <select
+                className="lux-select"
+                value={form.origem}
+                onChange={e => setForm({ ...form, origem: e.target.value })}
+              >
+                <option value="">— Não informado —</option>
+                {ORIGENS.map(o => (
+                  <option key={o} value={o}>{o}</option>
+                ))}
+              </select>
             </Campo>
           </Linha>
         </Secao>

@@ -104,12 +104,14 @@ export const api = {
   trocarSenha: (senhaAtual, senhaNova) =>
     request("/auth/senha", { method: "PUT", body: { senhaAtual, senhaNova } }),
 
-  listarClientes: ({ search = "", ativo = "", segmento = "", tagId = "" } = {}) => {
+  listarClientes: ({ search = "", ativo = "", segmento = "", tagId = "", statusFunil = "", origem = "" } = {}) => {
     const qs = new URLSearchParams();
     if (search) qs.set("search", search);
     if (ativo !== "") qs.set("ativo", ativo);
     if (segmento) qs.set("segmento", segmento);
     if (tagId) qs.set("tagId", tagId);
+    if (statusFunil) qs.set("statusFunil", statusFunil);
+    if (origem) qs.set("origem", origem);
     const q = qs.toString();
     return request(`/clientes${q ? `?${q}` : ""}`);
   },

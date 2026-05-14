@@ -199,6 +199,21 @@ enum TipoRegraAutomacao {
   POS_VENDA_FOLLOWUP
 }
 
+// Status do cliente no funil de relacionamento (CRM). Distingue prospects
+// (nunca compraram) de clientes ativos. Diferente do segmento RFM (que e
+// calculado automaticamente), o statusFunil pode ser ajustado manualmente.
+//
+//   LEAD            - prospect, ainda nao realizou nenhuma compra
+//   CLIENTE_ATIVO   - ja comprou pelo menos uma vez (promovido automaticamente)
+//   CLIENTE_INATIVO - cliente que parou de comprar (ajuste manual ou via RFM)
+//   PERDIDO         - lead que recusou ou foi descartado
+enum StatusClienteFunil {
+  LEAD
+  CLIENTE_ATIVO
+  CLIENTE_INATIVO
+  PERDIDO
+}
+
 // ============ USUARIOS ============
 
 model User {
@@ -271,6 +286,9 @@ model Cliente {
   cep         String?
   observacoes String?
   ativo       Boolean  @default(true)
+  // CRM — distincao Lead vs Cliente
+  origem      String?
+  statusFunil StatusClienteFunil @default(LEAD)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

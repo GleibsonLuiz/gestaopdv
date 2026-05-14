@@ -281,6 +281,16 @@ export async function criar(req, res, next) {
           });
         }
 
+        // CRM: promove cliente LEAD -> CLIENTE_ATIVO ao concluir 1a venda.
+        // Idempotente: o where do update so afeta clientes em LEAD ou PERDIDO,
+        // entao reativa quem havia sido marcado como perdido tambem.
+        if (clienteId) {
+          await tx.cliente.updateMany({
+            where: { id: clienteId, statusFunil: { in: ["LEAD", "PERDIDO"] } },
+            data: { statusFunil: "CLIENTE_ATIVO" },
+          });
+        }
+
         // Fidelidade: ganho de pontos (credito baseado no total pos-descontos)
         if (clienteId && total > 0) {
           const cfg = configFidelidade || await tx.configuracaoFidelidade.findFirst();

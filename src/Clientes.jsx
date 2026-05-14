@@ -541,6 +541,7 @@ export default function Clientes({ user }) {
         <PerfilClienteModal
           clienteId={perfilClienteId}
           onFechar={() => setPerfilClienteId(null)}
+          user={user}
         />
       )}
     </div>

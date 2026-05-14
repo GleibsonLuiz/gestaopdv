@@ -47,11 +47,21 @@ const FORMA_LABEL = {
   CREDIARIO: "Crediário",
 };
 
+const TIPO_INTERACAO = {
+  LIGACAO:  { label: "Ligação",   icon: "📞", cor: C.accent },
+  WHATSAPP: { label: "WhatsApp",  icon: "💬", cor: C.green },
+  VISITA:   { label: "Visita",    icon: "🏠", cor: C.purple },
+  EMAIL:    { label: "E-mail",    icon: "✉️", cor: C.yellow },
+  REUNIAO:  { label: "Reunião",   icon: "👥", cor: "#f97316" },
+  ANOTACAO: { label: "Anotação",  icon: "📝", cor: C.muted },
+};
+
 const ABAS = [
-  { id: "resumo", label: "Resumo" },
-  { id: "compras", label: "Compras" },
-  { id: "financeiro", label: "Financeiro" },
-  { id: "orcamentos", label: "Orçamentos" },
+  { id: "resumo",      label: "Resumo" },
+  { id: "interacoes",  label: "Interações" },
+  { id: "compras",     label: "Compras" },
+  { id: "financeiro",  label: "Financeiro" },
+  { id: "orcamentos",  label: "Orçamentos" },
 ];
 
 function Pill({ status, mapa }) {
@@ -106,6 +116,203 @@ function TabelaVazia({ msg }) {
 }
 
 // ============ ABAS ============
+
+function AbaInteracoes({ clienteId, user, onContadorChange }) {
+  const [interacoes, setInteracoes] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [salvando, setSalvando] = useState(false);
+  const [form, setForm] = useState({ tipo: "ANOTACAO", descricao: "", data: "" });
+  const [erro, setErro] = useState("");
+
+  const carregar = useCallback(async () => {
+    setCarregando(true);
+    try {
+      const d = await api.listarInteracoes(clienteId);
+      setInteracoes(d);
+      onContadorChange?.(d.length);
+    } catch {}
+    finally { setCarregando(false); }
+  }, [clienteId, onContadorChange]);
+
+  useEffect(() => { carregar(); }, [carregar]);
+
+  async function registrar(e) {
+    e.preventDefault();
+    if (!form.descricao.trim()) { setErro("Descrição é obrigatória"); return; }
+    setSalvando(true);
+    setErro("");
+    try {
+      await api.criarInteracao(clienteId, {
+        tipo: form.tipo,
+        descricao: form.descricao.trim(),
+        data: form.data || undefined,
+      });
+      setForm({ tipo: "ANOTACAO", descricao: "", data: "" });
+      await carregar();
+    } catch (err) {
+      setErro(err.message);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function deletar(id) {
+    if (!confirm("Excluir esta interação?")) return;
+    try {
+      await api.excluirInteracao(clienteId, id);
+      setInteracoes(prev => prev.filter(i => i.id !== id));
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  const podeExcluir = user?.role === "ADMIN";
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Formulário de registro rápido */}
+      <form onSubmit={registrar} style={{
+        background: C.card,
+        border: `1px solid ${C.border}`,
+        borderRadius: 12,
+        padding: "14px 16px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+      }}>
+        <p style={{ margin: 0, fontSize: 11, color: C.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          Registrar contato
+        </p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <select
+            value={form.tipo}
+            onChange={e => setForm(p => ({ ...p, tipo: e.target.value }))}
+            style={{
+              background: C.surface, border: `1px solid ${C.border}`, borderRadius: 7,
+              padding: "7px 10px", color: C.text, fontSize: 13, cursor: "pointer",
+            }}
+          >
+            {Object.entries(TIPO_INTERACAO).map(([k, v]) => (
+              <option key={k} value={k}>{v.icon} {v.label}</option>
+            ))}
+          </select>
+          <input
+            type="date"
+            value={form.data}
+            onChange={e => setForm(p => ({ ...p, data: e.target.value }))}
+            style={{
+              background: C.surface, border: `1px solid ${C.border}`, borderRadius: 7,
+              padding: "7px 10px", color: C.text, fontSize: 13,
+            }}
+            title="Deixe em branco para usar a data/hora atual"
+          />
+        </div>
+        <textarea
+          value={form.descricao}
+          onChange={e => setForm(p => ({ ...p, descricao: e.target.value }))}
+          placeholder="Descreva o contato, resultado da ligação, compromisso agendado..."
+          rows={3}
+          style={{
+            background: C.surface, border: `1px solid ${erro ? C.red : C.border}`,
+            borderRadius: 7, padding: "8px 10px", color: C.text, fontSize: 13,
+            resize: "vertical", outline: "none", fontFamily: "inherit",
+          }}
+        />
+        {erro && <p style={{ margin: 0, fontSize: 12, color: C.red }}>{erro}</p>}
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button
+            type="submit"
+            disabled={salvando}
+            style={{
+              background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+              color: C.white, border: "none", borderRadius: 8,
+              padding: "7px 18px", fontWeight: 700, fontSize: 13, cursor: "pointer",
+              opacity: salvando ? 0.7 : 1,
+            }}
+          >
+            {salvando ? "Salvando..." : "Registrar"}
+          </button>
+        </div>
+      </form>
+
+      {/* Timeline */}
+      {carregando ? (
+        <div style={{ textAlign: "center", padding: "30px 0", color: C.muted, fontSize: 13 }}>
+          Carregando interações...
+        </div>
+      ) : interacoes.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "30px 0", color: C.muted, fontSize: 13 }}>
+          Nenhuma interação registrada. Use o formulário acima para começar.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 0, position: "relative" }}>
+          {/* linha vertical */}
+          <div style={{
+            position: "absolute", left: 19, top: 0, bottom: 0,
+            width: 2, background: `${C.border}`, zIndex: 0,
+          }} />
+          {interacoes.map((int) => {
+            const info = TIPO_INTERACAO[int.tipo] || TIPO_INTERACAO.ANOTACAO;
+            return (
+              <div key={int.id} style={{
+                display: "flex", gap: 14, paddingBottom: 20, position: "relative", zIndex: 1,
+              }}>
+                {/* bolinha */}
+                <div style={{
+                  width: 38, height: 38, borderRadius: "50%", flexShrink: 0,
+                  background: `${info.cor}22`,
+                  border: `2px solid ${info.cor}`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 16, lineHeight: 1,
+                }}>
+                  {info.icon}
+                </div>
+                {/* conteúdo */}
+                <div style={{
+                  flex: 1, background: C.card, border: `1px solid ${C.border}`,
+                  borderRadius: 10, padding: "10px 14px",
+                  display: "flex", flexDirection: "column", gap: 4,
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: info.cor }}>
+                        {info.label}
+                      </span>
+                      <span style={{ fontSize: 11, color: C.muted }}>
+                        {new Date(int.data).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
+                      </span>
+                      <span style={{ fontSize: 11, color: C.muted }}>
+                        · {int.user?.nome || "—"}
+                      </span>
+                    </div>
+                    {podeExcluir && (
+                      <button
+                        onClick={() => deletar(int.id)}
+                        title="Excluir interação"
+                        style={{
+                          background: "none", border: "none", color: C.muted,
+                          cursor: "pointer", fontSize: 13, padding: "2px 4px",
+                          borderRadius: 4, lineHeight: 1,
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.color = C.red}
+                        onMouseLeave={e => e.currentTarget.style.color = C.muted}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  <p style={{ margin: 0, fontSize: 13, color: C.text, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+                    {int.descricao}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function AbaResumo({ kpis, cliente }) {
   const diasDesdeUltimaCompra = kpis.ultimaCompra
@@ -298,7 +505,7 @@ function AbaOrcamentos({ orcamentos }) {
 
 // ============ MODAL PRINCIPAL ============
 
-export default function PerfilClienteModal({ clienteId, onFechar }) {
+export default function PerfilClienteModal({ clienteId, onFechar, user }) {
   const [dados, setDados] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
@@ -328,6 +535,8 @@ export default function PerfilClienteModal({ clienteId, onFechar }) {
     return () => document.removeEventListener("keydown", onKey);
   }, [onFechar]);
 
+  const [qtdInteracoes, setQtdInteracoes] = useState(null);
+
   const abasComContador = ABAS.map(a => {
     let count = null;
     if (dados) {
@@ -335,6 +544,7 @@ export default function PerfilClienteModal({ clienteId, onFechar }) {
       if (a.id === "financeiro") count = dados.contasReceber.length;
       if (a.id === "orcamentos") count = dados.orcamentos.length;
     }
+    if (a.id === "interacoes" && qtdInteracoes !== null) count = qtdInteracoes;
     return { ...a, count };
   });
 
@@ -460,6 +670,13 @@ export default function PerfilClienteModal({ clienteId, onFechar }) {
           ) : dados ? (
             <>
               {aba === "resumo" && <AbaResumo kpis={dados.kpis} cliente={dados.cliente} />}
+              {aba === "interacoes" && (
+                <AbaInteracoes
+                  clienteId={clienteId}
+                  user={user}
+                  onContadorChange={setQtdInteracoes}
+                />
+              )}
               {aba === "compras" && <AbaCompras vendas={dados.vendas} />}
               {aba === "financeiro" && <AbaFinanceiro contas={dados.contasReceber} />}
               {aba === "orcamentos" && <AbaOrcamentos orcamentos={dados.orcamentos} />}

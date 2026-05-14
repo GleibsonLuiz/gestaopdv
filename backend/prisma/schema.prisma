@@ -102,6 +102,15 @@ enum TipoOrcamento {
   ORDEM_SERVICO
 }
 
+enum TipoInteracao {
+  LIGACAO
+  WHATSAPP
+  VISITA
+  EMAIL
+  REUNIAO
+  ANOTACAO
+}
+
 // Ciclo de vida do orcamento. RASCUNHO permite editar livremente; depois
 // de AGUARDANDO_APROVACAO so muda por acao explicita do usuario. ENTREGUE
 // e estado final positivo (sera convertido em venda); REJEITADO/CANCELADO
@@ -159,6 +168,7 @@ model User {
   orcamentos          Orcamento[] @relation("OrcamentoCriador")
   orcamentosResponsavel Orcamento[] @relation("OrcamentoResponsavel")
   configuracaoComissao ConfiguracaoComissao?
+  interacoes          Interacao[]
 
   @@map("users")
 }
@@ -209,6 +219,7 @@ model Cliente {
   vendas        Venda[]
   contasReceber ContaReceber[]
   orcamentos    Orcamento[]
+  interacoes    Interacao[]
 
   @@map("clientes")
 }
@@ -684,4 +695,24 @@ model ItemOrcamento {
 
   @@index([orcamentoId, ordem])
   @@map("itens_orcamento")
+}
+
+// ============ CRM — INTERACOES ============
+
+model Interacao {
+  id        String        @id @default(uuid())
+  tipo      TipoInteracao @default(ANOTACAO)
+  descricao String
+  // data permite retroagir (ex: registrar ligacao de ontem)
+  data      DateTime      @default(now())
+  createdAt DateTime      @default(now())
+
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([clienteId, data(sort: Desc)])
+  @@map("interacoes")
 }

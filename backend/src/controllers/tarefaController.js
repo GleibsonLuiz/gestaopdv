@@ -28,7 +28,7 @@ export async function listar(req, res, next) {
     if (prioridade) where.prioridade = prioridade;
     if (responsavelId) where.responsavelId = responsavelId;
     if (clienteId) where.clienteId = clienteId;
-    if (minhas === "true") where.responsavelId = req.user.id;
+    if (minhas === "true") where.responsavelId = req.user.sub;
 
     const tarefas = await prisma.tarefa.findMany({
       where,
@@ -78,7 +78,7 @@ export async function criar(req, res, next) {
         prioridade: prioridade || "MEDIA",
         responsavelId: norm(responsavelId),
         clienteId: norm(clienteId),
-        criadoPorId: req.user.id,
+        criadoPorId: req.user.sub,
       },
       include: INCLUDE_DETALHE,
     });

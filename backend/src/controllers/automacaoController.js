@@ -433,7 +433,7 @@ export async function executar(req, res, next) {
     const regra = await prisma.regraAutomacao.findUnique({ where: { id: req.params.id } });
     if (!regra) return res.status(404).json({ erro: "Regra nao encontrada" });
 
-    const resultado = await executarUma(regra, req.user.id);
+    const resultado = await executarUma(regra, req.user.sub);
     res.json({ regraId: regra.id, nome: regra.nome, ...resultado });
   } catch (err) {
     next(err);
@@ -446,7 +446,7 @@ export async function executarTodas(req, res, next) {
     const resultados = [];
     for (const r of regras) {
       try {
-        const resumo = await executarUma(r, req.user.id);
+        const resumo = await executarUma(r, req.user.sub);
         resultados.push({ regraId: r.id, nome: r.nome, ...resumo });
       } catch (e) {
         resultados.push({ regraId: r.id, nome: r.nome, erro: e.message });

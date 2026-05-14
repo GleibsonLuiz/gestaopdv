@@ -36,7 +36,7 @@ export async function criar(req, res, next) {
     const interacao = await prisma.interacao.create({
       data: {
         clienteId,
-        userId: req.user.id,
+        userId: req.user.sub,
         tipo: tipo || "ANOTACAO",
         descricao: String(descricao).trim(),
         data: data ? new Date(data) : new Date(),

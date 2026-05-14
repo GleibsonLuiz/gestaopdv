@@ -45,7 +45,7 @@ export async function listar(req, res, next) {
     if (responsavelId) where.responsavelId = responsavelId;
     if (clienteId) where.clienteId = clienteId;
     if (origem) where.origem = origem;
-    if (minhas === "true") where.responsavelId = req.user.id;
+    if (minhas === "true") where.responsavelId = req.user.sub;
     if (search && String(search).trim()) {
       const s = String(search).trim();
       where.OR = [
@@ -77,7 +77,7 @@ export async function resumoFunil(req, res, next) {
     const { responsavelId, minhas } = req.query;
     const where = {};
     if (responsavelId) where.responsavelId = responsavelId;
-    if (minhas === "true") where.responsavelId = req.user.id;
+    if (minhas === "true") where.responsavelId = req.user.sub;
 
     const todas = await prisma.oportunidade.findMany({
       where,
@@ -181,7 +181,7 @@ export async function criar(req, res, next) {
           origem: norm(origem),
           clienteId: norm(clienteId),
           responsavelId: norm(responsavelId),
-          criadoPorId: req.user.id,
+          criadoPorId: req.user.sub,
           dataGanho: etapaInicial === "GANHO" ? new Date() : null,
           dataPerdida: etapaInicial === "PERDIDO" ? new Date() : null,
         },
@@ -193,7 +193,7 @@ export async function criar(req, res, next) {
           oportunidadeId: criada.id,
           etapaAnterior: null,
           etapaNova: etapaInicial,
-          userId: req.user.id,
+          userId: req.user.sub,
           observacao: "Oportunidade criada",
         },
       });
@@ -306,7 +306,7 @@ export async function moverEtapa(req, res, next) {
           oportunidadeId: req.params.id,
           etapaAnterior: existente.etapa,
           etapaNova: etapa,
-          userId: req.user.id,
+          userId: req.user.sub,
           observacao: norm(observacao) || `Movida de ${existente.etapa} para ${etapa}`,
         },
       });

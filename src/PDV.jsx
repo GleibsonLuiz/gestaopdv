@@ -863,45 +863,36 @@ function NovaVenda({ user }) {
                     key={it.produtoId}
                     className={`pdv-cupom-item ${destacado === it.produtoId ? "is-new" : ""}`}
                   >
-                    <div className="pdv-cupom-hd">
+                    {/* Linha 1: índice + nome */}
+                    <div className="pdv-cupom-linha1">
                       <span className="pdv-cupom-idx">{String(idx + 1).padStart(3, "0")}</span>
-                      <span className="pdv-cupom-name">
-                        {it.nome}
-                        {it.tipoItem === "SERVICO" && (
-                          <span className="pdv-cupom-srv-tag">SVC</span>
-                        )}
+                      <span className="pdv-cupom-nome">
+                        {it.nome.toUpperCase()}{it.tipoItem === "SERVICO" && " [SVC]"}
                       </span>
-                      <button
-                        onClick={() => removerItem(it.produtoId)}
-                        title="Remover este item"
-                        className="pdv-cupom-rm"
-                      >× Rem</button>
                     </div>
-
-                    <div className="pdv-cupom-calc">
-                      <div className="pdv-qty">
-                        <button onClick={() => alterarQuantidade(it.produtoId, -1)}>−</button>
+                    {/* Linha 2: qtd UN x preço ....... total */}
+                    <div className="pdv-cupom-linha2">
+                      <span className="pdv-cupom-calc-txt">
+                        {String(it.quantidade).padStart(2, " ")} UN x {fmtBRL(it.precoUnitario)}
+                      </span>
+                      <span className="pdv-cupom-dots" />
+                      <span className="pdv-cupom-total-txt">{fmtBRL(it.quantidade * it.precoUnitario)}</span>
+                    </div>
+                    {/* Overlay de controles — visível apenas no hover */}
+                    <div className="pdv-cupom-ctrl">
+                      <button className="pdv-cupom-ctrl-btn" onClick={() => alterarQuantidade(it.produtoId, -1)}>−</button>
+                      <span className="pdv-cupom-ctrl-qty">{it.quantidade}</span>
+                      <button className="pdv-cupom-ctrl-btn" onClick={() => alterarQuantidade(it.produtoId, +1)}>+</button>
+                      {it.tipoItem === "SERVICO" && (
                         <input
-                          type="number" min="1"
-                          max={Number.isFinite(it.estoque) ? it.estoque : undefined}
-                          value={it.quantidade}
-                          onChange={e => definirQuantidade(it.produtoId, e.target.value)}
-                        />
-                        <button onClick={() => alterarQuantidade(it.produtoId, +1)}>+</button>
-                      </div>
-                      <span className="pdv-cupom-op">×</span>
-                      {it.tipoItem === "SERVICO" ? (
-                        <input
-                          type="number" step="0.01" min="0" value={it.precoUnitario}
+                          type="number" step="0.01" min="0"
+                          value={it.precoUnitario}
                           onChange={e => alterarPreco(it.produtoId, e.target.value)}
-                          className="pdv-cupom-price-input"
+                          className="pdv-cupom-ctrl-preco"
                           title="Preço editável (serviço)"
                         />
-                      ) : (
-                        <span className="pdv-cupom-price">{fmtBRL(it.precoUnitario)}</span>
                       )}
-                      <span className="pdv-cupom-op">=</span>
-                      <span className="pdv-cupom-total">{fmtBRL(it.quantidade * it.precoUnitario)}</span>
+                      <button className="pdv-cupom-ctrl-rm" onClick={() => removerItem(it.produtoId)} title="Remover item">✕</button>
                     </div>
                   </div>
                 ))}

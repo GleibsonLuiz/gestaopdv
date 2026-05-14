@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { C } from "../lib/theme.js";
 import { api } from "../lib/api.js";
+import BotoesContatoCliente from "./BotoesContatoCliente.jsx";
 
 const fmtBRL = (v) =>
   Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -510,6 +511,7 @@ export default function PerfilClienteModal({ clienteId, onFechar, user }) {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [aba, setAba] = useState("resumo");
+  const [templates, setTemplates] = useState([]);
 
   const carregar = useCallback(async () => {
     if (!clienteId) return;
@@ -526,6 +528,10 @@ export default function PerfilClienteModal({ clienteId, onFechar, user }) {
   }, [clienteId]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  useEffect(() => {
+    api.listarTemplates({ ativo: "true" }).then(setTemplates).catch(() => setTemplates([]));
+  }, []);
 
   useEffect(() => {
     function onKey(e) {
@@ -596,6 +602,28 @@ export default function PerfilClienteModal({ clienteId, onFechar, user }) {
                 {dados.cliente.email && ` · ${dados.cliente.email}`}
                 {dados.cliente.telefone && ` · ${dados.cliente.telefone}`}
               </p>
+            )}
+            {dados?.cliente?.tags && dados.cliente.tags.length > 0 && (
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
+                {dados.cliente.tags.map((t) => (
+                  <span key={t.id} style={{
+                    background: t.cor + "22", color: t.cor,
+                    padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: 700,
+                    border: `1px solid ${t.cor}55`,
+                  }}>{t.nome}</span>
+                ))}
+              </div>
+            )}
+            {dados?.cliente && (dados.cliente.telefone || dados.cliente.email) && (
+              <div style={{ marginTop: 10 }}>
+                <BotoesContatoCliente
+                  cliente={dados.cliente}
+                  templates={templates}
+                  kpis={dados.kpis}
+                  variant="completo"
+                  tamanho="md"
+                />
+              </div>
             )}
           </div>
           <button

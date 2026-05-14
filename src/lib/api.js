@@ -245,6 +245,19 @@ export const api = {
     request(`/orcamentos/${id}/converter-venda`, { method: "POST", body: { formaPagamento } }),
   excluirOrcamento: (id) => request(`/orcamentos/${id}`, { method: "DELETE" }),
 
+  // ==================== TEMPLATES DE MENSAGEM ====================
+  listarTemplates: ({ tipo = "", ativo = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (tipo) qs.set("tipo", tipo);
+    if (ativo !== "") qs.set("ativo", ativo);
+    const q = qs.toString();
+    return request(`/templates${q ? `?${q}` : ""}`);
+  },
+  obterTemplate: (id) => request(`/templates/${id}`),
+  criarTemplate: (data) => request("/templates", { method: "POST", body: data }),
+  atualizarTemplate: (id, data) => request(`/templates/${id}`, { method: "PUT", body: data }),
+  excluirTemplate: (id) => request(`/templates/${id}`, { method: "DELETE" }),
+
   // ==================== TAGS / SEGMENTACAO RFM ====================
   listarTags: () => request("/tags"),
   criarTag: (data) => request("/tags", { method: "POST", body: data }),

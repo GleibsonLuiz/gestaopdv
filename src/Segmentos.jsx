@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { C } from "./lib/theme.js";
 import { api } from "./lib/api.js";
+import BotoesContatoCliente from "./components/BotoesContatoCliente.jsx";
+import ModalGerirTemplates from "./components/ModalGerirTemplates.jsx";
 
 // ============ CONFIGURACAO DE SEGMENTOS RFM ============
 
@@ -22,14 +24,6 @@ const fmtData = (iso) => {
   return new Date(iso).toLocaleDateString("pt-BR");
 };
 
-function whatsappLink(telefone, mensagem) {
-  if (!telefone) return null;
-  const digits = String(telefone).replace(/\D/g, "");
-  if (!digits) return null;
-  const numero = digits.length <= 11 ? `55${digits}` : digits;
-  return `https://wa.me/${numero}${mensagem ? `?text=${encodeURIComponent(mensagem)}` : ""}`;
-}
-
 // ============ COMPONENTE PRINCIPAL ============
 
 export default function Segmentos({ user }) {
@@ -41,8 +35,10 @@ export default function Segmentos({ user }) {
   const [search, setSearch] = useState("");
   const [janela, setJanela] = useState(365);
   const [tags, setTags] = useState([]);
+  const [templates, setTemplates] = useState([]);
   const [modalTag, setModalTag] = useState(null); // cliente para gerenciar tags
   const [modalGerirTags, setModalGerirTags] = useState(false);
+  const [modalTemplates, setModalTemplates] = useState(false);
 
   const podeEditar = user.role === "ADMIN" || user.role === "GERENTE" || user.role === "VENDEDOR";
 
@@ -50,12 +46,14 @@ export default function Segmentos({ user }) {
     setCarregando(true);
     setErro("");
     try {
-      const [seg, tagsRes] = await Promise.all([
+      const [seg, tagsRes, templatesRes] = await Promise.all([
         api.segmentosClientes({ dias: janela }),
         api.listarTags().catch(() => []),
+        api.listarTemplates({ ativo: "true" }).catch(() => []),
       ]);
       setDados(seg);
       setTags(tagsRes);
+      setTemplates(templatesRes);
     } catch (e) {
       setErro(e.message || "Erro ao carregar segmentos");
     } finally {
@@ -101,6 +99,7 @@ export default function Segmentos({ user }) {
         janela={janela}
         onJanela={setJanela}
         onGerirTags={() => setModalGerirTags(true)}
+        onGerirTemplates={() => setModalTemplates(true)}
         podeEditar={podeEditar && (user.role === "ADMIN" || user.role === "GERENTE")}
       />
 
@@ -195,6 +194,7 @@ export default function Segmentos({ user }) {
       ) : (
         <TabelaClientes
           clientes={clientesFiltrados}
+          templates={templates}
           onAbrirTags={(c) => setModalTag(c)}
           podeEditar={podeEditar}
         />
@@ -220,13 +220,21 @@ export default function Segmentos({ user }) {
           podeExcluir={user.role === "ADMIN"}
         />
       )}
+
+      {modalTemplates && (
+        <ModalGerirTemplates
+          onFechar={() => { setModalTemplates(false); carregar(); }}
+          podeEditar={user.role === "ADMIN" || user.role === "GERENTE"}
+          podeExcluir={user.role === "ADMIN"}
+        />
+      )}
     </div>
   );
 }
 
 // ============ CABECALHO ============
 
-function Cabecalho({ dados, janela, onJanela, onGerirTags, podeEditar }) {
+function Cabecalho({ dados, janela, onJanela, onGerirTags, onGerirTemplates, podeEditar }) {
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
       <div>
@@ -258,6 +266,15 @@ function Cabecalho({ dados, janela, onJanela, onGerirTags, podeEditar }) {
             }}
           >🏷️ Gerir Tags</button>
         )}
+        {podeEditar && (
+          <button
+            onClick={onGerirTemplates}
+            style={{
+              background: C.card, color: C.text, border: `1px solid ${C.border}`,
+              padding: "8px 14px", borderRadius: 6, cursor: "pointer", fontSize: 13,
+            }}
+          >📨 Templates</button>
+        )}
       </div>
     </div>
   );
@@ -272,7 +289,7 @@ function inputFiltro(width) {
 
 // ============ TABELA ============
 
-function TabelaClientes({ clientes, onAbrirTags, podeEditar }) {
+function TabelaClientes({ clientes, templates, onAbrirTags, podeEditar }) {
   return (
     <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
       <div style={{ overflowX: "auto" }}>
@@ -292,9 +309,6 @@ function TabelaClientes({ clientes, onAbrirTags, podeEditar }) {
           <tbody>
             {clientes.map((c) => {
               const seg = SEG_MAP[c.segmento];
-              const wa = whatsappLink(c.telefone);
-              const tel = c.telefone ? `tel:${String(c.telefone).replace(/\D/g, "")}` : null;
-              const mail = c.email ? `mailto:${c.email}` : null;
               return (
                 <tr key={c.id} style={{ borderTop: `1px solid ${C.border}` }}>
                   <td style={td()}>
@@ -344,9 +358,7 @@ function TabelaClientes({ clientes, onAbrirTags, podeEditar }) {
                   </td>
                   <td style={td()}>
                     <div style={{ display: "flex", gap: 4 }}>
-                      {wa && <AcaoIcone href={wa} icone="💬" titulo="WhatsApp" cor={C.green} />}
-                      {tel && <AcaoIcone href={tel} icone="📞" titulo="Ligar" cor={C.accent} />}
-                      {mail && <AcaoIcone href={mail} icone="✉️" titulo="Email" cor={C.purple} />}
+                      <BotoesContatoCliente cliente={c} templates={templates} />
                       {podeEditar && (
                         <button
                           onClick={() => onAbrirTags(c)}
@@ -376,23 +388,6 @@ function th() {
 
 function td() {
   return { padding: "10px 12px", verticalAlign: "middle" };
-}
-
-function AcaoIcone({ href, icone, titulo, cor }) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={titulo}
-      style={{
-        background: cor + "22", color: cor, borderRadius: 4,
-        padding: "4px 8px", textDecoration: "none", fontSize: 13,
-        display: "inline-flex", alignItems: "center",
-        border: `1px solid ${cor}44`,
-      }}
-    >{icone}</a>
-  );
 }
 
 // ============ MODAL GERENCIAR TAGS DE UM CLIENTE ============

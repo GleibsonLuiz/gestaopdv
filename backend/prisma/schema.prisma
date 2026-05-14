@@ -180,6 +180,14 @@ enum EtapaFunil {
   PERDIDO
 }
 
+// Canal do template de mensagem (CRM). Cada tipo corresponde a um link
+// gerado no botao: WHATSAPP -> wa.me, EMAIL -> mailto, SMS -> sms:.
+enum TipoTemplate {
+  WHATSAPP
+  EMAIL
+  SMS
+}
+
 // ============ USUARIOS ============
 
 model User {
@@ -934,6 +942,29 @@ model ClienteTag {
   @@id([clienteId, tagId])
   @@index([tagId])
   @@map("cliente_tags")
+}
+
+// ============ CRM — TEMPLATES DE MENSAGEM ============
+//
+// Modelos prontos para WhatsApp/Email/SMS com variaveis interpoladas
+// no front: {{nome}}, {{primeiroNome}}, {{telefone}}, {{email}}, {{cidade}},
+// {{ultimaCompra}}, {{totalGasto}}, {{valorEmAberto}}.
+//
+// O backend so persiste o template; a interpolacao acontece no front quando
+// o usuario clica num cliente especifico para abrir wa.me / mailto / sms:.
+model TemplateMensagem {
+  id        String       @id @default(uuid())
+  nome      String       @unique
+  tipo      TipoTemplate
+  assunto   String?      // usado apenas em EMAIL
+  corpo     String       @db.Text
+  ativo     Boolean      @default(true)
+  ordem     Int          @default(0)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([tipo, ativo])
+  @@map("templates_mensagem")
 }
 
 // Log de mudancas de etapa — permite calcular tempo medio em cada etapa

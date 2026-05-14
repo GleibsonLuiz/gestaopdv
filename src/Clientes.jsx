@@ -3,6 +3,7 @@ import { C } from "./lib/theme.js";
 import { api } from "./lib/api.js";
 import ActionsMenu from "./components/ActionsMenu.jsx";
 import { FormularioLuxuoso, Secao, Linha, Campo } from "./components/FormularioLuxuoso.jsx";
+import PerfilClienteModal from "./components/PerfilClienteModal.jsx";
 
 
 const ESTADOS_BR = [
@@ -103,6 +104,7 @@ export default function Clientes({ user }) {
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [cepNaoEncontrado, setCepNaoEncontrado] = useState(false);
   const [nomeInvalido, setNomeInvalido] = useState(false);
+  const [perfilClienteId, setPerfilClienteId] = useState(null);
 
   const podeEditar = user.role === "ADMIN" || user.role === "GERENTE";
   const podeExcluir = user.role === "ADMIN";
@@ -336,6 +338,12 @@ export default function Clientes({ user }) {
               <ActionsMenu
                 items={[
                   {
+                    label: "Ver Perfil",
+                    icon: "◉",
+                    color: C.accent,
+                    onClick: () => setPerfilClienteId(c.id),
+                  },
+                  {
                     label: "Editar",
                     icon: "✎",
                     color: C.accent,
@@ -528,6 +536,13 @@ export default function Clientes({ user }) {
           </Linha>
         </Secao>
       </FormularioLuxuoso>
+
+      {perfilClienteId && (
+        <PerfilClienteModal
+          clienteId={perfilClienteId}
+          onFechar={() => setPerfilClienteId(null)}
+        />
+      )}
     </div>
   );
 }

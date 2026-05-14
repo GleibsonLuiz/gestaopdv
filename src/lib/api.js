@@ -112,6 +112,7 @@ export const api = {
     return request(`/clientes${q ? `?${q}` : ""}`);
   },
   obterCliente: (id) => request(`/clientes/${id}`),
+  perfilCliente: (id) => request(`/clientes/${id}/perfil`),
   criarCliente: (data) => request("/clientes", { method: "POST", body: data }),
   atualizarCliente: (id, data) => request(`/clientes/${id}`, { method: "PUT", body: data }),
   excluirCliente: (id) => request(`/clientes/${id}`, { method: "DELETE" }),

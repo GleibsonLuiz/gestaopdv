@@ -90,6 +90,94 @@ export async function atualizar(req, res, next) {
   }
 }
 
+export async function perfil(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    const [cliente, vendas, contasReceber, orcamentos] = await Promise.all([
+      prisma.cliente.findUnique({ where: { id } }),
+      prisma.venda.findMany({
+        where: { clienteId: id },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+        select: {
+          id: true,
+          numero: true,
+          total: true,
+          desconto: true,
+          formaPagamento: true,
+          status: true,
+          createdAt: true,
+          user: { select: { nome: true } },
+          itens: {
+            select: {
+              quantidade: true,
+              subtotal: true,
+              produto: { select: { nome: true } },
+            },
+          },
+        },
+      }),
+      prisma.contaReceber.findMany({
+        where: { clienteId: id },
+        orderBy: { vencimento: "desc" },
+        take: 50,
+        select: {
+          id: true,
+          descricao: true,
+          valor: true,
+          vencimento: true,
+          recebimento: true,
+          status: true,
+          parcelaAtual: true,
+          parcelaTotal: true,
+          tipoRecorrencia: true,
+          createdAt: true,
+        },
+      }),
+      prisma.orcamento.findMany({
+        where: { clienteId: id },
+        orderBy: { createdAt: "desc" },
+        take: 30,
+        select: {
+          id: true,
+          numero: true,
+          tipo: true,
+          status: true,
+          total: true,
+          tabelaPreco: true,
+          formaCondicaoPagamento: true,
+          createdAt: true,
+          responsavel: { select: { nome: true } },
+          user: { select: { nome: true } },
+        },
+      }),
+    ]);
+
+    if (!cliente) return res.status(404).json({ erro: "Cliente nao encontrado" });
+
+    const vendasConcluidas = vendas.filter((v) => v.status === "CONCLUIDA");
+    const totalGasto = vendasConcluidas.reduce((s, v) => s + Number(v.total), 0);
+    const qtdCompras = vendasConcluidas.length;
+    const ticketMedio = qtdCompras > 0 ? totalGasto / qtdCompras : 0;
+    const ultimaCompra = vendasConcluidas.length > 0 ? vendasConcluidas[0].createdAt : null;
+
+    const valorInadimplente = contasReceber
+      .filter((c) => c.status === "ATRASADA" || c.status === "PENDENTE")
+      .reduce((s, c) => s + Number(c.valor), 0);
+
+    res.json({
+      cliente,
+      kpis: { totalGasto, qtdCompras, ticketMedio, ultimaCompra, valorInadimplente },
+      vendas,
+      contasReceber,
+      orcamentos,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // Soft-delete apenas: marca ativo=false. Hard-delete foi removido para
 // preservar a integridade historica de vendas, contas e orcamentos que
 // referenciam o cliente.

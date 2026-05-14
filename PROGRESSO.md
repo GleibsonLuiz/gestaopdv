@@ -17,38 +17,51 @@ Arquivo de continuidade entre sessões. Sempre atualizar ao final de cada sessã
 d:/gestao-pdv/
 ├── backend/
 │   ├── prisma/
-│   │   ├── schema.prisma   ← modelos: User (com permissoes String[]),
-│   │   │                     Cliente, Fornecedor, Categoria, Produto,
+│   │   ├── schema.prisma   ← MVP: User, Cliente, Fornecedor, Categoria, Produto,
 │   │   │                     Venda/ItemVenda, Compra/ItemCompra,
 │   │   │                     MovimentacaoEstoque, ContaPagar, ContaReceber,
-│   │   │                     Anexo (do financeiro)
-│   │   ├── migrations/     ← incl. 20260430114015_add_user_permissoes
-│   │   └── seed.js         ← seed idempotente, 20 registros por módulo,
-│   │                         popula User.permissoes via permissoesPadrao(role)
+│   │   │                     Anexo, Caixa/MovimentacaoCaixa, Orcamento,
+│   │   │                     FormaPagamentoCustom, ConfiguracaoEmpresa,
+│   │   │                     ConfiguracaoComissao, ConfiguracaoFidelidade,
+│   │   │                     PontosCliente, MovimentacaoPontos, Tarefa, Interacao
+│   │   │                     CRM: Oportunidade, HistoricoOportunidade, Tag,
+│   │   │                     ClienteTag, TemplateMensagem, RegraAutomacao,
+│   │   │                     LogAutomacao, Contato, PesquisaNps
+│   │   │                     (Cliente ganhou origem, statusFunil, dataNascimento)
+│   │   ├── migrations/     ← incl. 8 migrations CRM em 2026-05-14
+│   │   ├── seed.js         ← seed idempotente, 20 registros por módulo,
+│   │   │                     popula User.permissoes via permissoesPadrao(role)
+│   │   └── ...
+│   ├── scripts/
+│   │   └── seed-funil-teste.js  ← 12 oportunidades temáticas (--clean limpa)
 │   ├── uploads/            ← anexos do financeiro (PDF/JPG/PNG até 5 MB)
 │   └── src/
-│       ├── controllers/    ← auth, cliente, fornecedor, categoria, produto,
-│       │                     estoque, compra, venda, dashboard, alertas,
-│       │                     contaPagar, contaReceber, funcionario, relatorios,
-│       │                     admin (reset total)
-│       ├── routes/         ← rotas de cada controller (com requirePermissao)
-│       ├── middlewares/    ← authRequired, requireRole, requirePermissao,
-│       │                     rateLimitLogin
-│       ├── lib/prisma.js · lib/permissoes.js
-│       └── server.js       ← Express na porta 3333
+│       ├── controllers/    ← MVP + CRM: oportunidade, tag, templateMensagem,
+│       │                     automacao, contato, nps, dashboardCrm
+│       ├── routes/         ← inclui oportunidades, tags, templates,
+│       │                     automacoes, nps (com endpoints publicos)
+│       ├── middlewares/    ← authRequired, requireRole, requirePermissao
+│       ├── lib/prisma.js · lib/permissoes.js (14 módulos)
+│       └── server.js       ← Express porta 3333
 └── src/  (frontend)
-    ├── App.jsx             ← sidebar retrátil (72↔240px) + temas + roteamento
-    ├── Login.jsx · TrocarSenhaModal.jsx · AparenciaModal.jsx
-    ├── Dashboard.jsx · PDV.jsx · Relatorios.jsx · Financeiro.jsx
-    ├── Clientes.jsx · Fornecedores.jsx · Produtos.jsx
-    ├── Estoque.jsx + MovimentarEstoqueModal.jsx · Compras.jsx
-    ├── Funcionarios.jsx    ← inclui modal com seção de Permissões (10 switches)
-    ├── Alertas.jsx         ← sino + drawer com polling 60s
-    ├── Sistema.jsx         ← zona de perigo: Reset Total (apenas ADMIN)
-    ├── Projeto.jsx         ← rastreador de etapas + aba Extras (9 melhorias)
+    ├── App.jsx             ← sidebar retrátil, temas, BYPASS de auth p/ ?nps=token
+    ├── Login.jsx · TrocarSenhaModal.jsx
+    ├── Dashboard.jsx · DashboardCrm.jsx · PDV.jsx · Relatorios.jsx
+    ├── Clientes.jsx · Fornecedores.jsx · Produtos.jsx · Estoque.jsx · Compras.jsx
+    ├── Funcionarios.jsx · Comissoes.jsx · Tarefas.jsx · Fidelidade.jsx
+    ├── Funil.jsx           ← CRM: Kanban de Oportunidades
+    ├── Segmentos.jsx       ← CRM: RFM + Tags + Score (coluna)
+    ├── Reativacao.jsx      ← CRM: Aniversariantes + Reativação
+    ├── Automacoes.jsx      ← CRM: Regras + log de execuções
+    ├── Nps.jsx             ← CRM: dashboard interno NPS
+    ├── PesquisaPublicaNps.jsx  ← Tela pública sem login (renderizada pelo App)
+    ├── Alertas.jsx · Sistema.jsx · Projeto.jsx · Configuracoes.jsx
+    ├── components/         ← FormularioLuxuoso, PerfilClienteModal (aba Contatos),
+    │                         BotoesContatoCliente, ModalGerirTemplates,
+    │                         ActionsMenu, SelectBusca, EtiquetaPreco*
     └── lib/api.js · lib/permissoes.js · lib/theme.js
-                            ← MODULOS, podeAcessar, permissoesPadrao,
-                              TEMAS (4 paletas), C, aplicarTema, salvarTema
+        · lib/templates.js   ← aplicarVariaveis() + gerarLink() WA/Email/SMS
+        · lib/scoring.js     ← classificações de lead score
 ```
 
 ---
@@ -132,6 +145,114 @@ d:/gestao-pdv/
 ---
 
 ## Histórico de sessões
+
+### Sessão — 2026-05-14 (CRM Profissional — 10 prioridades em uma sequência)
+
+Transformação do GestãoPRO em um **CRM profissional completo**. Saímos de "PDV com cadastro de clientes" para um sistema com funil Kanban, segmentação automática, automações, NPS e scoring — em 10 commits encadeados após análise inicial de gaps vs sistemas CRM de mercado.
+
+**10 prioridades implementadas em ordem:**
+
+1. **Funil de Vendas (Kanban)** — `feat(crm): funil de vendas (Kanban) - prioridade #1`
+   - Models `Oportunidade` + `HistoricoOportunidade` + enum `EtapaFunil` (LEAD/QUALIFICADO/PROPOSTA/NEGOCIACAO/GANHO/PERDIDO)
+   - `oportunidadeController` com CRUD + `moverEtapa` (registra histórico) + `resumoFunil` (KPIs)
+   - [src/Funil.jsx](src/Funil.jsx): Kanban com drag-and-drop nativo HTML5, 6 colunas com cor por etapa, modal de criar/editar com SelectBusca de clientes, atalho "✨ Usar exemplo", motivoPerda obrigatório ao mover para PERDIDO
+   - Permissão **OPORTUNIDADES** nova (GERENTE recebe; VENDEDOR também por padrão)
+
+2. **Tags + Segmentação RFM** — `feat(crm): tags customizadas + segmentacao RFM - prioridade #2`
+   - Models `Tag` + `ClienteTag` (n:n)
+   - `tagController` (CRUD) + atribuir/remover do cliente
+   - `clienteController.segmentos`: endpoint que calcula RFM **on-the-fly** (sem nova tabela) e classifica em 6 segmentos: **VIP**, **RECORRENTE**, **NOVO**, **EM_RISCO**, **INATIVO**, **PROSPECT**
+   - [src/Segmentos.jsx](src/Segmentos.jsx): tela com cards clicáveis por segmento, tabela com KPIs RFM por cliente, modais "Gerir tags" e "Tags do cliente"
+   - Janela RFM configurável (90/180/365/730 dias)
+   - Reusa permissão **CLIENTES**
+
+3. **Templates de mensagem WhatsApp/Email/SMS** — `feat(crm): templates de mensagem`
+   - Model `TemplateMensagem` + enum `TipoTemplate`
+   - [src/lib/templates.js](src/lib/templates.js): helper `aplicarVariaveis(texto, cliente)` + `gerarLink({tipo, ...})` com 10 variáveis suportadas: `{{nome}}`, `{{primeiroNome}}`, `{{telefone}}`, `{{email}}`, `{{cidade}}`, `{{estado}}`, `{{ultimaCompra}}`, `{{totalGasto}}`, `{{valorEmAberto}}`, `{{recenciaDias}}`
+   - [src/components/BotoesContatoCliente.jsx](src/components/BotoesContatoCliente.jsx): componente reutilizável com dropdown de templates por canal (WA/Tel/Email)
+   - [src/components/ModalGerirTemplates.jsx](src/components/ModalGerirTemplates.jsx): editor com **preview ao vivo** e chips clicáveis para inserir variáveis
+   - Integrado em Segmentos e PerfilClienteModal
+
+4. **Automações** — `feat(crm): automacoes (regras + tarefas automaticas)`
+   - Models `RegraAutomacao` + `LogAutomacao` + enum `TipoRegraAutomacao`
+   - Motor com 3 executores: **CLIENTE_INATIVO** (gera tarefa de reativação), **ORCAMENTO_PARADO** (follow-up de orçamento), **POS_VENDA_FOLLOWUP** (pesquisa pós-venda)
+   - **Anti-duplicação** por contexto (clienteId/orcamentoId/vendaId) via LogAutomacao
+   - Variáveis nos títulos de tarefa: `{{nomeCliente}}`, `{{recenciaDias}}`, `{{valorVenda}}`, `{{numeroOrcamento}}`, `{{diasParado}}`
+   - Endpoints: `POST /automacoes/executar` (todas ativas) e `POST /automacoes/:id/executar` (manual)
+   - [src/Automacoes.jsx](src/Automacoes.jsx): CRUD + botão "Executar agora" + histórico das últimas 50 execuções + botão "✨ Usar exemplo" no modal
+   - Permissão **AUTOMACOES** nova (GERENTE+ADMIN); execução via cron externo (Vercel Cron) ainda manual
+
+5. **Dashboard CRM dedicado** — `feat(crm): dashboard CRM consolidado`
+   - `dashboardCrmController.resumoCrm`: agrega em uma chamada — funil + segmentos + top 10 LTV + em risco + tarefas + performance comercial
+   - Endpoint `GET /dashboard/crm?dias=N` reusa permissão **DASHBOARD**
+   - [src/DashboardCrm.jsx](src/DashboardCrm.jsx): janela configurável, 6 KPIs no topo, funil com barras horizontais, segmentos com %, top 10 LTV + em risco lado a lado, tabela de performance por vendedor
+   - Layout responsivo (1 coluna em mobile)
+
+6. **Lead vs Cliente + origem** — `feat(crm): distincao Lead vs Cliente + origem`
+   - Enum `StatusClienteFunil` (LEAD / CLIENTE_ATIVO / CLIENTE_INATIVO / PERDIDO) + campo `origem` (texto livre) em `Cliente`
+   - Migration com **backfill SQL**: clientes com vendas viraram CLIENTE_ATIVO (5/6 promovidos)
+   - **Promoção automática** em `vendaController.criar` (`updateMany` idempotente na transação) — LEAD/PERDIDO → CLIENTE_ATIVO ao concluir 1ª venda
+   - Filtros `statusFunil` e `origem` em `/clientes`; UI em Clientes com badges coloridos e nova seção "CRM / Funil" no formulário luxuoso
+   - 9 origens pré-definidas: INDICACAO, INSTAGRAM, FACEBOOK, GOOGLE, WHATSAPP, WALK_IN, SITE, TELEFONE, OUTROS
+
+7. **Aniversariantes + Reativação** — `feat(crm): aniversariantes + reativacao`
+   - Campo `dataNascimento DateTime?` em `Cliente` (serve para PF e fundação PJ)
+   - Endpoints `GET /clientes/aniversariantes?mes=N&dia=N` (usa `EXTRACT(MONTH/DAY)` via `$queryRawUnsafe`) e `GET /clientes/reativacao?diasMin=N`
+   - [src/Reativacao.jsx](src/Reativacao.jsx): tela com 2 abas
+     * **Aniversariantes**: filtro por mês, bloco destaque "🎉 Aniversariantes de HOJE" em laranja, cards com avatar de data DD/MMM
+     * **Reativação**: KPIs (sem comprar há X / LTV total em risco / LTV médio), tabela ordenada por LTV
+   - Sidebar: novo item 🎂 **Aniversários**
+
+8. **Múltiplos contatos B2B** — `feat(crm): multiplos contatos por cliente B2B`
+   - Model `Contato` (n:1 com Cliente, cascade delete) com campo `principal`
+   - Regra: `manterUnicoPrincipal()` na transação garante apenas 1 principal por cliente
+   - Rotas aninhadas `GET/POST/PUT/DELETE /clientes/:clienteId/contatos[/:id]`
+   - [src/components/PerfilClienteModal.jsx](src/components/PerfilClienteModal.jsx): nova aba **Contatos** entre Resumo e Interações com form inline (grid 2×2), badges de principal, atalhos 📞/💬/✉️ por contato
+
+9. **NPS pós-venda** — `feat(crm): NPS pos-venda com link publico`
+   - Model `PesquisaNps` com `token` único (32 hex chars), 1:1 com Venda
+   - **Endpoints públicos sem auth**: `GET /nps/publico/:token` e `POST /nps/publico/:token`
+   - Endpoint privado `GET /nps/resumo`: calcula **NPS Score = %Promotores − %Detratores** + distribuição
+   - `vendaController`: gera pesquisa **automaticamente** na transação ao concluir venda com clienteId
+   - [src/PesquisaPublicaNps.jsx](src/PesquisaPublicaNps.jsx): tela do cliente externo com escala visual 0-10 colorida + comentário + tela de obrigado
+   - [src/Nps.jsx](src/Nps.jsx): dashboard com 6 KPIs, barra 100% empilhada (detratores/neutros/promotores), 3 abas (Respondidas/Pendentes/Todas), botão "💬 Enviar WhatsApp" com link pré-formatado
+   - **Bypass de auth em App.jsx**: se URL tem `?nps=<token>`, renderiza tela pública direto, sem requerir login (usa `useState(() => getNpsToken())` para detectar antes da gate de auth)
+   - Permissão **NPS** nova (GERENTE+ADMIN)
+
+10. **Lead Scoring 0-100** — `feat(crm): lead scoring 0-100 + classificacao - prioridade #10 FINAL`
+    - `calcularScore()` em `clienteController`:
+      * Recência (35): ≤7d=35, ≤30d=30, ≤60d=22, ≤90d=14, ≤180d=6
+      * Frequência (25): 11+=25, 7-10=22, 4-6=18, 2-3=12, 1=5
+      * Monetário (25): ≥2× média=25, ≥1×=20, ≥0,5×=12, >0=5
+      * Bônus (max 15): NPS promotor +10 / neutro +5 + tag VIP +5
+    - Classificação: **FRIO** 🥶 (0-25) / **MORNO** 😐 (26-50) / **QUENTE** 🔥 (51-75) / **VIP** 🌟 (76-100)
+    - `/clientes/segmentos` retorna agora `score`, `classificacaoScore`, `scoreBreakdown` (sem nova query — agrega NPS na mesma chamada)
+    - [src/lib/scoring.js](src/lib/scoring.js) + componente `ScoreBar` em Segmentos com barra de progresso visual + filtro por classificação
+
+**Novas permissões adicionadas (4):** OPORTUNIDADES, AUTOMACOES, NPS, AUTOMACOES (sincronizadas em `backend/src/lib/permissoes.js` e `src/lib/permissoes.js`).
+
+**Migrations dessa sequência (8):**
+- `20260514113900_add_oportunidades_funil`
+- `20260514115849_add_tags_cliente`
+- `20260514121423_add_templates_mensagem`
+- `20260514123944_add_automacoes_crm`
+- `20260514171132_add_lead_cliente_funil` (com backfill SQL para promover quem já tinha vendas)
+- `20260514172039_add_data_nascimento_cliente`
+- `20260514172738_add_contatos_b2b`
+- `20260514173823_add_pesquisas_nps`
+
+**Decisões arquiteturais relevantes:**
+- **Sem react-router**: bypass de auth para link público NPS feito direto no `App.jsx` lendo `URLSearchParams`. Mantém o stack minimalista atual.
+- **Score e RFM são derivados**: cálculo on-the-fly em `clienteController.segmentos` — evita necessidade de processo de "recálculo" periódico ou tabela de cache.
+- **Anti-duplicação de automações**: via `LogAutomacao` (vendaId/orcamentoId/clienteId únicos por regra) — mais robusto que controle por timestamp.
+- **NPS gerado em transação**: junto com a venda; vendas anônimas (sem clienteId) não geram pesquisa.
+
+**Validação:**
+- `npx vite build` OK em todos os 10 commits
+- Backend sanity (`node -e "import('./src/server.js')..."`) OK
+- Dados de teste do funil populados via `backend/scripts/seed-funil-teste.js` (12 oportunidades temáticas papelaria) e **removidos** antes do commit final da #2; templates iniciais úteis (cobrança, reativação 90d, pós-venda, boas-vindas) mantidos no banco para uso real
+
+---
 
 ### Sessão — 2026-05-11 (Design luxuoso nos modais de cadastro)
 
@@ -986,7 +1107,7 @@ GET /funcionarios → 20 registros
 
 ## Onde paramos
 
-**🎉 Projeto completo — 13 de 13 etapas + 10 melhorias pós-MVP entregues.**
+**🎉 Projeto completo — 13/13 etapas + 10 melhorias pós-MVP + 10 prioridades CRM Profissional entregues.**
 
 Todas as etapas planejadas foram entregues e o produto continuou a receber polimento. Em 2026-04-30, uma onda adicionou: hard-delete em cadastros, tela administrativa **Sistema** com Reset Total, **mini sidebar retrátil** (72↔240px com persistência), **sistema de temas** (4 paletas via CSS vars + modal Aparência), **PDV com atalhos/troco/cupom**, **Clientes com máscaras + ViaCEP**, **financeiro avançado** (juros/multa/desconto/recorrência/anexos), **permissões por módulo com bloqueio no backend** e a aba **Extras** documentando tudo dentro do próprio app.
 
@@ -998,7 +1119,9 @@ Em 2026-05-10, **venda a prazo → ContaReceber**: contraparte simétrica de Com
 
 Em 2026-05-11, **design luxuoso nos modais de cadastro**: aplicado um layout premium nos modais de Clientes, Fornecedores e Produtos a partir do protótipo HTML em `CLIENTE/`. Novo componente compartilhado `<FormularioLuxuoso>` em `src/components/` com eyebrow superior em mono, título serif Cormorant Garamond com itálico colorido, barra de progresso 0-100%, fieldsets com legenda hairline, rodapé com atalhos `⏎`/`Esc` e botões gradient. Cores derivadas do tema ativo via `color-mix(in srgb, var(--accent), transparent)` — funciona nos 6 temas. Adicionado campo Complemento em Clientes, máscaras CNPJ/CEP/Telefone + ViaCEP em Fornecedores. Componentes ricos do Produtos (SeletorTipoItem, CalculoMarkup, DropzoneImagem) preservados.
 
-Estado em 2026-05-11: design aplicado, `vite build` OK.
+Em 2026-05-14, **CRM Profissional — 10 prioridades**: maior salto de produto do projeto. Após análise de gaps vs CRMs de mercado (Pipedrive/HubSpot/RD Station), entregue em sequência: (1) Funil Kanban de Oportunidades; (2) Tags + Segmentação RFM em 6 segmentos; (3) Templates WA/Email/SMS com 10 variáveis; (4) Automações (cliente inativo / orçamento parado / pós-venda); (5) Dashboard CRM consolidado; (6) Lead vs Cliente + Origem com promoção automática; (7) Aniversariantes + Reativação com KPIs de LTV em risco; (8) Múltiplos contatos B2B por cliente; (9) NPS pós-venda com link público sem login + bypass de auth; (10) Lead scoring 0-100 multi-fator. 8 migrations, 4 novas permissões (OPORTUNIDADES, AUTOMACOES, NPS), 7 telas novas, 1 página pública. Stack mantida sem novas dependências.
+
+Estado em 2026-05-14: CRM completo, `vite build` OK em todos os 10 commits da sequência.
 
 ### Lacunas conhecidas (polimento opcional)
 
@@ -1011,11 +1134,19 @@ Estado em 2026-05-11: design aplicado, `vite build` OK.
 
 ### Próxima decisão (a ser tomada)
 
-- **(a)** Implementar `PUT /auth/preferencias` (campo `User.preferencias Json?`) e migrar tema/sidebar do `localStorage` para a conta — destrava sync entre dispositivos.
-- **(b)** Filtro por cliente no relatório de vendas (UI já tem o select de clientes em outras telas; reaproveitar).
-- **(c)** Auditoria do Reset Total (log estruturado de execuções).
-- **(d)** Atalhos visuais para o admin enxergar de relance "que módulos cada funcionário tem" — ex: chip-cluster pequeno na linha da tabela.
-- **(e)** Encerrar o projeto.
+**Possíveis evoluções do CRM (fora do escopo das 10 prioridades originais):**
+- **(a)** Cron automático das automações — hoje a execução é manual via botão "Executar agora". Adicionar Vercel Cron (em `vercel.json`) chamando `POST /automacoes/executar` 1x/dia com header de autorização (chave em env). Sem isso, automações dependem de gestor abrir a tela e clicar.
+- **(b)** Variável `{{linkNps}}` nos templates — útil para mandar pesquisa via WhatsApp direto da tela do cliente. Hoje o link vem da tela NPS (botão "💬 Enviar" / "🔗 Copiar link").
+- **(c)** Lead scoring no PerfilClienteModal — endpoint `GET /clientes/:id/score` que calcula só para um cliente (hoje o score só aparece em Segmentos, que faz cálculo em lote).
+- **(d)** Conversão Oportunidade GANHA → Venda automática — botão no card que abre PDV pré-preenchido com cliente.
+- **(e)** Análise de motivos de perda — agregação `GROUP BY motivoPerda` em Oportunidades para identificar padrões (preço, prazo, concorrente).
+
+**Lacunas pré-existentes (do escopo original):**
+- **(f)** Implementar `PUT /auth/preferencias` (campo `User.preferencias Json?`) e migrar tema/sidebar do `localStorage` para a conta — destrava sync entre dispositivos.
+- **(g)** Filtro por cliente no relatório de vendas (UI já tem o select de clientes em outras telas; reaproveitar).
+- **(h)** Auditoria do Reset Total (log estruturado de execuções).
+- **(i)** Chip-cluster pequeno na linha da tabela de Funcionários mostrando que módulos cada um tem.
+- **(j)** Encerrar o projeto.
 
 ### Como retomar
 

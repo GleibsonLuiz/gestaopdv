@@ -304,6 +304,7 @@ model Cliente {
   movimentacoesPontos MovimentacaoPontos[]
   oportunidades       Oportunidade[]
   tags                ClienteTag[]
+  contatos            Contato[]
 
   @@map("clientes")
 }
@@ -975,6 +976,31 @@ model ClienteTag {
   @@id([clienteId, tagId])
   @@index([tagId])
   @@map("cliente_tags")
+}
+
+// ============ CRM — CONTATOS DO CLIENTE (B2B) ============
+//
+// Para clientes PJ, um Cliente (a empresa) pode ter varios Contatos
+// (comprador, financeiro, decisor, etc). Cada contato tem dados proprios
+// de identificacao e a flag `principal` define o contato default.
+// Regra de negocio (no controller): apenas um Contato por Cliente pode
+// ter principal = true.
+model Contato {
+  id          String   @id @default(uuid())
+  nome        String
+  cargo       String?
+  email       String?
+  telefone    String?
+  principal   Boolean  @default(false)
+  observacoes String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@index([clienteId])
+  @@map("contatos")
 }
 
 // ============ CRM — TEMPLATES DE MENSAGEM ============

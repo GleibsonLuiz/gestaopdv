@@ -59,6 +59,7 @@ const TIPO_INTERACAO = {
 
 const ABAS = [
   { id: "resumo",      label: "Resumo" },
+  { id: "contatos",    label: "Contatos" },
   { id: "interacoes",  label: "Interações" },
   { id: "compras",     label: "Compras" },
   { id: "financeiro",  label: "Financeiro" },
@@ -315,6 +316,251 @@ function AbaInteracoes({ clienteId, user, onContadorChange }) {
   );
 }
 
+// ============ ABA CONTATOS (B2B) ============
+
+const CONTATO_VAZIO = {
+  nome: "", cargo: "", email: "", telefone: "",
+  principal: false, observacoes: "",
+};
+
+function AbaContatos({ clienteId, user, onContadorChange }) {
+  const [contatos, setContatos] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [editando, setEditando] = useState(null);
+  const [erro, setErro] = useState("");
+
+  const podeEditar = user?.role === "ADMIN" || user?.role === "GERENTE";
+  const podeExcluir = user?.role === "ADMIN";
+
+  const carregar = useCallback(async () => {
+    setCarregando(true);
+    try {
+      const d = await api.listarContatos(clienteId);
+      setContatos(d);
+      onContadorChange?.(d.length);
+    } catch (err) {
+      setErro(err.message);
+    } finally {
+      setCarregando(false);
+    }
+  }, [clienteId, onContadorChange]);
+
+  useEffect(() => { carregar(); }, [carregar]);
+
+  async function salvar(e) {
+    e.preventDefault();
+    if (!editando.nome.trim()) { setErro("Nome é obrigatório"); return; }
+    setErro("");
+    try {
+      if (editando.id) {
+        await api.atualizarContato(clienteId, editando.id, editando);
+      } else {
+        await api.criarContato(clienteId, editando);
+      }
+      setEditando(null);
+      await carregar();
+    } catch (err) {
+      setErro(err.message);
+    }
+  }
+
+  async function excluir(c) {
+    if (!confirm(`Excluir contato "${c.nome}"?`)) return;
+    try {
+      await api.excluirContato(clienteId, c.id);
+      await carregar();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  if (carregando) {
+    return <div style={{ color: C.muted, textAlign: "center", padding: 40 }}>Carregando...</div>;
+  }
+
+  return (
+    <div>
+      {erro && (
+        <div style={{ background: C.red + "22", color: C.red, padding: "8px 12px", borderRadius: 6, fontSize: 12, marginBottom: 12 }}>
+          {erro}
+        </div>
+      )}
+
+      {/* Form inline de criar/editar */}
+      {editando ? (
+        <form onSubmit={salvar} style={{
+          background: C.card, border: `1px solid ${C.border}`,
+          borderRadius: 8, padding: 14, marginBottom: 14,
+        }}>
+          <div style={{ color: C.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, fontWeight: 600 }}>
+            {editando.id ? "Editar contato" : "Novo contato"}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <input
+              autoFocus
+              value={editando.nome}
+              onChange={(e) => setEditando({ ...editando, nome: e.target.value })}
+              placeholder="Nome *"
+              style={inputContato()}
+            />
+            <input
+              value={editando.cargo}
+              onChange={(e) => setEditando({ ...editando, cargo: e.target.value })}
+              placeholder="Cargo (ex: COMPRADOR, FINANCEIRO)"
+              style={inputContato()}
+            />
+            <input
+              type="email"
+              value={editando.email}
+              onChange={(e) => setEditando({ ...editando, email: e.target.value })}
+              placeholder="E-mail"
+              style={inputContato()}
+            />
+            <input
+              value={editando.telefone}
+              onChange={(e) => setEditando({ ...editando, telefone: e.target.value })}
+              placeholder="Telefone"
+              style={inputContato()}
+            />
+          </div>
+          <textarea
+            value={editando.observacoes}
+            onChange={(e) => setEditando({ ...editando, observacoes: e.target.value })}
+            placeholder="Observações (opcional)"
+            rows={2}
+            style={{ ...inputContato(), marginTop: 8, resize: "vertical", minHeight: 50 }}
+          />
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10, gap: 8 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, color: C.text, fontSize: 12, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={editando.principal}
+                onChange={(e) => setEditando({ ...editando, principal: e.target.checked })}
+                style={{ accentColor: C.accent }}
+              />
+              ⭐ Contato principal
+            </label>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                type="button"
+                onClick={() => setEditando(null)}
+                style={{
+                  background: "transparent", color: C.muted, border: `1px solid ${C.border}`,
+                  padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontSize: 12,
+                }}
+              >Cancelar</button>
+              <button
+                type="submit"
+                style={{
+                  background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+                  color: C.white, border: "none", padding: "6px 18px",
+                  borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 700,
+                }}
+              >{editando.id ? "Salvar" : "Adicionar"}</button>
+            </div>
+          </div>
+        </form>
+      ) : podeEditar && (
+        <button
+          onClick={() => setEditando({ ...CONTATO_VAZIO })}
+          style={{
+            background: C.card, color: C.accent, border: `1px dashed ${C.accent}55`,
+            padding: "10px 14px", borderRadius: 8, cursor: "pointer", fontSize: 13,
+            width: "100%", marginBottom: 14, fontWeight: 600,
+          }}
+        >+ Adicionar contato</button>
+      )}
+
+      {/* Lista */}
+      {contatos.length === 0 ? (
+        <div style={{ color: C.muted, textAlign: "center", padding: 30, fontSize: 13 }}>
+          Nenhum contato cadastrado.
+          {podeEditar && " Cadastre o comprador, financeiro ou decisor para B2B."}
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {contatos.map((c) => (
+            <div key={c.id} style={{
+              background: C.card,
+              border: `1px solid ${c.principal ? C.accent + "55" : C.border}`,
+              borderLeft: c.principal ? `3px solid ${C.accent}` : `1px solid ${C.border}`,
+              borderRadius: 8, padding: 12,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                <span style={{ color: C.white, fontWeight: 700, fontSize: 14 }}>{c.nome}</span>
+                {c.principal && (
+                  <span style={{
+                    background: C.accent + "22", color: C.accent,
+                    padding: "1px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700,
+                    border: `1px solid ${C.accent}55`,
+                  }}>⭐ PRINCIPAL</span>
+                )}
+                {c.cargo && (
+                  <span style={{ color: C.muted, fontSize: 11 }}>· {c.cargo}</span>
+                )}
+                <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
+                  {c.telefone && (
+                    <a href={`tel:${String(c.telefone).replace(/\D/g, "")}`} title="Ligar"
+                       style={btnContato(C.accent)}>📞</a>
+                  )}
+                  {c.telefone && (
+                    <a href={`https://wa.me/${(() => {
+                      const d = String(c.telefone).replace(/\D/g, "");
+                      return d.length <= 11 ? `55${d}` : d;
+                    })()}`} target="_blank" rel="noopener noreferrer" title="WhatsApp"
+                       style={btnContato(C.green)}>💬</a>
+                  )}
+                  {c.email && (
+                    <a href={`mailto:${c.email}`} title="E-mail"
+                       style={btnContato(C.purple || "#7c3aed")}>✉️</a>
+                  )}
+                  {podeEditar && (
+                    <button onClick={() => setEditando(c)} title="Editar"
+                            style={{ ...btnContato(C.muted), border: `1px solid ${C.border}`, cursor: "pointer", background: "transparent" }}>
+                      ✎
+                    </button>
+                  )}
+                  {podeExcluir && (
+                    <button onClick={() => excluir(c)} title="Excluir"
+                            style={{ ...btnContato(C.red), border: `1px solid ${C.red}44`, cursor: "pointer", background: "transparent" }}>
+                      🗑
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div style={{ color: C.muted, fontSize: 11, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {c.email && <span>✉️ {c.email}</span>}
+                {c.telefone && <span>📞 {c.telefone}</span>}
+              </div>
+              {c.observacoes && (
+                <div style={{ color: C.text, fontSize: 11, marginTop: 6, fontStyle: "italic" }}>
+                  {c.observacoes}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function inputContato() {
+  return {
+    background: C.bg, color: C.text, border: `1px solid ${C.border}`,
+    borderRadius: 6, padding: "8px 10px", fontSize: 12, outline: "none",
+    fontFamily: "inherit", width: "100%", boxSizing: "border-box",
+  };
+}
+
+function btnContato(cor) {
+  return {
+    background: cor + "22", color: cor, padding: "3px 8px",
+    borderRadius: 4, fontSize: 12, textDecoration: "none",
+    display: "inline-flex", alignItems: "center", border: `1px solid ${cor}44`,
+  };
+}
+
 function AbaResumo({ kpis, cliente }) {
   const diasDesdeUltimaCompra = kpis.ultimaCompra
     ? Math.floor((Date.now() - new Date(kpis.ultimaCompra)) / 86400000)
@@ -542,6 +788,7 @@ export default function PerfilClienteModal({ clienteId, onFechar, user }) {
   }, [onFechar]);
 
   const [qtdInteracoes, setQtdInteracoes] = useState(null);
+  const [qtdContatos, setQtdContatos] = useState(null);
 
   const abasComContador = ABAS.map(a => {
     let count = null;
@@ -551,6 +798,7 @@ export default function PerfilClienteModal({ clienteId, onFechar, user }) {
       if (a.id === "orcamentos") count = dados.orcamentos.length;
     }
     if (a.id === "interacoes" && qtdInteracoes !== null) count = qtdInteracoes;
+    if (a.id === "contatos" && qtdContatos !== null) count = qtdContatos;
     return { ...a, count };
   });
 
@@ -698,6 +946,13 @@ export default function PerfilClienteModal({ clienteId, onFechar, user }) {
           ) : dados ? (
             <>
               {aba === "resumo" && <AbaResumo kpis={dados.kpis} cliente={dados.cliente} />}
+              {aba === "contatos" && (
+                <AbaContatos
+                  clienteId={clienteId}
+                  user={user}
+                  onContadorChange={setQtdContatos}
+                />
+              )}
               {aba === "interacoes" && (
                 <AbaInteracoes
                   clienteId={clienteId}

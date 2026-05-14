@@ -120,6 +120,11 @@ export const api = {
   listarInteracoes: (clienteId) => request(`/clientes/${clienteId}/interacoes`),
   criarInteracao: (clienteId, data) => request(`/clientes/${clienteId}/interacoes`, { method: "POST", body: data }),
   excluirInteracao: (clienteId, id) => request(`/clientes/${clienteId}/interacoes/${id}`, { method: "DELETE" }),
+
+  listarContatos: (clienteId) => request(`/clientes/${clienteId}/contatos`),
+  criarContato: (clienteId, data) => request(`/clientes/${clienteId}/contatos`, { method: "POST", body: data }),
+  atualizarContato: (clienteId, id, data) => request(`/clientes/${clienteId}/contatos/${id}`, { method: "PUT", body: data }),
+  excluirContato: (clienteId, id) => request(`/clientes/${clienteId}/contatos/${id}`, { method: "DELETE" }),
   criarCliente: (data) => request("/clientes", { method: "POST", body: data }),
   atualizarCliente: (id, data) => request(`/clientes/${id}`, { method: "PUT", body: data }),
   excluirCliente: (id) => request(`/clientes/${id}`, { method: "DELETE" }),

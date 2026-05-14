@@ -2,6 +2,7 @@ import { Router } from "express";
 import { authRequired, requireRole, requirePermissao } from "../middlewares/auth.js";
 import { listar, obter, criar, atualizar, excluir, perfil, segmentos, aniversariantes, reativacao } from "../controllers/clienteController.js";
 import { listar as listarInteracoes, criar as criarInteracao, excluir as excluirInteracao } from "../controllers/interacaoController.js";
+import { listar as listarContatos, criar as criarContato, atualizar as atualizarContato, excluir as excluirContato } from "../controllers/contatoController.js";
 
 const router = Router();
 
@@ -23,5 +24,13 @@ router.delete("/:id", requirePermissao("CLIENTES"), requireRole("ADMIN"), exclui
 router.get("/:clienteId/interacoes", listarInteracoes);
 router.post("/:clienteId/interacoes", criarInteracao);
 router.delete("/:clienteId/interacoes/:id", requireRole("ADMIN"), excluirInteracao);
+
+// Contatos (B2B): qualquer um autenticado pode listar. Mutacoes seguem
+// a regra de CLIENTES (permissao + ADMIN/GERENTE para criar/editar,
+// ADMIN para excluir).
+router.get("/:clienteId/contatos", listarContatos);
+router.post("/:clienteId/contatos", requirePermissao("CLIENTES"), requireRole("ADMIN", "GERENTE"), criarContato);
+router.put("/:clienteId/contatos/:id", requirePermissao("CLIENTES"), requireRole("ADMIN", "GERENTE"), atualizarContato);
+router.delete("/:clienteId/contatos/:id", requirePermissao("CLIENTES"), requireRole("ADMIN"), excluirContato);
 
 export default router;

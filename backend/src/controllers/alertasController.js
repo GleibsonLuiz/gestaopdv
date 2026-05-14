@@ -27,7 +27,10 @@ export async function listar(req, res, next) {
     const limite = new Date(hoje);
     limite.setDate(limite.getDate() + DIAS_PROXIMOS);
 
-    const [estoqueBaixo, contasPagar, contasReceber] = await Promise.all([
+    const amanha = new Date(hoje);
+    amanha.setDate(amanha.getDate() + 1);
+
+    const [estoqueBaixo, contasPagar, contasReceber, tarefas] = await Promise.all([
       prisma.$queryRaw`
         SELECT id, codigo, nome, estoque, "estoqueMinimo", unidade
         FROM produtos
@@ -51,6 +54,17 @@ export async function listar(req, res, next) {
         },
         include: { cliente: { select: { id: true, nome: true } } },
         orderBy: { vencimento: "asc" },
+      }),
+      prisma.tarefa.findMany({
+        where: {
+          status: { in: ["ABERTA", "EM_ANDAMENTO"] },
+          prazo: { lte: limite },
+        },
+        include: {
+          cliente: { select: { id: true, nome: true } },
+          responsavel: { select: { id: true, nome: true } },
+        },
+        orderBy: { prazo: "asc" },
       }),
     ]);
 
@@ -110,6 +124,26 @@ export async function listar(req, res, next) {
       });
     }
 
+    for (const t of tarefas) {
+      const dias = t.prazo ? diasAteVencer(t.prazo) : null;
+      const atrasada = dias !== null && dias < 0;
+      const severidadeBase = t.prioridade === "URGENTE" || t.prioridade === "ALTA" ? "ALTA"
+        : t.prioridade === "MEDIA" ? "MEDIA" : "BAIXA";
+      alertas.push({
+        id: `tarefa-${t.id}`,
+        tipo: atrasada ? "TAREFA_ATRASADA" : "TAREFA_VENCENDO",
+        severidade: atrasada ? "ALTA" : severidadeBase,
+        titulo: atrasada
+          ? `Tarefa atrasada há ${Math.abs(dias)} dia${Math.abs(dias) === 1 ? "" : "s"}`
+          : dias === 0 ? "Tarefa vence hoje" : `Tarefa vence em ${dias} dia${dias === 1 ? "" : "s"}`,
+        descricao: t.titulo,
+        complemento: t.cliente?.nome || t.responsavel?.nome || null,
+        data: t.prazo,
+        link: "tarefas",
+        tarefaId: t.id,
+      });
+    }
+
     const ordemSeveridade = { ALTA: 0, MEDIA: 1, BAIXA: 2 };
     alertas.sort((a, b) => {
       const sa = ordemSeveridade[a.severidade] ?? 9;
@@ -131,6 +165,8 @@ export async function listar(req, res, next) {
         contasPagarProximas: alertas.filter(a => a.tipo === "CONTA_PAGAR_PROXIMA").length,
         contasReceberAtrasadas: alertas.filter(a => a.tipo === "CONTA_RECEBER_ATRASADA").length,
         contasReceberProximas: alertas.filter(a => a.tipo === "CONTA_RECEBER_PROXIMA").length,
+        tarefasAtrasadas: alertas.filter(a => a.tipo === "TAREFA_ATRASADA").length,
+        tarefasVencendo: alertas.filter(a => a.tipo === "TAREFA_VENCENDO").length,
       },
       alertas,
     });

@@ -243,6 +243,24 @@ export const api = {
     request(`/orcamentos/${id}/converter-venda`, { method: "POST", body: { formaPagamento } }),
   excluirOrcamento: (id) => request(`/orcamentos/${id}`, { method: "DELETE" }),
 
+  listarTarefas: ({ status = "", prioridade = "", responsavelId = "", clienteId = "", minhas = "", atrasadas = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (status) qs.set("status", status);
+    if (prioridade) qs.set("prioridade", prioridade);
+    if (responsavelId) qs.set("responsavelId", responsavelId);
+    if (clienteId) qs.set("clienteId", clienteId);
+    if (minhas) qs.set("minhas", minhas);
+    if (atrasadas) qs.set("atrasadas", atrasadas);
+    const q = qs.toString();
+    return request(`/tarefas${q ? `?${q}` : ""}`);
+  },
+  obterTarefa: (id) => request(`/tarefas/${id}`),
+  criarTarefa: (data) => request("/tarefas", { method: "POST", body: data }),
+  atualizarTarefa: (id, data) => request(`/tarefas/${id}`, { method: "PUT", body: data }),
+  concluirTarefa: (id) => request(`/tarefas/${id}/concluir`, { method: "POST" }),
+  reabrirTarefa: (id) => request(`/tarefas/${id}/reabrir`, { method: "POST" }),
+  excluirTarefa: (id) => request(`/tarefas/${id}`, { method: "DELETE" }),
+
   obterDashboard: () => request("/dashboard/resumo"),
   obterAlertas: () => request("/alertas"),
 

@@ -111,6 +111,20 @@ enum TipoInteracao {
   ANOTACAO
 }
 
+enum PrioridadeTarefa {
+  BAIXA
+  MEDIA
+  ALTA
+  URGENTE
+}
+
+enum StatusTarefa {
+  ABERTA
+  EM_ANDAMENTO
+  CONCLUIDA
+  CANCELADA
+}
+
 // Ciclo de vida do orcamento. RASCUNHO permite editar livremente; depois
 // de AGUARDANDO_APROVACAO so muda por acao explicita do usuario. ENTREGUE
 // e estado final positivo (sera convertido em venda); REJEITADO/CANCELADO
@@ -169,6 +183,8 @@ model User {
   orcamentosResponsavel Orcamento[] @relation("OrcamentoResponsavel")
   configuracaoComissao ConfiguracaoComissao?
   interacoes          Interacao[]
+  tarefasCriadas      Tarefa[]    @relation("TarefaCriador")
+  tarefasResponsavel  Tarefa[]    @relation("TarefaResponsavel")
 
   @@map("users")
 }
@@ -220,6 +236,7 @@ model Cliente {
   contasReceber ContaReceber[]
   orcamentos    Orcamento[]
   interacoes    Interacao[]
+  tarefas       Tarefa[]
 
   @@map("clientes")
 }
@@ -695,6 +712,34 @@ model ItemOrcamento {
 
   @@index([orcamentoId, ordem])
   @@map("itens_orcamento")
+}
+
+// ============ CRM — TAREFAS E FOLLOW-UPS ============
+
+model Tarefa {
+  id          String           @id @default(uuid())
+  titulo      String
+  descricao   String?
+  prazo       DateTime?
+  prioridade  PrioridadeTarefa @default(MEDIA)
+  status      StatusTarefa     @default(ABERTA)
+  concluidaEm DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+
+  responsavelId String?
+  responsavel   User?   @relation("TarefaResponsavel", fields: [responsavelId], references: [id])
+
+  criadoPorId String
+  criadoPor   User   @relation("TarefaCriador", fields: [criadoPorId], references: [id])
+
+  @@index([status, prazo])
+  @@index([responsavelId, status])
+  @@index([clienteId])
+  @@map("tarefas")
 }
 
 // ============ CRM — INTERACOES ============

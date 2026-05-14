@@ -12,7 +12,6 @@ const fmtBRL = (v) => {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 };
 
-// Versao "split" para renderizar reais grande + centavos pequenos
 const fmtBRLSplit = (v) => {
   const n = Number(v);
   if (!Number.isFinite(n)) return { reais: "—", centavos: "" };
@@ -47,7 +46,6 @@ const fmtDiaSemana = (iso) => {
   return d.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "").toUpperCase();
 };
 
-// Saudacao de acordo com a hora do dia + dia da semana atual.
 function saudacao(nome) {
   const agora = new Date();
   const h = agora.getHours();
@@ -67,7 +65,6 @@ const ROTULO_PAGAMENTO = {
   CREDIARIO: "Crediário",
 };
 
-// Percentual com sinal
 const fmtPercentual = (v) => {
   if (v === null || v === undefined || !Number.isFinite(Number(v))) return null;
   const n = Number(v);
@@ -75,7 +72,6 @@ const fmtPercentual = (v) => {
   return `${sinal}${n.toFixed(1)}%`;
 };
 
-// Arredonda max para um numero "bonito" (50, 100, 200, 500, 1000, 2000, etc.)
 function niceMax(v) {
   const n = Math.max(1, Number(v) || 1);
   const exp = Math.floor(Math.log10(n));
@@ -94,6 +90,7 @@ export default function Dashboard({ user }) {
   const [dados, setDados] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
+  const [contagem, setContagem] = useState(60);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -110,13 +107,22 @@ export default function Dashboard({ user }) {
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  if (carregando && !dados) {
-    return (
-      <div style={{ padding: 30, textAlign: "center", color: C.muted, fontSize: 13, fontFamily: FONT_SANS }}>
-        Carregando indicadores...
-      </div>
-    );
-  }
+  // Auto-refresh a cada 60 s. Usa variável local `c` — nunca chama state setter
+  // dentro de outro state setter (violaria as regras do React 18).
+  useEffect(() => {
+    let c = 60;
+    const id = setInterval(() => {
+      c -= 1;
+      setContagem(c);
+      if (c <= 0) {
+        c = 60;
+        carregar();
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [carregar]);
+
+  if (carregando && !dados) return <SkeletonDashboard />;
 
   if (erro) {
     return (
@@ -135,10 +141,10 @@ export default function Dashboard({ user }) {
   }
 
   if (!dados) return null;
-  return <ConteudoDashboard dados={dados} onAtualizar={carregar} user={user} />;
+  return <ConteudoDashboard dados={dados} onAtualizar={carregar} user={user} contagem={contagem} />;
 }
 
-function ConteudoDashboard({ dados, onAtualizar, user }) {
+function ConteudoDashboard({ dados, onAtualizar, user, contagem }) {
   const k = dados.kpis;
 
   const totalFormas = useMemo(
@@ -183,7 +189,7 @@ function ConteudoDashboard({ dados, onAtualizar, user }) {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <SegmentedPeriodo />
-          <BotaoAtualizar onClick={onAtualizar} />
+          <BotaoAtualizar onClick={onAtualizar} contagem={contagem} />
         </div>
       </header>
 
@@ -239,9 +245,10 @@ function ConteudoDashboard({ dados, onAtualizar, user }) {
         {/* ========= MINI-TILES ========= */}
         <section style={{
           display: "grid", gap: 14,
-          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
         }}>
           <MiniTile icone={<IconPeople />} label="Clientes" valor={fmtNumero(k.clientesAtivos)} hint="ativos" />
+          <MiniTile icone={<IconUserPlus />} label="Novos clientes" valor={fmtNumero(k.novosCLientesMes || 0)} hint="este mês" />
           <MiniTile icone={<IconBox />} label="Produtos" valor={fmtNumero(k.produtosAtivos)} hint="ativos" />
           <MiniTile icone={<IconTruck />} label="Fornecedores" valor={fmtNumero(k.fornecedoresAtivos)} hint="cadastrados" />
           <MiniTile icone={<IconUser />} label="Funcionários" valor={fmtNumero(k.funcionariosAtivos)} hint="ativos" />
@@ -276,7 +283,7 @@ function ConteudoDashboard({ dados, onAtualizar, user }) {
         {/* ========= FINANCEIRO ========= */}
         <section style={{
           display: "grid", gap: 14,
-          gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
         }}>
           <PainelFinanceiro
             tipo="payable"
@@ -290,7 +297,19 @@ function ConteudoDashboard({ dados, onAtualizar, user }) {
             icone={<IconBillIn />}
             dados={k.contasReceberPendentes}
           />
+          <PainelSaldoFinanceiro
+            pagar={k.contasPagarPendentes}
+            receber={k.contasReceberPendentes}
+          />
         </section>
+
+        {/* ========= PROXIMAS CONTAS (7 dias) ========= */}
+        {dados.proximasContas && (
+          <PainelProximasContas
+            pagar={dados.proximasContas.pagar || []}
+            receber={dados.proximasContas.receber || []}
+          />
+        )}
 
         {/* ========= ESTOQUE BAIXO + ULTIMAS VENDAS ========= */}
         <section style={{
@@ -322,8 +341,6 @@ function ConteudoDashboard({ dados, onAtualizar, user }) {
 // ============================================================
 
 function SegmentedPeriodo() {
-  // Visual-only por enquanto — backend retorna sempre 7 dias.
-  // TODO(api): aceitar query param `?periodo=hoje|7d|30d|mes|ano` em /dashboard.
   return (
     <div style={{
       display: "inline-flex", border: `1px solid ${C.border}`, borderRadius: 10,
@@ -354,10 +371,11 @@ function SegmentedPeriodo() {
   );
 }
 
-function BotaoAtualizar({ onClick }) {
+function BotaoAtualizar({ onClick, contagem }) {
   return (
     <button
       onClick={onClick}
+      title={contagem !== undefined ? `Atualiza automaticamente em ${contagem}s` : ""}
       style={{
         display: "inline-flex", alignItems: "center", gap: 8,
         height: 32, padding: "0 14px", borderRadius: 8,
@@ -368,6 +386,13 @@ function BotaoAtualizar({ onClick }) {
       }}
     >
       <IconRefresh /> Atualizar
+      {contagem !== undefined && (
+        <span style={{
+          fontSize: 10, fontFamily: FONT_MONO, color: C.muted,
+          background: "rgba(0,0,0,0.25)", borderRadius: 4,
+          padding: "1px 5px", fontWeight: 500,
+        }}>{contagem}s</span>
+      )}
     </button>
   );
 }
@@ -454,7 +479,6 @@ function DeltaPill({ texto, tipo, style }) {
   );
 }
 
-// Sparkline usando SVG path com gradient fill
 function Sparkline({ cor, pontos }) {
   if (!pontos || pontos.length < 2) {
     return (
@@ -539,7 +563,7 @@ function MiniTile({ icone, label, valor, hint, warn, tagDelta }) {
 }
 
 // ============================================================
-// Cards genericos
+// Cards genéricos
 // ============================================================
 
 function Card({ children, padding = 18, style }) {
@@ -581,16 +605,17 @@ function CardHead({ titulo, meta, acessorio }) {
 }
 
 // ============================================================
-// Grafico de vendas semana
+// Gráfico de vendas semana
 // ============================================================
 
 function PainelGraficoVendas({ dados, totalSemana }) {
+  const [hoveredBar, setHoveredBar] = useState(null);
+
   const totaisNum = dados.map(d => Number(d.total) || 0);
   const max = Math.max(...totaisNum, 0);
   const yMax = niceMax(max);
   const idxMax = totaisNum.indexOf(max);
 
-  // SVG dimensoes
   const W = 720, H = 240;
   const padL = 40, padR = 12, padT = 20, padB = 30;
   const innerW = W - padL - padR;
@@ -600,7 +625,6 @@ function PainelGraficoVendas({ dados, totalSemana }) {
   const colW = innerW / n;
   const barW = Math.min(40, colW * 0.5);
 
-  // gridlines
   const ticks = 5;
   const gridY = [];
   for (let i = 0; i <= ticks; i++) {
@@ -609,7 +633,6 @@ function PainelGraficoVendas({ dados, totalSemana }) {
     gridY.push({ y, v });
   }
 
-  // barras
   const barras = dados.map((d, i) => {
     const v = Number(d.total) || 0;
     const cx = padL + i * colW + colW / 2;
@@ -621,7 +644,6 @@ function PainelGraficoVendas({ dados, totalSemana }) {
     return { d, v, cx, x, y, altura: Math.max(altura, 2), ePico, eHoje };
   });
 
-  // Media movel (3 dias)
   const media = totaisNum.map((_, i) => {
     const ini = Math.max(0, i - 1);
     const fim = Math.min(totaisNum.length - 1, i + 1);
@@ -660,7 +682,6 @@ function PainelGraficoVendas({ dados, totalSemana }) {
         </div>
       </div>
 
-      {/* Legenda */}
       <div style={{ display: "flex", gap: 14, fontSize: 11.5, color: C.muted, marginBottom: 8 }}>
         <span>
           <span style={{
@@ -700,7 +721,6 @@ function PainelGraficoVendas({ dados, totalSemana }) {
             </linearGradient>
           </defs>
 
-          {/* gridlines */}
           {gridY.map((g, i) => (
             <g key={i}>
               <line x1={padL} y1={g.y} x2={W - padR} y2={g.y}
@@ -712,18 +732,24 @@ function PainelGraficoVendas({ dados, totalSemana }) {
             </g>
           ))}
 
-          {/* barras */}
           {barras.map((b, i) => {
             const usaPlaceholder = b.v === 0;
             const fill = usaPlaceholder
               ? "url(#bar-flat)"
               : (b.ePico ? "url(#bar-green)" : "url(#bar-blue)");
+            const isHovered = hoveredBar === i;
             return (
-              <g key={i} opacity={b.eHoje && !usaPlaceholder ? 0.85 : 1}>
+              <g key={i}
+                opacity={b.eHoje && !usaPlaceholder ? 0.85 : 1}
+                style={{ cursor: b.v > 0 ? "pointer" : "default" }}
+                onMouseEnter={() => setHoveredBar(i)}
+                onMouseLeave={() => setHoveredBar(null)}
+              >
                 <rect
                   x={b.x} y={usaPlaceholder ? padT + innerH - 2 : b.y}
                   width={barW} height={usaPlaceholder ? 2 : b.altura}
                   rx={6} fill={fill}
+                  opacity={isHovered ? 0.7 : 1}
                 />
                 {b.v > 0 && (
                   <text x={b.cx} y={b.y - 6} textAnchor="middle"
@@ -738,17 +764,14 @@ function PainelGraficoVendas({ dados, totalSemana }) {
             );
           })}
 
-          {/* media movel */}
           {totaisNum.some(v => v > 0) && (
             <path d={mediaPath} fill="none" stroke="rgba(255,255,255,0.3)"
               strokeWidth="1.2" strokeDasharray="3 4" />
           )}
 
-          {/* baseline */}
           <line x1={padL} y1={padT + innerH} x2={W - padR} y2={padT + innerH}
             stroke={C.border} />
 
-          {/* x-axis labels */}
           {barras.map((b, i) => (
             <g key={"x" + i}>
               <text x={b.cx} y={H - 14} textAnchor="middle"
@@ -766,8 +789,48 @@ function PainelGraficoVendas({ dados, totalSemana }) {
             </g>
           ))}
         </svg>
+
+        {hoveredBar !== null && barras[hoveredBar] !== undefined && barras[hoveredBar].v > 0 && (
+          <TooltipBarra barra={barras[hoveredBar]} W={W} />
+        )}
       </div>
     </Card>
+  );
+}
+
+function TooltipBarra({ barra, W }) {
+  const pctLeft = (barra.cx / W) * 100;
+  const isRight = pctLeft > 60;
+  return (
+    <div style={{
+      position: "absolute",
+      left: `${pctLeft}%`,
+      top: 0,
+      transform: isRight ? "translateX(-90%)" : "translateX(-10%)",
+      pointerEvents: "none",
+      zIndex: 10,
+      background: C.surface,
+      border: `1px solid ${C.border}`,
+      borderRadius: 8,
+      padding: "8px 12px",
+      minWidth: 130,
+      boxShadow: "0 4px 16px rgba(0,0,0,0.45)",
+    }}>
+      <div style={{ fontSize: 10.5, color: C.muted, marginBottom: 3, fontFamily: FONT_MONO }}>
+        {fmtDiaSemana(barra.d.dia)} · {fmtDiaCurto(barra.d.dia)}
+      </div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: C.white, fontFamily: FONT_MONO }}>
+        {fmtBRL(barra.v)}
+      </div>
+      <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+        {barra.d.qtd} {barra.d.qtd === 1 ? "venda" : "vendas"}
+      </div>
+      {barra.ePico && (
+        <div style={{ fontSize: 10, color: C.green, marginTop: 4, fontWeight: 700 }}>
+          ▲ Melhor dia da semana
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -943,7 +1006,6 @@ function PainelFormasPagamento({ itens, totalGeral, qtdMes }) {
   const ordenados = [...itens].sort((a, b) => Number(b.total) - Number(a.total));
   const cores = [C.accent, C.green, C.yellow, C.purple, C.red, C.muted];
 
-  // Donut SVG
   const r = 46, cx = 60, cy = 60;
   const circ = 2 * Math.PI * r;
   let offset = 0;
@@ -952,11 +1014,7 @@ function PainelFormasPagamento({ itens, totalGeral, qtdMes }) {
     const cor = cores[i % cores.length];
     const pct = totalGeral > 0 ? Number(f.total) / Number(totalGeral) : 0;
     const dash = pct * circ;
-    const arco = {
-      cor, dash,
-      offset: -offset,
-      pct,
-    };
+    const arco = { cor, dash, offset: -offset, pct };
     offset += dash;
     return arco;
   });
@@ -1109,7 +1167,7 @@ function PainelFinanceiro({ tipo, titulo, icone, dados }) {
           <div style={{
             fontSize: 10.5, letterSpacing: "0.16em", textTransform: "uppercase",
             color: C.muted, marginBottom: 4,
-          }}>{tipo === "payable" ? "Atrasadas" : "Atrasadas"}</div>
+          }}>Atrasadas</div>
           <div style={{
             fontSize: 20, fontWeight: 700, color: atrasadas > 0 ? corPrincipal : C.text,
             fontFamily: FONT_MONO, fontVariantNumeric: "tabular-nums",
@@ -1130,6 +1188,190 @@ function PainelFinanceiro({ tipo, titulo, icone, dados }) {
           : "✓ Nenhuma conta atrasada"}
       </div>
     </article>
+  );
+}
+
+// ============================================================
+// Saldo financeiro previsto
+// ============================================================
+
+function PainelSaldoFinanceiro({ pagar, receber }) {
+  const aPagar = Number(pagar?.total) || 0;
+  const aReceber = Number(receber?.total) || 0;
+  const saldo = aReceber - aPagar;
+  const positivo = saldo >= 0;
+  const cor = positivo ? C.green : C.red;
+  const totalGeral = aPagar + aReceber;
+  const pctReceber = totalGeral > 0 ? (aReceber / totalGeral) * 100 : 50;
+  const pctPagar = 100 - pctReceber;
+
+  return (
+    <article style={{
+      background: positivo
+        ? `linear-gradient(180deg, ${C.green}18, ${C.card})`
+        : `linear-gradient(180deg, ${C.red}18, ${C.card})`,
+      border: `1px solid ${positivo ? C.green + "44" : C.red + "44"}`,
+      borderRadius: 14, padding: 18, position: "relative", overflow: "hidden",
+    }}>
+      <div style={{
+        position: "absolute", inset: 0, borderRadius: "inherit",
+        background: "linear-gradient(180deg, rgba(255,255,255,0.04), transparent 30%)",
+        pointerEvents: "none",
+      }} />
+      <div style={{
+        display: "flex", alignItems: "center", gap: 8, marginBottom: 12, position: "relative",
+      }}>
+        <span style={{ color: cor, display: "inline-flex" }}><IconBalance /></span>
+        <h4 style={{ margin: 0, fontSize: 12.5, fontWeight: 600, letterSpacing: "0.02em", color: C.text }}>
+          Saldo previsto
+        </h4>
+        <DeltaPill
+          texto={positivo ? "Positivo" : "Negativo"}
+          tipo={positivo ? "up" : "down"}
+          style={{ marginLeft: "auto" }}
+        />
+      </div>
+
+      <div style={{ position: "relative" }}>
+        <div style={{
+          fontSize: 10.5, letterSpacing: "0.16em", textTransform: "uppercase",
+          color: C.muted, marginBottom: 4,
+        }}>A receber − A pagar</div>
+        <div style={{
+          fontSize: 30, fontWeight: 800, letterSpacing: "-0.025em",
+          color: cor, fontVariantNumeric: "tabular-nums",
+        }}>
+          {positivo ? "" : "−"}{fmtBRL(Math.abs(saldo))}
+        </div>
+      </div>
+
+      <div style={{ marginTop: 14, position: "relative" }}>
+        <div style={{
+          height: 6, borderRadius: 99, display: "flex", overflow: "hidden",
+          background: "rgba(255,255,255,0.05)",
+        }}>
+          <div style={{ width: `${pctReceber}%`, background: C.green }} />
+          <div style={{ width: `${pctPagar}%`, background: C.red }} />
+        </div>
+        <div style={{
+          display: "flex", justifyContent: "space-between",
+          marginTop: 6, fontSize: 11, fontFamily: FONT_MONO,
+        }}>
+          <span style={{ color: C.green }}>↑ Receber {fmtBRL(aReceber)}</span>
+          <span style={{ color: C.red }}>↓ Pagar {fmtBRL(aPagar)}</span>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+// ============================================================
+// Próximas contas (7 dias)
+// ============================================================
+
+function PainelProximasContas({ pagar, receber }) {
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+
+  const itens = [
+    ...(pagar || []).map(c => ({ ...c, tipo: "pagar" })),
+    ...(receber || []).map(c => ({ ...c, tipo: "receber" })),
+  ].sort((a, b) => new Date(a.vencimento) - new Date(b.vencimento));
+
+  function fmtVenc(iso) {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "—";
+    const diff = Math.round((d - hoje) / 86400000);
+    if (diff === 0) return "Hoje";
+    if (diff === 1) return "Amanhã";
+    if (diff < 0) return `${Math.abs(diff)}d atrás`;
+    return `em ${diff} dias`;
+  }
+
+  const totalPagar = (pagar || []).reduce((a, c) => a + (Number(c.valor) || 0), 0);
+  const totalReceber = (receber || []).reduce((a, c) => a + (Number(c.valor) || 0), 0);
+
+  return (
+    <Card>
+      <div style={{
+        display: "flex", alignItems: "center", gap: 10, marginBottom: 12,
+      }}>
+        <h3 style={{
+          margin: 0, fontSize: 13, fontWeight: 600, letterSpacing: "0.02em", color: C.text,
+        }}>Próximas contas — 7 dias</h3>
+        <span style={{ marginLeft: "auto", display: "flex", gap: 12, fontSize: 11.5, fontFamily: FONT_MONO }}>
+          {totalReceber > 0 && (
+            <span style={{ color: C.green }}>↑ {fmtBRL(totalReceber)}</span>
+          )}
+          {totalPagar > 0 && (
+            <span style={{ color: C.red }}>↓ {fmtBRL(totalPagar)}</span>
+          )}
+        </span>
+      </div>
+
+      {itens.length === 0 ? (
+        <Vazio texto="✓ Nenhuma conta vencendo nos próximos 7 dias." />
+      ) : (
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
+          gap: 0,
+        }}>
+          {itens.map((c, idx) => {
+            const isPagar = c.tipo === "pagar";
+            const cor = isPagar ? C.red : C.green;
+            const atrasada = c.status === "ATRASADA";
+            const vencLabel = fmtVenc(c.vencimento);
+            return (
+              <div key={`${c.tipo}-${c.id}`} style={{
+                display: "grid",
+                gridTemplateColumns: "32px 1fr auto auto",
+                gap: 10,
+                alignItems: "center",
+                padding: "10px 0",
+                borderBottom: idx < itens.length - 1 ? `1px dashed ${C.border}` : "0",
+              }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: 8,
+                  display: "grid", placeItems: "center",
+                  color: cor, background: cor + "1f", border: `1px solid ${cor}44`,
+                  fontSize: 14, fontWeight: 700,
+                }}>
+                  {isPagar ? "↓" : "↑"}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{
+                    fontSize: 13, fontWeight: 600, color: C.white,
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                  }}>
+                    {c.descricao || (isPagar ? "Conta a pagar" : "Conta a receber")}
+                  </div>
+                  <div style={{ fontSize: 10.5, color: C.muted, fontFamily: FONT_MONO, marginTop: 1 }}>
+                    {isPagar ? "A pagar" : "A receber"}
+                    {atrasada && (
+                      <span style={{ color: C.red, marginLeft: 6, fontWeight: 700 }}>· ATRASADA</span>
+                    )}
+                  </div>
+                </div>
+                <div style={{
+                  fontSize: 11, fontWeight: 600, fontFamily: FONT_MONO,
+                  color: atrasada ? C.red : C.muted, whiteSpace: "nowrap",
+                }}>
+                  {vencLabel}
+                </div>
+                <div style={{
+                  fontFamily: FONT_MONO, fontWeight: 700, fontSize: 13,
+                  color: cor, textAlign: "right", whiteSpace: "nowrap",
+                }}>
+                  {fmtBRL(c.valor)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -1200,7 +1442,7 @@ function PainelEstoqueBaixo({ itens }) {
 }
 
 // ============================================================
-// Ultimas vendas
+// Últimas vendas
 // ============================================================
 
 function PainelUltimasVendas({ itens, totalHoje, qtdHoje }) {
@@ -1258,7 +1500,7 @@ function PainelUltimasVendas({ itens, totalHoje, qtdHoje }) {
 }
 
 // ============================================================
-// Ultimas compras
+// Últimas compras
 // ============================================================
 
 function PainelUltimasCompras({ itens }) {
@@ -1303,6 +1545,41 @@ function PainelUltimasCompras({ itens }) {
   );
 }
 
+// ============================================================
+// Skeleton de loading
+// ============================================================
+
+function SkeletonDashboard() {
+  const sk = (h) => ({
+    height: h, borderRadius: 14,
+    background: `linear-gradient(180deg, ${C.card}, ${C.surface})`,
+    border: `1px solid ${C.border}`,
+    opacity: 0.65,
+  });
+  return (
+    <div style={{ fontFamily: FONT_SANS }}>
+      <div style={{
+        height: 44, borderRadius: 8, width: 260, marginBottom: 18,
+        background: C.card, border: `1px solid ${C.border}`, opacity: 0.65,
+      }} />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, marginBottom: 14 }}>
+        {[0,1,2,3].map(i => <div key={i} style={sk(124)} />)}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 14, marginBottom: 14 }}>
+        {[0,1,2,3,4,5].map(i => <div key={i} style={sk(72)} />)}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.6fr) minmax(0, 1fr)", gap: 14, marginBottom: 14 }}>
+        <div style={sk(296)} />
+        <div style={sk(296)} />
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 14 }}>
+        <div style={sk(200)} />
+        <div style={sk(200)} />
+      </div>
+    </div>
+  );
+}
+
 function Vazio({ texto }) {
   return (
     <div style={{ color: C.muted, fontSize: 12, textAlign: "center", padding: "16px 0" }}>
@@ -1312,7 +1589,7 @@ function Vazio({ texto }) {
 }
 
 // ============================================================
-// Icones (SVG inline, stroke 1.8 — combinam com a sidebar do app)
+// Ícones (SVG inline, stroke 1.8)
 // ============================================================
 
 const sw = { fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round" };
@@ -1331,6 +1608,9 @@ function IconBag() {
 }
 function IconPeople() {
   return (<svg width="16" height="16" viewBox="0 0 24 24" {...sw}><circle cx="12" cy="8" r="4" /><path d="M4 21c1-4 5-6 8-6s7 2 8 6" /></svg>);
+}
+function IconUserPlus() {
+  return (<svg width="16" height="16" viewBox="0 0 24 24" {...sw}><circle cx="10" cy="8" r="4" /><path d="M2 21c1-4 5-6 8-6 1.4 0 2.7.3 3.8.8" /><path d="M18 12v6M15 15h6" /></svg>);
 }
 function IconBox() {
   return (<svg width="16" height="16" viewBox="0 0 24 24" {...sw}><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 9v12" /></svg>);
@@ -1352,4 +1632,7 @@ function IconBillIn() {
 }
 function IconRefresh() {
   return (<svg width="14" height="14" viewBox="0 0 24 24" {...sw}><path d="M21 12a9 9 0 1 1-3-6.7L21 8" /><path d="M21 3v5h-5" /></svg>);
+}
+function IconBalance() {
+  return (<svg width="18" height="18" viewBox="0 0 24 24" {...sw}><path d="M3 6h18" /><path d="M3 12h18" /><path d="M3 18h7" /><path d="M17 15l2 2 4-4" /></svg>);
 }

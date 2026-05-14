@@ -33,6 +33,8 @@ export async function resumo(req, res, next) {
     const mesAnteriorInicio = inicioDoMes(new Date(agora.getFullYear(), agora.getMonth() - 1, 1));
     const mesAnteriorFim = mesInicio;
     const seteDiasAtras = diasAtras(6, agora);
+    const seteDiasFuturos = new Date(hoje);
+    seteDiasFuturos.setDate(hoje.getDate() + 7);
 
     const [
       totalClientesAtivos,
@@ -55,6 +57,9 @@ export async function resumo(req, res, next) {
       contasReceberAtrasadasCount,
       ultimasVendas,
       ultimasCompras,
+      novosCLientesMesCount,
+      proximasContasPagarRaw,
+      proximasContasReceberRaw,
     ] = await Promise.all([
       prisma.cliente.count({ where: { ativo: true } }),
       prisma.produto.count({ where: { ativo: true } }),
@@ -188,6 +193,28 @@ export async function resumo(req, res, next) {
           fornecedor: { select: { nome: true } },
         },
       }),
+
+      prisma.cliente.count({ where: { createdAt: { gte: mesInicio } } }),
+
+      prisma.contaPagar.findMany({
+        where: {
+          status: { in: ["PENDENTE", "ATRASADA"] },
+          vencimento: { gte: hoje, lte: seteDiasFuturos },
+        },
+        orderBy: { vencimento: "asc" },
+        take: 6,
+        select: { id: true, descricao: true, valor: true, vencimento: true, status: true },
+      }),
+
+      prisma.contaReceber.findMany({
+        where: {
+          status: { in: ["PENDENTE", "ATRASADA"] },
+          vencimento: { gte: hoje, lte: seteDiasFuturos },
+        },
+        orderBy: { vencimento: "asc" },
+        take: 6,
+        select: { id: true, descricao: true, valor: true, vencimento: true, status: true },
+      }),
     ]);
 
     // Hidrata top produtos
@@ -265,6 +292,7 @@ export async function resumo(req, res, next) {
         fornecedoresAtivos: totalFornecedoresAtivos,
         funcionariosAtivos: totalFuncionariosAtivos,
         produtosEstoqueBaixo: produtosEstoqueBaixo.length,
+        novosCLientesMes: novosCLientesMesCount,
         contasPagarPendentes: {
           quantidade: contasPagarPendentesAgg._count._all,
           total: toNum(contasPagarPendentesAgg._sum.valor),
@@ -301,6 +329,22 @@ export async function resumo(req, res, next) {
         createdAt: c.createdAt,
         fornecedor: c.fornecedor?.nome || null,
       })),
+      proximasContas: {
+        pagar: proximasContasPagarRaw.map(c => ({
+          id: c.id,
+          descricao: c.descricao,
+          valor: toNum(c.valor),
+          vencimento: c.vencimento,
+          status: c.status,
+        })),
+        receber: proximasContasReceberRaw.map(c => ({
+          id: c.id,
+          descricao: c.descricao,
+          valor: toNum(c.valor),
+          vencimento: c.vencimento,
+          status: c.status,
+        })),
+      },
     });
   } catch (err) {
     next(err);

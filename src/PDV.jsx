@@ -1733,9 +1733,9 @@ function FormasPagamentoTopo({ resumo }) {
                     <div
                       className="pdv-graf-bar"
                       style={{
-                        height: `${Math.max(pct, 6)}%`,
-                        background: `linear-gradient(180deg, ${cor}, ${cor}66)`,
-                        boxShadow: `0 -2px 8px -2px ${cor}55`,
+                        height: `${Math.max(pct, 8)}%`,
+                        background: `linear-gradient(180deg, color-mix(in oklab, ${cor} 75%, white), ${cor})`,
+                        boxShadow: `0 -3px 10px -2px ${cor}66, inset 0 1px 0 rgba(255,255,255,.15)`,
                       }}
                     />
                   </div>

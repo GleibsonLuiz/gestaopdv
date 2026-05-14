@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { C } from "../lib/theme";
 
 // Dropdown de acoes reutilizado nas listas (Financeiro, Clientes, Produtos,
@@ -8,7 +8,10 @@ import { C } from "../lib/theme";
 export default function ActionsMenu({ items = [], align = "right", title = "AÃ§Ãµes" }) {
   const [aberto, setAberto] = useState(false);
   const [hoverIdx, setHoverIdx] = useState(-1);
+  const [coords, setCoords] = useState({ top: 0, left: 0, ready: false });
   const wrapRef = useRef(null);
+  const btnRef = useRef(null);
+  const menuRef = useRef(null);
 
   useEffect(() => {
     if (!aberto) return;
@@ -18,13 +21,39 @@ export default function ActionsMenu({ items = [], align = "right", title = "AÃ§Ã
     function onKey(e) {
       if (e.key === "Escape") setAberto(false);
     }
+    function onScroll() {
+      setAberto(false);
+    }
     document.addEventListener("mousedown", onClickFora);
     document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
     return () => {
       document.removeEventListener("mousedown", onClickFora);
       document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
     };
   }, [aberto]);
+
+  // Posiciona o menu com position:fixed para escapar de overflow:hidden em
+  // ancestrais (ex.: borda da tabela). Faz flip vertical se nao houver espaco
+  // abaixo do botao.
+  useLayoutEffect(() => {
+    if (!aberto || !btnRef.current || !menuRef.current) return;
+    const br = btnRef.current.getBoundingClientRect();
+    const menuH = menuRef.current.offsetHeight;
+    const menuW = menuRef.current.offsetWidth;
+    const margem = 8;
+    const espacoAbaixo = window.innerHeight - br.bottom;
+    const abrirParaCima = espacoAbaixo < menuH + margem && br.top > menuH + margem;
+    const top = abrirParaCima ? br.top - menuH - 4 : br.bottom + 4;
+    let left = align === "right" ? br.right - menuW : br.left;
+    // Garante que nao sai pela lateral da tela.
+    if (left < 8) left = 8;
+    if (left + menuW > window.innerWidth - 8) left = window.innerWidth - menuW - 8;
+    setCoords({ top, left, ready: true });
+  }, [aberto, align]);
 
   const validos = items.filter(it => it && !it.hidden);
   if (validos.length === 0) return null;
@@ -32,11 +61,19 @@ export default function ActionsMenu({ items = [], align = "right", title = "AÃ§Ã
   return (
     <div ref={wrapRef} style={{ position: "relative", display: "inline-block" }}>
       <button
+        ref={btnRef}
         type="button"
         title={title}
         aria-haspopup="menu"
         aria-expanded={aberto}
-        onClick={(e) => { e.stopPropagation(); setAberto(v => !v); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          setAberto(v => {
+            const novo = !v;
+            if (novo) setCoords(c => ({ ...c, ready: false }));
+            return novo;
+          });
+        }}
         style={{
           width: 30, height: 28,
           display: "inline-flex", alignItems: "center", justifyContent: "center",
@@ -63,20 +100,22 @@ export default function ActionsMenu({ items = [], align = "right", title = "AÃ§Ã
 
       {aberto && (
         <div
+          ref={menuRef}
           role="menu"
           style={{
-            position: "absolute",
-            top: "calc(100% + 4px)",
-            [align === "right" ? "right" : "left"]: 0,
+            position: "fixed",
+            top: coords.top,
+            left: coords.left,
             minWidth: 180,
             background: C.card,
             border: `1px solid ${C.border}`,
             borderRadius: 10,
             padding: 4,
             boxShadow: "0 14px 36px rgba(0,0,0,.5)",
-            zIndex: 60,
+            zIndex: 1000,
             display: "flex",
             flexDirection: "column",
+            visibility: coords.ready ? "visible" : "hidden",
           }}
         >
           {validos.map((it, i) => {

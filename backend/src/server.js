@@ -31,6 +31,8 @@ import npsRoutes from "./routes/nps.js";
 import comissoesRoutes from "./routes/comissoes.js";
 import tarefasRoutes from "./routes/tarefas.js";
 import fidelidadeRoutes from "./routes/fidelidade.js";
+import logsRoutes from "./routes/logs.js";
+import { auditoria } from "./middlewares/auditoria.js";
 
 dotenv.config();
 
@@ -66,6 +68,12 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+// Middleware de auditoria roda antes das rotas: captura mutacoes via
+// res.on("finish") (quando req.user ja foi populado pelos authRequired
+// das rotas). Filtros internos garantem que so mutacoes autenticadas
+// viram log.
+app.use(auditoria);
+
 app.use("/auth", authRoutes);
 app.use("/clientes", clientesRoutes);
 app.use("/fornecedores", fornecedoresRoutes);
@@ -94,6 +102,7 @@ app.use("/nps", npsRoutes);
 app.use("/comissoes", comissoesRoutes);
 app.use("/tarefas", tarefasRoutes);
 app.use("/fidelidade", fidelidadeRoutes);
+app.use("/logs", logsRoutes);
 
 app.use((err, req, res, _next) => {
   console.error(err);

@@ -146,6 +146,23 @@ d:/gestao-pdv/
 
 ## Histórico de sessões
 
+### Sessão — 2026-05-14 (Logs de auditoria + fix ActionsMenu)
+
+**Fix do dropdown `ActionsMenu`** (`6198f29`): trocado `position: absolute` por `position: fixed` com coordenadas calculadas via `getBoundingClientRect()`, escapando do `overflow: hidden` da tabela. Adicionado flip vertical automático quando não há espaço abaixo do botão (ex.: última linha da tabela de Clientes) e fechamento em scroll/resize. Cobre as 11 telas que usam o componente. Auditoria identificou 4 outros dropdowns com o mesmo padrão (`BotoesContatoCliente`, `SelectBusca`, `Alertas`, `Fidelidade`) — não corrigidos nesta sessão a pedido do usuário.
+
+**Módulo de Logs de Auditoria** (`feat(logs): ...`): novo subsistema para registrar tudo que os usuários fazem no sistema.
+- **Backend:**
+  - Model `LogAuditoria` em `schema.prisma` (`logs_auditoria`) — guarda usuário, ação, módulo, entidade afetada, rota, status, IP, user-agent, payload completo (sanitizado), snapshot do estado anterior e **diff campo a campo** em UPDATEs. Snapshot do nome/email do usuário sobrevive a delecao do User (onDelete: SetNull).
+  - Migration `20260514225043_add_logs_auditoria`.
+  - `backend/src/middlewares/auditoria.js`: middleware global que intercepta **mutações** (POST/PUT/PATCH/DELETE), carrega o registro antes (UPDATE/DELETE) via mapa rota→modelo Prisma, e grava o log via `res.on("finish")` (fire-and-forget). Sanitiza campos sensíveis (`senha*`/`token`/`secret`). Ignora rotas de auth que têm log explícito.
+  - `controllers/authController.js`: passou a registrar `LOGIN`, `LOGIN_FALHO` (com motivo: email inexistente / usuário inativo / senha incorreta), `TROCA_SENHA` (sucesso ou falha) e novo endpoint `POST /auth/logout` com `LOGOUT`. Helper `registrarEvento(...)` exposto pelo middleware.
+  - `controllers/logController.js` + `routes/logs.js`: 3 endpoints — `GET /logs` (paginado, filtros: usuário, módulo, ação, sucesso, range de datas, busca em rota/mensagem/email/nome/entidadeId), `GET /logs/resumo` (KPIs 24h/7d + top módulos), `GET /logs/filtros` (distinct de módulos/ações/usuários). Rota inteira sob `authRequired + requireRole("ADMIN")`.
+- **Frontend:**
+  - `src/Logs.jsx`: tela completa com 4 KPIs (24h, 7d, falhas, módulo mais ativo), toolbar com 7 filtros, tabela densa com badges coloridos por ação (CREATE/UPDATE/DELETE/LOGIN/...) e expansor por linha mostrando dados antes/depois lado a lado + **diff visual em vermelho/verde** (campo, valor anterior, valor novo).
+  - `src/lib/api.js`: `listarLogs`, `resumoLogs`, `filtrosLogs`, `logout` (best-effort).
+  - `src/App.jsx`: item "📜 Logs" na seção Sistema (ADMIN only), rota `tela === "logs"`, e `sair()` agora chama `api.logout()` antes de limpar a sessão.
+- **Smoke-test passou:** login → POST cliente → PUT cliente (diff capturou nome+telefone) → DELETE cliente → GET /logs retornou os 4 eventos corretamente. Dados de teste limpos.
+
 ### Sessão — 2026-05-14 (CRM Profissional — 10 prioridades em uma sequência)
 
 Transformação do GestãoPRO em um **CRM profissional completo**. Saímos de "PDV com cadastro de clientes" para um sistema com funil Kanban, segmentação automática, automações, NPS e scoring — em 10 commits encadeados após análise inicial de gaps vs sistemas CRM de mercado.
@@ -1118,6 +1135,8 @@ Em 2026-05-05, **estorno de compra**: nova rota `POST /compras/:id/estornar` (AD
 Em 2026-05-10, **venda a prazo → ContaReceber**: contraparte simétrica de Compras×ContaPagar para o lado das vendas. PDV gera ContaReceber automática (com parcelas opcionais) ao finalizar com BOLETO/CARTAO_CREDITO/CREDIARIO; cancelamento da venda cancela as pendentes e bloqueia se houver alguma já recebida.
 
 Em 2026-05-11, **design luxuoso nos modais de cadastro**: aplicado um layout premium nos modais de Clientes, Fornecedores e Produtos a partir do protótipo HTML em `CLIENTE/`. Novo componente compartilhado `<FormularioLuxuoso>` em `src/components/` com eyebrow superior em mono, título serif Cormorant Garamond com itálico colorido, barra de progresso 0-100%, fieldsets com legenda hairline, rodapé com atalhos `⏎`/`Esc` e botões gradient. Cores derivadas do tema ativo via `color-mix(in srgb, var(--accent), transparent)` — funciona nos 6 temas. Adicionado campo Complemento em Clientes, máscaras CNPJ/CEP/Telefone + ViaCEP em Fornecedores. Componentes ricos do Produtos (SeletorTipoItem, CalculoMarkup, DropzoneImagem) preservados.
+
+Em 2026-05-14 (após o CRM), **Logs de auditoria**: novo subsistema completo de auditoria. Model `LogAuditoria` no schema, middleware global que captura todas as mutações (POST/PUT/PATCH/DELETE) com snapshot do estado anterior e diff campo a campo nos UPDATEs, eventos especiais para LOGIN/LOGIN_FALHO/LOGOUT/TROCA_SENHA, e nova tela `📜 Logs` (ADMIN only) com 4 KPIs, filtros (usuário/módulo/ação/status/data/busca), tabela paginada com badges coloridos por ação e expansor por linha mostrando diff visual em vermelho/verde + payload sanitizado. Sanitiza campos sensíveis (`senha*`/`token`) antes de persistir. Smoke-test confirmou captura de LOGIN/CREATE/UPDATE(com diff)/DELETE. No mesmo dia, fix do dropdown `ActionsMenu` para não cortar na última linha de tabelas (position:fixed + flip vertical automático), cobrindo as 11 telas que usam o componente.
 
 Em 2026-05-14, **CRM Profissional — 10 prioridades**: maior salto de produto do projeto. Após análise de gaps vs CRMs de mercado (Pipedrive/HubSpot/RD Station), entregue em sequência: (1) Funil Kanban de Oportunidades; (2) Tags + Segmentação RFM em 6 segmentos; (3) Templates WA/Email/SMS com 10 variáveis; (4) Automações (cliente inativo / orçamento parado / pós-venda); (5) Dashboard CRM consolidado; (6) Lead vs Cliente + Origem com promoção automática; (7) Aniversariantes + Reativação com KPIs de LTV em risco; (8) Múltiplos contatos B2B por cliente; (9) NPS pós-venda com link público sem login + bypass de auth; (10) Lead scoring 0-100 multi-fator. 8 migrations, 4 novas permissões (OPORTUNIDADES, AUTOMACOES, NPS), 7 telas novas, 1 página pública. Stack mantida sem novas dependências.
 

@@ -30,6 +30,7 @@ import Reativacao from "./Reativacao.jsx";
 import Nps from "./Nps.jsx";
 import PesquisaPublicaNps from "./PesquisaPublicaNps.jsx";
 import Alertas from "./Alertas.jsx";
+import Logs from "./Logs.jsx";
 import { getUser, getToken, clearSession, api } from "./lib/api.js";
 import { podeAcessar } from "./lib/permissoes.js";
 
@@ -158,8 +159,12 @@ export default function App() {
   }, []);
 
   function sair() {
-    clearSession();
-    setUser(null);
+    // Best-effort: avisa o backend para registrar o evento de logout no
+    // log de auditoria; em seguida limpa sessao local independentemente.
+    api.logout().finally(() => {
+      clearSession();
+      setUser(null);
+    });
   }
 
   function navegar(t) {
@@ -187,7 +192,7 @@ export default function App() {
 
   function podeVer(t) {
     if (t === "projeto" || t === "aparencia") return true;
-    if (t === "sistema" || t === "empresa") return user?.role === "ADMIN";
+    if (t === "sistema" || t === "empresa" || t === "logs") return user?.role === "ADMIN";
     return podeAcessar(user, TELA_MODULO[t]);
   }
 
@@ -360,6 +365,9 @@ export default function App() {
             <Item icone="🏢" label="Empresa" ativo={tela === "empresa"} onClick={() => navegar("empresa")} />
           )}
           <Item icone="📋" label="Projeto" ativo={tela === "projeto"} onClick={() => navegar("projeto")} />
+          {user.role === "ADMIN" && (
+            <Item icone="📜" label="Logs" ativo={tela === "logs"} onClick={() => navegar("logs")} />
+          )}
           {user.role === "ADMIN" && (
             <Item icone="🛡" label="Sistema" ativo={tela === "sistema"} onClick={() => navegar("sistema")} />
           )}
@@ -581,6 +589,9 @@ export default function App() {
           )}
           {tela === "aparencia" && (
             <Aparencia />
+          )}
+          {tela === "logs" && user.role === "ADMIN" && (
+            <Logs />
           )}
           {tela === "sistema" && user.role === "ADMIN" && (
             <>

@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import prisma from "../lib/prisma.js";
+import { registrarEvento } from "../middlewares/auditoria.js";
 
 export async function login(req, res, next) {
   try {
@@ -11,11 +12,20 @@ export async function login(req, res, next) {
 
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user || !user.ativo) {
+      registrarEvento({
+        acao: "LOGIN_FALHO", modulo: "AUTH", sucesso: false,
+        usuarioEmail: email, mensagem: user ? "Usuario inativo" : "Email nao encontrado", req,
+      });
       return res.status(401).json({ erro: "Credenciais invalidas" });
     }
 
     const ok = await bcrypt.compare(senha, user.senha);
     if (!ok) {
+      registrarEvento({
+        acao: "LOGIN_FALHO", modulo: "AUTH", sucesso: false,
+        usuarioId: user.id, usuarioNome: user.nome, usuarioEmail: user.email,
+        mensagem: "Senha incorreta", req,
+      });
       return res.status(401).json({ erro: "Credenciais invalidas" });
     }
 
@@ -24,6 +34,11 @@ export async function login(req, res, next) {
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
     );
+
+    registrarEvento({
+      acao: "LOGIN", modulo: "AUTH", sucesso: true,
+      usuarioId: user.id, usuarioNome: user.nome, usuarioEmail: user.email, req,
+    });
 
     res.json({
       token,
@@ -50,6 +65,20 @@ export async function me(req, res, next) {
   }
 }
 
+export async function logout(req, res, next) {
+  try {
+    registrarEvento({
+      acao: "LOGOUT", modulo: "AUTH", sucesso: true,
+      usuarioId: req.user?.sub || null,
+      usuarioNome: req.user?.nome || null,
+      req,
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function trocarSenha(req, res, next) {
   try {
     const { senhaAtual, senhaNova } = req.body;
@@ -68,12 +97,24 @@ export async function trocarSenha(req, res, next) {
     if (!user.ativo) return res.status(403).json({ erro: "Usuario inativo" });
 
     const ok = await bcrypt.compare(senhaAtual, user.senha);
-    if (!ok) return res.status(401).json({ erro: "Senha atual incorreta" });
+    if (!ok) {
+      registrarEvento({
+        acao: "TROCA_SENHA", modulo: "AUTH", sucesso: false,
+        usuarioId: user.id, usuarioNome: user.nome, usuarioEmail: user.email,
+        mensagem: "Senha atual incorreta", req,
+      });
+      return res.status(401).json({ erro: "Senha atual incorreta" });
+    }
 
     const hash = await bcrypt.hash(senhaNova, 10);
     await prisma.user.update({
       where: { id: user.id },
       data: { senha: hash },
+    });
+
+    registrarEvento({
+      acao: "TROCA_SENHA", modulo: "AUTH", sucesso: true,
+      usuarioId: user.id, usuarioNome: user.nome, usuarioEmail: user.email, req,
     });
 
     res.json({ ok: true });

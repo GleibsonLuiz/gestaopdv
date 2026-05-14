@@ -242,6 +242,7 @@ model User {
   oportunidadesResponsavel Oportunidade[] @relation("OportunidadeResponsavel")
   historicoOportunidades  HistoricoOportunidade[]
   regrasAutomacao         RegraAutomacao[] @relation("RegraAutomacaoResponsavel")
+  logsAuditoria           LogAuditoria[]
 
   @@map("users")
 }
@@ -1147,4 +1148,43 @@ model HistoricoOportunidade {
 
   @@index([oportunidadeId, createdAt])
   @@map("historico_oportunidades")
+}
+
+// ============ AUDITORIA ============
+//
+// Log central de auditoria. Populado por middleware automatico em mutacoes
+// (POST/PUT/PATCH/DELETE) e por chamadas explicitas em eventos especiais
+// (LOGIN, LOGIN_FALHO, LOGOUT). Apenas ADMIN visualiza.
+//
+// `dadosAntes` guarda snapshot do registro antes do update/delete; `dadosDepois`
+// guarda o payload da request; `diff` lista somente os campos que mudaram em
+// UPDATEs. Campos sensiveis (senha*) sao removidos antes de persistir.
+model LogAuditoria {
+  id          String   @id @default(uuid())
+  acao        String   // CREATE | UPDATE | DELETE | LOGIN | LOGOUT | LOGIN_FALHO | OUTRA
+  modulo      String   // CLIENTES | PRODUTOS | FINANCEIRO | AUTH | ...
+  entidadeId  String?  // id do recurso afetado, quando aplicavel
+  metodo      String?  // POST | PUT | PATCH | DELETE
+  rota        String?
+  statusCode  Int?
+  sucesso     Boolean  @default(true)
+  ip          String?
+  userAgent   String?
+  dadosAntes  Json?
+  dadosDepois Json?
+  diff        Json?
+  duracaoMs   Int?
+  mensagem    String?
+  createdAt   DateTime @default(now())
+
+  usuarioId    String?
+  usuario      User?   @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  usuarioNome  String? // snapshot do nome para sobreviver a delecao do User
+  usuarioEmail String?
+
+  @@index([usuarioId, createdAt])
+  @@index([modulo, createdAt])
+  @@index([acao, createdAt])
+  @@index([createdAt])
+  @@map("logs_auditoria")
 }

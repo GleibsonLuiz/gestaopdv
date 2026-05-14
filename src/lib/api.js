@@ -563,4 +563,26 @@ export const api = {
     const q = params.toString();
     return request(`/comissoes/relatorio${q ? `?${q}` : ""}`);
   },
+
+  // Logout server-side. Best-effort: limpa sessao local mesmo se falhar.
+  logout: () => request("/auth/logout", { method: "POST" }).catch(() => null),
+
+  // Auditoria — ADMIN only.
+  listarLogs: ({ usuarioId = "", modulo = "", acao = "", sucesso = "",
+                 dataInicio = "", dataFim = "", busca = "",
+                 pagina = 1, tamanho = 50 } = {}) => {
+    const qs = new URLSearchParams();
+    if (usuarioId) qs.set("usuarioId", usuarioId);
+    if (modulo) qs.set("modulo", modulo);
+    if (acao) qs.set("acao", acao);
+    if (sucesso !== "") qs.set("sucesso", sucesso);
+    if (dataInicio) qs.set("dataInicio", dataInicio);
+    if (dataFim) qs.set("dataFim", dataFim);
+    if (busca) qs.set("busca", busca);
+    qs.set("pagina", String(pagina));
+    qs.set("tamanho", String(tamanho));
+    return request(`/logs?${qs.toString()}`);
+  },
+  resumoLogs: () => request("/logs/resumo"),
+  filtrosLogs: () => request("/logs/filtros"),
 };

@@ -1,4 +1,5 @@
 import prisma from "../lib/prisma.js";
+import { calcularTotaisCaixa } from "./caixaController.js";
 
 function inicioDoDia(d = new Date()) {
   const x = new Date(d);
@@ -10,6 +11,12 @@ function inicioDoMes(d = new Date()) {
   const x = new Date(d);
   x.setDate(1);
   x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function fimDoMes(d = new Date()) {
+  const x = inicioDoMes(d);
+  x.setMonth(x.getMonth() + 1);
   return x;
 }
 
@@ -30,11 +37,22 @@ export async function resumo(req, res, next) {
     const agora = new Date();
     const hoje = inicioDoDia(agora);
     const mesInicio = inicioDoMes(agora);
+    const mesFim = fimDoMes(agora);
     const mesAnteriorInicio = inicioDoMes(new Date(agora.getFullYear(), agora.getMonth() - 1, 1));
     const mesAnteriorFim = mesInicio;
+    const tresMesesAtras = inicioDoMes(new Date(agora.getFullYear(), agora.getMonth() - 3, 1));
     const seteDiasAtras = diasAtras(6, agora);
     const seteDiasFuturos = new Date(hoje);
     seteDiasFuturos.setDate(hoje.getDate() + 7);
+    const sessentaDiasAtras = diasAtras(60, agora);
+
+    // Métricas do mês (totais de dias / decorridos / restantes — usados para
+    // projetar a meta mensal: quanto falta vender por dia até o fim do mês)
+    const diasNoMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).getDate();
+    const diaAtualNoMes = agora.getDate();
+    const diasRestantesMes = Math.max(1, diasNoMes - diaAtualNoMes + 1);
+
+    const userId = req.user?.id || null;
 
     const [
       totalClientesAtivos,
@@ -60,6 +78,13 @@ export async function resumo(req, res, next) {
       novosCLientesMesCount,
       proximasContasPagarRaw,
       proximasContasReceberRaw,
+      margemMesRaw,
+      valorEstoqueRaw,
+      mediaUltimos3MesesRaw,
+      topCategoriasRaw,
+      vendasPorHoraRaw,
+      clientesInativosCount,
+      caixaAtualRecord,
     ] = await Promise.all([
       prisma.cliente.count({ where: { ativo: true } }),
       prisma.produto.count({ where: { ativo: true } }),
@@ -215,6 +240,99 @@ export async function resumo(req, res, next) {
         take: 6,
         select: { id: true, descricao: true, valor: true, vencimento: true, status: true },
       }),
+
+      // Margem bruta do mês: soma de (quantidade * (precoUnitario - precoCusto))
+      // por item vendido em vendas concluídas. Produtos sem precoCusto contam
+      // como margem = preco de venda (margem 100%, comum em serviços).
+      prisma.$queryRaw`
+        SELECT
+          COALESCE(SUM(iv.quantidade * (iv."precoUnitario" - COALESCE(p."precoCusto", 0))), 0)::float AS margem,
+          COALESCE(SUM(iv.subtotal), 0)::float AS faturamento
+        FROM itens_venda iv
+        JOIN vendas v ON v.id = iv."vendaId"
+        JOIN produtos p ON p.id = iv."produtoId"
+        WHERE v.status = 'CONCLUIDA' AND v."createdAt" >= ${mesInicio}
+      `,
+
+      // Valor imobilizado em estoque: SUM(estoque * precoCusto) de produtos
+      // ativos do tipo PRODUTO (serviços não contam — não têm estoque físico)
+      prisma.$queryRaw`
+        SELECT
+          COALESCE(SUM(estoque * COALESCE("precoCusto", 0)), 0)::float AS valor,
+          COALESCE(SUM(estoque), 0)::int AS quantidade
+        FROM produtos
+        WHERE ativo = true AND "tipoItem" = 'PRODUTO'
+      `,
+
+      // Meta mensal estimada: média do faturamento dos últimos 3 meses
+      // completos (exclui o atual, que está em andamento)
+      prisma.$queryRaw`
+        SELECT COALESCE(AVG(total_mes), 0)::float AS media
+        FROM (
+          SELECT
+            DATE_TRUNC('month', "createdAt") AS mes,
+            SUM(total) AS total_mes
+          FROM vendas
+          WHERE status = 'CONCLUIDA'
+            AND "createdAt" >= ${tresMesesAtras}
+            AND "createdAt" < ${mesInicio}
+          GROUP BY mes
+        ) AS t
+      `,
+
+      // Top categorias do mês (joins via raw para somar subtotal por categoria)
+      prisma.$queryRaw`
+        SELECT
+          COALESCE(c.id, '__sem_categoria__') AS id,
+          COALESCE(c.nome, 'Sem categoria') AS nome,
+          COALESCE(SUM(iv.subtotal), 0)::float AS total,
+          COALESCE(SUM(iv.quantidade), 0)::int AS quantidade
+        FROM itens_venda iv
+        JOIN vendas v ON v.id = iv."vendaId"
+        JOIN produtos p ON p.id = iv."produtoId"
+        LEFT JOIN categorias c ON c.id = p."categoriaId"
+        WHERE v.status = 'CONCLUIDA' AND v."createdAt" >= ${mesInicio}
+        GROUP BY c.id, c.nome
+        ORDER BY total DESC
+        LIMIT 5
+      `,
+
+      // Distribuição de vendas por hora do dia (0-23) no mês — útil pra
+      // identificar pico de movimento e planejar escala
+      prisma.$queryRaw`
+        SELECT
+          EXTRACT(HOUR FROM "createdAt")::int AS hora,
+          COUNT(*)::int AS qtd,
+          COALESCE(SUM(total), 0)::float AS total
+        FROM vendas
+        WHERE status = 'CONCLUIDA' AND "createdAt" >= ${mesInicio}
+        GROUP BY hora
+        ORDER BY hora ASC
+      `,
+
+      // Clientes inativos: cadastrados há mais de 60 dias e SEM vendas
+      // nos últimos 60 dias. Oportunidade de reativação/CRM.
+      prisma.$queryRaw`
+        SELECT COUNT(*)::int AS qtd
+        FROM clientes c
+        WHERE c.ativo = true
+          AND c."createdAt" < ${sessentaDiasAtras}
+          AND NOT EXISTS (
+            SELECT 1 FROM vendas v
+            WHERE v."clienteId" = c.id
+              AND v.status = 'CONCLUIDA'
+              AND v."createdAt" >= ${sessentaDiasAtras}
+          )
+      `,
+
+      // Caixa aberto do usuário logado (se houver). Pega só o registro;
+      // os totais são calculados depois com calcularTotaisCaixa()
+      userId
+        ? prisma.caixa.findFirst({
+            where: { userId, status: "ABERTO" },
+            select: { id: true, numero: true, saldoInicial: true, abertoEm: true },
+          })
+        : Promise.resolve(null),
     ]);
 
     // Hidrata top produtos
@@ -270,6 +388,66 @@ export async function resumo(req, res, next) {
         ? ((vendasMes - vendasMesAnterior) / vendasMesAnterior) * 100
         : null;
 
+    // Margem bruta
+    const margemRow = (margemMesRaw && margemMesRaw[0]) || {};
+    const margemMes = toNum(margemRow.margem);
+    const faturamentoComCustos = toNum(margemRow.faturamento);
+    const margemPercentual = faturamentoComCustos > 0
+      ? (margemMes / faturamentoComCustos) * 100
+      : null;
+
+    // Valor do estoque
+    const estoqueRow = (valorEstoqueRaw && valorEstoqueRaw[0]) || {};
+    const valorEstoque = toNum(estoqueRow.valor);
+    const itensEmEstoque = Number(estoqueRow.quantidade) || 0;
+
+    // Meta mensal: usa média dos 3 meses anteriores; se < 1k define piso
+    // conservador (evita meta absurda na primeira execução do sistema).
+    const mediaRow = (mediaUltimos3MesesRaw && mediaUltimos3MesesRaw[0]) || {};
+    const metaEstimada = Math.max(1000, toNum(mediaRow.media) || vendasMesAnterior);
+    const metaPercentual = metaEstimada > 0 ? (vendasMes / metaEstimada) * 100 : 0;
+    const metaFaltando = Math.max(0, metaEstimada - vendasMes);
+    const metaPorDia = diasRestantesMes > 0 ? metaFaltando / diasRestantesMes : 0;
+    const noRitmo = metaPercentual >= (diaAtualNoMes / diasNoMes) * 100;
+
+    // Top categorias
+    const topCategorias = (topCategoriasRaw || []).map(c => ({
+      id: c.id,
+      nome: c.nome || "Sem categoria",
+      total: toNum(c.total),
+      quantidade: Number(c.quantidade) || 0,
+    }));
+
+    // Vendas por hora — preenche horas vazias (0..23) para o gráfico ficar uniforme
+    const mapaHora = new Map((vendasPorHoraRaw || []).map(r => [Number(r.hora), r]));
+    const vendasPorHora = [];
+    for (let h = 0; h < 24; h++) {
+      const r = mapaHora.get(h);
+      vendasPorHora.push({
+        hora: h,
+        qtd: r ? Number(r.qtd) : 0,
+        total: r ? toNum(r.total) : 0,
+      });
+    }
+
+    // Caixa atual: calcula totais em runtime se houver caixa aberto
+    let caixaAtual = null;
+    if (caixaAtualRecord) {
+      const totais = await calcularTotaisCaixa(
+        caixaAtualRecord.id,
+        Number(caixaAtualRecord.saldoInicial)
+      );
+      caixaAtual = {
+        id: caixaAtualRecord.id,
+        numero: caixaAtualRecord.numero,
+        abertoEm: caixaAtualRecord.abertoEm,
+        saldoInicial: Number(caixaAtualRecord.saldoInicial),
+        entradas: totais.totalEntradas,
+        saidas: totais.totalSaidas,
+        saldoEsperado: totais.saldoEsperadoDinheiro,
+      };
+    }
+
     res.json({
       geradoEm: agora.toISOString(),
       kpis: {
@@ -287,7 +465,25 @@ export async function resumo(req, res, next) {
           quantidade: comprasMesAgg._count._all,
           total: toNum(comprasMesAgg._sum.total),
         },
+        margemBrutaMes: {
+          total: margemMes,
+          percentual: margemPercentual,
+        },
+        valorEstoque: {
+          total: valorEstoque,
+          itens: itensEmEstoque,
+        },
+        metaMes: {
+          estimada: metaEstimada,
+          faturado: vendasMes,
+          percentual: metaPercentual,
+          faltando: metaFaltando,
+          porDia: metaPorDia,
+          diasRestantes: diasRestantesMes,
+          noRitmo,
+        },
         clientesAtivos: totalClientesAtivos,
+        clientesInativos: Number(clientesInativosCount?.[0]?.qtd) || 0,
         produtosAtivos: totalProdutosAtivos,
         fornecedoresAtivos: totalFornecedoresAtivos,
         funcionariosAtivos: totalFuncionariosAtivos,
@@ -345,6 +541,9 @@ export async function resumo(req, res, next) {
           status: c.status,
         })),
       },
+      topCategorias,
+      vendasPorHora,
+      caixaAtual,
     });
   } catch (err) {
     next(err);

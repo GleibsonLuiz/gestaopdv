@@ -195,6 +195,19 @@ function ConteudoDashboard({ dados, onAtualizar, user, contagem }) {
 
       <div style={{ display: "grid", gap: 14 }}>
 
+        {/* ========= META MENSAL + CAIXA ATUAL ========= */}
+        {(k.metaMes || dados.caixaAtual) && (
+          <section style={{
+            display: "grid", gap: 14,
+            gridTemplateColumns: dados.caixaAtual
+              ? "minmax(0, 2fr) minmax(0, 1fr)"
+              : "1fr",
+          }}>
+            {k.metaMes && <PainelMetaMensal meta={k.metaMes} />}
+            {dados.caixaAtual && <PainelCaixaAtual caixa={dados.caixaAtual} />}
+          </section>
+        )}
+
         {/* ========= KPIs ========= */}
         <section style={{
           display: "grid", gap: 14,
@@ -221,12 +234,24 @@ function ConteudoDashboard({ dados, onAtualizar, user, contagem }) {
           />
           <KpiCard
             cor={C.yellow}
-            icone={<IconTicket />}
-            rotulo="Ticket médio (mês)"
-            valor={fmtBRLSplit(k.ticketMedioMes)}
-            descricao="Média por venda concluída"
-            comparativo={`${fmtNumero(k.vendasMes.quantidade)} vendas no mês`}
-            delta={{ texto: "— estável", tipo: "flat" }}
+            icone={<IconCoin />}
+            rotulo="Margem bruta (mês)"
+            valor={fmtBRLSplit(k.margemBrutaMes?.total || 0)}
+            descricao={
+              k.margemBrutaMes?.percentual != null
+                ? `${k.margemBrutaMes.percentual.toFixed(1)}% do faturamento`
+                : "sem custos cadastrados"
+            }
+            comparativo="lucro estimado"
+            delta={
+              k.margemBrutaMes?.percentual != null
+                ? {
+                    texto: `${k.margemBrutaMes.percentual.toFixed(1)}%`,
+                    tipo: k.margemBrutaMes.percentual >= 30 ? "up"
+                        : k.margemBrutaMes.percentual >= 15 ? "flat" : "down",
+                  }
+                : null
+            }
             sparkline={<Sparkline cor={C.yellow} pontos={(dados.vendasPorDia || []).map(d => d.total)} />}
           />
           <KpiCard
@@ -247,6 +272,20 @@ function ConteudoDashboard({ dados, onAtualizar, user, contagem }) {
           display: "grid", gap: 14,
           gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
         }}>
+          <MiniTile
+            icone={<IconTicket />}
+            label="Ticket médio"
+            valor={fmtBRL(k.ticketMedioMes)}
+            hint="por venda no mês"
+          />
+          <MiniTile
+            icone={<IconWarehouse />}
+            label="Valor do estoque"
+            valor={fmtBRL(k.valorEstoque?.total || 0)}
+            hint={k.valorEstoque?.itens != null
+              ? `${fmtNumero(k.valorEstoque.itens)} unidades`
+              : "imobilizado"}
+          />
           <MiniTile icone={<IconPeople />} label="Clientes" valor={fmtNumero(k.clientesAtivos)} hint="ativos" />
           <MiniTile icone={<IconUserPlus />} label="Novos clientes" valor={fmtNumero(k.novosCLientesMes || 0)} hint="este mês" />
           <MiniTile icone={<IconBox />} label="Produtos" valor={fmtNumero(k.produtosAtivos)} hint="ativos" />
@@ -260,6 +299,16 @@ function ConteudoDashboard({ dados, onAtualizar, user, contagem }) {
             warn={k.produtosEstoqueBaixo > 0}
             tagDelta={k.produtosEstoqueBaixo > 0 ? { texto: "crítico", tipo: "down" } : null}
           />
+          {(k.clientesInativos || 0) > 0 && (
+            <MiniTile
+              icone={<IconUserOff />}
+              label="Clientes inativos"
+              valor={fmtNumero(k.clientesInativos)}
+              hint="sem comprar há 60d"
+              warn
+              tagDelta={{ texto: "reativar", tipo: "down" }}
+            />
+          )}
         </section>
 
         {/* ========= CHART + TOP PRODUTOS ========= */}
@@ -271,12 +320,21 @@ function ConteudoDashboard({ dados, onAtualizar, user, contagem }) {
           <PainelTopProdutos itens={dados.topProdutos || []} totalMes={k.vendasMes.total} />
         </section>
 
-        {/* ========= TOP VENDEDORES + PAGAMENTOS ========= */}
+        {/* ========= TOP CATEGORIAS + VENDEDORES ========= */}
         <section style={{
           display: "grid", gap: 14,
           gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
         }}>
+          <PainelTopCategorias itens={dados.topCategorias || []} totalMes={k.vendasMes.total} />
           <PainelTopVendedores itens={dados.topVendedores || []} totalMes={k.vendasMes.total} qtdMes={k.vendasMes.quantidade} />
+        </section>
+
+        {/* ========= VENDAS POR HORA + PAGAMENTOS ========= */}
+        <section style={{
+          display: "grid", gap: 14,
+          gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
+        }}>
+          <PainelVendasPorHora itens={dados.vendasPorHora || []} />
           <PainelFormasPagamento itens={dados.formasPagamento || []} totalGeral={totalFormas} qtdMes={k.vendasMes.quantidade} />
         </section>
 
@@ -1546,6 +1604,352 @@ function PainelUltimasCompras({ itens }) {
 }
 
 // ============================================================
+// Meta mensal com forecast
+// ============================================================
+
+function PainelMetaMensal({ meta }) {
+  const pct = Math.min(100, Math.max(0, Number(meta.percentual) || 0));
+  const pctReal = Number(meta.percentual) || 0;
+  const noRitmo = !!meta.noRitmo;
+  const cor = pctReal >= 100 ? C.green : noRitmo ? C.accent : C.yellow;
+  const estimada = Number(meta.estimada) || 0;
+  const faturado = Number(meta.faturado) || 0;
+  const faltando = Number(meta.faltando) || 0;
+  const porDia = Number(meta.porDia) || 0;
+  const diasRestantes = Number(meta.diasRestantes) || 0;
+
+  return (
+    <article style={{
+      background: `linear-gradient(135deg, ${cor}1a, ${C.card} 60%)`,
+      border: `1px solid ${cor}55`, borderRadius: 14,
+      padding: 20, position: "relative", overflow: "hidden",
+    }}>
+      <div style={{
+        position: "absolute", inset: 0, borderRadius: "inherit",
+        background: "linear-gradient(180deg, rgba(255,255,255,0.04), transparent 30%)",
+        pointerEvents: "none",
+      }} />
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, position: "relative" }}>
+        <span style={{ color: cor, display: "inline-flex" }}><IconTarget /></span>
+        <h3 style={{ margin: 0, fontSize: 13, fontWeight: 600, letterSpacing: "0.02em", color: C.text }}>
+          Meta do mês
+        </h3>
+        <span style={{ fontSize: 11, color: C.muted, marginLeft: 4, fontFamily: FONT_MONO }}>
+          estimada pela média dos últimos 3 meses
+        </span>
+        <DeltaPill
+          texto={pctReal >= 100 ? "Bateu meta" : noRitmo ? "No ritmo" : "Atrasado"}
+          tipo={pctReal >= 100 ? "up" : noRitmo ? "up" : "down"}
+          style={{ marginLeft: "auto" }}
+        />
+      </div>
+
+      <div style={{
+        display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr",
+        gap: 18, alignItems: "end", position: "relative",
+      }}>
+        <div>
+          <div style={{
+            fontSize: 10.5, letterSpacing: "0.16em", textTransform: "uppercase",
+            color: C.muted, marginBottom: 4,
+          }}>Faturado de {fmtBRL(estimada)}</div>
+          <div style={{
+            fontSize: 30, fontWeight: 800, letterSpacing: "-0.025em",
+            color: cor, fontVariantNumeric: "tabular-nums",
+          }}>{fmtBRL(faturado)}</div>
+          <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2, fontFamily: FONT_MONO }}>
+            {pctReal.toFixed(1)}% da meta
+          </div>
+        </div>
+        <div>
+          <div style={{
+            fontSize: 10.5, letterSpacing: "0.16em", textTransform: "uppercase",
+            color: C.muted, marginBottom: 4,
+          }}>Falta</div>
+          <div style={{
+            fontSize: 20, fontWeight: 700, color: C.text,
+            fontFamily: FONT_MONO, fontVariantNumeric: "tabular-nums",
+          }}>{fmtBRL(faltando)}</div>
+        </div>
+        <div>
+          <div style={{
+            fontSize: 10.5, letterSpacing: "0.16em", textTransform: "uppercase",
+            color: C.muted, marginBottom: 4,
+          }}>Dias restantes</div>
+          <div style={{
+            fontSize: 20, fontWeight: 700, color: C.text,
+            fontFamily: FONT_MONO, fontVariantNumeric: "tabular-nums",
+          }}>{fmtNumero(diasRestantes)}</div>
+        </div>
+        <div>
+          <div style={{
+            fontSize: 10.5, letterSpacing: "0.16em", textTransform: "uppercase",
+            color: C.muted, marginBottom: 4,
+          }}>Necessário/dia</div>
+          <div style={{
+            fontSize: 20, fontWeight: 700, color: noRitmo ? C.text : cor,
+            fontFamily: FONT_MONO, fontVariantNumeric: "tabular-nums",
+          }}>{fmtBRL(porDia)}</div>
+        </div>
+      </div>
+
+      {/* Barra de progresso */}
+      <div style={{ marginTop: 14, position: "relative" }}>
+        <div style={{
+          height: 10, borderRadius: 99, overflow: "hidden",
+          background: "rgba(255,255,255,0.05)", position: "relative",
+        }}>
+          <div style={{
+            width: `${pct}%`, height: "100%",
+            background: pctReal >= 100
+              ? `linear-gradient(90deg, ${C.green}, ${C.accent})`
+              : `linear-gradient(90deg, ${cor}, ${cor}cc)`,
+            transition: "width 0.4s ease",
+          }} />
+        </div>
+        <div style={{
+          display: "flex", justifyContent: "space-between",
+          marginTop: 6, fontSize: 10, color: C.muted, fontFamily: FONT_MONO,
+        }}>
+          <span>R$ 0</span>
+          <span>{fmtBRL(estimada)}</span>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+// ============================================================
+// Caixa atual (status em tempo real)
+// ============================================================
+
+function PainelCaixaAtual({ caixa }) {
+  const saldo = Number(caixa.saldoEsperado) || 0;
+  const inicial = Number(caixa.saldoInicial) || 0;
+  const entradas = Number(caixa.entradas) || 0;
+  const saidas = Number(caixa.saidas) || 0;
+  const abertoEm = caixa.abertoEm ? new Date(caixa.abertoEm) : null;
+  const horaAberto = abertoEm
+    ? abertoEm.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    : "—";
+
+  return (
+    <article style={{
+      background: `linear-gradient(135deg, ${C.green}1a, ${C.card} 60%)`,
+      border: `1px solid ${C.green}55`, borderRadius: 14,
+      padding: 20, position: "relative", overflow: "hidden",
+    }}>
+      <div style={{
+        position: "absolute", inset: 0, borderRadius: "inherit",
+        background: "linear-gradient(180deg, rgba(255,255,255,0.04), transparent 30%)",
+        pointerEvents: "none",
+      }} />
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, position: "relative" }}>
+        <span style={{ color: C.green, display: "inline-flex" }}><IconCash /></span>
+        <h3 style={{ margin: 0, fontSize: 13, fontWeight: 600, letterSpacing: "0.02em", color: C.text }}>
+          Caixa #{caixa.numero}
+        </h3>
+        <DeltaPill texto="Aberto" tipo="up" style={{ marginLeft: "auto" }} />
+      </div>
+
+      <div style={{ position: "relative" }}>
+        <div style={{
+          fontSize: 10.5, letterSpacing: "0.16em", textTransform: "uppercase",
+          color: C.muted, marginBottom: 4,
+        }}>Saldo esperado</div>
+        <div style={{
+          fontSize: 28, fontWeight: 800, letterSpacing: "-0.025em",
+          color: C.green, fontVariantNumeric: "tabular-nums",
+        }}>{fmtBRL(saldo)}</div>
+      </div>
+
+      <div style={{
+        marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr 1fr",
+        gap: 8, fontSize: 11, fontFamily: FONT_MONO, position: "relative",
+      }}>
+        <div>
+          <div style={{ color: C.muted, fontSize: 9.5, textTransform: "uppercase", letterSpacing: "0.12em" }}>
+            Inicial
+          </div>
+          <div style={{ color: C.text, fontWeight: 600, marginTop: 2 }}>{fmtBRL(inicial)}</div>
+        </div>
+        <div>
+          <div style={{ color: C.muted, fontSize: 9.5, textTransform: "uppercase", letterSpacing: "0.12em" }}>
+            Entradas
+          </div>
+          <div style={{ color: C.green, fontWeight: 600, marginTop: 2 }}>+{fmtBRL(entradas)}</div>
+        </div>
+        <div>
+          <div style={{ color: C.muted, fontSize: 9.5, textTransform: "uppercase", letterSpacing: "0.12em" }}>
+            Saídas
+          </div>
+          <div style={{ color: C.red, fontWeight: 600, marginTop: 2 }}>−{fmtBRL(saidas)}</div>
+        </div>
+      </div>
+
+      <div style={{
+        marginTop: 10, fontSize: 11, color: C.muted, fontFamily: FONT_MONO,
+        position: "relative",
+      }}>
+        Aberto às {horaAberto}
+      </div>
+    </article>
+  );
+}
+
+// ============================================================
+// Top categorias do mês
+// ============================================================
+
+function PainelTopCategorias({ itens, totalMes }) {
+  const cores = [C.accent, C.green, C.yellow, C.purple, C.red];
+  return (
+    <Card>
+      <CardHead
+        titulo="Top categorias do mês"
+        meta={totalMes > 0 ? `${fmtBRL(totalMes)} no total` : "—"}
+      />
+      {itens.length === 0 ? (
+        <Vazio texto="Nenhuma categoria com vendas no mês." />
+      ) : itens.map((cat, idx) => {
+        const pct = totalMes > 0 ? (Number(cat.total) / Number(totalMes)) * 100 : 0;
+        const cor = cores[idx % cores.length];
+        return (
+          <div key={cat.id} style={{
+            padding: "10px 0",
+            borderBottom: idx < itens.length - 1 ? `1px dashed ${C.border}` : "0",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+              <span style={{
+                width: 22, height: 22, borderRadius: 6,
+                display: "grid", placeItems: "center",
+                fontFamily: FONT_MONO, fontSize: 10, fontWeight: 700,
+                color: cor, background: cor + "1f", border: `1px solid ${cor}44`,
+              }}>{idx + 1}</span>
+              <span style={{
+                flex: 1, fontSize: 13, fontWeight: 600, color: C.white,
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              }}>{cat.nome}</span>
+              <span style={{
+                fontSize: 11, color: C.muted, fontFamily: FONT_MONO,
+              }}>{fmtNumero(cat.quantidade)} un</span>
+              <span style={{
+                fontSize: 13, color: cor, fontFamily: FONT_MONO, fontWeight: 700,
+              }}>{fmtBRL(cat.total)}</span>
+            </div>
+            <div style={{
+              height: 5, borderRadius: 99, overflow: "hidden",
+              background: "rgba(255,255,255,0.05)",
+            }}>
+              <div style={{
+                width: `${Math.max(2, pct)}%`, height: "100%",
+                background: `linear-gradient(90deg, ${cor}, ${cor}88)`,
+              }} />
+            </div>
+            <div style={{ fontSize: 10, color: C.muted, marginTop: 4, fontFamily: FONT_MONO }}>
+              {pct.toFixed(1)}% do faturamento
+            </div>
+          </div>
+        );
+      })}
+    </Card>
+  );
+}
+
+// ============================================================
+// Vendas por hora do dia (heatmap horizontal)
+// ============================================================
+
+function PainelVendasPorHora({ itens }) {
+  const arr = itens.length === 24 ? itens : Array.from({ length: 24 }, (_, h) => {
+    const found = itens.find(x => Number(x.hora) === h);
+    return found || { hora: h, qtd: 0, total: 0 };
+  });
+  const max = Math.max(0, ...arr.map(x => Number(x.total) || 0));
+  const totalDia = arr.reduce((a, x) => a + (Number(x.total) || 0), 0);
+  const pico = arr.reduce((best, x) =>
+    (Number(x.total) || 0) > (Number(best.total) || 0) ? x : best
+  , { hora: -1, total: 0, qtd: 0 });
+
+  const W = 720, H = 140;
+  const padL = 32, padR = 12, padT = 14, padB = 26;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const colW = innerW / 24;
+  const barW = Math.max(8, colW * 0.7);
+
+  return (
+    <Card>
+      <div style={{
+        display: "flex", alignItems: "center", gap: 10, marginBottom: 10,
+      }}>
+        <h3 style={{
+          margin: 0, fontSize: 13, fontWeight: 600, letterSpacing: "0.02em", color: C.text,
+        }}>Vendas por hora (mês)</h3>
+        <span style={{ marginLeft: "auto", fontSize: 11.5, color: C.muted, fontFamily: FONT_MONO }}>
+          {pico.hora >= 0 && pico.total > 0
+            ? `pico ${String(pico.hora).padStart(2, "0")}h · ${fmtBRL(pico.total)}`
+            : "sem dados"}
+        </span>
+      </div>
+
+      <div style={{ height: H }}>
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
+             style={{ width: "100%", height: "100%" }}>
+          <defs>
+            <linearGradient id="hora-bar" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor={C.accent} />
+              <stop offset="100%" stopColor={C.purple} />
+            </linearGradient>
+          </defs>
+
+          {/* baseline */}
+          <line x1={padL} y1={padT + innerH} x2={W - padR} y2={padT + innerH}
+            stroke={C.border} />
+
+          {arr.map((h, i) => {
+            const v = Number(h.total) || 0;
+            const altura = max > 0 ? (v / max) * innerH : 0;
+            const cx = padL + i * colW + colW / 2;
+            const x = cx - barW / 2;
+            const y = padT + innerH - altura;
+            const isPico = pico.hora === h.hora && v > 0;
+            const fill = v === 0
+              ? "rgba(255,255,255,0.06)"
+              : isPico ? C.green : "url(#hora-bar)";
+            return (
+              <g key={i}>
+                <rect x={x} y={v === 0 ? padT + innerH - 2 : y}
+                  width={barW} height={v === 0 ? 2 : Math.max(altura, 2)}
+                  rx={3} fill={fill} />
+                {(i % 3 === 0 || isPico) && (
+                  <text x={cx} y={H - 12} textAnchor="middle"
+                    style={{
+                      fill: isPico ? C.green : C.muted,
+                      fontSize: 9.5, fontFamily: FONT_MONO,
+                      fontWeight: isPico ? 700 : 500,
+                    }}>
+                    {String(h.hora).padStart(2, "0")}h
+                  </text>
+                )}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+
+      <div style={{
+        display: "flex", justifyContent: "space-between", alignItems: "center",
+        marginTop: 8, fontSize: 11, color: C.muted, fontFamily: FONT_MONO,
+      }}>
+        <span>Total distribuído: {fmtBRL(totalDia)}</span>
+        <span>24 horas</span>
+      </div>
+    </Card>
+  );
+}
+
+// ============================================================
 // Skeleton de loading
 // ============================================================
 
@@ -1635,4 +2039,19 @@ function IconRefresh() {
 }
 function IconBalance() {
   return (<svg width="18" height="18" viewBox="0 0 24 24" {...sw}><path d="M3 6h18" /><path d="M3 12h18" /><path d="M3 18h7" /><path d="M17 15l2 2 4-4" /></svg>);
+}
+function IconCoin() {
+  return (<svg width="18" height="18" viewBox="0 0 24 24" {...sw}><circle cx="12" cy="12" r="9" /><path d="M12 7v10M15 9.5c0-1.4-1.3-2.5-3-2.5s-3 1-3 2.4c0 3 6 1.5 6 4.6 0 1.4-1.3 2.5-3 2.5s-3-1-3-2.5" /></svg>);
+}
+function IconTarget() {
+  return (<svg width="18" height="18" viewBox="0 0 24 24" {...sw}><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1.5" fill="currentColor" /></svg>);
+}
+function IconCash() {
+  return (<svg width="18" height="18" viewBox="0 0 24 24" {...sw}><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2.5" /><path d="M5 9.5v5M19 9.5v5" /></svg>);
+}
+function IconWarehouse() {
+  return (<svg width="16" height="16" viewBox="0 0 24 24" {...sw}><path d="M3 21V9l9-5 9 5v12" /><path d="M7 21v-8h10v8" /><path d="M10 17h4" /></svg>);
+}
+function IconUserOff() {
+  return (<svg width="16" height="16" viewBox="0 0 24 24" {...sw}><circle cx="12" cy="8" r="4" /><path d="M4 21c1-4 5-6 8-6 1.4 0 2.7.3 3.8.8" /><path d="M16 16l6 6M22 16l-6 6" /></svg>);
 }

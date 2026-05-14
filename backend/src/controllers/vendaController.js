@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import prisma from "../lib/prisma.js";
 import { exigirCaixaAberto, registrarNoCaixaAberto, calcularTotaisCaixa } from "./caixaController.js";
 import { parseDate, calcularValores, gerarSerieRecorrencia } from "../lib/contas.js";
@@ -288,6 +289,20 @@ export async function criar(req, res, next) {
           await tx.cliente.updateMany({
             where: { id: clienteId, statusFunil: { in: ["LEAD", "PERDIDO"] } },
             data: { statusFunil: "CLIENTE_ATIVO" },
+          });
+        }
+
+        // CRM: gera pesquisa NPS automaticamente para a venda. Token unico
+        // permite link publico /?nps=<token>. Vendas sem clienteId nao geram
+        // pesquisa (consumidor anonimo).
+        if (clienteId) {
+          const token = crypto.randomBytes(16).toString("hex");
+          await tx.pesquisaNps.create({
+            data: {
+              token,
+              vendaId: vendaCriada.id,
+              clienteId,
+            },
           });
         }
 

@@ -27,6 +27,8 @@ import Segmentos from "./Segmentos.jsx";
 import Automacoes from "./Automacoes.jsx";
 import DashboardCrm from "./DashboardCrm.jsx";
 import Reativacao from "./Reativacao.jsx";
+import Nps from "./Nps.jsx";
+import PesquisaPublicaNps from "./PesquisaPublicaNps.jsx";
 import Alertas from "./Alertas.jsx";
 import { getUser, getToken, clearSession, api } from "./lib/api.js";
 import { podeAcessar } from "./lib/permissoes.js";
@@ -76,7 +78,20 @@ const ESTILO_RESPONSIVO = `
 }
 `;
 
+// Detecta token NPS na URL antes mesmo de instanciar App, para que o
+// usuario externo (cliente) nunca veja a tela de login.
+function getNpsToken() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("nps") || null;
+  } catch { return null; }
+}
+
 export default function App() {
+  // Bypass de auth para pesquisa publica de NPS. Calculado uma vez via
+  // useState para nao re-renderizar a cada update.
+  const [npsToken] = useState(() => getNpsToken());
+
   const [user, setUser] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [tela, setTela] = useState("pdv");
@@ -160,6 +175,7 @@ export default function App() {
     compras: "COMPRAS", orcamentos: "ORCAMENTOS",
     funil: "OPORTUNIDADES",
     automacoes: "AUTOMACOES",
+    nps: "NPS",
     financeiro: "FINANCEIRO", relatorios: "RELATORIOS",
     comissoes: "COMISSOES",
     funcionarios: "FUNCIONARIOS",
@@ -179,12 +195,15 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     if (!podeVer(tela)) {
-      const primeira = ["pdv","dashboard","dashboardcrm","caixa","clientes","segmentos","reativacao","tarefas","fidelidade","funil","automacoes","fornecedores","produtos","etiquetas",
+      const primeira = ["pdv","dashboard","dashboardcrm","caixa","clientes","segmentos","reativacao","tarefas","fidelidade","funil","automacoes","nps","fornecedores","produtos","etiquetas",
         "estoque","compras","orcamentos","financeiro","relatorios","comissoes","funcionarios","projeto","sistema","empresa"].find(podeVer);
       if (primeira && primeira !== tela) setTela(primeira);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, tela]);
+
+  // Pesquisa publica NPS: cliente externo acessa sem login.
+  if (npsToken) return <PesquisaPublicaNps token={npsToken} />;
 
   if (carregando) {
     return (
@@ -320,6 +339,9 @@ export default function App() {
           )}
           {podeAcessar(user, "AUTOMACOES") && (
             <Item icone="⚡" label="Automações" ativo={tela === "automacoes"} onClick={() => navegar("automacoes")} />
+          )}
+          {podeAcessar(user, "NPS") && (
+            <Item icone="⭐" label="NPS" ativo={tela === "nps"} onClick={() => navegar("nps")} />
           )}
           {podeAcessar(user, "FINANCEIRO") && (
             <Item icone="💰" label="Financeiro" ativo={tela === "financeiro"} onClick={() => navegar("financeiro")} />
@@ -502,6 +524,9 @@ export default function App() {
           )}
           {tela === "reativacao" && (
             <Reativacao user={user} />
+          )}
+          {tela === "nps" && (
+            <Nps user={user} />
           )}
           {tela === "financeiro" && (
             <FinanceiroPage user={user} />

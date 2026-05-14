@@ -252,6 +252,26 @@ export const api = {
     request(`/orcamentos/${id}/converter-venda`, { method: "POST", body: { formaPagamento } }),
   excluirOrcamento: (id) => request(`/orcamentos/${id}`, { method: "DELETE" }),
 
+  // ==================== NPS POS-VENDA ====================
+  // Endpoints publicos (sem auth): cliente acessa pela URL ?nps=<token>
+  obterPesquisaNpsPublica: (token) => request(`/nps/publico/${token}`, { auth: false }),
+  responderPesquisaNps: (token, data) =>
+    request(`/nps/publico/${token}`, { method: "POST", body: data, auth: false }),
+  // Privados
+  resumoNps: ({ dias = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (dias) qs.set("dias", String(dias));
+    const q = qs.toString();
+    return request(`/nps/resumo${q ? `?${q}` : ""}`);
+  },
+  listarPesquisasNps: ({ status = "", limite = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (status) qs.set("status", status);
+    if (limite) qs.set("limite", String(limite));
+    const q = qs.toString();
+    return request(`/nps${q ? `?${q}` : ""}`);
+  },
+
   // ==================== AUTOMACOES (CRM) ====================
   listarAutomacoes: ({ ativo = "", tipo = "" } = {}) => {
     const qs = new URLSearchParams();

@@ -305,6 +305,7 @@ model Cliente {
   oportunidades       Oportunidade[]
   tags                ClienteTag[]
   contatos            Contato[]
+  pesquisasNps        PesquisaNps[]
 
   @@map("clientes")
 }
@@ -401,6 +402,7 @@ model Venda {
   contasReceber       ContaReceber[]
   movimentacoesPontos MovimentacaoPontos[]
   oportunidade        Oportunidade?
+  pesquisaNps         PesquisaNps?
 
   @@index([caixaId])
   @@map("vendas")
@@ -1001,6 +1003,34 @@ model Contato {
 
   @@index([clienteId])
   @@map("contatos")
+}
+
+// ============ CRM — PESQUISA NPS POS-VENDA ============
+//
+// Gerada automaticamente apos cada Venda CONCLUIDA que tem clienteId.
+// O cliente acessa via link publico ?nps=<token> (sem login). Nota
+// segue padrao NPS (0-10):
+//   0-6  = Detrator
+//   7-8  = Neutro
+//   9-10 = Promotor
+// Comentario e opcional. Cada Venda gera no maximo UMA pesquisa.
+model PesquisaNps {
+  id           String   @id @default(uuid())
+  token        String   @unique
+  nota         Int?
+  comentario   String?
+  respondidaEm DateTime?
+  createdAt    DateTime @default(now())
+
+  vendaId String @unique
+  venda   Venda  @relation(fields: [vendaId], references: [id], onDelete: Cascade)
+
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+
+  @@index([clienteId, respondidaEm])
+  @@index([createdAt])
+  @@map("pesquisas_nps")
 }
 
 // ============ CRM — TEMPLATES DE MENSAGEM ============

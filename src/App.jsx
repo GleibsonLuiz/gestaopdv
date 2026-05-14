@@ -21,6 +21,7 @@ import Configuracoes from "./Configuracoes.jsx";
 import TrocarSenhaModal from "./TrocarSenhaModal.jsx";
 import Aparencia from "./Aparencia.jsx";
 import Tarefas from "./Tarefas.jsx";
+import Fidelidade from "./Fidelidade.jsx";
 import Alertas from "./Alertas.jsx";
 import { getUser, getToken, clearSession, api } from "./lib/api.js";
 import { podeAcessar } from "./lib/permissoes.js";
@@ -156,6 +157,7 @@ export default function App() {
     comissoes: "COMISSOES",
     funcionarios: "FUNCIONARIOS",
     tarefas: "CLIENTES",
+    fidelidade: "CLIENTES",
   };
 
   function podeVer(t) {
@@ -168,7 +170,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     if (!podeVer(tela)) {
-      const primeira = ["pdv","dashboard","caixa","clientes","tarefas","fornecedores","produtos","etiquetas",
+      const primeira = ["pdv","dashboard","caixa","clientes","tarefas","fidelidade","fornecedores","produtos","etiquetas",
         "estoque","compras","orcamentos","financeiro","relatorios","comissoes","funcionarios","projeto","sistema","empresa"].find(podeVer);
       if (primeira && primeira !== tela) setTela(primeira);
     }
@@ -267,6 +269,9 @@ export default function App() {
           )}
           {podeAcessar(user, "CLIENTES") && (
             <Item icone="✅" label="Tarefas" ativo={tela === "tarefas"} onClick={() => navegar("tarefas")} />
+          )}
+          {podeAcessar(user, "CLIENTES") && (
+            <Item icone="⭐" label="Fidelidade" ativo={tela === "fidelidade"} onClick={() => navegar("fidelidade")} />
           )}
           {podeAcessar(user, "FORNECEDORES") && (
             <Item icone="🏭" label="Fornecedores" ativo={tela === "fornecedores"} onClick={() => navegar("fornecedores")} />
@@ -484,6 +489,12 @@ export default function App() {
             <>
               <PageHeader titulo="Tarefas" subtitulo="Follow-ups, lembretes e ações vinculadas a clientes" />
               <Tarefas user={user} />
+            </>
+          )}
+          {tela === "fidelidade" && (
+            <>
+              <PageHeader titulo="Fidelidade" subtitulo="Programa de pontos — configuração e consulta por cliente" />
+              <Fidelidade user={user} />
             </>
           )}
           {tela === "comissoes" && (

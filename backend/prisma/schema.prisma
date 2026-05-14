@@ -111,6 +111,12 @@ enum TipoInteracao {
   ANOTACAO
 }
 
+enum TipoMovimentacaoPontos {
+  GANHO
+  RESGATE
+  AJUSTE
+}
+
 enum PrioridadeTarefa {
   BAIXA
   MEDIA
@@ -185,6 +191,7 @@ model User {
   interacoes          Interacao[]
   tarefasCriadas      Tarefa[]    @relation("TarefaCriador")
   tarefasResponsavel  Tarefa[]    @relation("TarefaResponsavel")
+  movimentacoesPontos MovimentacaoPontos[]
 
   @@map("users")
 }
@@ -232,11 +239,13 @@ model Cliente {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  vendas        Venda[]
-  contasReceber ContaReceber[]
-  orcamentos    Orcamento[]
-  interacoes    Interacao[]
-  tarefas       Tarefa[]
+  vendas              Venda[]
+  contasReceber       ContaReceber[]
+  orcamentos          Orcamento[]
+  interacoes          Interacao[]
+  tarefas             Tarefa[]
+  pontosCliente       PontosCliente?
+  movimentacoesPontos MovimentacaoPontos[]
 
   @@map("clientes")
 }
@@ -327,10 +336,11 @@ model Venda {
   caixaId String?
   caixa   Caixa?  @relation(fields: [caixaId], references: [id])
 
-  itens         ItemVenda[]
-  movimentacoesCaixa MovimentacaoCaixa[]
-  orcamento     Orcamento?
-  contasReceber ContaReceber[]
+  itens               ItemVenda[]
+  movimentacoesCaixa  MovimentacaoCaixa[]
+  orcamento           Orcamento?
+  contasReceber       ContaReceber[]
+  movimentacoesPontos MovimentacaoPontos[]
 
   @@index([caixaId])
   @@map("vendas")
@@ -712,6 +722,59 @@ model ItemOrcamento {
 
   @@index([orcamentoId, ordem])
   @@map("itens_orcamento")
+}
+
+// ============ FIDELIDADE / PONTOS ============
+
+// Singleton — apenas 1 registro. Controller usa findFirst + upsert.
+model ConfiguracaoFidelidade {
+  id               String  @id @default(uuid())
+  ativo            Boolean @default(true)
+  // Quantos reais gastos geram 1 ponto (ex: 1.00 = R$1 por ponto)
+  reaisPorPonto    Decimal @default(1) @db.Decimal(10, 2)
+  // Quantos pontos equivalem a R$ 1,00 de desconto (ex: 100)
+  pontosParaUmReal Int     @default(100)
+  // Minimo de pontos para poder resgatar
+  minimoResgate    Int     @default(100)
+  // Maximo de desconto como % do total da venda (0-100)
+  maximoDescPct    Decimal @default(50) @db.Decimal(5, 2)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  @@map("configuracao_fidelidade")
+}
+
+model PontosCliente {
+  id             String   @id @default(uuid())
+  saldo          Int      @default(0)
+  totalGanho     Int      @default(0)
+  totalResgatado Int      @default(0)
+  updatedAt      DateTime @updatedAt
+
+  clienteId String  @unique
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@map("pontos_cliente")
+}
+
+model MovimentacaoPontos {
+  id        String                 @id @default(uuid())
+  tipo      TipoMovimentacaoPontos
+  pontos    Int
+  descricao String?
+  createdAt DateTime               @default(now())
+
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  vendaId String?
+  venda   Venda?  @relation(fields: [vendaId], references: [id], onDelete: SetNull)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([clienteId, createdAt(sort: Desc)])
+  @@index([vendaId])
+  @@map("movimentacoes_pontos")
 }
 
 // ============ CRM — TAREFAS E FOLLOW-UPS ============

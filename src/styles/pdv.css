@@ -371,6 +371,7 @@
   font-family: inherit; font-variant-numeric: tabular-nums;
 }
 .pdv-input-preco:focus { border-color: var(--pdv-line-3); }
+.pdv-input-preco.is-locked { cursor: default; color: var(--pdv-t2); border-style: dashed; pointer-events: none; }
 
 .pdv-cart-item-total {
   color: var(--pdv-accent); font-weight: 600; font-size: 17px;

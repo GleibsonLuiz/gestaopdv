@@ -267,6 +267,10 @@ function NovaVenda({ user }) {
   // CREDIARIO. Default: 30 dias a frente, 1 parcela.
   const [contaVencimento, setContaVencimento] = useState(() => dataDaqui(30));
   const [contaParcelas, setContaParcelas] = useState(1);
+  const [configFidelidade, setConfigFidelidade] = useState(null);
+  const [saldoPontos, setSaldoPontos] = useState(null);
+  const [pontosResgatando, setPontosResgatando] = useState(0);
+  const [painelPontosAberto, setPainelPontosAberto] = useState(false);
   const buscaRef = useRef(null);
   const finalizarRef = useRef(null);
   const valorRecebidoRef = useRef(null);
@@ -314,7 +318,20 @@ function NovaVenda({ user }) {
     recarregarCaixa().finally(() => setCaixaCarregando(false));
     recarregarPainel();
     recarregarFormasCustom();
+    api.obterConfiguracaoFidelidade().then(setConfigFidelidade).catch(() => {});
   }, [recarregarCaixa, recarregarPainel, recarregarFormasCustom]);
+
+  useEffect(() => {
+    setPontosResgatando(0);
+    setPainelPontosAberto(false);
+    setSaldoPontos(null);
+    if (clienteId && configFidelidade?.ativo) {
+      api.pontosFidelidade(clienteId)
+        .then(d => setSaldoPontos(d.saldo ?? 0))
+        .catch(() => setSaldoPontos(null));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clienteId]);
 
   useEffect(() => {
     buscaRef.current?.focus();
@@ -502,6 +519,9 @@ function NovaVenda({ user }) {
     setErro("");
     setValorRecebido("");
     setBusca("");
+    setPontosResgatando(0);
+    setPainelPontosAberto(false);
+    setSaldoPontos(null);
     if (refocar) focarBusca();
   }
 
@@ -524,7 +544,13 @@ function NovaVenda({ user }) {
     const n = parseFloat(String(desconto).replace(",", "."));
     return Number.isFinite(n) && n >= 0 ? n : 0;
   }, [desconto]);
-  const total = Math.max(0, subtotal - descontoNum);
+  const descontoFidelidade = useMemo(() => {
+    if (!pontosResgatando || !configFidelidade?.pontosParaUmReal) return 0;
+    const n = parseInt(pontosResgatando, 10);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    return Math.floor(n / Number(configFidelidade.pontosParaUmReal) * 100) / 100;
+  }, [pontosResgatando, configFidelidade]);
+  const total = Math.max(0, subtotal - descontoNum - descontoFidelidade);
 
   const valorRecebidoNum = useMemo(() => {
     const n = parseFloat(String(valorRecebido).replace(",", "."));
@@ -623,6 +649,10 @@ function NovaVenda({ user }) {
           precoUnitario: it.precoUnitario,
         })),
       };
+      const pontosN = parseInt(pontosResgatando, 10);
+      if (clienteId && Number.isFinite(pontosN) && pontosN > 0) {
+        payload.pontosResgatar = pontosN;
+      }
       if (geraReceber) {
         payload.gerarContaReceber = {
           vencimento: contaVencimento,
@@ -857,7 +887,9 @@ function NovaVenda({ user }) {
                       <input
                         type="number" step="0.01" min="0" value={it.precoUnitario}
                         onChange={e => alterarPreco(it.produtoId, e.target.value)}
-                        className="pdv-input-preco"
+                        className={`pdv-input-preco${it.tipoItem !== "SERVICO" ? " is-locked" : ""}`}
+                        readOnly={it.tipoItem !== "SERVICO"}
+                        title={it.tipoItem !== "SERVICO" ? "Preço fixo — edite no cadastro do produto" : "Preço editável (serviço)"}
                       />
                     </div>
                   </div>
@@ -891,6 +923,12 @@ function NovaVenda({ user }) {
                   <div className="pdv-totals-row">
                     <span>Desconto</span>
                     <strong style={{ color: "var(--pdv-c-rose)" }}>− {fmtBRL(descontoNum)}</strong>
+                  </div>
+                )}
+                {descontoFidelidade > 0 && (
+                  <div className="pdv-totals-row">
+                    <span>⭐ Pontos</span>
+                    <strong style={{ color: "var(--pdv-c-amber)" }}>− {fmtBRL(descontoFidelidade)}</strong>
                   </div>
                 )}
                 <div className="pdv-total-block">
@@ -1185,6 +1223,7 @@ function NovaVenda({ user }) {
                   <div className="pdv-modal-amount-sub">
                     {carrinho.reduce((a,it)=>a+it.quantidade,0)} produtos
                     {descontoNum > 0 && <> · desconto {fmtBRL(descontoNum)}</>}
+                    {descontoFidelidade > 0 && <> · pontos −{fmtBRL(descontoFidelidade)}</>}
                   </div>
                 </div>
                 <div className="pdv-modal-amount-num">
@@ -1202,6 +1241,76 @@ function NovaVenda({ user }) {
                   className="pdv-field-input"
                 />
               </div>
+
+              {configFidelidade?.ativo && clienteId && saldoPontos !== null && (
+                <div style={{
+                  padding: "12px 14px", borderRadius: 10,
+                  background: "rgba(251,191,36,.08)",
+                  border: "1px solid rgba(251,191,36,.3)",
+                  display: "flex", flexDirection: "column", gap: 10,
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 15 }}>⭐</span>
+                      <div>
+                        <div style={{ color: "var(--pdv-t1)", fontWeight: 700, fontSize: 13 }}>
+                          {saldoPontos.toLocaleString("pt-BR")} pontos disponíveis
+                        </div>
+                        {saldoPontos > 0 && (
+                          <div style={{ color: "var(--pdv-t3)", fontSize: 11 }}>
+                            ≈ R$ {(saldoPontos / Number(configFidelidade.pontosParaUmReal)).toFixed(2)} em desconto
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {saldoPontos >= (configFidelidade.minimoResgate || 1) && (
+                      <button
+                        type="button"
+                        onClick={() => { setPainelPontosAberto(v => !v); if (painelPontosAberto) setPontosResgatando(0); }}
+                        style={{
+                          padding: "5px 12px", borderRadius: 6, border: "1px solid rgba(251,191,36,.5)",
+                          background: painelPontosAberto ? "rgba(251,191,36,.2)" : "transparent",
+                          color: "var(--pdv-c-amber)", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                        }}
+                      >{painelPontosAberto ? "Cancelar" : "Usar pontos"}</button>
+                    )}
+                  </div>
+
+                  {painelPontosAberto && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
+                        <div style={{ flex: 1 }}>
+                          <label className="pdv-field-label" style={{ color: "var(--pdv-c-amber)" }}>
+                            Pontos a resgatar (mín. {configFidelidade.minimoResgate})
+                          </label>
+                          <input
+                            type="number" min={configFidelidade.minimoResgate} max={saldoPontos}
+                            step={configFidelidade.minimoResgate || 1}
+                            value={pontosResgatando || ""}
+                            onChange={e => setPontosResgatando(parseInt(e.target.value, 10) || 0)}
+                            placeholder={`0 – ${saldoPontos.toLocaleString("pt-BR")} pts`}
+                            className="pdv-field-input"
+                          />
+                        </div>
+                        {descontoFidelidade > 0 && (
+                          <div style={{
+                            padding: "9px 14px", borderRadius: 8, background: "rgba(251,191,36,.15)",
+                            border: "1px solid rgba(251,191,36,.4)", color: "var(--pdv-c-amber)",
+                            fontWeight: 700, fontSize: 14, whiteSpace: "nowrap",
+                          }}>
+                            − R$ {descontoFidelidade.toFixed(2)}
+                          </div>
+                        )}
+                      </div>
+                      {pontosResgatando > saldoPontos && (
+                        <div style={{ color: "var(--pdv-c-rose)", fontSize: 11 }}>
+                          Saldo insuficiente — disponível: {saldoPontos.toLocaleString("pt-BR")} pts
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>

@@ -83,6 +83,8 @@ export async function criar(req, res, next) {
   try {
     const { clienteId, formaPagamento, observacoes, itens, gerarContaReceber } = req.body;
     const desconto = req.body.desconto !== undefined ? toNumber(req.body.desconto) : 0;
+    const pontosResgatarRaw = parseInt(req.body.pontosResgatar, 10);
+    const pontosResgatar = Number.isFinite(pontosResgatarRaw) && pontosResgatarRaw > 0 ? pontosResgatarRaw : 0;
 
     if (!formaPagamento || !FORMAS_VALIDAS.has(formaPagamento)) {
       return res.status(400).json({ erro: "Forma de pagamento invalida" });
@@ -138,7 +140,35 @@ export async function criar(req, res, next) {
     }
 
     const subtotal = itensNorm.reduce((acc, it) => acc + it.quantidade * it.precoUnitario, 0);
-    const total = Math.max(0, subtotal - desconto);
+
+    let configFidelidade = null;
+    let descontoFidelidade = 0;
+    if (pontosResgatar > 0) {
+      if (!clienteId) {
+        return res.status(400).json({ erro: "Informe o cliente para resgatar pontos de fidelidade" });
+      }
+      configFidelidade = await prisma.configuracaoFidelidade.findFirst();
+      if (!configFidelidade?.ativo) {
+        return res.status(400).json({ erro: "Programa de fidelidade nao esta ativo" });
+      }
+      if (pontosResgatar < configFidelidade.minimoResgate) {
+        return res.status(400).json({ erro: `Minimo de resgate: ${configFidelidade.minimoResgate} pontos` });
+      }
+      const pontosDoc = await prisma.pontosCliente.findUnique({ where: { clienteId } });
+      const saldoAtual = pontosDoc?.saldo ?? 0;
+      if (saldoAtual < pontosResgatar) {
+        return res.status(400).json({ erro: `Saldo insuficiente. Disponivel: ${saldoAtual} pontos` });
+      }
+      descontoFidelidade = Math.floor(pontosResgatar / Number(configFidelidade.pontosParaUmReal) * 100) / 100;
+      const limiteDescPct = subtotal * (Number(configFidelidade.maximoDescPct) / 100);
+      if (descontoFidelidade > limiteDescPct + 0.005) {
+        return res.status(400).json({
+          erro: `Desconto por fidelidade excede o limite de ${configFidelidade.maximoDescPct}% do subtotal`,
+        });
+      }
+    }
+
+    const total = Math.max(0, subtotal - desconto - descontoFidelidade);
 
     try {
       // Defesa explicita: nao deixa registrar venda sem caixa aberto.
@@ -227,6 +257,62 @@ export async function criar(req, res, next) {
               userId: req.user.sub,
             },
           });
+        }
+
+        // Fidelidade: resgate de pontos (deducao do saldo)
+        if (pontosResgatar > 0 && configFidelidade?.ativo) {
+          await tx.pontosCliente.update({
+            where: { clienteId },
+            data: {
+              saldo: { decrement: pontosResgatar },
+              totalResgatado: { increment: pontosResgatar },
+              updatedAt: new Date(),
+            },
+          });
+          await tx.movimentacaoPontos.create({
+            data: {
+              tipo: "RESGATE",
+              pontos: pontosResgatar,
+              descricao: `RESGATE NA VENDA #${vendaCriada.numero}`,
+              clienteId,
+              vendaId: vendaCriada.id,
+              userId: req.user.sub,
+            },
+          });
+        }
+
+        // Fidelidade: ganho de pontos (credito baseado no total pos-descontos)
+        if (clienteId && total > 0) {
+          const cfg = configFidelidade || await tx.configuracaoFidelidade.findFirst();
+          if (cfg?.ativo) {
+            const pontosGanhos = Math.floor(total / Number(cfg.reaisPorPonto));
+            if (pontosGanhos > 0) {
+              await tx.pontosCliente.upsert({
+                where: { clienteId },
+                update: {
+                  saldo: { increment: pontosGanhos },
+                  totalGanho: { increment: pontosGanhos },
+                  updatedAt: new Date(),
+                },
+                create: {
+                  clienteId,
+                  saldo: pontosGanhos,
+                  totalGanho: pontosGanhos,
+                  totalResgatado: 0,
+                },
+              });
+              await tx.movimentacaoPontos.create({
+                data: {
+                  tipo: "GANHO",
+                  pontos: pontosGanhos,
+                  descricao: `GANHO NA VENDA #${vendaCriada.numero}`,
+                  clienteId,
+                  vendaId: vendaCriada.id,
+                  userId: req.user.sub,
+                },
+              });
+            }
+          }
         }
 
         // ContaReceber automatica: gera 1+ parcelas vinculadas a venda.

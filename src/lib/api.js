@@ -374,6 +374,12 @@ export const api = {
   resetarSistema: (confirmacao) =>
     request("/admin/reset", { method: "POST", body: { confirmacao } }),
 
+  // ==================== FIDELIDADE ====================
+  obterConfiguracaoFidelidade: () => request("/fidelidade/configuracao"),
+  salvarConfiguracaoFidelidade: (data) => request("/fidelidade/configuracao", { method: "PUT", body: data }),
+  pontosFidelidade: (clienteId) => request(`/fidelidade/pontos/${clienteId}`),
+  ajustarPontosFidelidade: (clienteId, data) => request(`/fidelidade/pontos/${clienteId}/ajustar`, { method: "POST", body: data }),
+
   // ==================== CONFIGURACAO DA EMPRESA ====================
   obterConfiguracao: () => request("/configuracao"),
   salvarConfiguracao: (dados) => request("/configuracao", { method: "PUT", body: dados }),

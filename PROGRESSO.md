@@ -71,9 +71,9 @@ d:/gestao-pdv/
 | 12 | Notificações e Alertas | ✅ Concluído | Sino no header + drawer com alertas (estoque + contas), polling 60s |
 | 13 | Relatórios + Exportação PDF | ✅ Concluído | 4 relatórios (vendas/compras/financeiro/estoque) com export PDF (jsPDF + autotable) |
 
-### Lacuna conhecida na Etapa 9 (Compras)
+### ~~Lacuna conhecida na Etapa 9 (Compras)~~ — ✅ Resolvida
 
-Não existe rota/UI para **cancelar/excluir** uma compra. Hoje, se uma compra é registrada por engano, o usuário precisa ir no Estoque e fazer SAIDA manual de cada item. Sugestão: implementar `DELETE /compras/:id` que faça estorno transacional do estoque (cria SAIDA com motivo `"CANCELAMENTO COMPRA #N"`). **Decisão pendente do usuário** se faz isso antes ou depois do PDV.
+`POST /compras/:id/estornar` implementado: transação que reverte estoque (SAIDA), cancela ContasPagar PENDENTES e bloqueia se houver conta PAGA (usuário reabre no Financeiro primeiro). UI: botão "↩ Estornar compra" no DetalheCompraModal com motivo obrigatório.
 
 ---
 

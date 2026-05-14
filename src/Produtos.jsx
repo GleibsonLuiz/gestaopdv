@@ -536,7 +536,7 @@ export default function Produtos({ user }) {
         larguraMax={860}
       >
         <Secao legenda="Identificação">
-          <Linha style={{ gridTemplateColumns: "150px 1fr" }}>
+          <Linha style={{ gridTemplateColumns: "150px 1fr 80px" }}>
             <CampoLux label="Código" obrigatorio>
               <div style={{ display: "flex", gap: 6 }}>
                 <input
@@ -560,6 +560,14 @@ export default function Produtos({ user }) {
                 value={form.nome}
                 onChange={e => setForm({ ...form, nome: e.target.value })}
                 placeholder="Ex.: Caneta esferográfica azul BIC"
+              />
+            </CampoLux>
+            <CampoLux label="Unidade">
+              <input
+                className="lux-input"
+                value={form.unidade}
+                onChange={e => setForm({ ...form, unidade: e.target.value.toUpperCase().slice(0, 6) })}
+                placeholder="UN, KG, LT..."
               />
             </CampoLux>
           </Linha>
@@ -617,7 +625,7 @@ export default function Produtos({ user }) {
         </Secao>
 
         <Secao legenda="Preços e estoque">
-          <Linha style={{ gridTemplateColumns: "80px 80px 1fr 1fr 70px", alignItems: "end" }}>
+          <Linha style={{ gridTemplateColumns: "80px 80px 1fr 1fr", alignItems: "end" }}>
             <CampoLux label={form.tipoItem === "SERVICO" ? "Estoque (n/a)" : "Estoque atual"}>
               <input
                 className="lux-input"
@@ -656,14 +664,6 @@ export default function Produtos({ user }) {
                 value={form.precoVenda}
                 onChange={e => setForm({ ...form, precoVenda: e.target.value })}
                 placeholder="0,00"
-              />
-            </CampoLux>
-            <CampoLux label="Unidade">
-              <input
-                className="lux-input"
-                value={form.unidade}
-                onChange={e => setForm({ ...form, unidade: e.target.value.toUpperCase().slice(0, 6) })}
-                placeholder="UN, KG, LT..."
               />
             </CampoLux>
           </Linha>

@@ -974,11 +974,6 @@ function NovaVenda({ user }) {
             )}
           </div>
 
-          {/* VENDAS DE HOJE (mini-bar colapsavel) — só quando ha caixa aberto */}
-          {!caixaCarregando && !semCaixa && (
-            <FormasPagamentoTopo resumo={painel.resumoDia} />
-          )}
-
           {carrinho.length > 0 && (
             <div className="pdv-totals-card">
               <div className="pdv-total-block pdv-total-block-lg">
@@ -1001,6 +996,11 @@ function NovaVenda({ user }) {
                 <span style={{ fontSize: 16 }}>→</span>
               </button>
             </div>
+          )}
+
+          {/* VENDAS DE HOJE — entre a cestinha (busca/total) e as formas de pagamento */}
+          {!caixaCarregando && !semCaixa && (
+            <FormasPagamentoTopo resumo={painel.resumoDia} />
           )}
 
           <div className="pdv-pay-card">
@@ -1693,89 +1693,59 @@ function ModalAbrirCaixaPDV({ onCancelar, onSucesso }) {
 function FormasPagamentoTopo({ resumo }) {
   const r = resumo || { porForma: [] };
   const totalPagamentos = r.porForma.reduce((acc, f) => acc + f.total, 0);
-  const [aberto, setAberto] = useState(() => {
-    try { return localStorage.getItem("pdv-formas-aberto") === "1"; }
-    catch { return false; }
-  });
-  const dataLabel = new Date().toLocaleDateString("pt-BR", {
-    weekday: "short", day: "2-digit", month: "short",
-  });
-
-  function toggle() {
-    setAberto(v => {
-      const novo = !v;
-      try { localStorage.setItem("pdv-formas-aberto", novo ? "1" : "0"); } catch { /* ignore */ }
-      return novo;
-    });
-  }
-
+  const dataLabel = new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
   const semVendas = r.porForma.length === 0;
+  const formasOrdenadas = [...r.porForma].sort((a, b) => b.total - a.total);
+  const maxValor = formasOrdenadas.reduce((m, f) => Math.max(m, f.total), 0) || 1;
 
   return (
-    <div className={`pdv-mini-bar ${aberto ? "is-open" : ""}`}>
-      <button
-        type="button"
-        onClick={toggle}
-        className="pdv-mini-bar-hd"
-        title={aberto ? "Recolher" : "Expandir resumo do dia"}
-      >
-        <span className="pdv-mini-bar-icon">◆</span>
-        <span className="pdv-mini-bar-lbl">Vendas de hoje</span>
+    <div className="pdv-graf-formas">
+      <div className="pdv-graf-hd">
+        <span className="pdv-graf-icon">◆</span>
+        <span className="pdv-graf-lbl">Vendas de hoje</span>
+        <span className="pdv-graf-date">{dataLabel}</span>
+        <span className="pdv-graf-total">
+          {semVendas ? <span className="pdv-graf-total-mut">—</span> : fmtBRL(totalPagamentos)}
+        </span>
+      </div>
+      <div className="pdv-graf-body">
         {semVendas ? (
-          <span className="pdv-mini-bar-empty">sem vendas finalizadas</span>
+          <div className="pdv-graf-empty">Sem vendas finalizadas hoje</div>
         ) : (
-          <>
-            <span className="pdv-mini-bar-total">{fmtBRL(totalPagamentos)}</span>
-            <span className="pdv-mini-bar-chips">
-              {r.porForma.slice(0, 6).map(f => {
-                const pct = (f.total / (totalPagamentos || 1)) * 100;
-                const cor = FORMA_COR_VAR[f.formaPagamento] || "var(--pdv-accent)";
-                return (
-                  <span key={f.formaPagamento} className="pdv-mini-bar-chip">
-                    <span className="pdv-mini-bar-dot" style={{ background: cor }} />
-                    <span style={{ color: "var(--pdv-t2)" }}>
-                      {(FORMA_LABEL[f.formaPagamento] || f.formaPagamento).slice(0, 4)}
-                    </span>
-                    <span style={{ color: cor, fontWeight: 600 }}>{pct.toFixed(0)}%</span>
-                  </span>
-                );
-              })}
-            </span>
-          </>
-        )}
-        <span className="pdv-mini-bar-date">{dataLabel}</span>
-        <span className={`pdv-mini-bar-chev ${aberto ? "is-open" : ""}`}>▾</span>
-      </button>
-
-      {aberto && !semVendas && (
-        <div className="pdv-mini-bar-body">
           <div
-            className="pdv-dash-grid"
-            style={{ gridTemplateColumns: `repeat(${Math.min(r.porForma.length, 6)}, minmax(0, 1fr))` }}
+            className="pdv-graf-chart"
+            style={{ gridTemplateColumns: `repeat(${formasOrdenadas.length}, minmax(0, 1fr))` }}
           >
-            {r.porForma.map(f => {
-              const pct = (f.total / (totalPagamentos || 1)) * 100;
+            {formasOrdenadas.map(f => {
+              const pct = (f.total / maxValor) * 100;
+              const pctTotal = (f.total / (totalPagamentos || 1)) * 100;
               const cor = FORMA_COR_VAR[f.formaPagamento] || "var(--pdv-accent)";
+              const nomeCompleto = FORMA_LABEL[f.formaPagamento] || f.formaPagamento;
+              const label = nomeCompleto.slice(0, 4);
               return (
-                <div key={f.formaPagamento} className="pdv-dash-block">
-                  <div className="pdv-dash-row">
-                    <span className="pdv-dash-label-mut">
-                      {FORMA_LABEL[f.formaPagamento] || f.formaPagamento}
-                    </span>
-                    <span className="pdv-dash-pct" style={{ color: cor }}>{pct.toFixed(0)}%</span>
+                <div
+                  key={f.formaPagamento}
+                  className="pdv-graf-col"
+                  title={`${nomeCompleto}: ${fmtBRL(f.total)} (${pctTotal.toFixed(0)}%)`}
+                >
+                  <div className="pdv-graf-val" style={{ color: cor }}>{fmtBRL(f.total)}</div>
+                  <div className="pdv-graf-bar-wrap">
+                    <div
+                      className="pdv-graf-bar"
+                      style={{
+                        height: `${Math.max(pct, 6)}%`,
+                        background: `linear-gradient(180deg, ${cor}, ${cor}66)`,
+                        boxShadow: `0 -2px 8px -2px ${cor}55`,
+                      }}
+                    />
                   </div>
-                  <div className="pdv-dash-num" style={{ color: cor }}>
-                    {fmtBRL(f.total)}
-                  </div>
-                  <div className="pdv-dash-bar">
-                    <span style={{ width: `${pct}%`, background: cor }} />
-                  </div>
+                  <div className="pdv-graf-lbl-bot" style={{ color: "var(--pdv-t2)" }}>{label}</div>
                 </div>
               );
             })}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

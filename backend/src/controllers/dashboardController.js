@@ -55,11 +55,6 @@ export async function resumo(req, res, next) {
       contasReceberAtrasadasCount,
       ultimasVendas,
       ultimasCompras,
-      novosClientesMes,
-      vendasCanceladas,
-      valorEstoqueRaw,
-      proximasContasPagar,
-      proximasContasReceber,
     ] = await Promise.all([
       prisma.cliente.count({ where: { ativo: true } }),
       prisma.produto.count({ where: { ativo: true } }),
@@ -105,14 +100,13 @@ export async function resumo(req, res, next) {
         ORDER BY dia ASC
       `,
 
-      // Ordenado por faturamento (subtotal), não quantidade
       prisma.itemVenda.groupBy({
         by: ["produtoId"],
         where: {
           venda: { status: "CONCLUIDA", createdAt: { gte: mesInicio } },
         },
         _sum: { quantidade: true, subtotal: true },
-        orderBy: { _sum: { subtotal: "desc" } },
+        orderBy: { _sum: { quantidade: "desc" } },
         take: 5,
       }),
 
@@ -194,38 +188,6 @@ export async function resumo(req, res, next) {
           fornecedor: { select: { nome: true } },
         },
       }),
-
-      prisma.cliente.count({ where: { createdAt: { gte: mesInicio } } }),
-      prisma.venda.count({ where: { status: "CANCELADA", createdAt: { gte: mesInicio } } }),
-      prisma.$queryRaw`
-        SELECT COALESCE(SUM(estoque::float * "precoVenda"::float), 0)::float AS total
-        FROM produtos
-        WHERE ativo = true AND "tipoItem" = 'PRODUTO'
-      `,
-      prisma.contaPagar.findMany({
-        where: { status: "PENDENTE", vencimento: { gte: hoje } },
-        orderBy: { vencimento: "asc" },
-        take: 4,
-        select: {
-          id: true,
-          descricao: true,
-          valor: true,
-          vencimento: true,
-          fornecedor: { select: { nome: true } },
-        },
-      }),
-      prisma.contaReceber.findMany({
-        where: { status: "PENDENTE", vencimento: { gte: hoje } },
-        orderBy: { vencimento: "asc" },
-        take: 4,
-        select: {
-          id: true,
-          descricao: true,
-          valor: true,
-          vencimento: true,
-          cliente: { select: { nome: true } },
-        },
-      }),
     ]);
 
     // Hidrata top produtos
@@ -275,36 +237,11 @@ export async function resumo(req, res, next) {
     }
 
     const vendasMes = toNum(vendasMesAgg._sum.total);
-    const comprasMes = toNum(comprasMesAgg._sum.total);
     const vendasMesAnterior = toNum(vendasMesAnteriorAgg._sum.total);
     const variacaoMes =
       vendasMesAnterior > 0
         ? ((vendasMes - vendasMesAnterior) / vendasMesAnterior) * 100
         : null;
-
-    const margemBrutaValor = vendasMes - comprasMes;
-    const margemBrutaPct = vendasMes > 0 ? (margemBrutaValor / vendasMes) * 100 : null;
-
-    const proximasContas = [
-      ...proximasContasPagar.map(c => ({
-        tipo: "pagar",
-        id: c.id,
-        descricao: c.descricao,
-        valor: toNum(c.valor),
-        vencimento: c.vencimento,
-        entidade: c.fornecedor?.nome || null,
-      })),
-      ...proximasContasReceber.map(c => ({
-        tipo: "receber",
-        id: c.id,
-        descricao: c.descricao,
-        valor: toNum(c.valor),
-        vencimento: c.vencimento,
-        entidade: c.cliente?.nome || null,
-      })),
-    ]
-      .sort((a, b) => new Date(a.vencimento) - new Date(b.vencimento))
-      .slice(0, 6);
 
     res.json({
       geradoEm: agora.toISOString(),
@@ -321,20 +258,23 @@ export async function resumo(req, res, next) {
         ticketMedioMes: toNum(ticketMesAgg._avg.total),
         comprasMes: {
           quantidade: comprasMesAgg._count._all,
-          total: comprasMes,
-        },
-        margemBruta: {
-          valor: margemBrutaValor,
-          percentual: margemBrutaPct,
+          total: toNum(comprasMesAgg._sum.total),
         },
         clientesAtivos: totalClientesAtivos,
         produtosAtivos: totalProdutosAtivos,
         fornecedoresAtivos: totalFornecedoresAtivos,
         funcionariosAtivos: totalFuncionariosAtivos,
         produtosEstoqueBaixo: produtosEstoqueBaixo.length,
-        novosClientesMes,
-        vendasCanceladas,
-        valorEstoque: toNum(valorEstoqueRaw?.[0]?.total),
+        contasPagarPendentes: {
+          quantidade: contasPagarPendentesAgg._count._all,
+          total: toNum(contasPagarPendentesAgg._sum.valor),
+          atrasadas: contasPagarAtrasadasCount,
+        },
+        contasReceberPendentes: {
+          quantidade: contasReceberPendentesAgg._count._all,
+          total: toNum(contasReceberPendentesAgg._sum.valor),
+          atrasadas: contasReceberAtrasadasCount,
+        },
       },
       vendasPorDia,
       topProdutos,
@@ -345,7 +285,6 @@ export async function resumo(req, res, next) {
         total: toNum(f._sum.total),
       })),
       estoqueBaixo: produtosEstoqueBaixo,
-      proximasContas,
       ultimasVendas: ultimasVendas.map(v => ({
         id: v.id,
         numero: v.numero,

@@ -707,110 +707,22 @@ function NovaVenda({ user }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {/* TOPO: alerta quando nao ha caixa aberto OU resumo de vendas do dia
-          por forma de pagamento (info financeira detalhada — saldo, sangria,
-          suprimento — fica restrita a tela do Caixa). */}
-      {!caixaCarregando && (
-        semCaixa ? (
-          <div className="pdv-no-cash" style={{ justifyContent: "space-between" }}>
-            <span style={{ fontSize: 18 }}>🔒</span>
-            <div style={{ flex: 1 }}>
-              <b>Nenhum caixa aberto.</b> Você não pode registrar vendas sem caixa.
-            </div>
-            <button
-              onClick={() => setAbrirCaixaAberto(true)}
-              className="pdv-btn-finalize"
-              style={{ width: "auto", padding: "10px 20px", fontSize: 13, flexShrink: 0 }}
-            >🟢 Abrir Caixa</button>
+      {/* TOPO: alerta quando nao ha caixa aberto (full-width). Resumo de vendas
+          do dia e barra de bipagem foram movidos para a coluna direita pra dar
+          mais altura vertical ao cupom. */}
+      {!caixaCarregando && semCaixa && (
+        <div className="pdv-no-cash" style={{ justifyContent: "space-between" }}>
+          <span style={{ fontSize: 18 }}>🔒</span>
+          <div style={{ flex: 1 }}>
+            <b>Nenhum caixa aberto.</b> Você não pode registrar vendas sem caixa.
           </div>
-        ) : (
-          <FormasPagamentoTopo resumo={painel.resumoDia} />
-        )
-      )}
-
-      {/* BARRA DE BIPAGEM CENTRAL — autofocus permanente */}
-      <div className={`pdv-scan ${scanFocused ? "is-focused" : ""}`}>
-        <div className="pdv-scan-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 7V5a1 1 0 0 1 1-1h2"/>
-            <path d="M20 7V5a1 1 0 0 0-1-1h-2"/>
-            <path d="M4 17v2a1 1 0 0 0 1 1h2"/>
-            <path d="M20 17v2a1 1 0 0 1-1 1h-2"/>
-            <path d="M4 12h16"/>
-          </svg>
+          <button
+            onClick={() => setAbrirCaixaAberto(true)}
+            className="pdv-btn-finalize"
+            style={{ width: "auto", padding: "10px 20px", fontSize: 13, flexShrink: 0 }}
+          >🟢 Abrir Caixa</button>
         </div>
-        <input
-          ref={buscaRef}
-          placeholder="Bipe um produto ou digite código/nome — pressione Enter para adicionar"
-          value={busca}
-          onChange={e => { setBusca(e.target.value); setSugestaoIdx(0); }}
-          onFocus={() => setScanFocused(true)}
-          onKeyDown={e => {
-            if (e.key === "ArrowDown") {
-              if (sugestoes.length > 0) {
-                e.preventDefault();
-                setSugestaoIdx(i => (i + 1) % sugestoes.length);
-              }
-              return;
-            }
-            if (e.key === "ArrowUp") {
-              if (sugestoes.length > 0) {
-                e.preventDefault();
-                setSugestaoIdx(i => (i - 1 + sugestoes.length) % sugestoes.length);
-              }
-              return;
-            }
-            if (e.key === "Enter") { e.preventDefault(); biparOuConfirmar(); }
-            if (e.key === "Escape") { e.preventDefault(); setBusca(""); }
-          }}
-          onBlur={() => {
-            setScanFocused(false);
-            // Refoco automático em ~120ms — só aplica quando nenhuma modal
-            // está aberta (evita roubar foco de inputs do checkout/cancelar).
-            setTimeout(() => {
-              if (!algumaModalAberta && document.activeElement === document.body) {
-                buscaRef.current?.focus();
-              }
-            }, 120);
-          }}
-        />
-        <span className="pdv-scan-hint">
-          <span className="pdv-kbd">/</span> focar &nbsp;·&nbsp;
-          <span className="pdv-kbd is-accent">Enter</span> adicionar
-        </span>
-
-        {/* Sugestões dropdown — só aparece quando há texto digitado */}
-        {sugestoes.length > 0 && (
-          <div className="pdv-scan-sugg">
-            {sugestoes.map((p, idx) => {
-              const ativo = idx === sugestaoSelecionada;
-              return (
-                <div
-                  key={p.id}
-                  onMouseEnter={() => setSugestaoIdx(idx)}
-                  onMouseDown={e => { e.preventDefault(); abrirQtdModal(p); }}
-                  className={`pdv-scan-sugg-row ${ativo ? "is-active" : ""}`}
-                >
-                  <FotoProduto url={p.imagem} nome={p.nome} tamanho={38} servico={p.tipoItem === "SERVICO"} />
-                  <div className="pdv-scan-sugg-name">
-                    <div className="nm">
-                      {p.nome}
-                      {p.tipoItem === "SERVICO" && <span className="pdv-srv-tag">SERVIÇO</span>}
-                    </div>
-                    <div className="meta">
-                      {p.codigo}
-                      {p.codigoBarras && <> · 📊 {p.codigoBarras}</>}
-                      {" · "}{p.tipoItem === "SERVICO" ? "♾ disponível" : `${p.estoque} ${p.unidade}`}
-                    </div>
-                  </div>
-                  <div className="pdv-scan-sugg-price">{fmtBRL(p.precoVenda)}</div>
-                  {ativo && <span className="pdv-kbd is-accent">↵</span>}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      )}
 
       <div className="pdv-main">
         {/* CESTINHA — fotos, novos no topo */}
@@ -981,8 +893,92 @@ function NovaVenda({ user }) {
           )}
         </div>
 
-        {/* PAINEL DIREITO — totais + botão Finalizar + atalhos */}
+        {/* PAINEL DIREITO — bipagem, vendas hoje, totais, finalizar, atalhos */}
         <div className="pdv-side">
+          {/* BARRA DE BIPAGEM (movida do topo) — autofocus permanente */}
+          <div className={`pdv-scan pdv-scan-side ${scanFocused ? "is-focused" : ""}`}>
+            <div className="pdv-scan-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 7V5a1 1 0 0 1 1-1h2"/>
+                <path d="M20 7V5a1 1 0 0 0-1-1h-2"/>
+                <path d="M4 17v2a1 1 0 0 0 1 1h2"/>
+                <path d="M20 17v2a1 1 0 0 1-1 1h-2"/>
+                <path d="M4 12h16"/>
+              </svg>
+            </div>
+            <input
+              ref={buscaRef}
+              placeholder="Bipe ou digite código/nome…"
+              value={busca}
+              onChange={e => { setBusca(e.target.value); setSugestaoIdx(0); }}
+              onFocus={() => setScanFocused(true)}
+              onKeyDown={e => {
+                if (e.key === "ArrowDown") {
+                  if (sugestoes.length > 0) {
+                    e.preventDefault();
+                    setSugestaoIdx(i => (i + 1) % sugestoes.length);
+                  }
+                  return;
+                }
+                if (e.key === "ArrowUp") {
+                  if (sugestoes.length > 0) {
+                    e.preventDefault();
+                    setSugestaoIdx(i => (i - 1 + sugestoes.length) % sugestoes.length);
+                  }
+                  return;
+                }
+                if (e.key === "Enter") { e.preventDefault(); biparOuConfirmar(); }
+                if (e.key === "Escape") { e.preventDefault(); setBusca(""); }
+              }}
+              onBlur={() => {
+                setScanFocused(false);
+                setTimeout(() => {
+                  if (!algumaModalAberta && document.activeElement === document.body) {
+                    buscaRef.current?.focus();
+                  }
+                }, 120);
+              }}
+            />
+            <span className="pdv-scan-hint">
+              <span className="pdv-kbd is-accent">⏎</span>
+            </span>
+
+            {sugestoes.length > 0 && (
+              <div className="pdv-scan-sugg">
+                {sugestoes.map((p, idx) => {
+                  const ativo = idx === sugestaoSelecionada;
+                  return (
+                    <div
+                      key={p.id}
+                      onMouseEnter={() => setSugestaoIdx(idx)}
+                      onMouseDown={e => { e.preventDefault(); abrirQtdModal(p); }}
+                      className={`pdv-scan-sugg-row ${ativo ? "is-active" : ""}`}
+                    >
+                      <FotoProduto url={p.imagem} nome={p.nome} tamanho={32} servico={p.tipoItem === "SERVICO"} />
+                      <div className="pdv-scan-sugg-name">
+                        <div className="nm">
+                          {p.nome}
+                          {p.tipoItem === "SERVICO" && <span className="pdv-srv-tag">SVC</span>}
+                        </div>
+                        <div className="meta">
+                          {p.codigo}
+                          {" · "}{p.tipoItem === "SERVICO" ? "♾" : `${p.estoque} ${p.unidade}`}
+                        </div>
+                      </div>
+                      <div className="pdv-scan-sugg-price">{fmtBRL(p.precoVenda)}</div>
+                      {ativo && <span className="pdv-kbd is-accent">↵</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* VENDAS DE HOJE (mini-bar colapsavel) — só quando ha caixa aberto */}
+          {!caixaCarregando && !semCaixa && (
+            <FormasPagamentoTopo resumo={painel.resumoDia} />
+          )}
+
           {carrinho.length > 0 && (
             <div className="pdv-totals-card">
               <div className="pdv-total-block pdv-total-block-lg">

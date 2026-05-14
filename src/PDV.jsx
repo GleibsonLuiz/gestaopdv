@@ -1690,56 +1690,94 @@ function ModalAbrirCaixaPDV({ onCancelar, onSucesso }) {
 
 // ============== TOPO DO PDV: VENDAS DE HOJE POR FORMA DE PAGAMENTO ==============
 // Substitui o antigo CaixaStatusCard. Saldo, sangria, suprimento e faturamento
-// total deixam de aparecer aqui — tudo isso fica restrito a tela do Caixa,
-// que e quem trata da gestao financeira do operador. Aqui exibimos apenas a
-// quebra de vendas do dia por forma de pagamento, util para o operador
-// acompanhar o mix sem virar uma KPI dashboard.
+// total deixam de aparecer aqui — tudo isso fica restrito a tela do Caixa.
+// Componente colapsavel: por default vira uma barra fina de ~28px no topo,
+// mostrando apenas o total do dia + chips minimalistas. Click expande para os
+// cards detalhados. Estado persistido em localStorage.
 function FormasPagamentoTopo({ resumo }) {
   const r = resumo || { porForma: [] };
-  const totalPagamentos = r.porForma.reduce((acc, f) => acc + f.total, 0) || 1;
+  const totalPagamentos = r.porForma.reduce((acc, f) => acc + f.total, 0);
+  const [aberto, setAberto] = useState(() => {
+    try { return localStorage.getItem("pdv-formas-aberto") === "1"; }
+    catch { return false; }
+  });
   const dataLabel = new Date().toLocaleDateString("pt-BR", {
     weekday: "short", day: "2-digit", month: "short",
   });
 
-  return (
-    <div className="pdv-dash">
-      <div className="pdv-dash-hd">
-        <div className="pdv-dash-title">
-          <span style={{ color: "var(--pdv-accent)", fontSize: 13 }}>◆</span>
-          Vendas de hoje por forma de pagamento
-        </div>
-        <div className="pdv-dash-date">{dataLabel}</div>
-      </div>
+  function toggle() {
+    setAberto(v => {
+      const novo = !v;
+      try { localStorage.setItem("pdv-formas-aberto", novo ? "1" : "0"); } catch { /* ignore */ }
+      return novo;
+    });
+  }
 
-      {r.porForma.length === 0 ? (
-        <div className="pdv-dash-empty">
-          Nenhuma venda finalizada hoje ainda.
-        </div>
-      ) : (
-        <div
-          className="pdv-dash-grid"
-          style={{ gridTemplateColumns: `repeat(${Math.min(r.porForma.length, 6)}, minmax(0, 1fr))` }}
-        >
-          {r.porForma.map(f => {
-            const pct = (f.total / totalPagamentos) * 100;
-            const cor = FORMA_COR_VAR[f.formaPagamento] || "var(--pdv-accent)";
-            return (
-              <div key={f.formaPagamento} className="pdv-dash-block">
-                <div className="pdv-dash-row">
-                  <span className="pdv-dash-label-mut">
-                    {FORMA_LABEL[f.formaPagamento] || f.formaPagamento}
+  const semVendas = r.porForma.length === 0;
+
+  return (
+    <div className={`pdv-mini-bar ${aberto ? "is-open" : ""}`}>
+      <button
+        type="button"
+        onClick={toggle}
+        className="pdv-mini-bar-hd"
+        title={aberto ? "Recolher" : "Expandir resumo do dia"}
+      >
+        <span className="pdv-mini-bar-icon">◆</span>
+        <span className="pdv-mini-bar-lbl">Vendas de hoje</span>
+        {semVendas ? (
+          <span className="pdv-mini-bar-empty">sem vendas finalizadas</span>
+        ) : (
+          <>
+            <span className="pdv-mini-bar-total">{fmtBRL(totalPagamentos)}</span>
+            <span className="pdv-mini-bar-chips">
+              {r.porForma.slice(0, 6).map(f => {
+                const pct = (f.total / (totalPagamentos || 1)) * 100;
+                const cor = FORMA_COR_VAR[f.formaPagamento] || "var(--pdv-accent)";
+                return (
+                  <span key={f.formaPagamento} className="pdv-mini-bar-chip">
+                    <span className="pdv-mini-bar-dot" style={{ background: cor }} />
+                    <span style={{ color: "var(--pdv-t2)" }}>
+                      {(FORMA_LABEL[f.formaPagamento] || f.formaPagamento).slice(0, 4)}
+                    </span>
+                    <span style={{ color: cor, fontWeight: 600 }}>{pct.toFixed(0)}%</span>
                   </span>
-                  <span className="pdv-dash-pct" style={{ color: cor }}>{pct.toFixed(0)}%</span>
+                );
+              })}
+            </span>
+          </>
+        )}
+        <span className="pdv-mini-bar-date">{dataLabel}</span>
+        <span className={`pdv-mini-bar-chev ${aberto ? "is-open" : ""}`}>▾</span>
+      </button>
+
+      {aberto && !semVendas && (
+        <div className="pdv-mini-bar-body">
+          <div
+            className="pdv-dash-grid"
+            style={{ gridTemplateColumns: `repeat(${Math.min(r.porForma.length, 6)}, minmax(0, 1fr))` }}
+          >
+            {r.porForma.map(f => {
+              const pct = (f.total / (totalPagamentos || 1)) * 100;
+              const cor = FORMA_COR_VAR[f.formaPagamento] || "var(--pdv-accent)";
+              return (
+                <div key={f.formaPagamento} className="pdv-dash-block">
+                  <div className="pdv-dash-row">
+                    <span className="pdv-dash-label-mut">
+                      {FORMA_LABEL[f.formaPagamento] || f.formaPagamento}
+                    </span>
+                    <span className="pdv-dash-pct" style={{ color: cor }}>{pct.toFixed(0)}%</span>
+                  </div>
+                  <div className="pdv-dash-num" style={{ color: cor }}>
+                    {fmtBRL(f.total)}
+                  </div>
+                  <div className="pdv-dash-bar">
+                    <span style={{ width: `${pct}%`, background: cor }} />
+                  </div>
                 </div>
-                <div className="pdv-dash-num" style={{ color: cor }}>
-                  {fmtBRL(f.total)}
-                </div>
-                <div className="pdv-dash-bar">
-                  <span style={{ width: `${pct}%`, background: cor }} />
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

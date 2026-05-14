@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { C } from "./lib/theme.js";
 import { api } from "./lib/api.js";
 
@@ -99,7 +99,6 @@ export default function Dashboard({ user }) {
   const carregar = useCallback(async () => {
     setCarregando(true);
     setErro("");
-    setContagem(60);
     try {
       const data = await api.obterDashboard();
       setDados(data);
@@ -107,22 +106,27 @@ export default function Dashboard({ user }) {
       setErro(err.message);
     } finally {
       setCarregando(false);
+      setContagem(60);
     }
   }, []);
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  // Countdown de 60s; zera e recarrega ao atingir 0
+  // Decrementa o contador a cada segundo (só quando não está carregando)
   useEffect(() => {
     if (carregando) return;
     const timer = setInterval(() => {
-      setContagem(c => {
-        if (c <= 1) { carregar(); return 60; }
-        return c - 1;
-      });
+      setContagem(c => Math.max(0, c - 1));
     }, 1000);
     return () => clearInterval(timer);
-  }, [carregando, carregar]);
+  }, [carregando]);
+
+  // Dispara recarga quando o contador chega a zero
+  useEffect(() => {
+    if (contagem === 0 && !carregando) {
+      carregar();
+    }
+  }, [contagem, carregando, carregar]);
 
   if (carregando && !dados) {
     return <SkeletonDashboard />;
@@ -950,53 +954,60 @@ function PainelGraficoVendas({ dados, totalSemana }) {
           })}
 
           {/* Tooltip flutuante */}
-          {hoveredBar !== null && (() => {
-            const b = barras[hoveredBar];
-            const leftPct = (b.cx / W) * 100;
-            const topPct = Math.max(2, ((b.y - 8) / H) * 100);
-            return (
-              <div style={{
-                position: "absolute",
-                left: `clamp(2%, calc(${leftPct}% - 56px), calc(100% - 116px))`,
-                top: `${topPct}%`,
-                width: 112,
-                background: C.surface,
-                border: `1px solid ${C.border}`,
-                borderRadius: 9,
-                padding: "7px 10px",
-                fontSize: 11.5,
-                fontFamily: FONT_MONO,
-                color: C.text,
-                pointerEvents: "none",
-                zIndex: 10,
-                boxShadow: "0 6px 24px rgba(0,0,0,0.5)",
-              }}>
-                <div style={{
-                  fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase",
-                  color: C.muted, marginBottom: 4,
-                }}>
-                  {fmtDiaSemana(b.d.dia)} {fmtDiaCurto(b.d.dia)}
-                </div>
-                <div style={{ fontWeight: 700, color: b.ePico ? C.green : C.white, fontSize: 13 }}>
-                  {modo === "faturamento" ? fmtBRL(b.v) : `${b.v} venda${b.v !== 1 ? "s" : ""}`}
-                </div>
-                {modo === "faturamento" && (
-                  <div style={{ color: C.muted, fontSize: 10.5, marginTop: 2 }}>
-                    {b.d.qtd} venda{b.d.qtd !== 1 ? "s" : ""}
-                  </div>
-                )}
-                {b.ePico && (
-                  <div style={{
-                    fontSize: 9.5, color: C.green, marginTop: 4,
-                    letterSpacing: "0.08em", textTransform: "uppercase",
-                  }}>★ Pico</div>
-                )}
-              </div>
-            );
-          })()}
+          {hoveredBar !== null && (
+            <TooltipBarra
+              b={barras[hoveredBar]}
+              W={W} H={H}
+              modo={modo}
+            />
+          )}
         </div>
       </div>
     </Card>
+  );
+}
+
+function TooltipBarra({ b, W, H, modo }) {
+  const leftPct = (b.cx / W) * 100;
+  const topPct = Math.max(2, ((b.y - 8) / H) * 100);
+  return (
+    <div style={{
+      position: "absolute",
+      left: `${Math.min(Math.max(2, leftPct - 8), 72)}%`,
+      top: `${topPct}%`,
+      width: 112,
+      background: C.surface,
+      border: `1px solid ${C.border}`,
+      borderRadius: 9,
+      padding: "7px 10px",
+      fontSize: 11.5,
+      fontFamily: FONT_MONO,
+      color: C.text,
+      pointerEvents: "none",
+      zIndex: 10,
+      boxShadow: "0 6px 24px rgba(0,0,0,0.5)",
+    }}>
+      <div style={{
+        fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase",
+        color: C.muted, marginBottom: 4,
+      }}>
+        {fmtDiaSemana(b.d.dia)} {fmtDiaCurto(b.d.dia)}
+      </div>
+      <div style={{ fontWeight: 700, color: b.ePico ? C.green : C.white, fontSize: 13 }}>
+        {modo === "faturamento" ? fmtBRL(b.v) : `${b.v} venda${b.v !== 1 ? "s" : ""}`}
+      </div>
+      {modo === "faturamento" && (
+        <div style={{ color: C.muted, fontSize: 10.5, marginTop: 2 }}>
+          {b.d.qtd} venda{b.d.qtd !== 1 ? "s" : ""}
+        </div>
+      )}
+      {b.ePico && (
+        <div style={{
+          fontSize: 9.5, color: C.green, marginTop: 4,
+          letterSpacing: "0.08em", textTransform: "uppercase",
+        }}>★ Pico</div>
+      )}
+    </div>
   );
 }
 

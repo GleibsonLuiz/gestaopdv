@@ -2,9 +2,33 @@ import prisma from "../lib/prisma.js";
 
 const norm = (v) => (v === undefined || v === null || v === "" ? null : v);
 
+// ============ HELPERS DE SEGMENTACAO RFM ============
+//
+// Classifica clientes em segmentos com base em Recencia/Frequencia/Monetario.
+// Janela padrao de analise: 365 dias.
+//
+//   VIP        - alta frequencia + alto monetario + recencia baixa
+//   RECORRENTE - frequencia >= 3 e recencia < 90d
+//   NOVO       - 1 unica compra, ate 30 dias
+//   EM_RISCO   - frequencia >= 2 e recencia >= 90d e < 180d
+//   INATIVO    - recencia >= 180d (ou nunca comprou e cadastro > 60d)
+//   PROSPECT   - nunca comprou (recente)
+
+function classificarSegmento({ qtdCompras, totalGasto, recenciaDias, mediaTotal, mediaQtd }) {
+  if (qtdCompras === 0) {
+    return recenciaDias === null ? "PROSPECT" : "INATIVO";
+  }
+  if (recenciaDias >= 180) return "INATIVO";
+  if (qtdCompras >= 3 && totalGasto >= mediaTotal * 1.5 && recenciaDias < 60) return "VIP";
+  if (qtdCompras >= 3 && recenciaDias < 90) return "RECORRENTE";
+  if (qtdCompras === 1 && recenciaDias <= 30) return "NOVO";
+  if (recenciaDias >= 90 && recenciaDias < 180) return "EM_RISCO";
+  return qtdCompras > 0 ? "RECORRENTE" : "PROSPECT";
+}
+
 export async function listar(req, res, next) {
   try {
-    const { search, ativo } = req.query;
+    const { search, ativo, segmento, tagId } = req.query;
     const where = {};
     if (ativo === "true") where.ativo = true;
     if (ativo === "false") where.ativo = false;
@@ -15,11 +39,137 @@ export async function listar(req, res, next) {
         { email: { contains: search, mode: "insensitive" } },
       ];
     }
+    if (tagId) {
+      where.tags = { some: { tagId } };
+    }
     const clientes = await prisma.cliente.findMany({
       where,
       orderBy: { nome: "asc" },
+      include: { tags: { include: { tag: true } } },
     });
-    res.json(clientes);
+
+    // Achata as tags
+    const lista = clientes.map((c) => ({
+      ...c,
+      tags: c.tags.map((ct) => ({ id: ct.tag.id, nome: ct.tag.nome, cor: ct.tag.cor })),
+    }));
+
+    // Se nao filtrou por segmento, retorna direto (mais leve)
+    if (!segmento) return res.json(lista);
+
+    // Calcula RFM apenas para filtrar
+    const ids = lista.map((c) => c.id);
+    const vendas = await prisma.venda.findMany({
+      where: { clienteId: { in: ids }, status: "CONCLUIDA" },
+      select: { clienteId: true, total: true, createdAt: true },
+    });
+
+    const agg = new Map();
+    for (const v of vendas) {
+      const a = agg.get(v.clienteId) || { qtd: 0, total: 0, ultima: null };
+      a.qtd += 1;
+      a.total += Number(v.total);
+      if (!a.ultima || v.createdAt > a.ultima) a.ultima = v.createdAt;
+      agg.set(v.clienteId, a);
+    }
+
+    // Para o segmento VIP precisamos da media de todos os clientes
+    const arr = Array.from(agg.values());
+    const mediaTotal = arr.length ? arr.reduce((s, x) => s + x.total, 0) / arr.length : 0;
+    const mediaQtd = arr.length ? arr.reduce((s, x) => s + x.qtd, 0) / arr.length : 0;
+    const hoje = Date.now();
+
+    const filtrada = lista.filter((c) => {
+      const a = agg.get(c.id);
+      const qtdCompras = a?.qtd || 0;
+      const totalGasto = a?.total || 0;
+      const recenciaDias = a?.ultima ? Math.floor((hoje - a.ultima.getTime()) / 86400000) : null;
+      const seg = classificarSegmento({ qtdCompras, totalGasto, recenciaDias, mediaTotal, mediaQtd });
+      return seg === segmento;
+    });
+
+    res.json(filtrada);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ============ SEGMENTOS RFM ============
+//
+// Retorna lista de clientes com KPIs RFM calculados + segmento classificado.
+// Janela: ultimos 365 dias por default.
+
+export async function segmentos(req, res, next) {
+  try {
+    const dias = parseInt(req.query.dias || "365", 10);
+    const desde = new Date(Date.now() - dias * 86400000);
+
+    const [clientes, vendas] = await Promise.all([
+      prisma.cliente.findMany({
+        where: { ativo: true },
+        select: {
+          id: true, nome: true, telefone: true, email: true, cidade: true, estado: true,
+          createdAt: true,
+          tags: { include: { tag: true } },
+        },
+      }),
+      prisma.venda.findMany({
+        where: { status: "CONCLUIDA", createdAt: { gte: desde }, clienteId: { not: null } },
+        select: { clienteId: true, total: true, createdAt: true },
+      }),
+    ]);
+
+    const agg = new Map();
+    for (const v of vendas) {
+      if (!v.clienteId) continue;
+      const a = agg.get(v.clienteId) || { qtd: 0, total: 0, ultima: null };
+      a.qtd += 1;
+      a.total += Number(v.total);
+      if (!a.ultima || v.createdAt > a.ultima) a.ultima = v.createdAt;
+      agg.set(v.clienteId, a);
+    }
+
+    const arr = Array.from(agg.values());
+    const mediaTotal = arr.length ? arr.reduce((s, x) => s + x.total, 0) / arr.length : 0;
+    const mediaQtd = arr.length ? arr.reduce((s, x) => s + x.qtd, 0) / arr.length : 0;
+    const hoje = Date.now();
+
+    const enriquecidos = clientes.map((c) => {
+      const a = agg.get(c.id);
+      const qtdCompras = a?.qtd || 0;
+      const totalGasto = a?.total || 0;
+      const recenciaDias = a?.ultima ? Math.floor((hoje - a.ultima.getTime()) / 86400000) : null;
+      const ticketMedio = qtdCompras > 0 ? totalGasto / qtdCompras : 0;
+      const segmento = classificarSegmento({ qtdCompras, totalGasto, recenciaDias, mediaTotal, mediaQtd });
+      return {
+        id: c.id,
+        nome: c.nome,
+        telefone: c.telefone,
+        email: c.email,
+        cidade: c.cidade,
+        estado: c.estado,
+        tags: c.tags.map((ct) => ({ id: ct.tag.id, nome: ct.tag.nome, cor: ct.tag.cor })),
+        rfm: {
+          recenciaDias,
+          frequencia: qtdCompras,
+          monetario: totalGasto,
+          ticketMedio,
+          ultimaCompra: a?.ultima || null,
+        },
+        segmento,
+      };
+    });
+
+    // Contagem por segmento (para os KPIs)
+    const SEGS = ["VIP", "RECORRENTE", "NOVO", "EM_RISCO", "INATIVO", "PROSPECT"];
+    const resumo = {};
+    for (const s of SEGS) resumo[s] = { quantidade: 0, monetario: 0 };
+    for (const c of enriquecidos) {
+      resumo[c.segmento].quantidade += 1;
+      resumo[c.segmento].monetario += c.rfm.monetario;
+    }
+
+    res.json({ janelaDias: dias, resumo, clientes: enriquecidos });
   } catch (err) {
     next(err);
   }
@@ -29,9 +179,13 @@ export async function obter(req, res, next) {
   try {
     const cliente = await prisma.cliente.findUnique({
       where: { id: req.params.id },
+      include: { tags: { include: { tag: true } } },
     });
     if (!cliente) return res.status(404).json({ erro: "Cliente nao encontrado" });
-    res.json(cliente);
+    res.json({
+      ...cliente,
+      tags: cliente.tags.map((ct) => ({ id: ct.tag.id, nome: ct.tag.nome, cor: ct.tag.cor })),
+    });
   } catch (err) {
     next(err);
   }
@@ -95,7 +249,10 @@ export async function perfil(req, res, next) {
     const { id } = req.params;
 
     const [cliente, vendas, contasReceber, orcamentos] = await Promise.all([
-      prisma.cliente.findUnique({ where: { id } }),
+      prisma.cliente.findUnique({
+        where: { id },
+        include: { tags: { include: { tag: true } } },
+      }),
       prisma.venda.findMany({
         where: { clienteId: id },
         orderBy: { createdAt: "desc" },
@@ -161,14 +318,20 @@ export async function perfil(req, res, next) {
     const qtdCompras = vendasConcluidas.length;
     const ticketMedio = qtdCompras > 0 ? totalGasto / qtdCompras : 0;
     const ultimaCompra = vendasConcluidas.length > 0 ? vendasConcluidas[0].createdAt : null;
+    const recenciaDias = ultimaCompra
+      ? Math.floor((Date.now() - new Date(ultimaCompra).getTime()) / 86400000)
+      : null;
 
     const valorInadimplente = contasReceber
       .filter((c) => c.status === "ATRASADA" || c.status === "PENDENTE")
       .reduce((s, c) => s + Number(c.valor), 0);
 
     res.json({
-      cliente,
-      kpis: { totalGasto, qtdCompras, ticketMedio, ultimaCompra, valorInadimplente },
+      cliente: {
+        ...cliente,
+        tags: cliente.tags.map((ct) => ({ id: ct.tag.id, nome: ct.tag.nome, cor: ct.tag.cor })),
+      },
+      kpis: { totalGasto, qtdCompras, ticketMedio, ultimaCompra, recenciaDias, valorInadimplente },
       vendas,
       contasReceber,
       orcamentos,

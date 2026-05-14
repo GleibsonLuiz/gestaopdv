@@ -262,6 +262,7 @@ model Cliente {
   pontosCliente       PontosCliente?
   movimentacoesPontos MovimentacaoPontos[]
   oportunidades       Oportunidade[]
+  tags                ClienteTag[]
 
   @@map("clientes")
 }
@@ -904,6 +905,35 @@ model Oportunidade {
   @@index([responsavelId, etapa])
   @@index([clienteId])
   @@map("oportunidades")
+}
+
+// ============ CRM — TAGS / ETIQUETAS DE CLIENTE ============
+//
+// Tags livres atribuidas a clientes (B2B, ATACADO, VIP, INADIMPLENTE, etc).
+// Diferente dos segmentos RFM (que sao calculados), tags sao definidas
+// manualmente pelo usuario. Um cliente pode ter N tags.
+model Tag {
+  id        String   @id @default(uuid())
+  nome      String   @unique
+  cor       String   @default("#4f8ef7")
+  createdAt DateTime @default(now())
+
+  clientes ClienteTag[]
+
+  @@map("tags")
+}
+
+model ClienteTag {
+  clienteId String
+  tagId     String
+  createdAt DateTime @default(now())
+
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([clienteId, tagId])
+  @@index([tagId])
+  @@map("cliente_tags")
 }
 
 // Log de mudancas de etapa — permite calcular tempo medio em cada etapa

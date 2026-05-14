@@ -320,7 +320,20 @@ export default function Clientes({ user }) {
             alignItems: "center", fontSize: 13,
             opacity: c.ativo ? 1 : 0.55,
           }}>
-            <div style={{ color: C.white, fontWeight: 600 }}>{c.nome}</div>
+            <div>
+              <div style={{ color: C.white, fontWeight: 600 }}>{c.nome}</div>
+              {c.tags && c.tags.length > 0 && (
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>
+                  {c.tags.map((t) => (
+                    <span key={t.id} style={{
+                      background: t.cor + "22", color: t.cor,
+                      padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700,
+                      border: `1px solid ${t.cor}55`,
+                    }}>{t.nome}</span>
+                  ))}
+                </div>
+              )}
+            </div>
             <div style={{ color: C.text }}>{c.cpfCnpj || "—"}</div>
             <div style={{ color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.email || "—"}</div>
             <div style={{ color: C.text }}>{c.telefone || "—"}</div>

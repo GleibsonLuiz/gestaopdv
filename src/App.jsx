@@ -23,6 +23,7 @@ import Aparencia from "./Aparencia.jsx";
 import Tarefas from "./Tarefas.jsx";
 import Fidelidade from "./Fidelidade.jsx";
 import Funil from "./Funil.jsx";
+import Segmentos from "./Segmentos.jsx";
 import Alertas from "./Alertas.jsx";
 import { getUser, getToken, clearSession, api } from "./lib/api.js";
 import { podeAcessar } from "./lib/permissoes.js";
@@ -160,6 +161,7 @@ export default function App() {
     funcionarios: "FUNCIONARIOS",
     tarefas: "CLIENTES",
     fidelidade: "CLIENTES",
+    segmentos: "CLIENTES",
   };
 
   function podeVer(t) {
@@ -172,7 +174,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     if (!podeVer(tela)) {
-      const primeira = ["pdv","dashboard","caixa","clientes","tarefas","fidelidade","funil","fornecedores","produtos","etiquetas",
+      const primeira = ["pdv","dashboard","caixa","clientes","segmentos","tarefas","fidelidade","funil","fornecedores","produtos","etiquetas",
         "estoque","compras","orcamentos","financeiro","relatorios","comissoes","funcionarios","projeto","sistema","empresa"].find(podeVer);
       if (primeira && primeira !== tela) setTela(primeira);
     }
@@ -268,6 +270,9 @@ export default function App() {
           )}
           {podeAcessar(user, "CLIENTES") && (
             <Item icone="👥" label="Clientes" ativo={tela === "clientes"} onClick={() => navegar("clientes")} />
+          )}
+          {podeAcessar(user, "CLIENTES") && (
+            <Item icone="📊" label="Segmentos" ativo={tela === "segmentos"} onClick={() => navegar("segmentos")} />
           )}
           {podeAcessar(user, "CLIENTES") && (
             <Item icone="✅" label="Tarefas" ativo={tela === "tarefas"} onClick={() => navegar("tarefas")} />
@@ -471,6 +476,9 @@ export default function App() {
           )}
           {tela === "funil" && (
             <Funil user={user} />
+          )}
+          {tela === "segmentos" && (
+            <Segmentos user={user} />
           )}
           {tela === "financeiro" && (
             <FinanceiroPage user={user} />

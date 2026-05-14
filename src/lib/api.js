@@ -104,10 +104,12 @@ export const api = {
   trocarSenha: (senhaAtual, senhaNova) =>
     request("/auth/senha", { method: "PUT", body: { senhaAtual, senhaNova } }),
 
-  listarClientes: ({ search = "", ativo = "" } = {}) => {
+  listarClientes: ({ search = "", ativo = "", segmento = "", tagId = "" } = {}) => {
     const qs = new URLSearchParams();
     if (search) qs.set("search", search);
     if (ativo !== "") qs.set("ativo", ativo);
+    if (segmento) qs.set("segmento", segmento);
+    if (tagId) qs.set("tagId", tagId);
     const q = qs.toString();
     return request(`/clientes${q ? `?${q}` : ""}`);
   },
@@ -242,6 +244,22 @@ export const api = {
   converterOrcamentoEmVenda: (id, formaPagamento) =>
     request(`/orcamentos/${id}/converter-venda`, { method: "POST", body: { formaPagamento } }),
   excluirOrcamento: (id) => request(`/orcamentos/${id}`, { method: "DELETE" }),
+
+  // ==================== TAGS / SEGMENTACAO RFM ====================
+  listarTags: () => request("/tags"),
+  criarTag: (data) => request("/tags", { method: "POST", body: data }),
+  atualizarTag: (id, data) => request(`/tags/${id}`, { method: "PUT", body: data }),
+  excluirTag: (id) => request(`/tags/${id}`, { method: "DELETE" }),
+  atribuirTagCliente: (clienteId, tagId) =>
+    request(`/tags/clientes/${clienteId}/${tagId}`, { method: "POST" }),
+  removerTagCliente: (clienteId, tagId) =>
+    request(`/tags/clientes/${clienteId}/${tagId}`, { method: "DELETE" }),
+  segmentosClientes: ({ dias = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (dias) qs.set("dias", String(dias));
+    const q = qs.toString();
+    return request(`/clientes/segmentos${q ? `?${q}` : ""}`);
+  },
 
   // ==================== OPORTUNIDADES (FUNIL CRM) ====================
   listarOportunidades: ({ etapa = "", responsavelId = "", clienteId = "", origem = "", search = "", minhas = "" } = {}) => {

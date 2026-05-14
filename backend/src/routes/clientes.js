@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authRequired, requireRole, requirePermissao } from "../middlewares/auth.js";
-import { listar, obter, criar, atualizar, excluir, perfil } from "../controllers/clienteController.js";
+import { listar, obter, criar, atualizar, excluir, perfil, segmentos } from "../controllers/clienteController.js";
 import { listar as listarInteracoes, criar as criarInteracao, excluir as excluirInteracao } from "../controllers/interacaoController.js";
 
 const router = Router();
@@ -9,6 +9,7 @@ router.use(authRequired);
 
 // GETs liberados (PDV e outros modulos consultam clientes).
 router.get("/", listar);
+router.get("/segmentos", segmentos);
 router.get("/:id/perfil", perfil);
 router.get("/:id", obter);
 router.post("/", requirePermissao("CLIENTES"), criar);

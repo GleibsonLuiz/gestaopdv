@@ -11,7 +11,10 @@ router.get("/", listar);
 router.get("/:id", obter);
 router.post("/", criar);
 router.post("/:id/cancelar", requireRole("ADMIN", "GERENTE"), cancelar);
-router.post("/:id/reabrir", requireRole("ADMIN", "GERENTE"), reabrir);
-router.post("/:id/refinalizar", requireRole("ADMIN", "GERENTE"), refinalizar);
+// VENDEDOR pode reabrir/refinalizar desde que apresente autorizacao
+// (email + senha) de um ADMIN/GERENTE — verificado no controller via
+// exigirAutorizacaoGerencial.
+router.post("/:id/reabrir", reabrir);
+router.post("/:id/refinalizar", refinalizar);
 
 export default router;

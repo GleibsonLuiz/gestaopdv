@@ -2196,14 +2196,20 @@ function Historico({ user }) {
   const [detalhe, setDetalhe] = useState(null);
   const [reimpressao, setReimpressao] = useState(null);
   const [refinalizar, setRefinalizar] = useState(null);
+  const [autorizacaoPendente, setAutorizacaoPendente] = useState(null);
+  const [autorizacaoCreds, setAutorizacaoCreds] = useState(null);
   const [mensagem, setMensagem] = useState("");
 
   const podeCancelar = user.role === "ADMIN" || user.role === "GERENTE";
-  const podeReabrir = user.role === "ADMIN" || user.role === "GERENTE";
+  // VENDEDOR pode alterar forma de pagamento, mas precisa de autorizacao
+  // gerencial (email + senha de um ADMIN/GERENTE) — validada no backend.
+  const podeReabrir = true;
+  const exigeAutorizacao = user.role === "VENDEDOR";
 
   useModalKeys(!!detalhe, { onClose: () => setDetalhe(null) });
   useModalKeys(!!reimpressao, { onClose: () => setReimpressao(null) });
   useModalKeys(!!refinalizar, { onClose: () => setRefinalizar(null) });
+  useModalKeys(!!autorizacaoPendente, { onClose: () => setAutorizacaoPendente(null) });
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -2261,29 +2267,77 @@ function Historico({ user }) {
     }
   }
 
-  async function reabrir(v) {
-    const msg =
-      `Reabrir venda #${v.numero} para alterar a forma de pagamento?\n\n` +
-      `• O lançamento no caixa será estornado.\n` +
-      `• Contas a receber pendentes serão canceladas.\n` +
-      `• O estoque NÃO será mexido (o cliente já levou a mercadoria).`;
-    if (!confirm(msg)) return;
+  // Ponto de entrada para "Alterar forma de pagamento" / "Continuar refinalizacao".
+  // VENDEDOR cai antes na AutorizacaoModal; ADMIN/GERENTE seguem direto.
+  function solicitarAlteracao(v, tipo) {
+    if (exigeAutorizacao) {
+      // Fecha o modal de detalhe (se estiver aberto) antes de pedir
+      // a senha, para nao empilhar dois modais e nao reagir 2x ao Esc.
+      setDetalhe(null);
+      setAutorizacaoPendente({ tipo, venda: v });
+      return;
+    }
+    if (tipo === "reabrir") return reabrir(v, null);
+    if (tipo === "continuar") return continuarRefinalizacao(v, null);
+  }
+
+  async function reabrir(v, autorizacao) {
+    // Para ADMIN/GERENTE mantemos o aviso por confirm. VENDEDOR ja viu a
+    // modal de autorizacao gerencial, entao pulamos o confirm para nao
+    // duplicar a friccao.
+    if (!autorizacao) {
+      const msg =
+        `Reabrir venda #${v.numero} para alterar a forma de pagamento?\n\n` +
+        `• O lançamento no caixa será estornado.\n` +
+        `• Contas a receber pendentes serão canceladas.\n` +
+        `• O estoque NÃO será mexido (o cliente já levou a mercadoria).`;
+      if (!confirm(msg)) return;
+    }
     try {
-      const reaberta = await api.reabrirVenda(v.id);
+      const reaberta = await api.reabrirVenda(v.id, autorizacao || undefined);
       flash(`Venda #${v.numero} reaberta — selecione a nova forma de pagamento.`);
       setDetalhe(null);
+      setAutorizacaoCreds(autorizacao || null);
       setRefinalizar(reaberta);
       carregar();
+    } catch (err) {
+      alert(err.message);
+      // Em caso de senha invalida, reabre a modal de autorizacao para
+      // o vendedor tentar de novo sem perder o contexto.
+      if (autorizacao) setAutorizacaoPendente({ tipo: "reabrir", venda: v });
+    }
+  }
+
+  async function continuarRefinalizacao(v, autorizacao) {
+    try {
+      const completa = await api.obterVenda(v.id);
+      setAutorizacaoCreds(autorizacao || null);
+      setRefinalizar(completa);
+      setDetalhe(null);
     } catch (err) {
       alert(err.message);
     }
   }
 
+  async function confirmarAutorizacao(creds) {
+    const pend = autorizacaoPendente;
+    if (!pend) return;
+    const autorizacao = {
+      emailAutorizacao: creds.email,
+      senhaAutorizacao: creds.senha,
+    };
+    setAutorizacaoPendente(null);
+    if (pend.tipo === "reabrir") await reabrir(pend.venda, autorizacao);
+    else if (pend.tipo === "continuar") await continuarRefinalizacao(pend.venda, autorizacao);
+  }
+
   async function aplicarRefinalizacao(payload) {
+    const corpo = autorizacaoCreds ? { ...payload, ...autorizacaoCreds } : payload;
     try {
-      await api.refinalizarVenda(refinalizar.id, payload);
+      await api.refinalizarVenda(refinalizar.id, corpo);
       flash(`Venda #${refinalizar.numero} refinalizada com ${FORMA_LABEL[payload.formaPagamento]}.`);
       setRefinalizar(null);
+      setAutorizacaoCreds(null);
       carregar();
     } catch (err) {
       alert(err.message);
@@ -2415,19 +2469,14 @@ function Historico({ user }) {
                       label: "Alterar forma de pagamento",
                       icon: "💱",
                       color: C.yellow,
-                      onClick: () => reabrir(v),
+                      onClick: () => solicitarAlteracao(v, "reabrir"),
                       hidden: !podeReabrir || v.status !== "CONCLUIDA",
                     },
                     {
                       label: "Continuar refinalização",
                       icon: "▶",
                       color: C.yellow,
-                      onClick: async () => {
-                        try {
-                          const completa = await api.obterVenda(v.id);
-                          setRefinalizar(completa);
-                        } catch (err) { alert(err.message); }
-                      },
+                      onClick: () => solicitarAlteracao(v, "continuar"),
                       hidden: !podeReabrir || v.status !== "EM_EDICAO",
                     },
                   ]}
@@ -2443,11 +2492,8 @@ function Historico({ user }) {
           venda={detalhe}
           onFechar={() => setDetalhe(null)}
           onCancelar={podeCancelar && detalhe.status === "CONCLUIDA" ? () => cancelar(detalhe) : null}
-          onReabrir={podeReabrir && detalhe.status === "CONCLUIDA" ? () => reabrir(detalhe) : null}
-          onContinuarRefinalizacao={podeReabrir && detalhe.status === "EM_EDICAO" ? () => {
-            setRefinalizar(detalhe);
-            setDetalhe(null);
-          } : null}
+          onReabrir={podeReabrir && detalhe.status === "CONCLUIDA" ? () => solicitarAlteracao(detalhe, "reabrir") : null}
+          onContinuarRefinalizacao={podeReabrir && detalhe.status === "EM_EDICAO" ? () => solicitarAlteracao(detalhe, "continuar") : null}
           onReimprimir={detalhe.status === "CONCLUIDA" ? () => {
             setReimpressao(detalhe);
             setDetalhe(null);
@@ -2466,8 +2512,19 @@ function Historico({ user }) {
       {refinalizar && (
         <RefinalizarVendaModal
           venda={refinalizar}
-          onFechar={() => setRefinalizar(null)}
+          onFechar={() => { setRefinalizar(null); setAutorizacaoCreds(null); }}
           onAplicar={aplicarRefinalizacao}
+        />
+      )}
+
+      {autorizacaoPendente && (
+        <AutorizacaoGerencialModal
+          venda={autorizacaoPendente.venda}
+          acao={autorizacaoPendente.tipo === "continuar"
+            ? "continuar a refinalizacao da venda"
+            : "alterar a forma de pagamento desta venda"}
+          onCancelar={() => setAutorizacaoPendente(null)}
+          onConfirmar={confirmarAutorizacao}
         />
       )}
     </div>
@@ -2736,6 +2793,80 @@ function RefinalizarVendaModal({ venda, onFechar, onAplicar }) {
             {salvando ? "Aplicando…" : `Confirmar (${FORMA_LABEL[forma] || ""})`}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function AutorizacaoGerencialModal({ venda, acao, onCancelar, onConfirmar }) {
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const podeConfirmar = email.trim() && senha;
+
+  async function submeter(e) {
+    e.preventDefault();
+    if (!podeConfirmar || enviando) return;
+    setEnviando(true);
+    try {
+      await onConfirmar({ email: email.trim(), senha });
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div onClick={onCancelar} className="pdv-modal-bg">
+      <div onClick={e => e.stopPropagation()} className="pdv-modal" style={{ width: "min(460px, calc(100vw - 32px))" }}>
+        <div className="pdv-modal-hd">
+          <div>
+            <div className="pdv-modal-title">🔐 Autorização gerencial</div>
+            <div className="pdv-modal-sub">
+              Venda #{venda?.numero} · {acao}
+            </div>
+          </div>
+          <button type="button" onClick={onCancelar} className="pdv-modal-x">×</button>
+        </div>
+
+        <form onSubmit={submeter}>
+          <div className="pdv-modal-body" style={{ paddingBottom: 14 }}>
+            <div style={{
+              padding: "12px 14px", borderRadius: 10, marginBottom: 14,
+              background: "color-mix(in oklab, var(--pdv-c-amber, #f59e0b) 12%, transparent)",
+              border: "1px solid rgba(245,158,11,.30)",
+              color: "var(--pdv-t2)", fontSize: 12.5, lineHeight: 1.45,
+            }}>
+              Esta operação requer aprovação de um <b>ADMIN ou GERENTE</b>.
+              Peça para alguém autorizado digitar e-mail e senha abaixo.
+            </div>
+
+            <label className="pdv-field-label" style={{ display: "block", marginBottom: 4 }}>E-mail do autorizador</label>
+            <input
+              type="email" autoComplete="off" autoFocus
+              value={email} onChange={e => setEmail(e.target.value)}
+              placeholder="gerente@empresa.com"
+              className="pdv-field-input"
+              style={{ marginBottom: 12 }}
+            />
+
+            <label className="pdv-field-label" style={{ display: "block", marginBottom: 4 }}>Senha</label>
+            <input
+              type="password" autoComplete="new-password"
+              value={senha} onChange={e => setSenha(e.target.value)}
+              placeholder="••••••••"
+              className="pdv-field-input"
+            />
+          </div>
+
+          <div className="pdv-modal-foot" style={{ justifyContent: "flex-end", gap: 10 }}>
+            <button type="button" onClick={onCancelar} disabled={enviando} className="pdv-btn-ghost">
+              Cancelar <span className="pdv-kbd is-warn" style={{ marginLeft: 4 }}>Esc</span>
+            </button>
+            <button type="submit" disabled={!podeConfirmar || enviando} className="pdv-btn-primary" style={{ padding: "10px 18px" }}>
+              {enviando ? "Validando…" : "Autorizar"}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

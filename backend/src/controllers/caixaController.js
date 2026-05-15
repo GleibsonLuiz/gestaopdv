@@ -26,7 +26,7 @@ function whereCaixaAberto(userId, tipoCaixa) {
 
 // Operacoes sensiveis (sangria, fechamento) feitas por VENDEDOR exigem
 // senha de um ADMIN/GERENTE ativo. ADMIN/GERENTE passam direto.
-async function exigirAutorizacaoGerencial(req) {
+export async function exigirAutorizacaoGerencial(req) {
   if (req.user.role !== "VENDEDOR") return; // ADMIN/GERENTE passam
   const { senhaAutorizacao, emailAutorizacao } = req.body || {};
   if (!senhaAutorizacao || !emailAutorizacao) {

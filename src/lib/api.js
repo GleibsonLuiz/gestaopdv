@@ -227,7 +227,10 @@ export const api = {
   obterVenda: (id) => request(`/vendas/${id}`),
   criarVenda: (data) => request("/vendas", { method: "POST", body: data }),
   cancelarVenda: (id) => request(`/vendas/${id}/cancelar`, { method: "POST" }),
-  reabrirVenda: (id) => request(`/vendas/${id}/reabrir`, { method: "POST" }),
+  reabrirVenda: (id, autorizacao) => request(`/vendas/${id}/reabrir`, {
+    method: "POST",
+    body: autorizacao && autorizacao.emailAutorizacao ? autorizacao : undefined,
+  }),
   refinalizarVenda: (id, data) => request(`/vendas/${id}/refinalizar`, { method: "POST", body: data }),
 
   // ==================== ORCAMENTOS / ORDENS DE SERVICO ====================

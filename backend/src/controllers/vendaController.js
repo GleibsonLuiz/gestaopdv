@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import prisma from "../lib/prisma.js";
-import { exigirCaixaAberto, registrarNoCaixaAberto, calcularTotaisCaixa } from "./caixaController.js";
+import { exigirCaixaAberto, registrarNoCaixaAberto, calcularTotaisCaixa, exigirAutorizacaoGerencial } from "./caixaController.js";
 import { parseDate, calcularValores, gerarSerieRecorrencia } from "../lib/contas.js";
 
 const FORMAS_VALIDAS = new Set([
@@ -410,6 +410,7 @@ export async function reabrir(req, res, next) {
   try {
     const id = req.params.id;
     try {
+      await exigirAutorizacaoGerencial(req);
       const venda = await prisma.$transaction(async (tx) => {
         const atual = await tx.venda.findUnique({
           where: { id },
@@ -496,6 +497,13 @@ export async function refinalizar(req, res, next) {
   try {
     const id = req.params.id;
     const { formaPagamento, gerarContaReceber } = req.body;
+
+    try {
+      await exigirAutorizacaoGerencial(req);
+    } catch (err) {
+      if (err.status) return res.status(err.status).json({ erro: err.message });
+      throw err;
+    }
 
     if (!formaPagamento || !FORMAS_VALIDAS.has(formaPagamento)) {
       return res.status(400).json({ erro: "Forma de pagamento invalida" });

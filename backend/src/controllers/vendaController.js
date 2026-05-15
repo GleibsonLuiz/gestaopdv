@@ -46,7 +46,13 @@ export async function listar(req, res, next) {
     const { clienteId, userId, formaPagamento, status, dataInicio, dataFim, limite } = req.query;
     const where = {};
     if (clienteId) where.clienteId = clienteId;
-    if (userId) where.userId = userId;
+    // VENDEDOR so ve as proprias vendas (ignora userId da query). ADMIN e
+    // GERENTE podem filtrar por qualquer vendedor.
+    if (req.user.role === "VENDEDOR") {
+      where.userId = req.user.sub;
+    } else if (userId) {
+      where.userId = userId;
+    }
     if (formaPagamento && FORMAS_VALIDAS.has(formaPagamento)) where.formaPagamento = formaPagamento;
     if (status) where.status = status;
     if (dataInicio || dataFim) {
@@ -74,6 +80,11 @@ export async function obter(req, res, next) {
       include: INCLUDE_DETALHE,
     });
     if (!venda) return res.status(404).json({ erro: "Venda nao encontrada" });
+    // VENDEDOR so abre detalhe das proprias vendas (consistente com a
+    // listagem). 404 ao inves de 403 para nao revelar existencia.
+    if (req.user.role === "VENDEDOR" && venda.userId !== req.user.sub) {
+      return res.status(404).json({ erro: "Venda nao encontrada" });
+    }
     res.json(venda);
   } catch (err) {
     next(err);

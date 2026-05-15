@@ -106,6 +106,7 @@ function RelatoriosCrm() {
     { id: "funil", label: "📊 Funil de Vendas", cor: "#7c3aed" },
     { id: "performance", label: "🏅 Performance Comercial", cor: C.accent },
     { id: "carteira", label: "👥 Carteira de Clientes (RFM)", cor: C.green },
+    { id: "nps", label: "😊 NPS & Satisfação", cor: C.yellow },
   ];
   const [sub, setSub] = useState("funil");
 
@@ -129,6 +130,7 @@ function RelatoriosCrm() {
       {sub === "funil" && <RelatorioFunilCrm key="cf" />}
       {sub === "performance" && <RelatorioPerformanceCrm key="cp" />}
       {sub === "carteira" && <RelatorioCarteiraCrm key="cc" />}
+      {sub === "nps" && <RelatorioNpsCrm key="cn" />}
     </div>
   );
 }
@@ -1474,6 +1476,327 @@ function RelatorioPerformanceCrm() {
                 ])}
             />
           )}
+        </>
+      )}
+    </BlocoRelatorio>
+  );
+}
+
+// ============ RELATÓRIO DE NPS CONSOLIDADO ============
+const FAIXA_NPS_INFO = {
+  DETRATOR: { label: "Detratores", cor: C.red, icone: "😠", faixa: "0-6" },
+  NEUTRO: { label: "Neutros", cor: C.yellow, icone: "😐", faixa: "7-8" },
+  PROMOTOR: { label: "Promotores", cor: C.green, icone: "😍", faixa: "9-10" },
+};
+
+function corNps(score) {
+  if (score >= 75) return C.green;
+  if (score >= 50) return "#22c55e";
+  if (score >= 0) return C.yellow;
+  return C.red;
+}
+
+function classificacaoNps(score) {
+  if (score >= 75) return "Excelente";
+  if (score >= 50) return "Muito bom";
+  if (score >= 0) return "Razoável";
+  return "Crítico";
+}
+
+function fmtMes(ym) {
+  if (!ym) return "—";
+  const [a, m] = ym.split("-");
+  const meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+  return `${meses[parseInt(m, 10) - 1]}/${a}`;
+}
+
+function RelatorioNpsCrm() {
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+  const [userId, setUserId] = useState("");
+  const [somenteRespondidas, setSomenteRespondidas] = useState("");
+  const [usuarios, setUsuarios] = useState([]);
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
+  }, []);
+
+  const gerar = useCallback(async () => {
+    setCarregando(true); setErro("");
+    try {
+      const r = await api.relatorioNpsCrm({ dataInicio, dataFim, userId, somenteRespondidas });
+      setDados(r);
+    } catch (err) { setErro(err.message); }
+    finally { setCarregando(false); }
+  }, [dataInicio, dataFim, userId, somenteRespondidas]);
+
+  async function exportar() {
+    if (!dados) return;
+    const doc = await criarPDF("Relatório de NPS & Satisfação (CRM)");
+    addPeriodo(doc, dataInicio, dataFim);
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 4,
+      head: [["Indicador", "Valor"]],
+      body: [
+        ["NPS Score", `${dados.resumo.npsScore.toFixed(1)} (${classificacaoNps(dados.resumo.npsScore)})`],
+        ["Pesquisas enviadas", fmtNum(dados.resumo.totalEnviadas)],
+        ["Pesquisas respondidas", fmtNum(dados.resumo.respondidas)],
+        ["Taxa de resposta", `${dados.resumo.taxaResposta.toFixed(1)}%`],
+        ["Nota média", dados.resumo.notaMedia.toFixed(2)],
+        ["Detratores (0-6)", fmtNum(dados.resumo.detratores)],
+        ["Neutros (7-8)", fmtNum(dados.resumo.neutros)],
+        ["Promotores (9-10)", fmtNum(dados.resumo.promotores)],
+      ],
+      theme: "striped", headStyles: { fillColor: [245, 158, 11] },
+      styles: { fontSize: 10 },
+    });
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 6,
+      head: [["Faixa", "Quantidade", "%"]],
+      body: dados.distribuicao.map(d => [
+        d.label, fmtNum(d.quantidade), `${d.percentual.toFixed(1)}%`,
+      ]),
+      theme: "striped", headStyles: { fillColor: [245, 158, 11] },
+      styles: { fontSize: 9 },
+    });
+
+    if (dados.porVendedor.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["#", "Vendedor", "Enviadas", "Respondidas", "Taxa resp.", "Nota méd.", "NPS"]],
+        body: dados.porVendedor.map((v, i) => [
+          i + 1, v.nome,
+          fmtNum(v.enviadas), fmtNum(v.respondidas),
+          `${v.taxaResposta.toFixed(1)}%`,
+          v.notaMedia.toFixed(2),
+          v.nps.toFixed(1),
+        ]),
+        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        styles: { fontSize: 9 },
+      });
+    }
+
+    if (dados.evolucaoMensal.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["Mês", "Respondidas", "Nota média", "NPS"]],
+        body: dados.evolucaoMensal.map(e => [
+          fmtMes(e.mes), fmtNum(e.respondidas), e.notaMedia.toFixed(2), e.nps.toFixed(1),
+        ]),
+        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        styles: { fontSize: 9 },
+      });
+    }
+
+    if (dados.detratoresRecentes.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["🚨 Detratores recentes (últimos 30 dias) — PRIORIDADE DE CONTATO", "", "", "", ""]],
+        body: [],
+        styles: { fontSize: 11, fontStyle: "bold" }, theme: "plain",
+      });
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY,
+        head: [["Data", "Cliente", "Venda", "Vendedor", "Nota", "Comentário"]],
+        body: dados.detratoresRecentes.map(d => [
+          fmtData(d.respondidaEm),
+          d.cliente || "—",
+          d.venda ? `#${d.venda.numero}` : "—",
+          d.vendedor || "—",
+          d.nota,
+          d.comentario || "(sem comentário)",
+        ]),
+        theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+        styles: { fontSize: 8 },
+      });
+    }
+
+    doc.save(`relatorio-nps-crm-${hoje()}.pdf`);
+  }
+
+  return (
+    <BlocoRelatorio
+      titulo="Relatório de NPS & Satisfação (CRM)" cor={C.yellow}
+      filtros={
+        <>
+          <CampoData label="De" value={dataInicio} onChange={setDataInicio} />
+          <CampoData label="Até" value={dataFim} onChange={setDataFim} />
+          <CampoSelectBusca label="Vendedor (da venda)" opcoes={usuarios} value={userId} onChange={setUserId} placeholder="Todos" />
+          <CampoSelect label="Mostrar" value={somenteRespondidas} onChange={setSomenteRespondidas}>
+            <option value="">Todas pesquisas</option>
+            <option value="true">Só respondidas</option>
+          </CampoSelect>
+        </>
+      }
+      onGerar={gerar} onExportar={exportar} carregando={carregando}
+      erro={erro} dados={dados}
+    >
+      {dados && (
+        <>
+          {/* Card grande do NPS Score */}
+          <div style={{
+            background: C.card, border: `1px solid ${C.border}`,
+            borderRadius: 12, padding: 20, marginBottom: 16,
+            display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap",
+          }}>
+            <div style={{
+              width: 140, height: 140, borderRadius: "50%",
+              background: `radial-gradient(circle, ${corNps(dados.resumo.npsScore)}22 0%, transparent 70%)`,
+              border: `3px solid ${corNps(dados.resumo.npsScore)}`,
+              display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center",
+            }}>
+              <div style={{ color: corNps(dados.resumo.npsScore), fontSize: 36, fontWeight: 800, lineHeight: 1 }}>
+                {dados.resumo.npsScore.toFixed(0)}
+              </div>
+              <div style={{ color: C.muted, fontSize: 10, marginTop: 4, textTransform: "uppercase", letterSpacing: 1 }}>
+                NPS Score
+              </div>
+            </div>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ color: corNps(dados.resumo.npsScore), fontSize: 22, fontWeight: 800 }}>
+                {classificacaoNps(dados.resumo.npsScore)}
+              </div>
+              <div style={{ color: C.muted, fontSize: 12, marginTop: 4, lineHeight: 1.6 }}>
+                {fmtNum(dados.resumo.respondidas)} respostas de {fmtNum(dados.resumo.totalEnviadas)} pesquisas
+                ({dados.resumo.taxaResposta.toFixed(1)}% de taxa de resposta).<br />
+                Nota média: <strong style={{ color: C.text }}>{dados.resumo.notaMedia.toFixed(2)}</strong> · Detratores: <strong style={{ color: C.red }}>{dados.resumo.detratores}</strong> · Promotores: <strong style={{ color: C.green }}>{dados.resumo.promotores}</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* Barra horizontal de distribuição */}
+          {dados.resumo.respondidas > 0 && (
+            <div style={{
+              background: C.card, border: `1px solid ${C.border}`,
+              borderRadius: 12, padding: 16, marginBottom: 16,
+            }}>
+              <div style={{ color: C.white, fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
+                Distribuição das respostas
+              </div>
+              <div style={{ display: "flex", height: 32, borderRadius: 8, overflow: "hidden" }}>
+                {dados.distribuicao.map(d => {
+                  const info = FAIXA_NPS_INFO[d.faixa];
+                  if (d.quantidade === 0) return null;
+                  return (
+                    <div key={d.faixa} style={{
+                      width: `${d.percentual}%`, background: info.cor,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: C.white, fontSize: 11, fontWeight: 700,
+                    }}>
+                      {d.percentual >= 8 ? `${info.icone} ${d.percentual.toFixed(0)}%` : ""}
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-around", marginTop: 10, flexWrap: "wrap", gap: 8 }}>
+                {dados.distribuicao.map(d => {
+                  const info = FAIXA_NPS_INFO[d.faixa];
+                  return (
+                    <div key={d.faixa} style={{ textAlign: "center", minWidth: 120 }}>
+                      <div style={{ color: info.cor, fontSize: 18, fontWeight: 800 }}>
+                        {info.icone} {fmtNum(d.quantidade)}
+                      </div>
+                      <div style={{ color: C.muted, fontSize: 11 }}>
+                        {info.label} ({info.faixa}) · {d.percentual.toFixed(1)}%
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {dados.detratoresRecentes.length > 0 && (
+            <div style={{
+              background: C.red + "11", border: `1px solid ${C.red}55`,
+              borderRadius: 12, padding: 16, marginBottom: 16,
+            }}>
+              <div style={{ color: C.red, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>
+                🚨 Detratores recentes — prioridade de contato ({dados.detratoresRecentes.length})
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {dados.detratoresRecentes.map(d => (
+                  <div key={d.id} style={{
+                    background: C.card, border: `1px solid ${C.border}`,
+                    borderRadius: 8, padding: "10px 12px",
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                      <div style={{ color: C.text, fontSize: 13, fontWeight: 700 }}>
+                        {d.cliente || "Cliente sem cadastro"}
+                        {d.venda && <span style={{ color: C.muted, fontWeight: 500 }}> · Venda #{d.venda.numero}</span>}
+                      </div>
+                      <div style={{ color: C.red, fontSize: 16, fontWeight: 800 }}>
+                        Nota {d.nota}/10
+                      </div>
+                    </div>
+                    <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>
+                      {fmtData(d.respondidaEm)} · vendedor: {d.vendedor || "—"}
+                    </div>
+                    {d.comentario && (
+                      <div style={{
+                        color: C.text, fontSize: 12, marginTop: 6,
+                        padding: "8px 10px", background: C.surface, borderRadius: 6,
+                        borderLeft: `3px solid ${C.red}`,
+                      }}>
+                        “{d.comentario}”
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {dados.porVendedor.length > 0 && (
+            <Tabela
+              titulo={`NPS por vendedor (${dados.porVendedor.length})`}
+              colunas={["#", "Vendedor", "Enviadas", "Respondidas", "Taxa resp.", "Nota média", "NPS"]}
+              alinhamentos={["center", "left", "right", "right", "right", "right", "right"]}
+              linhas={dados.porVendedor.map((v, i) => [
+                i + 1, v.nome,
+                fmtNum(v.enviadas), fmtNum(v.respondidas),
+                `${v.taxaResposta.toFixed(1)}%`,
+                v.notaMedia.toFixed(2),
+                <span key={v.id} style={{ color: corNps(v.nps), fontWeight: 700 }}>{v.nps.toFixed(1)}</span>,
+              ])}
+            />
+          )}
+
+          {dados.evolucaoMensal.length > 0 && (
+            <Tabela
+              titulo={`Evolução mensal (${dados.evolucaoMensal.length} ${dados.evolucaoMensal.length === 1 ? "mês" : "meses"})`}
+              colunas={["Mês", "Respondidas", "Nota média", "NPS"]}
+              alinhamentos={["left", "right", "right", "right"]}
+              linhas={dados.evolucaoMensal.map(e => [
+                fmtMes(e.mes),
+                fmtNum(e.respondidas),
+                e.notaMedia.toFixed(2),
+                <span key={e.mes} style={{ color: corNps(e.nps), fontWeight: 700 }}>{e.nps.toFixed(1)}</span>,
+              ])}
+            />
+          )}
+
+          <Tabela
+            titulo={`Pesquisas (${dados.pesquisas.length})`}
+            colunas={["Data", "Cliente", "Venda", "Vendedor", "Nota", "Faixa", "Comentário"]}
+            alinhamentos={["left", "left", "left", "left", "right", "left", "left"]}
+            linhas={dados.pesquisas.map(p => [
+              fmtData(p.respondidaEm || p.createdAt),
+              p.cliente || "—",
+              p.venda ? `#${p.venda.numero}` : "—",
+              p.vendedor || "—",
+              p.nota !== null && p.nota !== undefined ? p.nota : "—",
+              p.faixa ? (FAIXA_NPS_INFO[p.faixa]?.label || p.faixa) : "Sem resposta",
+              p.comentario || "—",
+            ])}
+            vazioTexto="Nenhuma pesquisa no período."
+          />
         </>
       )}
     </BlocoRelatorio>

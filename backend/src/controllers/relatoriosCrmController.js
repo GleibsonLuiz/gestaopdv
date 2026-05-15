@@ -289,6 +289,210 @@ export async function relatorioFunilCrm(req, res, next) {
   }
 }
 
+// ============ RELATORIO NPS CONSOLIDADO ============
+//
+// Net Promoter Score (NPS) calculado sobre PesquisaNps criadas a partir
+// de Vendas CONCLUIDAS no periodo.
+//
+// Faixas (padrao NPS):
+//   0-6  = Detrator
+//   7-8  = Neutro
+//   9-10 = Promotor
+//
+// NPS Score = %promotores - %detratores
+//
+// Filtros:
+//   dataInicio, dataFim   -> periodo de criacao da pesquisa (createdAt)
+//   userId                -> vendedor da Venda associada
+//   somenteRespondidas    -> "true" exclui as nao respondidas
+//
+// Retorno:
+//   resumo                -> NPS score, taxa de resposta, contagens
+//   distribuicao          -> detratores/neutros/promotores (qtd, %)
+//   porVendedor           -> NPS por vendedor da venda
+//   evolucaoMensal        -> NPS por mes (ano-mes) com qtd
+//   detratoresRecentes    -> nota 0-6 dos ultimos 30 dias
+//   pesquisas             -> detalhamento
+
+function faixaNps(nota) {
+  if (nota === null || nota === undefined) return null;
+  if (nota <= 6) return "DETRATOR";
+  if (nota <= 8) return "NEUTRO";
+  return "PROMOTOR";
+}
+
+function ymKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+export async function relatorioNpsCrm(req, res, next) {
+  try {
+    const { dataInicio, dataFim, userId, somenteRespondidas } = req.query;
+    const di = parseDataInicio(dataInicio);
+    const df = parseDataFim(dataFim);
+
+    const where = {};
+    if (di || df) where.createdAt = {};
+    if (di) where.createdAt.gte = di;
+    if (df) where.createdAt.lte = df;
+    if (somenteRespondidas === "true") where.respondidaEm = { not: null };
+    if (userId) where.venda = { userId };
+
+    const pesquisas = await prisma.pesquisaNps.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      include: {
+        cliente: { select: { id: true, nome: true } },
+        venda: {
+          select: {
+            id: true, numero: true, total: true, createdAt: true,
+            user: { select: { id: true, nome: true } },
+          },
+        },
+      },
+    });
+
+    // ===== CONTAGENS =====
+    const totalEnviadas = pesquisas.length;
+    let respondidas = 0;
+    let detratores = 0, neutros = 0, promotores = 0;
+    let somaNotas = 0;
+
+    for (const p of pesquisas) {
+      if (p.nota === null || p.nota === undefined) continue;
+      respondidas += 1;
+      somaNotas += p.nota;
+      const f = faixaNps(p.nota);
+      if (f === "DETRATOR") detratores += 1;
+      else if (f === "NEUTRO") neutros += 1;
+      else if (f === "PROMOTOR") promotores += 1;
+    }
+
+    const npsScore = respondidas > 0
+      ? ((promotores / respondidas) * 100) - ((detratores / respondidas) * 100)
+      : 0;
+    const notaMedia = respondidas > 0 ? somaNotas / respondidas : 0;
+    const taxaResposta = totalEnviadas > 0 ? (respondidas / totalEnviadas) * 100 : 0;
+
+    const distribuicao = [
+      { faixa: "DETRATOR", label: "Detratores (0-6)", quantidade: detratores, percentual: respondidas > 0 ? (detratores / respondidas) * 100 : 0 },
+      { faixa: "NEUTRO", label: "Neutros (7-8)", quantidade: neutros, percentual: respondidas > 0 ? (neutros / respondidas) * 100 : 0 },
+      { faixa: "PROMOTOR", label: "Promotores (9-10)", quantidade: promotores, percentual: respondidas > 0 ? (promotores / respondidas) * 100 : 0 },
+    ];
+
+    // ===== POR VENDEDOR =====
+    const mapaVend = new Map();
+    for (const p of pesquisas) {
+      const u = p.venda?.user;
+      if (!u) continue;
+      const a = mapaVend.get(u.id) || {
+        id: u.id, nome: u.nome,
+        enviadas: 0, respondidas: 0,
+        detratores: 0, neutros: 0, promotores: 0,
+        somaNotas: 0,
+      };
+      a.enviadas += 1;
+      if (p.nota !== null && p.nota !== undefined) {
+        a.respondidas += 1;
+        a.somaNotas += p.nota;
+        const f = faixaNps(p.nota);
+        if (f === "DETRATOR") a.detratores += 1;
+        else if (f === "NEUTRO") a.neutros += 1;
+        else if (f === "PROMOTOR") a.promotores += 1;
+      }
+      mapaVend.set(u.id, a);
+    }
+    const porVendedor = Array.from(mapaVend.values()).map(a => {
+      const npsVend = a.respondidas > 0
+        ? ((a.promotores / a.respondidas) * 100) - ((a.detratores / a.respondidas) * 100)
+        : 0;
+      const notaMediaVend = a.respondidas > 0 ? a.somaNotas / a.respondidas : 0;
+      const taxaRespVend = a.enviadas > 0 ? (a.respondidas / a.enviadas) * 100 : 0;
+      delete a.somaNotas;
+      return { ...a, nps: npsVend, notaMedia: notaMediaVend, taxaResposta: taxaRespVend };
+    }).sort((a, b) => b.nps - a.nps || b.respondidas - a.respondidas);
+
+    // ===== EVOLUCAO MENSAL =====
+    const mapaMes = new Map();
+    for (const p of pesquisas) {
+      if (p.nota === null || p.nota === undefined) continue;
+      const key = ymKey(p.createdAt);
+      const a = mapaMes.get(key) || { ym: key, respondidas: 0, detratores: 0, promotores: 0, somaNotas: 0 };
+      a.respondidas += 1;
+      a.somaNotas += p.nota;
+      const f = faixaNps(p.nota);
+      if (f === "DETRATOR") a.detratores += 1;
+      else if (f === "PROMOTOR") a.promotores += 1;
+      mapaMes.set(key, a);
+    }
+    const evolucaoMensal = Array.from(mapaMes.values())
+      .map(a => ({
+        mes: a.ym,
+        respondidas: a.respondidas,
+        nps: a.respondidas > 0
+          ? ((a.promotores / a.respondidas) * 100) - ((a.detratores / a.respondidas) * 100)
+          : 0,
+        notaMedia: a.respondidas > 0 ? a.somaNotas / a.respondidas : 0,
+      }))
+      .sort((a, b) => a.mes.localeCompare(b.mes));
+
+    // ===== DETRATORES RECENTES (ultimos 30d) =====
+    const ha30dias = new Date(Date.now() - 30 * 86400000);
+    const detratoresRecentes = pesquisas
+      .filter(p => p.nota !== null && p.nota <= 6 && p.respondidaEm && p.respondidaEm >= ha30dias)
+      .map(p => ({
+        id: p.id,
+        nota: p.nota,
+        comentario: p.comentario,
+        respondidaEm: p.respondidaEm,
+        cliente: p.cliente?.nome || null,
+        venda: p.venda ? { numero: p.venda.numero, total: toNum(p.venda.total) } : null,
+        vendedor: p.venda?.user?.nome || null,
+      }))
+      .sort((a, b) => (b.respondidaEm?.getTime() || 0) - (a.respondidaEm?.getTime() || 0));
+
+    // ===== DETALHAMENTO =====
+    const detalhe = pesquisas.map(p => ({
+      id: p.id,
+      nota: p.nota,
+      faixa: faixaNps(p.nota),
+      comentario: p.comentario,
+      createdAt: p.createdAt,
+      respondidaEm: p.respondidaEm,
+      cliente: p.cliente?.nome || null,
+      venda: p.venda ? { numero: p.venda.numero, total: toNum(p.venda.total) } : null,
+      vendedor: p.venda?.user?.nome || null,
+    }));
+
+    res.json({
+      filtros: {
+        dataInicio: di ? di.toISOString() : null,
+        dataFim: df ? df.toISOString() : null,
+        userId: userId || null,
+        somenteRespondidas: somenteRespondidas === "true",
+      },
+      geradoEm: new Date().toISOString(),
+      resumo: {
+        totalEnviadas,
+        respondidas,
+        taxaResposta,
+        npsScore,
+        notaMedia,
+        detratores,
+        neutros,
+        promotores,
+      },
+      distribuicao,
+      porVendedor,
+      evolucaoMensal,
+      detratoresRecentes,
+      pesquisas: detalhe,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // ============ RELATORIO DE CARTEIRA DE CLIENTES (RFM) ============
 //
 // Visao da base instalada de clientes, segmentada via RFM

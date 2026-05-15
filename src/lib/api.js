@@ -466,6 +466,15 @@ export const api = {
     const q = qs.toString();
     return request(`/relatorios/crm/carteira${q ? `?${q}` : ""}`);
   },
+  relatorioNpsCrm: ({ dataInicio = "", dataFim = "", userId = "", somenteRespondidas = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (dataInicio) qs.set("dataInicio", dataInicio);
+    if (dataFim) qs.set("dataFim", dataFim);
+    if (userId) qs.set("userId", userId);
+    if (somenteRespondidas) qs.set("somenteRespondidas", somenteRespondidas);
+    const q = qs.toString();
+    return request(`/relatorios/crm/nps${q ? `?${q}` : ""}`);
+  },
 
   listarContasPagar: ({ search = "", status = "", fornecedorId = "", dataInicio = "", dataFim = "", vencidas = "" } = {}) => {
     const qs = new URLSearchParams();

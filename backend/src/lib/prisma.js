@@ -101,27 +101,37 @@ const prisma = base.$extends({
         return query(args);
       },
 
-      // ---------- findUnique: where precisa ser unique-key, entao convertemos
-      // para findFirst com filtro de tenant adicionado. Resultado: se o id
-      // existe mas pertence a outro tenant, retorna null (como se nao existisse).
+      // ---------- findUnique: where precisa ser unique-key (id, etc), entao
+      // nao da pra adicionar filtro de tenantId no where. Em vez disso,
+      // executamos a query normalmente (via query() — preservando contexto
+      // de transacao) e validamos o tenantId NO RESULTADO. Se pertencer a
+      // outro tenant, retornamos null como se nao existisse.
+      //
+      // IMPORTANTE: usar query() ao inves de delegate base e essencial para
+      // queries dentro de prisma.$transaction — o tx tem visibilidade de
+      // creates recem-feitos na mesma tx, o cliente base nao.
       async findUnique({ model, args, query }) {
-        if (!precisaFiltrar(model)) return query(args);
+        const result = await query(args);
+        if (!precisaFiltrar(model) || !result) return result;
         const tenant = tenantAtual();
-        // Constroi um findFirst equivalente preservando select/include
-        const delegate = baseSemFiltro[lower(model)];
-        return delegate.findFirst({
-          ...args,
-          where: { ...(args.where || {}), tenantId: tenant },
-        });
+        // Se select removeu tenantId, nao da pra validar — confia no caller.
+        // Caso comum (sem select especifico) traz tenantId automaticamente.
+        if (result.tenantId !== undefined && result.tenantId !== tenant) {
+          return null;
+        }
+        return result;
       },
       async findUniqueOrThrow({ model, args, query }) {
-        if (!precisaFiltrar(model)) return query(args);
+        const result = await query(args);
+        if (!precisaFiltrar(model)) return result;
         const tenant = tenantAtual();
-        const delegate = baseSemFiltro[lower(model)];
-        return delegate.findFirstOrThrow({
-          ...args,
-          where: { ...(args.where || {}), tenantId: tenant },
-        });
+        if (result.tenantId !== undefined && result.tenantId !== tenant) {
+          // Simula o not-found do findUniqueOrThrow original
+          const err = new Error(`No ${model} found`);
+          err.code = "P2025";
+          throw err;
+        }
+        return result;
       },
 
       // ---------- CREATES ----------

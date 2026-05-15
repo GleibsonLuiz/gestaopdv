@@ -1,4 +1,5 @@
 import prisma from "../lib/prisma.js";
+import { criarComNumeroRetry } from "../lib/proximoNumero.js";
 
 const ETAPAS = ["LEAD", "QUALIFICADO", "PROPOSTA", "NEGOCIACAO", "GANHO", "PERDIDO"];
 
@@ -168,25 +169,28 @@ export async function criar(req, res, next) {
       : PROB_PADRAO[etapaInicial];
 
     const op = await prisma.$transaction(async (tx) => {
-      const criada = await tx.oportunidade.create({
-        data: {
-          titulo: String(titulo).trim(),
-          descricao: norm(descricao),
-          etapa: etapaInicial,
-          probabilidade: probFinal,
-          valorEstimado: valorEstimado !== undefined && valorEstimado !== null && valorEstimado !== ""
-            ? Number(valorEstimado)
-            : null,
-          dataFechamentoPrevista: parseDate(dataFechamentoPrevista),
-          origem: norm(origem),
-          clienteId: norm(clienteId),
-          responsavelId: norm(responsavelId),
-          criadoPorId: req.user.sub,
-          dataGanho: etapaInicial === "GANHO" ? new Date() : null,
-          dataPerdida: etapaInicial === "PERDIDO" ? new Date() : null,
-        },
-        include: INCLUDE_DETALHE,
-      });
+      const criada = await criarComNumeroRetry(tx.oportunidade, req.tenantId, (numero) =>
+        tx.oportunidade.create({
+          data: {
+            numero,
+            titulo: String(titulo).trim(),
+            descricao: norm(descricao),
+            etapa: etapaInicial,
+            probabilidade: probFinal,
+            valorEstimado: valorEstimado !== undefined && valorEstimado !== null && valorEstimado !== ""
+              ? Number(valorEstimado)
+              : null,
+            dataFechamentoPrevista: parseDate(dataFechamentoPrevista),
+            origem: norm(origem),
+            clienteId: norm(clienteId),
+            responsavelId: norm(responsavelId),
+            criadoPorId: req.user.sub,
+            dataGanho: etapaInicial === "GANHO" ? new Date() : null,
+            dataPerdida: etapaInicial === "PERDIDO" ? new Date() : null,
+          },
+          include: INCLUDE_DETALHE,
+        })
+      );
 
       await tx.historicoOportunidade.create({
         data: {

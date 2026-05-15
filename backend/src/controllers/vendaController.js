@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import prisma from "../lib/prisma.js";
 import { exigirCaixaAberto, registrarNoCaixaAberto, calcularTotaisCaixa, exigirAutorizacaoGerencial } from "./caixaController.js";
 import { parseDate, calcularValores, gerarSerieRecorrencia } from "../lib/contas.js";
+import { criarComNumeroRetry } from "../lib/proximoNumero.js";
 
 const FORMAS_VALIDAS = new Set([
   "DINHEIRO", "CARTAO_CREDITO", "CARTAO_DEBITO", "PIX", "BOLETO", "CREDIARIO",
@@ -215,27 +216,31 @@ export async function criar(req, res, next) {
           }
         }
 
-        const vendaCriada = await tx.venda.create({
-          data: {
-            clienteId: clienteId || null,
-            userId: req.user.sub,
-            caixaId: caixaAtivo.id,
-            formaPagamento,
-            status: "CONCLUIDA",
-            desconto,
-            total,
-            observacoes: observacoes ? String(observacoes).trim() : null,
-            itens: {
-              create: itensNorm.map(it => ({
-                produtoId: it.produtoId,
-                quantidade: it.quantidade,
-                precoUnitario: it.precoUnitario,
-                subtotal: it.quantidade * it.precoUnitario,
-              })),
+        // Numero sequencial por tenant (ETAPA 8). Retry em race condition.
+        const vendaCriada = await criarComNumeroRetry(tx.venda, req.tenantId, (numero) =>
+          tx.venda.create({
+            data: {
+              numero,
+              clienteId: clienteId || null,
+              userId: req.user.sub,
+              caixaId: caixaAtivo.id,
+              formaPagamento,
+              status: "CONCLUIDA",
+              desconto,
+              total,
+              observacoes: observacoes ? String(observacoes).trim() : null,
+              itens: {
+                create: itensNorm.map(it => ({
+                  produtoId: it.produtoId,
+                  quantidade: it.quantidade,
+                  precoUnitario: it.precoUnitario,
+                  subtotal: it.quantidade * it.precoUnitario,
+                })),
+              },
             },
-          },
-          include: INCLUDE_DETALHE,
-        });
+            include: INCLUDE_DETALHE,
+          })
+        );
 
         // Registra a venda no extrato do caixa (todas as formas — saldo so
         // muda quando DINHEIRO).

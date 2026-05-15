@@ -1,5 +1,6 @@
 import prisma from "../lib/prisma.js";
 import { exigirCaixaAberto, registrarNoCaixaAberto } from "./caixaController.js";
+import { criarComNumeroRetry } from "../lib/proximoNumero.js";
 
 const TIPOS_VALIDOS = new Set(["ORCAMENTO", "ORDEM_SERVICO"]);
 const STATUS_VALIDOS = new Set([
@@ -247,39 +248,42 @@ export async function criar(req, res, next) {
 
         const totais = calcularTotais(itensNorm, desl, desc);
 
-        const criado = await tx.orcamento.create({
-          data: {
-            tipo: tipo || "ORCAMENTO",
-            status: statusInicial,
-            tabelaPreco: tabelaPreco || "AV",
-            clienteId: clienteId || null,
-            descricaoCliente: up(descricaoCliente),
-            contato: up(contato),
-            telefone: trimOrNull(telefone, 50),
-            via: viaFinal,
-            observacoes: up(observacoes),
-            imprimirObservacoes: imprimirObservacoes === false ? false : true,
-            rodape: up(rodape),
-            mostrarValorMetro: !!mostrarValorMetro,
-            imprimirValores: imprimirValores === false ? false : true,
-            valorProdutos: totais.valorProdutos,
-            valorServicos: totais.valorServicos,
-            deslocamento: arred(desl, 2),
-            desconto: arred(desc, 2),
-            total: totais.total,
-            formaCondicaoPagamento: up(formaCondicaoPagamento),
-            userId: req.user.sub,
-            responsavelId: responsavelId || null,
-            itens: {
-              create: itensNorm.map((it) => {
-                // remove tipoItem antes de salvar (campo so usado no calculo)
-                const { tipoItem, ...rest } = it;
-                return rest;
-              }),
+        const criado = await criarComNumeroRetry(tx.orcamento, req.tenantId, (numero) =>
+          tx.orcamento.create({
+            data: {
+              numero,
+              tipo: tipo || "ORCAMENTO",
+              status: statusInicial,
+              tabelaPreco: tabelaPreco || "AV",
+              clienteId: clienteId || null,
+              descricaoCliente: up(descricaoCliente),
+              contato: up(contato),
+              telefone: trimOrNull(telefone, 50),
+              via: viaFinal,
+              observacoes: up(observacoes),
+              imprimirObservacoes: imprimirObservacoes === false ? false : true,
+              rodape: up(rodape),
+              mostrarValorMetro: !!mostrarValorMetro,
+              imprimirValores: imprimirValores === false ? false : true,
+              valorProdutos: totais.valorProdutos,
+              valorServicos: totais.valorServicos,
+              deslocamento: arred(desl, 2),
+              desconto: arred(desc, 2),
+              total: totais.total,
+              formaCondicaoPagamento: up(formaCondicaoPagamento),
+              userId: req.user.sub,
+              responsavelId: responsavelId || null,
+              itens: {
+                create: itensNorm.map((it) => {
+                  // remove tipoItem antes de salvar (campo so usado no calculo)
+                  const { tipoItem, ...rest } = it;
+                  return rest;
+                }),
+              },
             },
-          },
-          include: INCLUDE_DETALHE,
-        });
+            include: INCLUDE_DETALHE,
+          })
+        );
 
         return criado;
       });
@@ -549,33 +553,36 @@ export async function converterEmVenda(req, res, next) {
         const total = Number(orc.total);
         const desconto = Number(orc.desconto);
 
-        const venda = await tx.venda.create({
-          data: {
-            clienteId: orc.clienteId,
-            userId: req.user.sub,
-            caixaId: caixaAtivo.id,
-            formaPagamento,
-            status: "CONCLUIDA",
-            desconto,
-            total,
-            observacoes: `Gerada do orcamento #${orc.numero}`,
-            itens: {
-              create: orc.itens.map((it) => {
-                const qtdInt = Math.max(1, Math.ceil(Number(it.quantidade)));
-                const subtotal = Number(it.subtotal);
-                return {
-                  produtoId: it.produtoId,
-                  quantidade: qtdInt,
-                  // Preco unitario calculado a partir do subtotal/qtd para
-                  // que (qtd * preco) bata com o subtotal do item.
-                  precoUnitario: arred(subtotal / qtdInt, 2),
-                  subtotal: arred(subtotal, 2),
-                };
-              }),
+        const venda = await criarComNumeroRetry(tx.venda, req.tenantId, (numero) =>
+          tx.venda.create({
+            data: {
+              numero,
+              clienteId: orc.clienteId,
+              userId: req.user.sub,
+              caixaId: caixaAtivo.id,
+              formaPagamento,
+              status: "CONCLUIDA",
+              desconto,
+              total,
+              observacoes: `Gerada do orcamento #${orc.numero}`,
+              itens: {
+                create: orc.itens.map((it) => {
+                  const qtdInt = Math.max(1, Math.ceil(Number(it.quantidade)));
+                  const subtotal = Number(it.subtotal);
+                  return {
+                    produtoId: it.produtoId,
+                    quantidade: qtdInt,
+                    // Preco unitario calculado a partir do subtotal/qtd para
+                    // que (qtd * preco) bata com o subtotal do item.
+                    precoUnitario: arred(subtotal / qtdInt, 2),
+                    subtotal: arred(subtotal, 2),
+                  };
+                }),
+              },
             },
-          },
-          include: { itens: true },
-        });
+            include: { itens: true },
+          })
+        );
 
         await registrarNoCaixaAberto(tx, req.user.sub, {
           tipo: "VENDA",

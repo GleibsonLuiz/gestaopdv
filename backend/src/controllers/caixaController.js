@@ -1,5 +1,6 @@
 import prisma from "../lib/prisma.js";
 import bcrypt from "bcryptjs";
+import { criarComNumeroRetry } from "../lib/proximoNumero.js";
 
 const FORMAS_VALIDAS = new Set([
   "DINHEIRO", "CARTAO_CREDITO", "CARTAO_DEBITO", "PIX", "BOLETO", "CREDIARIO",
@@ -143,17 +144,20 @@ export async function abrir(req, res, next) {
     }
 
     const caixa = await prisma.$transaction(async (tx) => {
-      const novo = await tx.caixa.create({
-        data: {
-          userId: req.user.sub,
-          status: "ABERTO",
-          saldoInicial: toDecimal(saldoInicial),
-          observacoesAbertura: req.body.observacoesAbertura
-            ? String(req.body.observacoesAbertura).trim().toUpperCase()
-            : null,
-        },
-        include: INCLUDE_RESUMO,
-      });
+      const novo = await criarComNumeroRetry(tx.caixa, req.tenantId, (numero) =>
+        tx.caixa.create({
+          data: {
+            numero,
+            userId: req.user.sub,
+            status: "ABERTO",
+            saldoInicial: toDecimal(saldoInicial),
+            observacoesAbertura: req.body.observacoesAbertura
+              ? String(req.body.observacoesAbertura).trim().toUpperCase()
+              : null,
+          },
+          include: INCLUDE_RESUMO,
+        })
+      );
 
       await tx.movimentacaoCaixa.create({
         data: {

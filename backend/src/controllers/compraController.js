@@ -1,5 +1,6 @@
 import prisma from "../lib/prisma.js";
 import { parseDate, gerarSerieRecorrencia, calcularValores } from "../lib/contas.js";
+import { criarComNumeroRetry } from "../lib/proximoNumero.js";
 
 const INCLUDE_LISTA = {
   fornecedor: { select: { id: true, nome: true, cnpj: true } },
@@ -153,23 +154,26 @@ export async function criar(req, res, next) {
           }
         }
 
-        const compraCriada = await tx.compra.create({
-          data: {
-            fornecedorId,
-            total,
-            observacoes: observacoes ? String(observacoes).trim() : null,
-            ...(dataCompraDate ? { createdAt: dataCompraDate } : {}),
-            itens: {
-              create: itensNorm.map(it => ({
-                produtoId: it.produtoId,
-                quantidade: it.quantidade,
-                precoUnitario: it.precoUnitario,
-                subtotal: it.quantidade * it.precoUnitario,
-              })),
+        const compraCriada = await criarComNumeroRetry(tx.compra, req.tenantId, (numero) =>
+          tx.compra.create({
+            data: {
+              numero,
+              fornecedorId,
+              total,
+              observacoes: observacoes ? String(observacoes).trim() : null,
+              ...(dataCompraDate ? { createdAt: dataCompraDate } : {}),
+              itens: {
+                create: itensNorm.map(it => ({
+                  produtoId: it.produtoId,
+                  quantidade: it.quantidade,
+                  precoUnitario: it.precoUnitario,
+                  subtotal: it.quantidade * it.precoUnitario,
+                })),
+              },
             },
-          },
-          include: INCLUDE_DETALHE,
-        });
+            include: INCLUDE_DETALHE,
+          })
+        );
 
         for (const it of itensNorm) {
           const p = mapaProdutos.get(it.produtoId);

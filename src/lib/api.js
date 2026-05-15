@@ -129,6 +129,9 @@ async function uploadForm(path, formData) {
 export const api = {
   login: (email, senha) => request("/auth/login", { method: "POST", body: { email, senha }, auth: false }),
   me: () => request("/auth/me"),
+  // Multi-tenant signup publico — cria Empresa + admin User em transacao
+  // e ja retorna { token, user, empresa } pronto para auto-login.
+  signup: (dados) => request("/tenants/signup", { method: "POST", body: dados, auth: false }),
   trocarSenha: (senhaAtual, senhaNova) =>
     request("/auth/senha", { method: "PUT", body: { senhaAtual, senhaNova } }),
 

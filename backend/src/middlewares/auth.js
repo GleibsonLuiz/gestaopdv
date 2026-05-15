@@ -1,17 +1,27 @@
 import jwt from "jsonwebtoken";
-import prisma from "../lib/prisma.js";
+import prisma, { tenantStorage } from "../lib/prisma.js";
 
 export function authRequired(req, res, next) {
   const header = req.headers.authorization;
   if (!header || !header.startsWith("Bearer ")) {
     return res.status(401).json({ erro: "Token nao fornecido" });
   }
+  let decoded;
   try {
-    req.user = jwt.verify(header.slice(7), process.env.JWT_SECRET);
-    next();
+    decoded = jwt.verify(header.slice(7), process.env.JWT_SECRET);
   } catch {
     return res.status(401).json({ erro: "Token invalido ou expirado" });
   }
+  req.user = decoded;
+  // Multi-tenant: tid no payload identifica o tenant da request. Tokens
+  // antigos (pre-ETAPA-2) nao tem tid — rejeitamos para forcar relogin.
+  if (!decoded.tid) {
+    return res.status(401).json({ erro: "Token sem tenant. Faca login novamente." });
+  }
+  req.tenantId = decoded.tid;
+  // Encapsula o resto da request em um AsyncLocalStorage scope para que
+  // o Prisma extension consiga ler o tenantId e filtrar as queries.
+  tenantStorage.run({ tenantId: req.tenantId }, () => next());
 }
 
 export function requireRole(...roles) {

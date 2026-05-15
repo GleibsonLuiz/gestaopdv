@@ -14,6 +14,21 @@ export async function inicio(req, res, next) {
 
     const caixa = await buscarCaixaAberto(req.user.sub);
 
+    // VENDEDOR ve apenas as proprias vendas do dia (isola no modo
+    // COMPARTILHADO, onde o caixa e coletivo). ADMIN e GERENTE veem tudo
+    // do caixa aberto.
+    const isVendedor = req.user.role === "VENDEDOR";
+    const whereUltimasVendas = caixa
+      ? {
+          caixaId: caixa.id,
+          status: "CONCLUIDA",
+          ...(isVendedor && {
+            userId: req.user.sub,
+            createdAt: { gte: inicioDia },
+          }),
+        }
+      : null;
+
     const [topGroups, ultimasVendas, vendasHojeAgg, formasHoje] = await Promise.all([
       prisma.itemVenda.groupBy({
         by: ["produtoId"],
@@ -27,15 +42,16 @@ export async function inicio(req, res, next) {
         orderBy: { _sum: { quantidade: "desc" } },
         take: 8,
       }),
-      caixa
+      whereUltimasVendas
         ? prisma.venda.findMany({
-            where: { caixaId: caixa.id, status: "CONCLUIDA" },
+            where: whereUltimasVendas,
             orderBy: { createdAt: "desc" },
             take: 5,
             select: {
               id: true, numero: true, total: true, formaPagamento: true,
               createdAt: true,
               cliente: { select: { nome: true } },
+              user: { select: { nome: true } },
               _count: { select: { itens: true } },
             },
           })

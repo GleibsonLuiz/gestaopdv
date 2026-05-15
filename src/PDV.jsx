@@ -791,6 +791,7 @@ function NovaVenda({ user }) {
 
           {carrinho.length === 0 ? (
             <AcessoRapido
+              user={user}
               topProdutos={painel.topProdutos}
               ultimasVendas={painel.ultimasVendas}
               onAdicionar={(p) => {
@@ -1784,8 +1785,11 @@ function FormasPagamentoTopo({ resumo, role }) {
 // ============== ACESSO RAPIDO (cestinha vazia) ==============
 // Mostrado no espaco antes ocupado por "Cestinha vazia". Combina chips dos
 // produtos mais vendidos (clicaveis) com lista das ultimas vendas do caixa.
-function AcessoRapido({ topProdutos, ultimasVendas, onAdicionar, onAbrirVenda }) {
+function AcessoRapido({ user, topProdutos, ultimasVendas, onAdicionar, onAbrirVenda }) {
   const semDados = (!topProdutos?.length) && (!ultimasVendas?.length);
+  // ADMIN/GERENTE veem vendas de varios vendedores — mostrar de quem e cada
+  // uma. VENDEDOR ja so ve as proprias (filtrado no backend).
+  const mostrarVendedor = user?.role === "ADMIN" || user?.role === "GERENTE";
 
   if (semDados) {
     return (
@@ -1844,21 +1848,31 @@ function AcessoRapido({ topProdutos, ultimasVendas, onAdicionar, onAbrirVenda })
           <div className="pdv-section-hd" style={{ marginTop: 8 }}>
             <div className="pdv-card-title">
               <span style={{ color: "var(--pdv-t3)" }}>⏱</span>
-              Últimas vendas deste caixa
+              {mostrarVendedor ? "Últimas vendas deste caixa" : "Minhas vendas de hoje"}
             </div>
           </div>
           <div>
             {ultimasVendas.map((v) => {
               const cor = FORMA_COR_VAR[v.formaPagamento] || "var(--pdv-accent)";
+              const primeiroNomeVendedor = v.user?.nome?.split(" ")[0] || "";
               return (
                 <button
                   key={v.id} type="button"
                   onClick={() => onAbrirVenda(v.id)}
                   className="pdv-rec-row"
+                  title={mostrarVendedor && v.user?.nome ? `Vendedor: ${v.user.nome}` : undefined}
                 >
                   <div className="pdv-rec-id">#{v.numero}</div>
                   <div className={`pdv-rec-cust ${!v.cliente?.nome ? "is-empty" : ""}`}>
                     {v.cliente?.nome || "Consumidor"}
+                    {mostrarVendedor && primeiroNomeVendedor && (
+                      <span style={{
+                        marginLeft: 8, fontSize: 11, color: "var(--pdv-t3)",
+                        opacity: 0.75, fontWeight: 500,
+                      }}>
+                        · {primeiroNomeVendedor}
+                      </span>
+                    )}
                   </div>
                   <div className="pdv-rec-method">
                     <span className="pdv-rec-method-dot" style={{ background: cor }} />

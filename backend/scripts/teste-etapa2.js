@@ -1,21 +1,49 @@
 // Teste da ETAPA 2 do multi-tenant: JWT com tenantId no payload.
 //
+// Cria um user temporario (admin-etapa2-temp) no tenant DEFAULT para nao
+// depender da senha real do admin@gestaopro.local. Remove no final.
+//
 // 1. Sobe o app Express in-process
-// 2. POST /auth/login com admin@gestaopro.local / admin123
-// 3. Decodifica o JWT (sem verificar signature, so pra inspecionar)
-// 4. Imprime o payload em formato bonito
-// 5. Verifica que o campo `tid` existe e bate com a Empresa DEFAULT no banco
-// 6. Verifica tambem signature: jwt.verify(token, secret) com o segredo do .env
-// 7. Chama /auth/me e confirma que retorna tenantId + empresa
+// 2. POST /auth/login com user temp
+// 3. Decodifica o JWT
+// 4. Verifica que o campo `tid` existe e bate com a Empresa DEFAULT
+// 5. Verifica signature com JWT_SECRET
+// 6. Chama /auth/me e confirma que retorna tenantId + empresa
 //
 // Rodar com: cd backend && node scripts/teste-etapa2.js
 
+import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 import jwt from "jsonwebtoken";
 import http from "node:http";
 import app from "../src/server.js";
 
 const prisma = new PrismaClient();
+const EMAIL_TEMP = "admin-etapa2-temp@teste.local";
+const SENHA_TEMP = "etapa2-teste-7a2c";
+
+async function setupUserTemp() {
+  const existing = await prisma.user.findFirst({ where: { email: EMAIL_TEMP } });
+  if (existing) return existing;
+  const tenant = await prisma.empresa.findUnique({ where: { cnpj: "00000000000000" } });
+  if (!tenant) throw new Error("Empresa DEFAULT nao encontrada");
+  const hash = await bcrypt.hash(SENHA_TEMP, 10);
+  return prisma.user.create({
+    data: {
+      nome: "ETAPA2 TEMP ADMIN", email: EMAIL_TEMP, senha: hash,
+      role: "ADMIN", ativo: true, tenantId: tenant.id,
+    },
+  });
+}
+
+async function cleanupUserTemp(userId) {
+  if (!userId) return;
+  await prisma.logAuditoria.updateMany({
+    where: { usuarioId: userId },
+    data: { usuarioId: null },
+  });
+  await prisma.user.delete({ where: { id: userId } });
+}
 
 function httpRequest(server, { method, path, headers = {}, body }) {
   return new Promise((resolve, reject) => {
@@ -50,7 +78,7 @@ function check(cond, msg) {
 async function main() {
   console.log("🔐 Teste ETAPA 2 — JWT com tenantId\n");
 
-  // ---------- 0. Buscar Empresa DEFAULT no banco para comparacao ----------
+  // ---------- 0. Buscar Empresa DEFAULT + criar user temp ----------
   console.log("=== 0. Empresa DEFAULT no banco ===");
   const empresaDefault = await prisma.empresa.findUnique({
     where: { cnpj: "00000000000000" },
@@ -60,6 +88,8 @@ async function main() {
     console.log(`  ℹ️  id: ${empresaDefault.id}`);
     console.log(`  ℹ️  nome: ${empresaDefault.nome}`);
   }
+  const userTemp = await setupUserTemp();
+  console.log(`  ℹ️  User temp: ${userTemp.email}`);
 
   // ---------- 1. Sobe servidor ----------
   const server = http.createServer(app);
@@ -71,7 +101,7 @@ async function main() {
     console.log("=== 1. POST /auth/login ===");
     const r = await httpRequest(server, {
       method: "POST", path: "/auth/login",
-      body: { email: "admin@gestaopro.local", senha: "admin123" },
+      body: { email: EMAIL_TEMP, senha: SENHA_TEMP },
     });
     check(r.status === 200, `status 200`);
     check(typeof r.body?.token === "string", `body.token e string`);
@@ -141,6 +171,8 @@ async function main() {
 
   } finally {
     await new Promise(resolve => server.close(resolve));
+    await cleanupUserTemp(userTemp.id);
+    console.log(`\nUser temp removido.`);
   }
 
   console.log(`\n${"=".repeat(50)}`);
@@ -150,8 +182,12 @@ async function main() {
 }
 
 main()
-  .catch(e => {
+  .catch(async (e) => {
     console.error("\n❌ Erro:", e);
+    try {
+      const u = await prisma.user.findFirst({ where: { email: EMAIL_TEMP } });
+      if (u) await cleanupUserTemp(u.id);
+    } catch {}
     process.exit(1);
   })
   .finally(() => prisma.$disconnect());

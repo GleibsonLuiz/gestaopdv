@@ -128,10 +128,12 @@ const prisma = base.$extends({
       async create({ model, args, query }) {
         if (precisaFiltrar(model)) {
           const tenant = tenantAtual();
-          // So injeta se nao foi passado explicitamente.
+          // Auto-fill no nivel raiz...
           if (args.data && args.data.tenantId === undefined) {
             args.data.tenantId = tenant;
           }
+          // ... e em nested writes (data: { itens: { create: [...] } })
+          if (args.data) propagarTenantEmCreate(args.data, tenant);
         }
         return query(args);
       },
@@ -217,6 +219,60 @@ async function garantirOwnership(model, where) {
 // Prisma Client expoe delegates em camelCase do nome do model. "User" -> "user".
 function lower(model) {
   return model.charAt(0).toLowerCase() + model.slice(1);
+}
+
+// Propaga tenantId recursivamente em nested writes do `create`.
+//
+// Caso classico: prisma.venda.create({ data: { ..., itens: { create: [...] } } })
+// O hook `create` do extension so injeta tenantId no nivel raiz; sem este
+// helper, os itens_venda ficavam orfaos (tenantId NULL).
+//
+// Premissa: todo model no schema (exceto Empresa) tem tenantId. Empresa nunca
+// e nested write (e o tenant root). Logo, qualquer nested .create / .createMany.data /
+// .connectOrCreate.create pode receber tenantId com seguranca.
+//
+// Nao toca em `connect: { id }` (apenas referencia), `disconnect`, `update`,
+// `set` etc — soh nas operacoes que CRIAM novos registros.
+function propagarTenantEmCreate(data, tenant) {
+  if (!data || typeof data !== "object") return;
+  for (const key of Object.keys(data)) {
+    const valor = data[key];
+    if (!valor || typeof valor !== "object") continue;
+
+    // Nested: { create: <obj> } ou { create: [<obj>, ...] }
+    if (valor.create !== undefined) {
+      if (Array.isArray(valor.create)) {
+        for (const item of valor.create) {
+          if (item && typeof item === "object" && item.tenantId === undefined) {
+            item.tenantId = tenant;
+          }
+          propagarTenantEmCreate(item, tenant);
+        }
+      } else if (typeof valor.create === "object") {
+        if (valor.create.tenantId === undefined) {
+          valor.create.tenantId = tenant;
+        }
+        propagarTenantEmCreate(valor.create, tenant);
+      }
+    }
+
+    // Nested: { createMany: { data: [<obj>, ...] } }
+    if (valor.createMany?.data && Array.isArray(valor.createMany.data)) {
+      for (const item of valor.createMany.data) {
+        if (item && typeof item === "object" && item.tenantId === undefined) {
+          item.tenantId = tenant;
+        }
+      }
+    }
+
+    // Nested: { connectOrCreate: { where, create: <obj> } }
+    if (valor.connectOrCreate?.create && typeof valor.connectOrCreate.create === "object") {
+      if (valor.connectOrCreate.create.tenantId === undefined) {
+        valor.connectOrCreate.create.tenantId = tenant;
+      }
+      propagarTenantEmCreate(valor.connectOrCreate.create, tenant);
+    }
+  }
 }
 
 export default prisma;

@@ -4,7 +4,7 @@
 //
 // Implementacao fire-and-forget: a gravacao do log nunca segura a resposta
 // e qualquer falha so vai pro console.error.
-import prisma from "../lib/prisma.js";
+import prisma, { tenantStorage } from "../lib/prisma.js";
 
 const METODOS_MUTACAO = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
@@ -144,6 +144,11 @@ export async function auditoria(req, res, next) {
     }
     const diff = (acao === "UPDATE" && dadosAntes) ? calcularDiff(dadosAntes, dadosDepois) : null;
 
+    // tenantId: prefere o req.tenantId injetado pelo authRequired (ETAPA 3),
+    // fallback no JWT decodificado (req.user.tid). Em rotas autenticadas sempre
+    // tem; rotas livres caem em null (e o caller usa registrarEvento direto).
+    const tenantId = req.tenantId || req.user?.tid || null;
+
     prisma.logAuditoria.create({
       data: {
         usuarioId,
@@ -162,6 +167,7 @@ export async function auditoria(req, res, next) {
         dadosDepois,
         diff,
         duracaoMs: Date.now() - inicio,
+        tenantId,
       },
     }).catch(err => {
       console.error("[auditoria] falha ao gravar log:", err?.message || err);
@@ -172,11 +178,22 @@ export async function auditoria(req, res, next) {
 }
 
 // Helper para logar eventos especiais (login, logout, login falho).
+//
+// tenantId pode ser passado explicitamente quando o caller ja resolveu
+// o user (ex: login com senha correta) — caso contrario tenta ler do
+// tenantStorage (sera null em rotas pre-auth como POST /auth/login).
+// Para login com email inexistente, ambos sao null - log fica com
+// tenantId nulo, que e o unico caso aceito (LogAuditoria.tenantId
+// continua nullable de proposito na ETAPA 6).
 export async function registrarEvento({
   acao, modulo = "AUTH", usuarioId = null, usuarioNome = null,
   usuarioEmail = null, sucesso = true, mensagem = null, req = null,
+  tenantId = undefined,
 }) {
   try {
+    const finalTenantId = tenantId !== undefined
+      ? tenantId
+      : (tenantStorage.getStore()?.tenantId || null);
     await prisma.logAuditoria.create({
       data: {
         acao,
@@ -191,6 +208,7 @@ export async function registrarEvento({
         rota: req ? (req.originalUrl || req.path || "").slice(0, 500) : null,
         metodo: req?.method || null,
         statusCode: null,
+        tenantId: finalTenantId,
       },
     });
   } catch (err) {

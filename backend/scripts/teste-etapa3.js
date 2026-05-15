@@ -58,10 +58,14 @@ function secao(t) { console.log(`\n=== ${t} ===`); }
 // IDs criados pelo teste — usados no cleanup mesmo se houver falha.
 const criados = {
   empresaB: null,
+  userA: null, // admin temp no tenant DEFAULT (nao usa admin real)
   userB: null,
   produtoA: null,
   produtoB: null,
 };
+
+const EMAIL_A_TEMP = "admin-a-etapa3-temp@teste.local";
+const SENHA_A_TEMP = "etapa3-A-9c4f";
 
 async function cleanup() {
   secao("Cleanup");
@@ -83,6 +87,14 @@ async function cleanup() {
       });
       await prisma.user.delete({ where: { id: criados.userB } });
       info(`user B removido: ${criados.userB}`);
+    }
+    if (criados.userA) {
+      await prisma.logAuditoria.updateMany({
+        where: { usuarioId: criados.userA },
+        data: { usuarioId: null },
+      });
+      await prisma.user.delete({ where: { id: criados.userA } });
+      info(`user A temp removido: ${criados.userA}`);
     }
     if (criados.empresaB) {
       // Logs de auditoria criados durante o teste referenciam empresa B via tenantId
@@ -127,6 +139,19 @@ async function main() {
 
   // Buscar Empresa A (DEFAULT) para comparacao
   const empresaA = await prisma.empresa.findUnique({ where: { cnpj: "00000000000000" } });
+  if (!empresaA) throw new Error("Empresa DEFAULT nao encontrada — rode backfill antes");
+
+  // Cria admin temp no tenant A (em vez de usar admin@gestaopro.local — nao
+  // depender da senha real do user)
+  const senhaHashA = await bcrypt.hash(SENHA_A_TEMP, 10);
+  const userA = await prisma.user.create({
+    data: {
+      nome: "ADMIN A TEMP", email: EMAIL_A_TEMP, senha: senhaHashA,
+      role: "ADMIN", ativo: true, tenantId: empresaA.id,
+    },
+  });
+  criados.userA = userA.id;
+  info(`User A temp criado: ${userA.id} (${userA.email})`);
 
   // ---------- 1. Sobe servidor ----------
   const server = http.createServer(app);
@@ -138,9 +163,9 @@ async function main() {
     secao("1. Login dos 2 tenants");
     const loginA = await req(server, {
       method: "POST", path: "/auth/login",
-      body: { email: "admin@gestaopro.local", senha: "admin123" },
+      body: { email: EMAIL_A_TEMP, senha: SENHA_A_TEMP },
     });
-    check(loginA.status === 200, `Login A status 200`);
+    check(loginA.status === 200, `Login A (temp) status 200`);
     check(loginA.body?.user?.tenantId === empresaA.id, `Token A tenant = Empresa DEFAULT`);
     const tokenA = loginA.body.token;
 

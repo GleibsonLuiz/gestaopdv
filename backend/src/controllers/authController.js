@@ -23,6 +23,9 @@ export async function login(req, res, next) {
       registrarEvento({
         acao: "LOGIN_FALHO", modulo: "AUTH", sucesso: false,
         usuarioEmail: email, mensagem: user ? "Usuario inativo" : "Email nao encontrado", req,
+        // tenantId: null para email inexistente (nao da pra adivinhar antes
+        // de validar). Para usuario inativo, sabemos o tenant.
+        tenantId: user?.tenantId || null,
       });
       return res.status(401).json({ erro: "Credenciais invalidas" });
     }
@@ -41,6 +44,7 @@ export async function login(req, res, next) {
             ? "Tenant nao encontrado"
             : "Tenant inativo",
         req,
+        tenantId: user.tenantId || null,
       });
       return res.status(403).json({ erro: "Conta indisponivel. Contate o suporte." });
     }
@@ -51,6 +55,7 @@ export async function login(req, res, next) {
         acao: "LOGIN_FALHO", modulo: "AUTH", sucesso: false,
         usuarioId: user.id, usuarioNome: user.nome, usuarioEmail: user.email,
         mensagem: "Senha incorreta", req,
+        tenantId: user.tenantId,
       });
       return res.status(401).json({ erro: "Credenciais invalidas" });
     }
@@ -66,6 +71,7 @@ export async function login(req, res, next) {
     registrarEvento({
       acao: "LOGIN", modulo: "AUTH", sucesso: true,
       usuarioId: user.id, usuarioNome: user.nome, usuarioEmail: user.email, req,
+      tenantId: user.tenantId,
     });
 
     res.json({

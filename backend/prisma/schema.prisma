@@ -244,8 +244,8 @@ model FormaPagamentoCustom {
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, nome])
   @@index([tenantId])
@@ -265,8 +265,8 @@ model User {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   vendas                   Venda[]
   movimentacoes            MovimentacaoEstoque[]
@@ -307,8 +307,8 @@ model ConfiguracaoComissao {
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@map("configuracoes_comissao")
@@ -334,8 +334,8 @@ model Cliente {
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   vendas              Venda[]
   contasReceber       ContaReceber[]
@@ -368,8 +368,8 @@ model Fornecedor {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   produtos    Produto[]
   compras     Compra[]
@@ -385,8 +385,8 @@ model Categoria {
   nome      String
   createdAt DateTime @default(now())
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   produtos Produto[]
 
@@ -421,8 +421,8 @@ model Produto {
   fornecedorId String?
   fornecedor   Fornecedor? @relation(fields: [fornecedorId], references: [id])
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   itensVenda     ItemVenda[]
   itensCompra    ItemCompra[]
@@ -456,8 +456,8 @@ model Venda {
   caixaId String?
   caixa   Caixa?  @relation(fields: [caixaId], references: [id])
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   itens               ItemVenda[]
   movimentacoesCaixa  MovimentacaoCaixa[]
@@ -484,8 +484,8 @@ model ItemVenda {
   produtoId String
   produto   Produto @relation(fields: [produtoId], references: [id])
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@map("itens_venda")
@@ -506,8 +506,8 @@ model Compra {
   fornecedorId String
   fornecedor   Fornecedor @relation(fields: [fornecedorId], references: [id])
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   itens       ItemCompra[]
   contasPagar ContaPagar[]
@@ -528,8 +528,8 @@ model ItemCompra {
   produtoId String
   produto   Produto @relation(fields: [produtoId], references: [id])
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@map("itens_compra")
@@ -552,8 +552,8 @@ model MovimentacaoEstoque {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([produtoId, createdAt])
   @@index([tenantId])
@@ -585,8 +585,8 @@ model ContaPagar {
   compraId String?
   compra   Compra? @relation(fields: [compraId], references: [id], onDelete: SetNull)
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   anexos             Anexo[]
   movimentacoesCaixa MovimentacaoCaixa[]
@@ -622,8 +622,8 @@ model ContaReceber {
   vendaId String?
   venda   Venda?  @relation(fields: [vendaId], references: [id], onDelete: SetNull)
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   anexos             Anexo[]
   movimentacoesCaixa MovimentacaoCaixa[]
@@ -649,8 +649,8 @@ model Anexo {
   contaReceberId String?
   contaReceber   ContaReceber? @relation(fields: [contaReceberId], references: [id], onDelete: Cascade)
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([contaPagarId])
   @@index([contaReceberId])
@@ -677,8 +677,8 @@ model Caixa {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   vendas        Venda[]
   movimentacoes MovimentacaoCaixa[]
@@ -711,8 +711,8 @@ model ConfiguracaoEmpresa {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  tenantId String?  @unique
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String  @unique
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("configuracao_empresa")
 }
@@ -740,8 +740,8 @@ model MovimentacaoCaixa {
   contaReceberId String?
   contaReceber   ContaReceber? @relation(fields: [contaReceberId], references: [id])
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([caixaId, createdAt])
   @@index([tenantId])
@@ -795,8 +795,8 @@ model Orcamento {
   vendaId String? @unique
   venda   Venda?  @relation(fields: [vendaId], references: [id], onDelete: SetNull)
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -837,8 +837,8 @@ model ItemOrcamento {
   orcamentoId String
   orcamento   Orcamento @relation(fields: [orcamentoId], references: [id], onDelete: Cascade)
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([orcamentoId, ordem])
   @@index([tenantId])
@@ -857,8 +857,8 @@ model ConfiguracaoFidelidade {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  tenantId String?  @unique
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String  @unique
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("configuracao_fidelidade")
 }
@@ -873,8 +873,8 @@ model PontosCliente {
   clienteId String  @unique
   cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@map("pontos_cliente")
@@ -896,8 +896,8 @@ model MovimentacaoPontos {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([clienteId, createdAt(sort: Desc)])
   @@index([vendaId])
@@ -927,8 +927,8 @@ model Tarefa {
   criadoPorId String
   criadoPor   User   @relation("TarefaCriador", fields: [criadoPorId], references: [id])
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([status, prazo])
   @@index([responsavelId, status])
@@ -952,8 +952,8 @@ model Interacao {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([clienteId, data(sort: Desc)])
   @@index([tenantId])
@@ -993,8 +993,8 @@ model Oportunidade {
   vendaId String? @unique
   venda   Venda?  @relation(fields: [vendaId], references: [id], onDelete: SetNull)
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1016,8 +1016,8 @@ model Tag {
   cor       String   @default("#4f8ef7")
   createdAt DateTime @default(now())
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   clientes ClienteTag[]
 
@@ -1034,8 +1034,8 @@ model ClienteTag {
   cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
   tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@id([clienteId, tagId])
   @@index([tagId])
@@ -1059,8 +1059,8 @@ model Contato {
   clienteId String
   cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([clienteId])
   @@index([tenantId])
@@ -1083,8 +1083,8 @@ model PesquisaNps {
   clienteId String?
   cliente   Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([clienteId, respondidaEm])
   @@index([createdAt])
@@ -1105,8 +1105,8 @@ model TemplateMensagem {
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, nome])
   @@index([tipo, ativo])
@@ -1136,8 +1136,8 @@ model RegraAutomacao {
   ultimaExecucao DateTime?
   totalDisparos  Int       @default(0)
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1161,8 +1161,8 @@ model LogAutomacao {
   tarefaId  String?
   resultado String  @default("CRIADA")
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 
@@ -1189,8 +1189,8 @@ model HistoricoOportunidade {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
-  tenantId String?
-  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([oportunidadeId, createdAt])
   @@index([tenantId])
@@ -1222,6 +1222,9 @@ model LogAuditoria {
   usuarioNome  String?
   usuarioEmail String?
 
+  // tenantId fica NULLABLE (unico caso em todo o schema): login com email
+  // inexistente nao tem como saber o tenant antes de validar. Outros 34
+  // modelos sao NOT NULL desde a migration da ETAPA 6.
   tenantId String?
   tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 

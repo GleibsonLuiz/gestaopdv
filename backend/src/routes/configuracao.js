@@ -14,14 +14,14 @@ router.use(authRequired);
 // cabecalhos de relatorios, recibos e impressoes.
 router.get("/", obter);
 
-// Mutacoes restritas a ADMIN — proprietario do sistema.
-router.put("/", requireRole("ADMIN"), salvar);
+// Mutacoes liberadas para ADMIN e GERENTE — ambos administram a empresa.
+router.put("/", requireRole("ADMIN", "GERENTE"), salvar);
 router.post("/logotipo",
-  requireRole("ADMIN"),
+  requireRole("ADMIN", "GERENTE"),
   uploadLogotipo.single("logotipo"),
   tratarErroUploadLogotipo,
   enviarLogotipo,
 );
-router.delete("/logotipo", requireRole("ADMIN"), excluirLogotipo);
+router.delete("/logotipo", requireRole("ADMIN", "GERENTE"), excluirLogotipo);
 
 export default router;

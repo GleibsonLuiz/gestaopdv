@@ -36,7 +36,7 @@ export default function Configuracoes({ user }) {
   const [logoPreview, setLogoPreview] = useState(null);
   const inputLogoRef = useRef(null);
 
-  const ehAdmin = user.role === "ADMIN";
+  const podeEditar = user.role === "ADMIN" || user.role === "GERENTE";
 
   useEffect(() => {
     let ativo = true;
@@ -149,9 +149,9 @@ export default function Configuracoes({ user }) {
       {mensagem && <div style={alertStyle(C.green)}>{mensagem}</div>}
       {erro && <div style={alertStyle(C.red)}>{erro}</div>}
 
-      {!ehAdmin && (
+      {!podeEditar && (
         <div style={alertStyle(C.yellow)}>
-          🔒 Apenas o administrador pode editar os dados da empresa. Você está vendo em modo leitura.
+          🔒 Apenas ADMIN ou GERENTE pode editar os dados da empresa. Você está vendo em modo leitura.
         </div>
       )}
 
@@ -167,12 +167,12 @@ export default function Configuracoes({ user }) {
               LOGOTIPO
             </div>
             <div
-              onClick={() => ehAdmin && inputLogoRef.current?.click()}
+              onClick={() => podeEditar && inputLogoRef.current?.click()}
               style={{
                 width: 168, height: 168, borderRadius: 12,
                 background: C.surface, border: `2px dashed ${C.border}`,
                 display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: ehAdmin ? "pointer" : "default",
+                cursor: podeEditar ? "pointer" : "default",
                 overflow: "hidden",
               }}>
               {logoPreview ? (
@@ -181,11 +181,11 @@ export default function Configuracoes({ user }) {
               ) : (
                 <div style={{ color: C.muted, fontSize: 12, textAlign: "center", padding: 10 }}>
                   <div style={{ fontSize: 32 }}>🖼️</div>
-                  {ehAdmin ? "Clique para enviar" : "Sem logotipo"}
+                  {podeEditar ? "Clique para enviar" : "Sem logotipo"}
                 </div>
               )}
             </div>
-            {ehAdmin && (
+            {podeEditar && (
               <>
                 <input ref={inputLogoRef} type="file"
                   accept="image/jpeg,image/png,image/webp,image/svg+xml"
@@ -216,25 +216,25 @@ export default function Configuracoes({ user }) {
                 <Campo label="Razão social *">
                   <input value={form.razaoSocial}
                     onChange={e => setForm(f => ({ ...f, razaoSocial: e.target.value.toUpperCase() }))}
-                    disabled={!ehAdmin} required style={input(ehAdmin)} />
+                    disabled={!podeEditar} required style={input(podeEditar)} />
                 </Campo>
                 <Campo label="CNPJ">
                   <input value={form.cnpj}
                     onChange={e => setForm(f => ({ ...f, cnpj: e.target.value }))}
-                    disabled={!ehAdmin} placeholder="00.000.000/0000-00"
-                    style={input(ehAdmin)} />
+                    disabled={!podeEditar} placeholder="00.000.000/0000-00"
+                    style={input(podeEditar)} />
                 </Campo>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}>
                 <Campo label="Nome fantasia">
                   <input value={form.nomeFantasia}
                     onChange={e => setForm(f => ({ ...f, nomeFantasia: e.target.value.toUpperCase() }))}
-                    disabled={!ehAdmin} style={input(ehAdmin)} />
+                    disabled={!podeEditar} style={input(podeEditar)} />
                 </Campo>
                 <Campo label="Inscrição estadual">
                   <input value={form.inscEstadual}
                     onChange={e => setForm(f => ({ ...f, inscEstadual: e.target.value }))}
-                    disabled={!ehAdmin} placeholder="Opcional" style={input(ehAdmin)} />
+                    disabled={!podeEditar} placeholder="Opcional" style={input(podeEditar)} />
                 </Campo>
               </div>
             </Secao>
@@ -244,13 +244,13 @@ export default function Configuracoes({ user }) {
                 <Campo label="Telefone">
                   <input value={form.telefone}
                     onChange={e => setForm(f => ({ ...f, telefone: e.target.value }))}
-                    disabled={!ehAdmin} placeholder="(00) 00000-0000"
-                    style={input(ehAdmin)} />
+                    disabled={!podeEditar} placeholder="(00) 00000-0000"
+                    style={input(podeEditar)} />
                 </Campo>
                 <Campo label="E-mail">
                   <input type="email" value={form.email}
                     onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                    disabled={!ehAdmin} style={input(ehAdmin)} />
+                    disabled={!podeEditar} style={input(podeEditar)} />
                 </Campo>
               </div>
             </Secao>
@@ -260,34 +260,34 @@ export default function Configuracoes({ user }) {
                 <Campo label="Logradouro">
                   <input value={form.endereco}
                     onChange={e => setForm(f => ({ ...f, endereco: e.target.value.toUpperCase() }))}
-                    disabled={!ehAdmin} style={input(ehAdmin)} />
+                    disabled={!podeEditar} style={input(podeEditar)} />
                 </Campo>
                 <Campo label="Número">
                   <input value={form.numero}
                     onChange={e => setForm(f => ({ ...f, numero: e.target.value }))}
-                    disabled={!ehAdmin} style={input(ehAdmin)} />
+                    disabled={!podeEditar} style={input(podeEditar)} />
                 </Campo>
                 <Campo label="Bairro">
                   <input value={form.bairro}
                     onChange={e => setForm(f => ({ ...f, bairro: e.target.value.toUpperCase() }))}
-                    disabled={!ehAdmin} style={input(ehAdmin)} />
+                    disabled={!podeEditar} style={input(podeEditar)} />
                 </Campo>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 12 }}>
                 <Campo label="Cidade">
                   <input value={form.cidade}
                     onChange={e => setForm(f => ({ ...f, cidade: e.target.value.toUpperCase() }))}
-                    disabled={!ehAdmin} style={input(ehAdmin)} />
+                    disabled={!podeEditar} style={input(podeEditar)} />
                 </Campo>
                 <Campo label="UF">
                   <input value={form.estado}
                     onChange={e => setForm(f => ({ ...f, estado: e.target.value.toUpperCase().slice(0, 2) }))}
-                    disabled={!ehAdmin} maxLength={2} style={input(ehAdmin)} />
+                    disabled={!podeEditar} maxLength={2} style={input(podeEditar)} />
                 </Campo>
                 <Campo label="CEP">
                   <input value={form.cep}
                     onChange={e => setForm(f => ({ ...f, cep: e.target.value }))}
-                    disabled={!ehAdmin} placeholder="00.000-000" style={input(ehAdmin)} />
+                    disabled={!podeEditar} placeholder="00.000-000" style={input(podeEditar)} />
                 </Campo>
               </div>
             </Secao>
@@ -296,10 +296,10 @@ export default function Configuracoes({ user }) {
               <Campo>
                 <textarea value={form.observacoes}
                   onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))}
-                  disabled={!ehAdmin}
+                  disabled={!podeEditar}
                   rows={2}
                   placeholder="Texto adicional para aparecer no rodapé de impressões (opcional)"
-                  style={{ ...input(ehAdmin), resize: "vertical", fontFamily: "inherit" }} />
+                  style={{ ...input(podeEditar), resize: "vertical", fontFamily: "inherit" }} />
               </Campo>
             </Secao>
 
@@ -312,7 +312,7 @@ export default function Configuracoes({ user }) {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 <OpcaoCaixa
                   marcada={form.tipoCaixa === "INDEPENDENTE"}
-                  disabled={!ehAdmin}
+                  disabled={!podeEditar}
                   titulo="Caixa Independente"
                   icone="👤"
                   descricao="Cada operador abre e gerencia o próprio caixa. Vendas exigem caixa pessoal aberto."
@@ -320,7 +320,7 @@ export default function Configuracoes({ user }) {
                 />
                 <OpcaoCaixa
                   marcada={form.tipoCaixa === "COMPARTILHADO"}
-                  disabled={!ehAdmin}
+                  disabled={!podeEditar}
                   titulo="Caixa Compartilhado"
                   icone="👥"
                   descricao="Um único caixa por turno para toda a empresa. Todos vendem no mesmo caixa aberto."
@@ -329,7 +329,7 @@ export default function Configuracoes({ user }) {
               </div>
             </Secao>
 
-            {ehAdmin && (
+            {podeEditar && (
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
                 <button type="submit" disabled={salvando}
                   style={{

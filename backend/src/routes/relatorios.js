@@ -12,6 +12,7 @@ import {
   relatorioPerformanceCrm,
   relatorioCarteiraCrm,
   relatorioNpsCrm,
+  relatorioAtividadesCrm,
 } from "../controllers/relatoriosCrmController.js";
 
 const router = Router();
@@ -28,5 +29,6 @@ router.get("/crm/funil", relatorioFunilCrm);
 router.get("/crm/performance", relatorioPerformanceCrm);
 router.get("/crm/carteira", relatorioCarteiraCrm);
 router.get("/crm/nps", relatorioNpsCrm);
+router.get("/crm/atividades", relatorioAtividadesCrm);
 
 export default router;

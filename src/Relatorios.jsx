@@ -107,6 +107,7 @@ function RelatoriosCrm() {
     { id: "performance", label: "🏅 Performance Comercial", cor: C.accent },
     { id: "carteira", label: "👥 Carteira de Clientes (RFM)", cor: C.green },
     { id: "nps", label: "😊 NPS & Satisfação", cor: C.yellow },
+    { id: "atividades", label: "📞 Atividades & Cadência", cor: "#7c3aed" },
   ];
   const [sub, setSub] = useState("funil");
 
@@ -131,6 +132,7 @@ function RelatoriosCrm() {
       {sub === "performance" && <RelatorioPerformanceCrm key="cp" />}
       {sub === "carteira" && <RelatorioCarteiraCrm key="cc" />}
       {sub === "nps" && <RelatorioNpsCrm key="cn" />}
+      {sub === "atividades" && <RelatorioAtividadesCrm key="ca" />}
     </div>
   );
 }
@@ -1475,6 +1477,299 @@ function RelatorioPerformanceCrm() {
                   fmtNum(v.interacoes),
                 ])}
             />
+          )}
+        </>
+      )}
+    </BlocoRelatorio>
+  );
+}
+
+// ============ RELATÓRIO DE ATIVIDADES & CADÊNCIA ============
+const ROTULO_TIPO_INTERACAO = {
+  LIGACAO: "📞 Ligação",
+  WHATSAPP: "💬 WhatsApp",
+  EMAIL: "📧 E-mail",
+  VISITA: "🚪 Visita",
+  REUNIAO: "🤝 Reunião",
+  ANOTACAO: "📝 Anotação",
+};
+
+function RelatorioAtividadesCrm() {
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+  const [userId, setUserId] = useState("");
+  const [diasInativo, setDiasInativo] = useState("60");
+  const [usuarios, setUsuarios] = useState([]);
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
+  }, []);
+
+  const gerar = useCallback(async () => {
+    setCarregando(true); setErro("");
+    try {
+      const r = await api.relatorioAtividadesCrm({ dataInicio, dataFim, userId, diasInativo });
+      setDados(r);
+    } catch (err) { setErro(err.message); }
+    finally { setCarregando(false); }
+  }, [dataInicio, dataFim, userId, diasInativo]);
+
+  async function exportar() {
+    if (!dados) return;
+    const doc = await criarPDF("Relatório de Atividades & Cadência (CRM)");
+    addPeriodo(doc, dataInicio, dataFim);
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 4,
+      head: [["Indicador", "Valor"]],
+      body: [
+        ["Total de interações", fmtNum(dados.resumo.totalInteracoes)],
+        ["Média por dia útil", dados.resumo.mediaPorDiaUtil.toFixed(1)],
+        ["Dias úteis no período", fmtNum(dados.resumo.diasUteis)],
+        ["Clientes contactados (únicos)", fmtNum(dados.resumo.clientesContactados)],
+        ["Base ativa", fmtNum(dados.resumo.baseAtiva)],
+        ["Cobertura da carteira", `${dados.resumo.cobertura.toFixed(1)}%`],
+        ["Tarefas concluídas", fmtNum(dados.resumo.totalTarefasConcluidas)],
+        ["SLA geral de tarefas", `${dados.resumo.slaGeral.toFixed(1)}%`],
+        ["Tarefas abertas atrasadas", fmtNum(dados.resumo.totalAtrasadas)],
+        [`Clientes sem contato há ${dados.filtros.diasInativo}+ dias`, fmtNum(dados.resumo.clientesSemContato)],
+      ],
+      theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+      styles: { fontSize: 10 },
+    });
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 6,
+      head: [["Tipo", "Quantidade"]],
+      body: dados.porTipo.map(t => [
+        ROTULO_TIPO_INTERACAO[t.tipo] || t.tipo,
+        fmtNum(t.quantidade),
+      ]),
+      theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+      styles: { fontSize: 9 },
+    });
+
+    if (dados.porVendedor.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["#", "Vendedor", "Total", "Clientes únicos", "Ligação", "WhatsApp", "E-mail", "Visita", "Reunião", "Tarefas (SLA)"]],
+        body: dados.porVendedor.map((v, i) => [
+          i + 1, v.nome,
+          fmtNum(v.interacoes), fmtNum(v.clientesContactados),
+          fmtNum(v.interacoesLigacao), fmtNum(v.interacoesWhatsapp),
+          fmtNum(v.interacoesEmail), fmtNum(v.interacoesVisita),
+          fmtNum(v.interacoesReuniao),
+          `${v.tarefasConcluidas} (${v.slaTarefas.toFixed(0)}%)`,
+        ]),
+        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        styles: { fontSize: 8 },
+      });
+    }
+
+    if (dados.clientesSemContato.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["🔔 Clientes sem contato — agir agora", "", "", "", ""]],
+        body: [],
+        styles: { fontSize: 11, fontStyle: "bold" }, theme: "plain",
+      });
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY,
+        head: [["Cliente", "Cidade", "Telefone", "Última interação", "Dias sem contato"]],
+        body: dados.clientesSemContato.map(c => [
+          c.nome, c.cidade || "—", c.telefone || "—",
+          c.ultimaInteracao ? fmtData(c.ultimaInteracao) : "Nunca",
+          fmtNum(c.diasSemContato),
+        ]),
+        theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+        styles: { fontSize: 9 },
+      });
+    }
+
+    if (dados.distribuicaoSemanal.some(d => d.quantidade > 0)) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["Dia da semana", "Interações"]],
+        body: dados.distribuicaoSemanal.map(d => [d.dia, fmtNum(d.quantidade)]),
+        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        styles: { fontSize: 9 },
+      });
+    }
+
+    doc.save(`relatorio-atividades-crm-${hoje()}.pdf`);
+  }
+
+  const maxPorTipo = dados ? Math.max(1, ...dados.porTipo.map(t => t.quantidade)) : 1;
+  const maxSemana = dados ? Math.max(1, ...dados.distribuicaoSemanal.map(d => d.quantidade)) : 1;
+
+  return (
+    <BlocoRelatorio
+      titulo="Relatório de Atividades & Cadência (CRM)" cor="#7c3aed"
+      filtros={
+        <>
+          <CampoData label="De" value={dataInicio} onChange={setDataInicio} />
+          <CampoData label="Até" value={dataFim} onChange={setDataFim} />
+          <CampoSelectBusca label="Vendedor" opcoes={usuarios} value={userId} onChange={setUserId} placeholder="Todos" />
+          <CampoSelect label="Dias sem contato" value={diasInativo} onChange={setDiasInativo}>
+            <option value="30">30 dias</option>
+            <option value="60">60 dias</option>
+            <option value="90">90 dias</option>
+            <option value="180">180 dias</option>
+          </CampoSelect>
+        </>
+      }
+      onGerar={gerar} onExportar={exportar} carregando={carregando}
+      erro={erro} dados={dados}
+    >
+      {dados && (
+        <>
+          <Resumo cards={[
+            { rotulo: "Interações", valor: fmtNum(dados.resumo.totalInteracoes), cor: "#7c3aed" },
+            { rotulo: "Média/dia útil", valor: dados.resumo.mediaPorDiaUtil.toFixed(1), cor: C.accent },
+            { rotulo: "Clientes únicos", valor: fmtNum(dados.resumo.clientesContactados), cor: C.green },
+            { rotulo: "Cobertura", valor: `${dados.resumo.cobertura.toFixed(1)}%`, cor: dados.resumo.cobertura >= 50 ? C.green : C.yellow },
+            { rotulo: "Tarefas conc.", valor: fmtNum(dados.resumo.totalTarefasConcluidas), cor: C.accent },
+            { rotulo: "SLA tarefas", valor: `${dados.resumo.slaGeral.toFixed(1)}%`, cor: dados.resumo.slaGeral >= 80 ? C.green : C.yellow },
+            { rotulo: "Atrasadas abertas", valor: fmtNum(dados.resumo.totalAtrasadas), cor: dados.resumo.totalAtrasadas > 0 ? C.red : C.muted },
+            { rotulo: "Sem contato", valor: fmtNum(dados.resumo.clientesSemContato), cor: dados.resumo.clientesSemContato > 0 ? C.yellow : C.muted },
+          ]} />
+
+          {/* Volume por tipo de interação */}
+          {dados.porTipo.some(t => t.quantidade > 0) && (
+            <div style={{
+              background: C.card, border: `1px solid ${C.border}`,
+              borderRadius: 12, padding: 16, marginBottom: 16,
+            }}>
+              <div style={{ color: C.white, fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
+                Volume por tipo de interação
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {dados.porTipo.map(t => {
+                  const pct = (t.quantidade / maxPorTipo) * 100;
+                  return (
+                    <div key={t.tipo} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ width: 130, color: C.text, fontSize: 12, fontWeight: 600 }}>
+                        {ROTULO_TIPO_INTERACAO[t.tipo] || t.tipo}
+                      </div>
+                      <div style={{ flex: 1, position: "relative", height: 22, background: C.surface, borderRadius: 6, overflow: "hidden" }}>
+                        <div style={{
+                          width: `${pct}%`, height: "100%",
+                          background: "#7c3aed", opacity: 0.7,
+                        }} />
+                        <div style={{
+                          position: "absolute", inset: 0,
+                          display: "flex", alignItems: "center", padding: "0 10px",
+                          color: C.white, fontSize: 11, fontWeight: 700,
+                        }}>
+                          {fmtNum(t.quantidade)}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Distribuição por dia da semana */}
+          {dados.distribuicaoSemanal.some(d => d.quantidade > 0) && (
+            <div style={{
+              background: C.card, border: `1px solid ${C.border}`,
+              borderRadius: 12, padding: 16, marginBottom: 16,
+            }}>
+              <div style={{ color: C.white, fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
+                Distribuição por dia da semana
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-around", alignItems: "flex-end", gap: 4, height: 120 }}>
+                {dados.distribuicaoSemanal.map(d => {
+                  const altura = (d.quantidade / maxSemana) * 100;
+                  const ehFimSemana = d.indice === 0 || d.indice === 6;
+                  return (
+                    <div key={d.indice} style={{
+                      flex: 1, display: "flex", flexDirection: "column",
+                      alignItems: "center", gap: 4,
+                    }}>
+                      <div style={{ color: C.text, fontSize: 11, fontWeight: 700 }}>
+                        {d.quantidade}
+                      </div>
+                      <div style={{
+                        width: "70%",
+                        height: `${altura}%`,
+                        background: ehFimSemana ? C.muted : C.accent,
+                        borderRadius: "4px 4px 0 0",
+                        minHeight: 2,
+                      }} />
+                      <div style={{ color: C.muted, fontSize: 10, fontWeight: 600 }}>
+                        {d.dia.slice(0, 3)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {dados.porVendedor.length > 0 && (
+            <Tabela
+              titulo={`Atividade por vendedor (${dados.porVendedor.length})`}
+              colunas={["#", "Vendedor", "Total", "Clientes únicos", "Ligação", "WhatsApp", "E-mail", "Visita", "Reunião", "Tarefas (SLA)"]}
+              alinhamentos={["center", "left", "right", "right", "right", "right", "right", "right", "right", "right"]}
+              linhas={dados.porVendedor.map((v, i) => [
+                i + 1, v.nome,
+                fmtNum(v.interacoes), fmtNum(v.clientesContactados),
+                fmtNum(v.interacoesLigacao), fmtNum(v.interacoesWhatsapp),
+                fmtNum(v.interacoesEmail), fmtNum(v.interacoesVisita),
+                fmtNum(v.interacoesReuniao),
+                `${v.tarefasConcluidas} (${v.slaTarefas.toFixed(0)}%)`,
+              ])}
+              vazioTexto="Nenhuma atividade no período."
+            />
+          )}
+
+          {dados.clientesSemContato.length > 0 && (
+            <div style={{
+              background: C.yellow + "11", border: `1px solid ${C.yellow}55`,
+              borderRadius: 12, padding: 16, marginBottom: 16,
+            }}>
+              <div style={{ color: C.yellow, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>
+                🔔 Clientes sem contato há {dados.filtros.diasInativo}+ dias — top {dados.clientesSemContato.length}
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: C.surface }}>
+                      {["Cliente", "Cidade", "Telefone", "E-mail", "Última interação", "Dias"].map((h, i) => (
+                        <th key={i} style={{
+                          padding: "8px 12px", textAlign: i === 5 ? "right" : "left",
+                          color: C.muted, fontSize: 10, fontWeight: 700,
+                          textTransform: "uppercase", letterSpacing: 0.5,
+                          borderBottom: `1px solid ${C.border}`,
+                        }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dados.clientesSemContato.map(c => (
+                      <tr key={c.id} style={{ borderBottom: `1px solid ${C.border}55` }}>
+                        <td style={{ padding: "8px 12px", color: C.text, whiteSpace: "nowrap" }}>{c.nome}</td>
+                        <td style={{ padding: "8px 12px", color: C.muted }}>{c.cidade || "—"}</td>
+                        <td style={{ padding: "8px 12px", color: C.muted }}>{c.telefone || "—"}</td>
+                        <td style={{ padding: "8px 12px", color: C.muted }}>{c.email || "—"}</td>
+                        <td style={{ padding: "8px 12px", color: C.muted }}>
+                          {c.ultimaInteracao ? fmtData(c.ultimaInteracao) : "Nunca"}
+                        </td>
+                        <td style={{ padding: "8px 12px", textAlign: "right", color: C.red, fontWeight: 700 }}>
+                          {fmtNum(c.diasSemContato)}d
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           )}
         </>
       )}

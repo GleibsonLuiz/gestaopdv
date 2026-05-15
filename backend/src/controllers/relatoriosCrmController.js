@@ -289,6 +289,257 @@ export async function relatorioFunilCrm(req, res, next) {
   }
 }
 
+// ============ RELATORIO DE ATIVIDADES & CADENCIA ============
+//
+// Visao da "respiracao comercial" — quem esta acionando clientes,
+// com que frequencia, e onde estao os gaps de relacionamento.
+//
+// Distinto do Performance Comercial (foco em resultados): aqui o foco
+// e em acoes (interacoes registradas, tarefas executadas, alcance da
+// base) e em identificar clientes sem contato recente.
+//
+// Filtros:
+//   dataInicio, dataFim   -> periodo de analise (interacoes + tarefas concluidas)
+//   userId                -> 1 vendedor (ou todos)
+//   diasInativo           -> dias sem interacao para entrar na lista
+//                            "clientes sem contato" (default 60)
+//
+// Retorno:
+//   resumo                -> KPIs gerais
+//   porTipo               -> volume por tipo de interacao
+//   porVendedor           -> linha por User com volume + SLA tarefas + alcance
+//   clientesSemContato    -> top 30 clientes ativos sem interacao ha N dias
+//   distribuicaoSemanal   -> volume de interacoes por dia da semana
+
+const TIPOS_INTERACAO = ["LIGACAO", "WHATSAPP", "EMAIL", "VISITA", "REUNIAO", "ANOTACAO"];
+
+export async function relatorioAtividadesCrm(req, res, next) {
+  try {
+    const { dataInicio, dataFim, userId, diasInativo } = req.query;
+    const di = parseDataInicio(dataInicio);
+    const df = parseDataFim(dataFim);
+    const diasInativoNum = parseInt(diasInativo || "60", 10);
+
+    const filtroPeriodoInteracoes = {};
+    if (di || df) filtroPeriodoInteracoes.data = {};
+    if (di) filtroPeriodoInteracoes.data.gte = di;
+    if (df) filtroPeriodoInteracoes.data.lte = df;
+    if (userId) filtroPeriodoInteracoes.userId = userId;
+
+    const filtroTarefasConcluidas = {
+      status: "CONCLUIDA",
+    };
+    if (di || df) filtroTarefasConcluidas.concluidaEm = {};
+    if (di) filtroTarefasConcluidas.concluidaEm.gte = di;
+    if (df) filtroTarefasConcluidas.concluidaEm.lte = df;
+    if (userId) filtroTarefasConcluidas.responsavelId = userId;
+
+    const filtroTarefasAbertas = {
+      status: { in: ["ABERTA", "EM_ANDAMENTO"] },
+      ...(userId ? { responsavelId: userId } : {}),
+    };
+
+    const [usuarios, interacoes, tarefasConcluidas, tarefasAbertas, clientesAtivos] = await Promise.all([
+      prisma.user.findMany({
+        where: { ativo: true, role: { in: ["GERENTE", "VENDEDOR"] }, ...(userId ? { id: userId } : {}) },
+        select: { id: true, nome: true, role: true },
+      }),
+      prisma.interacao.findMany({
+        where: filtroPeriodoInteracoes,
+        select: { id: true, tipo: true, data: true, userId: true, clienteId: true },
+      }),
+      prisma.tarefa.findMany({
+        where: filtroTarefasConcluidas,
+        select: { responsavelId: true, prazo: true, concluidaEm: true },
+      }),
+      prisma.tarefa.findMany({
+        where: filtroTarefasAbertas,
+        select: { responsavelId: true, prazo: true },
+      }),
+      prisma.cliente.findMany({
+        where: { ativo: true },
+        select: { id: true, nome: true, telefone: true, email: true, cidade: true, createdAt: true },
+      }),
+    ]);
+
+    const agora = new Date();
+
+    // ===== POR TIPO =====
+    const mapaTipo = {};
+    for (const t of TIPOS_INTERACAO) mapaTipo[t] = { tipo: t, quantidade: 0 };
+    for (const i of interacoes) {
+      if (mapaTipo[i.tipo]) mapaTipo[i.tipo].quantidade += 1;
+    }
+    const porTipo = TIPOS_INTERACAO.map(t => mapaTipo[t]);
+
+    // ===== POR VENDEDOR =====
+    const mapaUser = new Map();
+    for (const u of usuarios) {
+      mapaUser.set(u.id, {
+        id: u.id, nome: u.nome, role: u.role,
+        interacoes: 0,
+        interacoesLigacao: 0,
+        interacoesWhatsapp: 0,
+        interacoesEmail: 0,
+        interacoesVisita: 0,
+        interacoesReuniao: 0,
+        interacoesAnotacao: 0,
+        clientesContactados: new Set(),
+        tarefasConcluidas: 0,
+        tarefasConcluidasNoPrazo: 0,
+        tarefasAbertasTotal: 0,
+        tarefasAbertasAtrasadas: 0,
+      });
+    }
+
+    for (const i of interacoes) {
+      const a = mapaUser.get(i.userId);
+      if (!a) continue;
+      a.interacoes += 1;
+      if (i.clienteId) a.clientesContactados.add(i.clienteId);
+      switch (i.tipo) {
+        case "LIGACAO": a.interacoesLigacao += 1; break;
+        case "WHATSAPP": a.interacoesWhatsapp += 1; break;
+        case "EMAIL": a.interacoesEmail += 1; break;
+        case "VISITA": a.interacoesVisita += 1; break;
+        case "REUNIAO": a.interacoesReuniao += 1; break;
+        case "ANOTACAO": a.interacoesAnotacao += 1; break;
+      }
+    }
+
+    for (const t of tarefasConcluidas) {
+      if (!t.responsavelId) continue;
+      const a = mapaUser.get(t.responsavelId);
+      if (!a) continue;
+      a.tarefasConcluidas += 1;
+      if (!t.prazo || (t.concluidaEm && t.concluidaEm <= t.prazo)) {
+        a.tarefasConcluidasNoPrazo += 1;
+      }
+    }
+
+    for (const t of tarefasAbertas) {
+      if (!t.responsavelId) continue;
+      const a = mapaUser.get(t.responsavelId);
+      if (!a) continue;
+      a.tarefasAbertasTotal += 1;
+      if (t.prazo && new Date(t.prazo) < agora) a.tarefasAbertasAtrasadas += 1;
+    }
+
+    const porVendedor = Array.from(mapaUser.values()).map(a => {
+      const slaTarefas = a.tarefasConcluidas > 0
+        ? (a.tarefasConcluidasNoPrazo / a.tarefasConcluidas) * 100
+        : 0;
+      const clientesContactados = a.clientesContactados.size;
+      delete a.clientesContactados;
+      return { ...a, clientesContactados, slaTarefas };
+    }).sort((a, b) => b.interacoes - a.interacoes);
+
+    // ===== CLIENTES SEM CONTATO HA N DIAS =====
+    // Para cada cliente ativo, achar a interacao mais recente (em qualquer
+    // periodo, nao limitada a janela de filtro) e calcular dias desde.
+    // Considera apenas clientes cadastrados ha mais que `diasInativoNum` dias.
+    const todasInteracoes = await prisma.interacao.findMany({
+      select: { clienteId: true, data: true },
+      orderBy: { data: "desc" },
+    });
+    const ultimaInteracaoPorCliente = new Map();
+    for (const i of todasInteracoes) {
+      if (!i.clienteId) continue;
+      if (!ultimaInteracaoPorCliente.has(i.clienteId)) {
+        ultimaInteracaoPorCliente.set(i.clienteId, i.data);
+      }
+    }
+
+    const corteSemContato = new Date(Date.now() - diasInativoNum * 86400000);
+    const clientesSemContato = clientesAtivos
+      .filter(c => {
+        const cadastradoHa = (agora.getTime() - c.createdAt.getTime()) / 86400000;
+        if (cadastradoHa < diasInativoNum) return false;
+        const ultima = ultimaInteracaoPorCliente.get(c.id);
+        return !ultima || ultima < corteSemContato;
+      })
+      .map(c => {
+        const ultima = ultimaInteracaoPorCliente.get(c.id);
+        return {
+          id: c.id, nome: c.nome,
+          telefone: c.telefone, email: c.email, cidade: c.cidade,
+          ultimaInteracao: ultima || null,
+          diasSemContato: ultima
+            ? Math.floor((agora.getTime() - ultima.getTime()) / 86400000)
+            : Math.floor((agora.getTime() - c.createdAt.getTime()) / 86400000),
+        };
+      })
+      .sort((a, b) => b.diasSemContato - a.diasSemContato)
+      .slice(0, 30);
+
+    // ===== DISTRIBUICAO POR DIA DA SEMANA =====
+    const diasSemanaNomes = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+    const distribuicaoSemanal = diasSemanaNomes.map((nome, idx) => ({
+      dia: nome,
+      indice: idx,
+      quantidade: 0,
+    }));
+    for (const i of interacoes) {
+      const idx = new Date(i.data).getDay();
+      distribuicaoSemanal[idx].quantidade += 1;
+    }
+
+    // ===== RESUMO =====
+    const clientesContactadosTotal = new Set();
+    for (const i of interacoes) {
+      if (i.clienteId) clientesContactadosTotal.add(i.clienteId);
+    }
+    const baseAtiva = clientesAtivos.length;
+    const cobertura = baseAtiva > 0 ? (clientesContactadosTotal.size / baseAtiva) * 100 : 0;
+
+    // Calcular media por dia util no periodo (segunda a sexta)
+    let diasUteis = 0;
+    if (di && df) {
+      const cursor = new Date(di);
+      while (cursor <= df) {
+        const dow = cursor.getDay();
+        if (dow !== 0 && dow !== 6) diasUteis += 1;
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    }
+
+    const totalTarefasConcluidas = porVendedor.reduce((s, v) => s + v.tarefasConcluidas, 0);
+    const totalTarefasNoPrazo = porVendedor.reduce((s, v) => s + v.tarefasConcluidasNoPrazo, 0);
+    const slaGeral = totalTarefasConcluidas > 0
+      ? (totalTarefasNoPrazo / totalTarefasConcluidas) * 100
+      : 0;
+    const totalAtrasadas = porVendedor.reduce((s, v) => s + v.tarefasAbertasAtrasadas, 0);
+
+    res.json({
+      filtros: {
+        dataInicio: di ? di.toISOString() : null,
+        dataFim: df ? df.toISOString() : null,
+        userId: userId || null,
+        diasInativo: diasInativoNum,
+      },
+      geradoEm: new Date().toISOString(),
+      resumo: {
+        totalInteracoes: interacoes.length,
+        clientesContactados: clientesContactadosTotal.size,
+        baseAtiva,
+        cobertura,
+        mediaPorDiaUtil: diasUteis > 0 ? interacoes.length / diasUteis : 0,
+        diasUteis,
+        totalTarefasConcluidas,
+        slaGeral,
+        totalAtrasadas,
+        clientesSemContato: clientesSemContato.length,
+      },
+      porTipo,
+      porVendedor,
+      clientesSemContato,
+      distribuicaoSemanal,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // ============ RELATORIO NPS CONSOLIDADO ============
 //
 // Net Promoter Score (NPS) calculado sobre PesquisaNps criadas a partir

@@ -475,6 +475,15 @@ export const api = {
     const q = qs.toString();
     return request(`/relatorios/crm/nps${q ? `?${q}` : ""}`);
   },
+  relatorioAtividadesCrm: ({ dataInicio = "", dataFim = "", userId = "", diasInativo = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (dataInicio) qs.set("dataInicio", dataInicio);
+    if (dataFim) qs.set("dataFim", dataFim);
+    if (userId) qs.set("userId", userId);
+    if (diasInativo) qs.set("diasInativo", diasInativo);
+    const q = qs.toString();
+    return request(`/relatorios/crm/atividades${q ? `?${q}` : ""}`);
+  },
 
   listarContasPagar: ({ search = "", status = "", fornecedorId = "", dataInicio = "", dataFim = "", vencidas = "" } = {}) => {
     const qs = new URLSearchParams();

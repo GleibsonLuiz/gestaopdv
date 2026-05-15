@@ -15,6 +15,22 @@ const SELECT_PUBLICO = {
   updatedAt: true,
 };
 
+// Lista enxuta de usuarios ativos para uso em selects de "responsavel"
+// (CRM, tarefas, etc). Retorna apenas {id, nome, role} — disponivel para
+// qualquer usuario autenticado, sem exigir permissao do modulo FUNCIONARIOS.
+export async function listarResponsaveis(req, res, next) {
+  try {
+    const usuarios = await prisma.user.findMany({
+      where: { ativo: true },
+      select: { id: true, nome: true, role: true },
+      orderBy: { nome: "asc" },
+    });
+    res.json(usuarios);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function listar(req, res, next) {
   try {
     const { search, ativo, role } = req.query;

@@ -199,6 +199,9 @@ export const api = {
   criarCompra: (data) => request("/compras", { method: "POST", body: data }),
   estornarCompra: (id, motivo) => request(`/compras/${id}/estornar`, { method: "POST", body: { motivo } }),
 
+  // Lista enxuta de usuarios ativos {id, nome, role} para selects de
+  // "responsavel" — disponivel para todos (nao exige modulo FUNCIONARIOS).
+  listarResponsaveis: () => request("/funcionarios/responsaveis"),
   listarFuncionarios: ({ search = "", ativo = "", role = "" } = {}) => {
     const qs = new URLSearchParams();
     if (search) qs.set("search", search);

@@ -62,7 +62,8 @@ function TarefaModal({ tarefa, onFechar, onSalvo, user }) {
 
   useEffect(() => {
     Promise.all([
-      api.listarFuncionarios({ ativo: "true" }),
+      // Endpoint enxuto: funciona tambem para VENDEDOR (sem perm. FUNCIONARIOS)
+      api.listarResponsaveis(),
       api.listarClientes({ ativo: "true" }),
     ]).then(([f, c]) => {
       setFuncionarios(f);

@@ -83,7 +83,8 @@ export default function Funil({ user }) {
     (async () => {
       try {
         const [funcs, clis] = await Promise.all([
-          api.listarFuncionarios({ ativo: "true" }).catch(() => []),
+          // Endpoint enxuto que VENDEDOR tambem pode chamar (sem perm. FUNCIONARIOS)
+          api.listarResponsaveis().catch(() => []),
           api.listarClientes({ ativo: "true" }).catch(() => []),
         ]);
         if (!ativo) return;

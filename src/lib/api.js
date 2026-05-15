@@ -2,8 +2,18 @@
 // variavel de ambiente do projeto. Em dev, default para o backend local.
 export const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3333";
 
+// Multi-tenant: o JWT armazenado em localStorage carrega o `tid` (tenant id)
+// dentro do payload. Toda requisicao autenticada enviada por request()
+// inclui Authorization: Bearer <token>, e o backend extrai o tenantId do
+// JWT para isolar dados via Prisma extension (ver backend/src/lib/prisma.js).
+//
+// Os dados da empresa logada (id, nome, cnpj) sao salvos junto da sessao
+// para permitir exibir contexto no header da UI sem ter que decodificar
+// o JWT no front.
+
 const TOKEN_KEY = "gestao_token";
 const USER_KEY = "gestao_user";
+const EMPRESA_KEY = "gestao_empresa";
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
@@ -18,16 +28,34 @@ export function getUser() {
   }
 }
 
-export function setSession(token, user) {
+export function getEmpresa() {
+  try {
+    const raw = localStorage.getItem(EMPRESA_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setSession(token, user, empresa = null) {
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(USER_KEY, JSON.stringify(user));
+  if (empresa) {
+    localStorage.setItem(EMPRESA_KEY, JSON.stringify(empresa));
+  }
 }
 
 export function clearSession() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+  localStorage.removeItem(EMPRESA_KEY);
 }
 
+// Interceptor de autenticacao multi-tenant: cada chamada autenticada
+// injeta automaticamente o JWT (lido do localStorage) no header
+// Authorization. Em 401 o backend ja invalidou o token, entao
+// limpamos a sessao localmente e disparamos auth:logout para o
+// App.jsx redirecionar pro Login.
 async function request(path, { method = "GET", body, auth = true } = {}) {
   const headers = { "Content-Type": "application/json" };
   if (auth) {

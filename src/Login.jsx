@@ -106,8 +106,10 @@ export default function Login({ onSuccess }) {
     setErr('');
 
     try {
-      const { token, user } = await api.login(email, password);
-      setSession(token, user);
+      // Backend (ETAPA 2 multi-tenant) retorna { token, user, empresa }.
+      // user.tenantId duplica empresa.id mas mantemos para conveniencia.
+      const { token, user, empresa } = await api.login(email, password);
+      setSession(token, user, empresa);
       setStatus('success');
       onSuccess?.(user);
     } catch (e2) {

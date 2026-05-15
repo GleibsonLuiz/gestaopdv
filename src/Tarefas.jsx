@@ -61,14 +61,14 @@ function TarefaModal({ tarefa, onFechar, onSalvo, user }) {
   const [clientes, setClientes] = useState([]);
 
   useEffect(() => {
-    Promise.all([
-      // Endpoint enxuto: funciona tambem para VENDEDOR (sem perm. FUNCIONARIOS)
-      api.listarResponsaveis(),
-      api.listarClientes({ ativo: "true" }),
-    ]).then(([f, c]) => {
-      setFuncionarios(f);
-      setClientes(c);
-    }).catch(() => {});
+    // Cada chamada tem seu proprio .catch para que uma falha
+    // (ex: cliente sem permissao) nao zere a outra lista.
+    api.listarResponsaveis()
+      .then(setFuncionarios)
+      .catch(() => setFuncionarios([]));
+    api.listarClientes({ ativo: "true" })
+      .then(setClientes)
+      .catch(() => setClientes([]));
   }, []);
 
   useEffect(() => {

@@ -146,6 +146,19 @@ d:/gestao-pdv/
 
 ## Histórico de sessões
 
+### Sessão — 2026-05-15 (Relatórios CRM — Funil de Vendas)
+
+Análise do sistema vs CRMs profissionais (Salesforce/HubSpot/Pipedrive) identificou gap claro: 6 abas operacionais em Relatórios (Vendas/Compras/Financeiro/Estoque/Caixas/Comissões), **zero relatórios de relacionamento**. Apresentadas 7 propostas (Funil, Performance Comercial, Motivos de Perda, Carteira/RFM, Atividades & Cadência, NPS, Forecast); usuário aprovou começar pelo **Funil de Vendas** com sub-tabs em uma única aba "🎯 CRM" e conversão etapa-a-etapa baseada em `HistoricoOportunidade`.
+
+**Entregue** (`11242d9` — `feat(relatorios): novo relatorio de Funil de Vendas no modulo CRM`):
+- **Backend:** novo controller [backend/src/controllers/relatoriosCrmController.js](backend/src/controllers/relatoriosCrmController.js) com `relatorioFunilCrm` (KPIs do pipeline, distribuição por etapa, conversão etapa-a-etapa via `HistoricoOportunidade` — para cada par adjacente do fluxo LEAD→QUALIFICADO→PROPOSTA→NEGOCIACAO→GANHO calcula quantas oportunidades visitaram cada etapa em algum momento e a taxa de avanço, performance por responsável com `taxaConversao`/`valorGanho`, agrupamento por origem, motivos de perda agregados, e detalhamento de até todas as oportunidades do período com `diasNaEtapa` calculado a partir do histórico).
+- **Rota:** `GET /relatorios/crm/funil` registrado em [backend/src/routes/relatorios.js](backend/src/routes/relatorios.js) (reaproveita permissão `RELATORIOS` já configurada).
+- **API client:** `api.relatorioFunilCrm({ dataInicio, dataFim, responsavelId, origem })` em [src/lib/api.js](src/lib/api.js).
+- **Frontend:** [src/Relatorios.jsx](src/Relatorios.jsx) ganhou aba "🎯 CRM" com sub-tabs (estrutura preparada pros próximos 6 relatórios). Sub-tab "📊 Funil de Vendas" com 8 KPIs no topo, **funil visual em barras horizontais coloridas por etapa**, tabela de conversão etapa-a-etapa, ranking de vendedores, agrupamento por origem, motivos de perda e detalhamento — tudo com export PDF (header de empresa + período + todas as tabelas via `jspdf-autotable`).
+- **Cleanup:** removido import órfão de `useConfiguracaoEmpresa` em `Relatorios.jsx:6` (pré-existente, pego pelo lint).
+
+Smoke-test não rodado (usuário pediu pra commitar direto); `vite build` OK, `eslint` limpo em todos os arquivos modificados.
+
 ### Sessão — 2026-05-14 (Logs de auditoria + fix ActionsMenu)
 
 **Fix do dropdown `ActionsMenu`** (`6198f29`): trocado `position: absolute` por `position: fixed` com coordenadas calculadas via `getBoundingClientRect()`, escapando do `overflow: hidden` da tabela. Adicionado flip vertical automático quando não há espaço abaixo do botão (ex.: última linha da tabela de Clientes) e fechamento em scroll/resize. Cobre as 11 telas que usam o componente. Auditoria identificou 4 outros dropdowns com o mesmo padrão (`BotoesContatoCliente`, `SelectBusca`, `Alertas`, `Fidelidade`) — não corrigidos nesta sessão a pedido do usuário.
@@ -1152,6 +1165,15 @@ Estado em 2026-05-14: CRM completo, `vite build` OK em todos os 10 commits da se
 - **Auditoria do Reset Total:** `POST /admin/reset` apaga arquivos físicos de `backend/uploads/` em best-effort, sem log estruturado de "quem executou, quando, quantos registros". Fácil de adicionar (um `console.log` ou tabela `AuditLog`).
 
 ### Próxima decisão (a ser tomada)
+
+**Relatórios CRM — continuar a sequência iniciada em 2026-05-15:**
+A aba "🎯 CRM" em Relatórios foi entregue com a estrutura de sub-tabs já pronta; falta implementar os 6 sub-relatórios restantes. Ordem sugerida (e justificativa):
+- **(crm-1)** Performance Comercial — reaproveita muito código do Funil (mesmas tabelas `Oportunidade` + `User`), foco em atividade do vendedor (ciclo, conversão, ticket, tarefas concluídas, interações).
+- **(crm-2)** Carteira de Clientes (RFM) — segmentação on-the-fly (lógica já existe em `dashboardCrmController.classificarSegmento`), Top LTV, distribuição por segmento. Alto valor para gestão.
+- **(crm-3)** NPS Consolidado — você já coleta `PesquisaNps` pós-venda; falta NPS Score, distribuição Detratores/Neutros/Promotores, ranking por vendedor, lista de detratores recentes para recuperação.
+- **(crm-4)** Atividades & Cadência — volume de interações por tipo/vendedor, cobertura da carteira (% clientes contatados), SLA de tarefas.
+- **(crm-5)** Motivos de Perda — já calculado no Funil; pode virar relatório dedicado com gráfico por concorrente/razão.
+- **(crm-6)** Forecast / Previsão — agrupa oportunidades por mês de `dataFechamentoPrevista`, com valor ponderado, para os próximos 3-6 meses.
 
 **Possíveis evoluções do CRM (fora do escopo das 10 prioridades originais):**
 - **(a)** Cron automático das automações — hoje a execução é manual via botão "Executar agora". Adicionar Vercel Cron (em `vercel.json`) chamando `POST /automacoes/executar` 1x/dia com header de autorização (chave em env). Sem isso, automações dependem de gestor abrir a tela e clicar.

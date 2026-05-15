@@ -10,18 +10,39 @@ export async function login(req, res, next) {
       return res.status(400).json({ erro: "Email e senha sao obrigatorios" });
     }
 
-    // ETAPA 1 multi-tenant: User.email virou @@unique([tenantId, email]),
-    // entao findUnique nao aceita mais filtrar so por email. findFirst
-    // funciona porque ainda ha um unico tenant (DEFAULT) no banco; a
-    // ETAPA 3 (middleware) vai trocar isso por findFirst com filtro
-    // explicito de tenantId.
-    const user = await prisma.user.findFirst({ where: { email } });
+    // Multi-tenant: include = tenant para emitir o JWT com o tenantId
+    // do usuario. findFirst e necessario porque User.email virou
+    // @@unique([tenantId, email]) na ETAPA 1.
+    const user = await prisma.user.findFirst({
+      where: { email },
+      include: {
+        tenant: { select: { id: true, nome: true, cnpj: true, ativo: true } },
+      },
+    });
     if (!user || !user.ativo) {
       registrarEvento({
         acao: "LOGIN_FALHO", modulo: "AUTH", sucesso: false,
         usuarioEmail: email, mensagem: user ? "Usuario inativo" : "Email nao encontrado", req,
       });
       return res.status(401).json({ erro: "Credenciais invalidas" });
+    }
+
+    // Bloqueio: tenant precisa existir e estar ativo. Se tenantId esta
+    // null (deve so acontecer em legado pre-ETAPA-1), recusamos o login
+    // ao inves de emitir um JWT sem tid. Mensagem generica para nao
+    // vazar info da arquitetura.
+    if (!user.tenantId || !user.tenant || !user.tenant.ativo) {
+      registrarEvento({
+        acao: "LOGIN_FALHO", modulo: "AUTH", sucesso: false,
+        usuarioId: user.id, usuarioNome: user.nome, usuarioEmail: user.email,
+        mensagem: !user.tenantId
+          ? "Usuario sem tenantId atribuido"
+          : !user.tenant
+            ? "Tenant nao encontrado"
+            : "Tenant inativo",
+        req,
+      });
+      return res.status(403).json({ erro: "Conta indisponivel. Contate o suporte." });
     }
 
     const ok = await bcrypt.compare(senha, user.senha);
@@ -34,8 +55,10 @@ export async function login(req, res, next) {
       return res.status(401).json({ erro: "Credenciais invalidas" });
     }
 
+    // JWT inclui `tid` (tenant id) que sera usado pelo middleware da
+    // ETAPA 3 para injetar req.tenantId em toda request.
     const token = jwt.sign(
-      { sub: user.id, role: user.role, nome: user.nome },
+      { sub: user.id, role: user.role, nome: user.nome, tid: user.tenantId },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
     );
@@ -50,6 +73,12 @@ export async function login(req, res, next) {
       user: {
         id: user.id, nome: user.nome, email: user.email,
         role: user.role, permissoes: user.permissoes,
+        tenantId: user.tenantId,
+      },
+      empresa: {
+        id: user.tenant.id,
+        nome: user.tenant.nome,
+        cnpj: user.tenant.cnpj,
       },
     });
   } catch (err) {
@@ -61,10 +90,18 @@ export async function me(req, res, next) {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user.sub },
-      select: { id: true, nome: true, email: true, role: true, ativo: true, permissoes: true },
+      select: {
+        id: true, nome: true, email: true, role: true, ativo: true, permissoes: true,
+        tenantId: true,
+        tenant: { select: { id: true, nome: true, cnpj: true, ativo: true } },
+      },
     });
     if (!user) return res.status(404).json({ erro: "Usuario nao encontrado" });
-    res.json(user);
+    const { tenant, ...rest } = user;
+    res.json({
+      ...rest,
+      empresa: tenant ? { id: tenant.id, nome: tenant.nome, cnpj: tenant.cnpj } : null,
+    });
   } catch (err) {
     next(err);
   }

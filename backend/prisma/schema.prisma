@@ -81,6 +81,19 @@ enum StatusCaixa {
   FECHADO
 }
 
+// Politica de uso do caixa por instalacao do sistema.
+//
+//   INDEPENDENTE - cada usuario opera o proprio caixa; vendas exigem que o
+//                  usuario logado tenha um caixa aberto pessoal.
+//   COMPARTILHADO - existe no maximo UM caixa aberto por turno na empresa;
+//                  qualquer vendedor registra vendas nele. A venda continua
+//                  gravando o userId do operador (comissao/auditoria), mas
+//                  o saldo financeiro vai para o caixa compartilhado ativo.
+enum TipoCaixa {
+  INDEPENDENTE
+  COMPARTILHADO
+}
+
 enum TipoMovimentacaoCaixa {
   ABERTURA
   VENDA
@@ -616,6 +629,9 @@ model ConfiguracaoEmpresa {
   cep          String?
   logotipo     String?
   observacoes  String?
+  // Politica de caixa do sistema (singleton). Default INDEPENDENTE preserva
+  // o comportamento legado: cada operador abre o proprio caixa.
+  tipoCaixa    TipoCaixa @default(INDEPENDENTE)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

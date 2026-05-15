@@ -5,6 +5,25 @@ const FORMAS_VALIDAS = new Set([
   "DINHEIRO", "CARTAO_CREDITO", "CARTAO_DEBITO", "PIX", "BOLETO", "CREDIARIO",
 ]);
 
+// Le a politica de caixa do sistema (singleton). Default INDEPENDENTE
+// quando ainda nao ha registro de configuracao salvo — mantem o comportamento
+// legado para instalacoes novas que ainda nao acessaram a tela Configuracoes.
+export async function obterTipoCaixa(tx = prisma) {
+  const cfg = await tx.configuracaoEmpresa.findFirst({
+    select: { tipoCaixa: true },
+  });
+  return cfg?.tipoCaixa || "INDEPENDENTE";
+}
+
+// Filtro WHERE para localizar o caixa ABERTO relevante de acordo com a
+// politica do sistema:
+//   INDEPENDENTE  -> caixa aberto do proprio usuario
+//   COMPARTILHADO -> qualquer caixa aberto (deve existir no maximo um)
+function whereCaixaAberto(userId, tipoCaixa) {
+  if (tipoCaixa === "COMPARTILHADO") return { status: "ABERTO" };
+  return { userId, status: "ABERTO" };
+}
+
 // Operacoes sensiveis (sangria, fechamento) feitas por VENDEDOR exigem
 // senha de um ADMIN/GERENTE ativo. ADMIN/GERENTE passam direto.
 async function exigirAutorizacaoGerencial(req) {
@@ -49,14 +68,16 @@ const INCLUDE_RESUMO = {
 
 export async function obterAtual(req, res, next) {
   try {
+    const tipoCaixa = await obterTipoCaixa();
     const caixa = await prisma.caixa.findFirst({
-      where: { userId: req.user.sub, status: "ABERTO" },
+      where: whereCaixaAberto(req.user.sub, tipoCaixa),
       include: INCLUDE_RESUMO,
+      orderBy: { abertoEm: "desc" },
     });
-    if (!caixa) return res.json({ caixa: null });
+    if (!caixa) return res.json({ caixa: null, tipoCaixa });
 
     const totais = await calcularTotaisCaixa(caixa.id, Number(caixa.saldoInicial));
-    res.json({ caixa: { ...caixa, totais } });
+    res.json({ caixa: { ...caixa, totais }, tipoCaixa });
   } catch (err) {
     next(err);
   }
@@ -67,8 +88,16 @@ export async function obterAtual(req, res, next) {
 
 export async function sugerirTroco(req, res, next) {
   try {
+    const tipoCaixa = await obterTipoCaixa();
+    // No modo COMPARTILHADO o troco que ficou para o proximo dia pertence
+    // a empresa, nao ao operador — busca o ultimo fechamento de qualquer
+    // caixa. No modo INDEPENDENTE, segue a regra anterior por usuario.
+    const where = tipoCaixa === "COMPARTILHADO"
+      ? { status: "FECHADO", trocoProximoDia: { not: null } }
+      : { userId: req.user.sub, status: "FECHADO", trocoProximoDia: { not: null } };
+
     const ultimo = await prisma.caixa.findFirst({
-      where: { userId: req.user.sub, status: "FECHADO", trocoProximoDia: { not: null } },
+      where,
       orderBy: { fechadoEm: "desc" },
       select: { trocoProximoDia: true, fechadoEm: true, numero: true },
     });
@@ -77,6 +106,7 @@ export async function sugerirTroco(req, res, next) {
       origem: ultimo
         ? { caixaNumero: ultimo.numero, fechadoEm: ultimo.fechadoEm }
         : null,
+      tipoCaixa,
     });
   } catch (err) {
     next(err);
@@ -92,15 +122,22 @@ export async function abrir(req, res, next) {
       return res.status(400).json({ erro: "Saldo inicial invalido" });
     }
 
-    // Bloqueia abertura se ja existe um caixa ABERTO para esse user.
+    const tipoCaixa = await obterTipoCaixa();
+
+    // Bloqueia abertura conforme a politica:
+    //   INDEPENDENTE  -> ja existe caixa aberto para esse user
+    //   COMPARTILHADO -> ja existe QUALQUER caixa aberto (so um por turno)
     const aberto = await prisma.caixa.findFirst({
-      where: { userId: req.user.sub, status: "ABERTO" },
-      select: { id: true, numero: true },
+      where: whereCaixaAberto(req.user.sub, tipoCaixa),
+      select: { id: true, numero: true, user: { select: { nome: true } } },
     });
     if (aberto) {
-      return res.status(409).json({
-        erro: `Voce ja tem um caixa aberto (#${aberto.numero}). Feche-o antes de abrir outro.`,
-      });
+      const msg = tipoCaixa === "COMPARTILHADO"
+        ? `Ja existe um caixa compartilhado aberto (#${aberto.numero}` +
+          (aberto.user?.nome ? ` por ${aberto.user.nome}` : "") +
+          "). Feche-o antes de abrir outro."
+        : `Voce ja tem um caixa aberto (#${aberto.numero}). Feche-o antes de abrir outro.`;
+      return res.status(409).json({ erro: msg });
     }
 
     const caixa = await prisma.$transaction(async (tx) => {
@@ -341,8 +378,11 @@ export async function listar(req, res, next) {
   try {
     const { userId, status, dataInicio, dataFim, limite } = req.query;
     const where = {};
-    // VENDEDOR ve so o proprio historico; ADMIN/GERENTE veem tudo.
-    if (req.user.role === "VENDEDOR") {
+    const tipoCaixa = await obterTipoCaixa();
+    // No modo COMPARTILHADO todos enxergam todos os caixas — o caixa
+    // pertence a empresa. No modo INDEPENDENTE, VENDEDOR ve so o proprio
+    // historico; ADMIN/GERENTE veem tudo.
+    if (tipoCaixa !== "COMPARTILHADO" && req.user.role === "VENDEDOR") {
       where.userId = req.user.sub;
     } else if (userId) {
       where.userId = userId;
@@ -464,30 +504,45 @@ export async function registrarEmCaixa(tx, caixaId, userId, dados) {
   });
 }
 
-// Versao "automatica" — busca o caixa aberto do user logado e delega.
+// Versao "automatica" — busca o caixa aberto pertinente (proprio user no
+// modo INDEPENDENTE; qualquer caixa no modo COMPARTILHADO) e delega.
 // Mantida para compatibilidade com vendaController e fluxos onde o usuario
 // nao escolheu caixa explicitamente.
 export async function registrarNoCaixaAberto(tx, userId, dados) {
+  const tipoCaixa = await obterTipoCaixa(tx);
   const caixa = await tx.caixa.findFirst({
-    where: { userId, status: "ABERTO" },
+    where: whereCaixaAberto(userId, tipoCaixa),
+    orderBy: { abertoEm: "desc" },
     select: { id: true },
   });
   if (!caixa) return null;
   return await registrarEmCaixa(tx, caixa.id, userId, dados);
 }
 
-export async function buscarCaixaAberto(userId) {
-  return await prisma.caixa.findFirst({
-    where: { userId, status: "ABERTO" },
+export async function buscarCaixaAberto(userId, tx = prisma) {
+  const tipoCaixa = await obterTipoCaixa(tx);
+  return await tx.caixa.findFirst({
+    where: whereCaixaAberto(userId, tipoCaixa),
+    orderBy: { abertoEm: "desc" },
     select: { id: true, numero: true },
   });
 }
 
 // Validacao usada pelo vendaController — exige caixa aberto e devolve o id.
+// A mensagem de erro muda conforme a politica: no modo COMPARTILHADO nao
+// e culpa do operador, e sim que ninguem abriu o caixa do turno.
 export async function exigirCaixaAberto(userId) {
-  const caixa = await buscarCaixaAberto(userId);
+  const tipoCaixa = await obterTipoCaixa();
+  const caixa = await prisma.caixa.findFirst({
+    where: whereCaixaAberto(userId, tipoCaixa),
+    orderBy: { abertoEm: "desc" },
+    select: { id: true, numero: true },
+  });
   if (!caixa) {
-    const e = new Error("Voce precisa abrir um caixa antes de registrar vendas. Acesse o modulo Caixa.");
+    const msg = tipoCaixa === "COMPARTILHADO"
+      ? "Nenhum caixa compartilhado esta aberto. Peca para alguem abrir o caixa do turno antes de registrar vendas."
+      : "Voce precisa abrir um caixa antes de registrar vendas. Acesse o modulo Caixa.";
+    const e = new Error(msg);
     e.status = 400;
     throw e;
   }

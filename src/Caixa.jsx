@@ -43,6 +43,7 @@ const FORMA_LABEL = {
 export default function Caixa({ user }) {
   const [aba, setAba] = useState("atual");
   const [caixaAtual, setCaixaAtual] = useState(null);
+  const [tipoCaixa, setTipoCaixa] = useState("INDEPENDENTE");
   const [carregando, setCarregando] = useState(true);
   const [mensagem, setMensagem] = useState("");
   const [erro, setErro] = useState("");
@@ -53,6 +54,7 @@ export default function Caixa({ user }) {
     try {
       const data = await api.obterCaixaAtual();
       setCaixaAtual(data.caixa);
+      setTipoCaixa(data.tipoCaixa || "INDEPENDENTE");
     } catch (err) {
       setErro(err.message);
     } finally {
@@ -69,9 +71,9 @@ export default function Caixa({ user }) {
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
         <BotaoAba ativo={aba === "atual"} onClick={() => setAba("atual")}>
-          💵 Meu caixa
+          💵 {tipoCaixa === "COMPARTILHADO" ? "Caixa do turno" : "Meu caixa"}
         </BotaoAba>
         <BotaoAba ativo={aba === "extrato"} onClick={() => setAba("extrato")} disabled={!caixaAtual}>
           📋 Extrato {caixaAtual ? `#${caixaAtual.numero}` : ""}
@@ -79,6 +81,15 @@ export default function Caixa({ user }) {
         <BotaoAba ativo={aba === "historico"} onClick={() => setAba("historico")}>
           📅 Histórico
         </BotaoAba>
+        <span style={{
+          marginLeft: "auto", fontSize: 11, fontWeight: 800,
+          padding: "5px 10px", borderRadius: 6, letterSpacing: 0.4,
+          background: tipoCaixa === "COMPARTILHADO" ? C.purple + "22" : C.muted + "22",
+          color: tipoCaixa === "COMPARTILHADO" ? C.purple : C.muted,
+          border: `1px solid ${tipoCaixa === "COMPARTILHADO" ? C.purple + "55" : C.border}`,
+        }}>
+          {tipoCaixa === "COMPARTILHADO" ? "👥 COMPARTILHADO" : "👤 INDEPENDENTE"}
+        </span>
       </div>
 
       {mensagem && <div style={alertStyle(C.green)}>{mensagem}</div>}

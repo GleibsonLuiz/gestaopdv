@@ -1,5 +1,5 @@
 import prisma from "../lib/prisma.js";
-import { calcularTotaisCaixa } from "./caixaController.js";
+import { calcularTotaisCaixa, obterTipoCaixa } from "./caixaController.js";
 
 function inicioDoDia(d = new Date()) {
   const x = new Date(d);
@@ -52,7 +52,8 @@ export async function resumo(req, res, next) {
     const diaAtualNoMes = agora.getDate();
     const diasRestantesMes = Math.max(1, diasNoMes - diaAtualNoMes + 1);
 
-    const userId = req.user?.id || null;
+    const userId = req.user?.sub || req.user?.id || null;
+    const tipoCaixa = await obterTipoCaixa();
 
     const [
       totalClientesAtivos,
@@ -325,11 +326,15 @@ export async function resumo(req, res, next) {
           )
       `,
 
-      // Caixa aberto do usuário logado (se houver). Pega só o registro;
-      // os totais são calculados depois com calcularTotaisCaixa()
+      // Caixa aberto relevante: no modo INDEPENDENTE, o do proprio user;
+      // no modo COMPARTILHADO, qualquer caixa aberto da empresa. Pega so o
+      // registro; totais sao calculados depois com calcularTotaisCaixa().
       userId
         ? prisma.caixa.findFirst({
-            where: { userId, status: "ABERTO" },
+            where: tipoCaixa === "COMPARTILHADO"
+              ? { status: "ABERTO" }
+              : { userId, status: "ABERTO" },
+            orderBy: { abertoEm: "desc" },
             select: { id: true, numero: true, saldoInicial: true, abertoEm: true },
           })
         : Promise.resolve(null),

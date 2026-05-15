@@ -16,6 +16,7 @@ const VAZIO = {
   estado: "",
   cep: "",
   observacoes: "",
+  tipoCaixa: "INDEPENDENTE",
 };
 
 export function urlLogotipo(logotipo) {
@@ -56,6 +57,7 @@ export default function Configuracoes({ user }) {
           estado: cfg.estado || "",
           cep: cfg.cep || "",
           observacoes: cfg.observacoes || "",
+          tipoCaixa: cfg.tipoCaixa || "INDEPENDENTE",
         });
         setLogotipoAtual(cfg.logotipo || null);
         setLogoPreview(cfg.logotipo ? urlLogotipo(cfg.logotipo) : null);
@@ -301,6 +303,32 @@ export default function Configuracoes({ user }) {
               </Campo>
             </Secao>
 
+            <Secao titulo="Operação do caixa">
+              <div style={{ color: C.muted, fontSize: 11, marginBottom: 8 }}>
+                Define como a abertura/fechamento de caixa funciona para todos os
+                operadores do sistema. Não é possível alterar enquanto houver
+                caixa aberto.
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <OpcaoCaixa
+                  marcada={form.tipoCaixa === "INDEPENDENTE"}
+                  disabled={!ehAdmin}
+                  titulo="Caixa Independente"
+                  icone="👤"
+                  descricao="Cada operador abre e gerencia o próprio caixa. Vendas exigem caixa pessoal aberto."
+                  onSelecionar={() => setForm(f => ({ ...f, tipoCaixa: "INDEPENDENTE" }))}
+                />
+                <OpcaoCaixa
+                  marcada={form.tipoCaixa === "COMPARTILHADO"}
+                  disabled={!ehAdmin}
+                  titulo="Caixa Compartilhado"
+                  icone="👥"
+                  descricao="Um único caixa por turno para toda a empresa. Todos vendem no mesmo caixa aberto."
+                  onSelecionar={() => setForm(f => ({ ...f, tipoCaixa: "COMPARTILHADO" }))}
+                />
+              </div>
+            </Secao>
+
             {ehAdmin && (
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
                 <button type="submit" disabled={salvando}
@@ -364,6 +392,44 @@ function Campo({ label, children }) {
       )}
       {children}
     </div>
+  );
+}
+
+function OpcaoCaixa({ marcada, disabled, titulo, icone, descricao, onSelecionar }) {
+  const corBorda = marcada ? C.accent : C.border;
+  const fundo = marcada ? `linear-gradient(135deg, ${C.accent}22, ${C.purple}22)` : C.surface;
+  return (
+    <button
+      type="button"
+      onClick={disabled ? undefined : onSelecionar}
+      disabled={disabled}
+      style={{
+        background: fundo,
+        border: `2px solid ${corBorda}${marcada ? "" : "55"}`,
+        borderRadius: 10,
+        padding: "12px 14px",
+        textAlign: "left",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled && !marcada ? 0.6 : 1,
+        display: "flex", gap: 10, alignItems: "flex-start",
+      }}
+    >
+      <div style={{
+        width: 18, height: 18, borderRadius: "50%",
+        border: `2px solid ${marcada ? C.accent : C.muted}`,
+        background: marcada ? C.accent : "transparent",
+        boxShadow: marcada ? `inset 0 0 0 3px ${C.card}` : "none",
+        flexShrink: 0, marginTop: 2,
+      }} />
+      <div>
+        <div style={{ color: marcada ? C.white : C.text, fontWeight: 700, fontSize: 13, marginBottom: 4 }}>
+          {icone} {titulo}
+        </div>
+        <div style={{ color: C.muted, fontSize: 11, lineHeight: 1.4 }}>
+          {descricao}
+        </div>
+      </div>
+    </button>
   );
 }
 

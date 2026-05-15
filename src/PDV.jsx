@@ -238,6 +238,7 @@ function PDVHeader({ user, aba, setAba, onSair, sairConta }) {
 // ==================== NOVA VENDA ====================
 
 function NovaVenda({ user }) {
+  const empresa = useConfiguracaoEmpresa();
   const [produtos, setProdutos] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [busca, setBusca] = useState("");
@@ -254,6 +255,7 @@ function NovaVenda({ user }) {
   const [valorRecebido, setValorRecebido] = useState("");
   const [destacado, setDestacado] = useState(null); // produtoId recém-adicionado (para flash)
   const [caixaAtual, setCaixaAtual] = useState(null);
+  const [tipoCaixa, setTipoCaixa] = useState("INDEPENDENTE");
   const [caixaCarregando, setCaixaCarregando] = useState(true);
   const [painel, setPainel] = useState({ topProdutos: [], ultimasVendas: [], resumoDia: null });
   const [vendaDetalheAberta, setVendaDetalheAberta] = useState(null);
@@ -298,7 +300,10 @@ function NovaVenda({ user }) {
 
   const recarregarCaixa = useCallback(() => {
     return api.obterCaixaAtual()
-      .then(r => setCaixaAtual(r.caixa))
+      .then(r => {
+        setCaixaAtual(r.caixa);
+        if (r.tipoCaixa) setTipoCaixa(r.tipoCaixa);
+      })
       .catch(() => setCaixaAtual(null));
   }, []);
 
@@ -714,7 +719,14 @@ function NovaVenda({ user }) {
         <div className="pdv-no-cash" style={{ justifyContent: "space-between" }}>
           <span style={{ fontSize: 18 }}>🔒</span>
           <div style={{ flex: 1 }}>
-            <b>Nenhum caixa aberto.</b> Você não pode registrar vendas sem caixa.
+            {tipoCaixa === "COMPARTILHADO" ? (
+              <>
+                <b>Nenhum caixa compartilhado aberto.</b> Peça para alguém abrir
+                o caixa do turno antes de registrar vendas.
+              </>
+            ) : (
+              <><b>Nenhum caixa aberto.</b> Você não pode registrar vendas sem caixa.</>
+            )}
           </div>
           <button
             onClick={() => setAbrirCaixaAberto(true)}
@@ -800,8 +812,21 @@ function NovaVenda({ user }) {
               <div className="pdv-cupom-paper">
                 {/* === HEADER DO CUPOM === */}
                 <div className="pdv-cupom-hd">
-                  <div className="pdv-cupom-hd-store">GESTÃO PRO</div>
-                  <div className="pdv-cupom-hd-sub">PAPELARIA E SERVIÇOS · CNPJ 00.000.000/0001-00</div>
+                  <div className="pdv-cupom-hd-store">
+                    {((empresa?.nomeFantasia || empresa?.razaoSocial) || "GESTÃO PRO").toUpperCase()}
+                  </div>
+                  {empresa?.cnpj && (
+                    <div className="pdv-cupom-hd-sub">CNPJ {empresa.cnpj}</div>
+                  )}
+                  {(() => {
+                    const end = formatarEndereco(empresa);
+                    return end ? <div className="pdv-cupom-hd-sub">{end.toUpperCase()}</div> : null;
+                  })()}
+                  {(empresa?.telefone || empresa?.email) && (
+                    <div className="pdv-cupom-hd-sub">
+                      {[empresa.telefone, empresa.email].filter(Boolean).join(" · ").toUpperCase()}
+                    </div>
+                  )}
                   <div className="pdv-cupom-hd-tag">— CUPOM DE VENDA · NÃO FISCAL —</div>
                   <div className="pdv-cupom-hd-meta">
                     <span>{new Date().toLocaleDateString("pt-BR")} {new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
@@ -891,9 +916,34 @@ function NovaVenda({ user }) {
               </div>
             </div>
           )}
+
+          {/* ATALHOS RÁPIDOS — abaixo dos mais vendidos / cupom */}
+          <div className="pdv-shortcuts">
+            <div className="pdv-shortcuts-label">Atalhos rápidos</div>
+            <div className="pdv-short-grid">
+              <BotaoAtalho
+                tecla="F8" tom="warn" label="Cancelar item"
+                disabled={carrinho.length === 0}
+                onClick={() => carrinho.length > 0 && setCancelarAberto(true)}
+              />
+              <BotaoAtalho
+                tecla="F10" tom="ok" label="Finalizar"
+                disabled={carrinho.length === 0 || semCaixa}
+                onClick={abrirPagamento}
+              />
+              <BotaoAtalho
+                tecla="Esc" tom="mut" label="Limpar busca"
+                onClick={() => { setBusca(""); focarBusca(); }}
+              />
+              <BotaoAtalho
+                tecla="Enter" tom="ok" label="Adicionar bipado"
+                onClick={() => { biparOuConfirmar(); focarBusca(); }}
+              />
+            </div>
+          </div>
         </div>
 
-        {/* PAINEL DIREITO — bipagem, vendas hoje, totais, finalizar, atalhos */}
+        {/* PAINEL DIREITO — bipagem, totais, finalizar, atalhos */}
         <div className="pdv-side">
           {/* BARRA DE BIPAGEM (movida do topo) — autofocus permanente */}
           <div className={`pdv-scan pdv-scan-side ${scanFocused ? "is-focused" : ""}`}>
@@ -998,9 +1048,9 @@ function NovaVenda({ user }) {
             </div>
           )}
 
-          {/* VENDAS DE HOJE — entre a cestinha (busca/total) e as formas de pagamento */}
+          {/* VENDAS DE HOJE — entre o total e as formas de pagamento */}
           {!caixaCarregando && !semCaixa && (
-            <FormasPagamentoTopo resumo={painel.resumoDia} />
+            <FormasPagamentoTopo resumo={painel.resumoDia} role={user.role} />
           )}
 
           <div className="pdv-pay-card">
@@ -1052,31 +1102,9 @@ function NovaVenda({ user }) {
             )}
           </div>
 
-          <div className="pdv-shortcuts">
-            <div className="pdv-shortcuts-label">Atalhos rápidos</div>
-            <div className="pdv-short-grid">
-              <BotaoAtalho
-                tecla="F8" tom="warn" label="Cancelar item"
-                disabled={carrinho.length === 0}
-                onClick={() => carrinho.length > 0 && setCancelarAberto(true)}
-              />
-              <BotaoAtalho
-                tecla="F10" tom="ok" label="Finalizar"
-                disabled={carrinho.length === 0 || semCaixa}
-                onClick={abrirPagamento}
-              />
-              <BotaoAtalho
-                tecla="Esc" tom="mut" label="Limpar busca"
-                onClick={() => { setBusca(""); focarBusca(); }}
-              />
-              <BotaoAtalho
-                tecla="Enter" tom="ok" label="Adicionar bipado"
-                onClick={() => { biparOuConfirmar(); focarBusca(); }}
-              />
-            </div>
-            <div style={{ color: "var(--pdv-t3)", fontSize: 11, textAlign: "center", marginTop: 12, paddingTop: 10, borderTop: "1px solid var(--pdv-line)" }}>
-              Vendedor: <span style={{ color: "var(--pdv-t1)", fontWeight: 500 }}>{user.nome}</span>
-            </div>
+          {/* AVISO DE VENDEDOR — abaixo das formas de pagamento */}
+          <div className="pdv-vendedor-aviso">
+            Vendedor: <span>{user.nome}</span>
           </div>
         </div>
       </div>
@@ -1690,13 +1718,15 @@ function ModalAbrirCaixaPDV({ onCancelar, onSucesso }) {
 // Componente colapsavel: por default vira uma barra fina de ~28px no topo,
 // mostrando apenas o total do dia + chips minimalistas. Click expande para os
 // cards detalhados. Estado persistido em localStorage.
-function FormasPagamentoTopo({ resumo }) {
+function FormasPagamentoTopo({ resumo, role }) {
   const r = resumo || { porForma: [] };
   const totalPagamentos = r.porForma.reduce((acc, f) => acc + f.total, 0);
   const dataLabel = new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
   const semVendas = r.porForma.length === 0;
   const formasOrdenadas = [...r.porForma].sort((a, b) => b.total - a.total);
   const maxValor = formasOrdenadas.reduce((m, f) => Math.max(m, f.total), 0) || 1;
+  // VENDEDOR ve apenas percentuais; GERENTE/ADMIN veem valores em R$.
+  const mostrarValor = role === "ADMIN" || role === "GERENTE";
 
   return (
     <div className="pdv-graf-formas">
@@ -1705,41 +1735,42 @@ function FormasPagamentoTopo({ resumo }) {
         <span className="pdv-graf-lbl">Vendas de hoje</span>
         <span className="pdv-graf-date">{dataLabel}</span>
         <span className="pdv-graf-total">
-          {semVendas ? <span className="pdv-graf-total-mut">—</span> : fmtBRL(totalPagamentos)}
+          {semVendas
+            ? <span className="pdv-graf-total-mut">—</span>
+            : mostrarValor ? fmtBRL(totalPagamentos) : "100%"}
         </span>
       </div>
       <div className="pdv-graf-body">
         {semVendas ? (
           <div className="pdv-graf-empty">Sem vendas finalizadas hoje</div>
         ) : (
-          <div
-            className="pdv-graf-chart"
-            style={{ gridTemplateColumns: `repeat(${formasOrdenadas.length}, minmax(0, 1fr))` }}
-          >
+          <div className="pdv-graf-chart">
             {formasOrdenadas.map(f => {
               const pct = (f.total / maxValor) * 100;
               const pctTotal = (f.total / (totalPagamentos || 1)) * 100;
               const cor = FORMA_COR_VAR[f.formaPagamento] || "var(--pdv-accent)";
               const nomeCompleto = FORMA_LABEL[f.formaPagamento] || f.formaPagamento;
-              const label = nomeCompleto.slice(0, 4);
+              const label = nomeCompleto.slice(0, 6);
               return (
                 <div
                   key={f.formaPagamento}
                   className="pdv-graf-col"
                   title={`${nomeCompleto}: ${fmtBRL(f.total)} (${pctTotal.toFixed(0)}%)`}
                 >
-                  <div className="pdv-graf-val" style={{ color: cor }}>{fmtBRL(f.total)}</div>
+                  <div className="pdv-graf-lbl-bot">{label}</div>
                   <div className="pdv-graf-bar-wrap">
                     <div
                       className="pdv-graf-bar"
                       style={{
-                        height: `${Math.max(pct, 8)}%`,
-                        background: `linear-gradient(180deg, color-mix(in oklab, ${cor} 75%, white), ${cor})`,
-                        boxShadow: `0 -3px 10px -2px ${cor}66, inset 0 1px 0 rgba(255,255,255,.15)`,
+                        width: `${Math.max(pct, 6)}%`,
+                        background: `linear-gradient(90deg, color-mix(in oklab, ${cor} 75%, white), ${cor})`,
+                        boxShadow: `3px 0 10px -2px ${cor}66, inset 0 1px 0 rgba(255,255,255,.15)`,
                       }}
                     />
                   </div>
-                  <div className="pdv-graf-lbl-bot" style={{ color: "var(--pdv-t2)" }}>{label}</div>
+                  <div className="pdv-graf-val" style={{ color: cor }}>
+                    {mostrarValor ? fmtBRL(f.total) : `${pctTotal.toFixed(0)}%`}
+                  </div>
                 </div>
               );
             })}

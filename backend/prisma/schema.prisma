@@ -1,4 +1,4 @@
-// Schema do banco de dados - Gestao + PDV
+// Schema do banco de dados - Gestao + PDV (Multi-tenant)
 // Documentacao: https://pris.ly/d/prisma-schema
 
 generator client {
@@ -41,24 +41,6 @@ enum FormaPagamento {
   CREDIARIO
 }
 
-// Formas de pagamento extras cadastradas pelo usuario (ex: Vale-Refeicao,
-// Cheque, etc). Cada uma referencia uma das FormaPagamento "base" para
-// preservar compatibilidade com colunas enum em vendas/contas — ao escolher
-// um custom, o backend persiste o enum base; o label custom e usado apenas
-// para exibicao no dropdown / relatorios.
-model FormaPagamentoCustom {
-  id                 String         @id @default(uuid())
-  nome               String         @unique
-  icone              String?
-  baseFormaPagamento FormaPagamento
-  ativo              Boolean        @default(true)
-  ordem              Int            @default(0)
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
-
-  @@map("formas_pagamento_custom")
-}
-
 enum TipoMovimentacao {
   ENTRADA
   SAIDA
@@ -86,9 +68,7 @@ enum StatusCaixa {
 //   INDEPENDENTE - cada usuario opera o proprio caixa; vendas exigem que o
 //                  usuario logado tenha um caixa aberto pessoal.
 //   COMPARTILHADO - existe no maximo UM caixa aberto por turno na empresa;
-//                  qualquer vendedor registra vendas nele. A venda continua
-//                  gravando o userId do operador (comissao/auditoria), mas
-//                  o saldo financeiro vai para o caixa compartilhado ativo.
+//                  qualquer vendedor registra vendas nele.
 enum TipoCaixa {
   INDEPENDENTE
   COMPARTILHADO
@@ -107,9 +87,6 @@ enum TipoMovimentacaoCaixa {
   FECHAMENTO
 }
 
-// Tipo do documento: ORCAMENTO e proposta comercial; ORDEM_SERVICO e
-// trabalho ja em execucao (impressao, instalacao). A estrutura e a mesma
-// — muda apenas a nomenclatura no front e o ciclo de vida.
 enum TipoOrcamento {
   ORCAMENTO
   ORDEM_SERVICO
@@ -144,10 +121,6 @@ enum StatusTarefa {
   CANCELADA
 }
 
-// Ciclo de vida do orcamento. RASCUNHO permite editar livremente; depois
-// de AGUARDANDO_APROVACAO so muda por acao explicita do usuario. ENTREGUE
-// e estado final positivo (sera convertido em venda); REJEITADO/CANCELADO
-// sao finais negativos.
 enum StatusOrcamento {
   RASCUNHO
   AGUARDANDO_APROVACAO
@@ -157,20 +130,12 @@ enum StatusOrcamento {
   CANCELADO
 }
 
-// Tabelas de preco aplicaveis ao orcamento como multiplicador unico sobre
-// todos os itens (AV = a vista, PZ = a prazo, AT = atacado). Os fatores
-// sao definidos no controller e podem ser ajustados via configuracao no
-// futuro.
 enum TabelaPreco {
   AV
   PZ
   AT
 }
 
-// Comissionamento por vendedor. Uma configuracao por User (1:1).
-// tipo + valor formam a regra principal: PORCENTAGEM (valor = aliquota %)
-// ou VALOR_FIXO (valor = R$ por venda). base controla se a aliquota incide
-// sobre o total bruto da venda ou sobre a margem (preco venda - preco custo).
 enum TipoComissao {
   PORCENTAGEM
   VALOR_FIXO
@@ -181,9 +146,6 @@ enum BaseComissao {
   LUCRO_LIQUIDO
 }
 
-// Etapas do funil de vendas (CRM). LEAD entra no topo; GANHO/PERDIDO sao
-// terminais. A probabilidade default de cada etapa e calculada no controller
-// quando o usuario nao informa.
 enum EtapaFunil {
   LEAD
   QUALIFICADO
@@ -193,33 +155,18 @@ enum EtapaFunil {
   PERDIDO
 }
 
-// Canal do template de mensagem (CRM). Cada tipo corresponde a um link
-// gerado no botao: WHATSAPP -> wa.me, EMAIL -> mailto, SMS -> sms:.
 enum TipoTemplate {
   WHATSAPP
   EMAIL
   SMS
 }
 
-// Tipos de gatilho para regras de automacao do CRM.
-//
-//   CLIENTE_INATIVO     - cliente sem compra ha X dias gera tarefa de reativacao
-//   ORCAMENTO_PARADO    - orcamento em AGUARDANDO_APROVACAO ha X dias gera follow-up
-//   POS_VENDA_FOLLOWUP  - apos venda CONCLUIDA, gera tarefa de acompanhamento
 enum TipoRegraAutomacao {
   CLIENTE_INATIVO
   ORCAMENTO_PARADO
   POS_VENDA_FOLLOWUP
 }
 
-// Status do cliente no funil de relacionamento (CRM). Distingue prospects
-// (nunca compraram) de clientes ativos. Diferente do segmento RFM (que e
-// calculado automaticamente), o statusFunil pode ser ajustado manualmente.
-//
-//   LEAD            - prospect, ainda nao realizou nenhuma compra
-//   CLIENTE_ATIVO   - ja comprou pelo menos uma vez (promovido automaticamente)
-//   CLIENTE_INATIVO - cliente que parou de comprar (ajuste manual ou via RFM)
-//   PERDIDO         - lead que recusou ou foi descartado
 enum StatusClienteFunil {
   LEAD
   CLIENTE_ATIVO
@@ -227,12 +174,90 @@ enum StatusClienteFunil {
   PERDIDO
 }
 
+// ============ MULTI-TENANT ============
+//
+// Empresa = tenant. Cada registro de negocio (cliente, produto, venda, etc)
+// tem tenantId apontando para a empresa-dona. Isolamento e garantido pelo
+// middleware backend (req.tenantId injetado no JWT) + clausula WHERE em
+// toda query.
+//
+// FASE 1 desta migration: tenantId e NULLABLE em todas as tabelas para
+// permitir o backfill dos registros existentes. FASE 2 (proxima migration)
+// torna NOT NULL apos o backfill.
+model Empresa {
+  id        String   @id @default(uuid())
+  nome      String
+  cnpj      String?  @unique
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Back-relations (uma por modelo com tenantId)
+  formasPagamentoCustom  FormaPagamentoCustom[]
+  users                  User[]
+  configuracoesComissao  ConfiguracaoComissao[]
+  clientes               Cliente[]
+  fornecedores           Fornecedor[]
+  categorias             Categoria[]
+  produtos               Produto[]
+  vendas                 Venda[]
+  itensVenda             ItemVenda[]
+  compras                Compra[]
+  itensCompra            ItemCompra[]
+  movimentacoesEstoque   MovimentacaoEstoque[]
+  contasPagar            ContaPagar[]
+  contasReceber          ContaReceber[]
+  anexos                 Anexo[]
+  caixas                 Caixa[]
+  configuracaoEmpresa    ConfiguracaoEmpresa?
+  movimentacoesCaixa     MovimentacaoCaixa[]
+  orcamentos             Orcamento[]
+  itensOrcamento         ItemOrcamento[]
+  configuracaoFidelidade ConfiguracaoFidelidade?
+  pontosCliente          PontosCliente[]
+  movimentacoesPontos    MovimentacaoPontos[]
+  tarefas                Tarefa[]
+  interacoes             Interacao[]
+  oportunidades          Oportunidade[]
+  tags                   Tag[]
+  clienteTags            ClienteTag[]
+  contatos               Contato[]
+  pesquisasNps           PesquisaNps[]
+  templatesMensagem      TemplateMensagem[]
+  regrasAutomacao        RegraAutomacao[]
+  logsAutomacao          LogAutomacao[]
+  historicoOportunidades HistoricoOportunidade[]
+  logsAuditoria          LogAuditoria[]
+
+  @@map("empresas")
+}
+
+// ============ FORMAS DE PAGAMENTO CUSTOM ============
+
+model FormaPagamentoCustom {
+  id                 String         @id @default(uuid())
+  nome               String
+  icone              String?
+  baseFormaPagamento FormaPagamento
+  ativo              Boolean        @default(true)
+  ordem              Int            @default(0)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, nome])
+  @@index([tenantId])
+  @@map("formas_pagamento_custom")
+}
+
 // ============ USUARIOS ============
 
 model User {
   id         String   @id @default(uuid())
   nome       String
-  email      String   @unique
+  email      String
   senha      String
   role       Role     @default(VENDEDOR)
   ativo      Boolean  @default(true)
@@ -240,38 +265,37 @@ model User {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  vendas              Venda[]
-  movimentacoes       MovimentacaoEstoque[]
-  caixas              Caixa[]
-  movimentacoesCaixa  MovimentacaoCaixa[]
-  orcamentos          Orcamento[] @relation("OrcamentoCriador")
-  orcamentosResponsavel Orcamento[] @relation("OrcamentoResponsavel")
-  configuracaoComissao ConfiguracaoComissao?
-  interacoes          Interacao[]
-  tarefasCriadas      Tarefa[]    @relation("TarefaCriador")
-  tarefasResponsavel  Tarefa[]    @relation("TarefaResponsavel")
-  movimentacoesPontos MovimentacaoPontos[]
-  oportunidadesCriadas    Oportunidade[] @relation("OportunidadeCriador")
-  oportunidadesResponsavel Oportunidade[] @relation("OportunidadeResponsavel")
-  historicoOportunidades  HistoricoOportunidade[]
-  regrasAutomacao         RegraAutomacao[] @relation("RegraAutomacaoResponsavel")
-  logsAuditoria           LogAuditoria[]
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  vendas                   Venda[]
+  movimentacoes            MovimentacaoEstoque[]
+  caixas                   Caixa[]
+  movimentacoesCaixa       MovimentacaoCaixa[]
+  orcamentos               Orcamento[]             @relation("OrcamentoCriador")
+  orcamentosResponsavel    Orcamento[]             @relation("OrcamentoResponsavel")
+  configuracaoComissao     ConfiguracaoComissao?
+  interacoes               Interacao[]
+  tarefasCriadas           Tarefa[]                @relation("TarefaCriador")
+  tarefasResponsavel       Tarefa[]                @relation("TarefaResponsavel")
+  movimentacoesPontos      MovimentacaoPontos[]
+  oportunidadesCriadas     Oportunidade[]          @relation("OportunidadeCriador")
+  oportunidadesResponsavel Oportunidade[]          @relation("OportunidadeResponsavel")
+  historicoOportunidades   HistoricoOportunidade[]
+  regrasAutomacao          RegraAutomacao[]        @relation("RegraAutomacaoResponsavel")
+  logsAuditoria            LogAuditoria[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
   @@map("users")
 }
 
 // ============ COMISSAO ============
-//
-// Configuracao do plano de comissionamento de cada vendedor. Persistido por
-// User (1:1) — quando role muda ou usuario e desativado, a config fica
-// atrelada. Calculo no front e mero auxilio visual; o backend nao gera
-// lancamentos de comissao automaticamente (vira em uma etapa futura).
+
 model ConfiguracaoComissao {
   id           String       @id @default(uuid())
   tipo         TipoComissao @default(PORCENTAGEM)
   base         BaseComissao @default(VALOR_BRUTO)
-  // valor da aliquota (em % quando tipo=PORCENTAGEM) ou valor fixo (em R$
-  // quando tipo=VALOR_FIXO).
   valor        Decimal      @db.Decimal(10, 2)
   metaMensal   Decimal      @default(0) @db.Decimal(10, 2)
   bonusPorMeta Decimal      @default(0) @db.Decimal(5, 2)
@@ -283,31 +307,35 @@ model ConfiguracaoComissao {
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
   @@map("configuracoes_comissao")
 }
 
 // ============ CADASTROS ============
 
 model Cliente {
-  id          String   @id @default(uuid())
-  nome        String
-  cpfCnpj     String?  @unique
-  email       String?
-  telefone    String?
-  endereco    String?
-  cidade      String?
-  estado      String?
-  cep         String?
-  observacoes String?
-  ativo       Boolean  @default(true)
-  // CRM — distincao Lead vs Cliente
-  origem      String?
-  statusFunil StatusClienteFunil @default(LEAD)
-  // Data de nascimento (PF) ou data de fundacao (PJ). Armazenado como
-  // DateTime para simplicidade — front trabalha apenas com YYYY-MM-DD.
+  id             String             @id @default(uuid())
+  nome           String
+  cpfCnpj        String?
+  email          String?
+  telefone       String?
+  endereco       String?
+  cidade         String?
+  estado         String?
+  cep            String?
+  observacoes    String?
+  ativo          Boolean            @default(true)
+  origem         String?
+  statusFunil    StatusClienteFunil @default(LEAD)
   dataNascimento DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   vendas              Venda[]
   contasReceber       ContaReceber[]
@@ -321,13 +349,15 @@ model Cliente {
   contatos            Contato[]
   pesquisasNps        PesquisaNps[]
 
+  @@unique([tenantId, cpfCnpj])
+  @@index([tenantId])
   @@map("clientes")
 }
 
 model Fornecedor {
   id        String   @id @default(uuid())
   nome      String
-  cnpj      String?  @unique
+  cnpj      String?
   email     String?
   telefone  String?
   endereco  String?
@@ -338,20 +368,30 @@ model Fornecedor {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   produtos    Produto[]
   compras     Compra[]
   contasPagar ContaPagar[]
 
+  @@unique([tenantId, cnpj])
+  @@index([tenantId])
   @@map("fornecedores")
 }
 
 model Categoria {
   id        String   @id @default(uuid())
-  nome      String   @unique
+  nome      String
   createdAt DateTime @default(now())
+
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   produtos Produto[]
 
+  @@unique([tenantId, nome])
+  @@index([tenantId])
   @@map("categorias")
 }
 
@@ -359,8 +399,8 @@ model Categoria {
 
 model Produto {
   id            String   @id @default(uuid())
-  codigo        String   @unique
-  codigoBarras  String?  @unique
+  codigo        String
+  codigoBarras  String?
   referencia    String?
   nome          String
   descricao     String?
@@ -381,11 +421,17 @@ model Produto {
   fornecedorId String?
   fornecedor   Fornecedor? @relation(fields: [fornecedorId], references: [id])
 
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   itensVenda     ItemVenda[]
   itensCompra    ItemCompra[]
   itensOrcamento ItemOrcamento[]
   movimentacoes  MovimentacaoEstoque[]
 
+  @@unique([tenantId, codigo])
+  @@unique([tenantId, codigoBarras])
+  @@index([tenantId])
   @@map("produtos")
 }
 
@@ -410,6 +456,9 @@ model Venda {
   caixaId String?
   caixa   Caixa?  @relation(fields: [caixaId], references: [id])
 
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   itens               ItemVenda[]
   movimentacoesCaixa  MovimentacaoCaixa[]
   orcamento           Orcamento?
@@ -419,6 +468,7 @@ model Venda {
   pesquisaNps         PesquisaNps?
 
   @@index([caixaId])
+  @@index([tenantId])
   @@map("vendas")
 }
 
@@ -434,6 +484,10 @@ model ItemVenda {
   produtoId String
   produto   Produto @relation(fields: [produtoId], references: [id])
 
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
   @@map("itens_venda")
 }
 
@@ -452,9 +506,13 @@ model Compra {
   fornecedorId String
   fornecedor   Fornecedor @relation(fields: [fornecedorId], references: [id])
 
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   itens       ItemCompra[]
   contasPagar ContaPagar[]
 
+  @@index([tenantId])
   @@map("compras")
 }
 
@@ -470,6 +528,10 @@ model ItemCompra {
   produtoId String
   produto   Produto @relation(fields: [produtoId], references: [id])
 
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
   @@map("itens_compra")
 }
 
@@ -490,61 +552,69 @@ model MovimentacaoEstoque {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   @@index([produtoId, createdAt])
+  @@index([tenantId])
   @@map("movimentacoes_estoque")
 }
 
 model ContaPagar {
-  id          String      @id @default(uuid())
-  descricao   String
-  valor       Decimal     @db.Decimal(10, 2)
-  valorBruto  Decimal     @default(0) @db.Decimal(10, 2)
-  juros       Decimal     @default(0) @db.Decimal(10, 2)
-  multa       Decimal     @default(0) @db.Decimal(10, 2)
-  desconto    Decimal     @default(0) @db.Decimal(10, 2)
-  vencimento  DateTime
-  pagamento   DateTime?
-  status      StatusConta @default(PENDENTE)
-  observacoes String?
-  tipoRecorrencia      TipoRecorrencia @default(NENHUMA)
-  grupoRecorrenciaId   String?
-  parcelaAtual         Int?
-  parcelaTotal         Int?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id                 String          @id @default(uuid())
+  descricao          String
+  valor              Decimal         @db.Decimal(10, 2)
+  valorBruto         Decimal         @default(0) @db.Decimal(10, 2)
+  juros              Decimal         @default(0) @db.Decimal(10, 2)
+  multa              Decimal         @default(0) @db.Decimal(10, 2)
+  desconto           Decimal         @default(0) @db.Decimal(10, 2)
+  vencimento         DateTime
+  pagamento          DateTime?
+  status             StatusConta     @default(PENDENTE)
+  observacoes        String?
+  tipoRecorrencia    TipoRecorrencia @default(NENHUMA)
+  grupoRecorrenciaId String?
+  parcelaAtual       Int?
+  parcelaTotal       Int?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
   fornecedorId String?
   fornecedor   Fornecedor? @relation(fields: [fornecedorId], references: [id])
 
   compraId String?
-  compra   Compra?  @relation(fields: [compraId], references: [id], onDelete: SetNull)
+  compra   Compra? @relation(fields: [compraId], references: [id], onDelete: SetNull)
+
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   anexos             Anexo[]
   movimentacoesCaixa MovimentacaoCaixa[]
 
   @@index([grupoRecorrenciaId])
   @@index([compraId])
+  @@index([tenantId])
   @@map("contas_pagar")
 }
 
 model ContaReceber {
-  id          String      @id @default(uuid())
-  descricao   String
-  valor       Decimal     @db.Decimal(10, 2)
-  valorBruto  Decimal     @default(0) @db.Decimal(10, 2)
-  juros       Decimal     @default(0) @db.Decimal(10, 2)
-  multa       Decimal     @default(0) @db.Decimal(10, 2)
-  desconto    Decimal     @default(0) @db.Decimal(10, 2)
-  vencimento  DateTime
-  recebimento DateTime?
-  status      StatusConta @default(PENDENTE)
-  observacoes String?
-  tipoRecorrencia      TipoRecorrencia @default(NENHUMA)
-  grupoRecorrenciaId   String?
-  parcelaAtual         Int?
-  parcelaTotal         Int?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id                 String          @id @default(uuid())
+  descricao          String
+  valor              Decimal         @db.Decimal(10, 2)
+  valorBruto         Decimal         @default(0) @db.Decimal(10, 2)
+  juros              Decimal         @default(0) @db.Decimal(10, 2)
+  multa              Decimal         @default(0) @db.Decimal(10, 2)
+  desconto           Decimal         @default(0) @db.Decimal(10, 2)
+  vencimento         DateTime
+  recebimento        DateTime?
+  status             StatusConta     @default(PENDENTE)
+  observacoes        String?
+  tipoRecorrencia    TipoRecorrencia @default(NENHUMA)
+  grupoRecorrenciaId String?
+  parcelaAtual       Int?
+  parcelaTotal       Int?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
   clienteId String?
   cliente   Cliente? @relation(fields: [clienteId], references: [id])
@@ -552,22 +622,26 @@ model ContaReceber {
   vendaId String?
   venda   Venda?  @relation(fields: [vendaId], references: [id], onDelete: SetNull)
 
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   anexos             Anexo[]
   movimentacoesCaixa MovimentacaoCaixa[]
 
   @@index([grupoRecorrenciaId])
   @@index([vendaId])
+  @@index([tenantId])
   @@map("contas_receber")
 }
 
 model Anexo {
-  id              String   @id @default(uuid())
-  nomeOriginal    String
-  nomeArmazenado  String
-  mimeType        String
-  tamanho         Int
-  url             String
-  createdAt       DateTime @default(now())
+  id             String   @id @default(uuid())
+  nomeOriginal   String
+  nomeArmazenado String
+  mimeType       String
+  tamanho        Int
+  url            String
+  createdAt      DateTime @default(now())
 
   contaPagarId String?
   contaPagar   ContaPagar? @relation(fields: [contaPagarId], references: [id], onDelete: Cascade)
@@ -575,46 +649,50 @@ model Anexo {
   contaReceberId String?
   contaReceber   ContaReceber? @relation(fields: [contaReceberId], references: [id], onDelete: Cascade)
 
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   @@index([contaPagarId])
   @@index([contaReceberId])
+  @@index([tenantId])
   @@map("anexos")
 }
 
 // ============ CAIXA ============
 
 model Caixa {
-  id                    String       @id @default(uuid())
-  numero                Int          @unique @default(autoincrement())
-  status                StatusCaixa  @default(ABERTO)
-  saldoInicial          Decimal      @db.Decimal(10, 2)
-  saldoFinalContado     Decimal?     @db.Decimal(10, 2)
-  saldoFinalEsperado    Decimal?     @db.Decimal(10, 2)
-  trocoProximoDia       Decimal?     @db.Decimal(10, 2)
-  diferenca             Decimal?     @db.Decimal(10, 2)
+  id                    String      @id @default(uuid())
+  numero                Int         @unique @default(autoincrement())
+  status                StatusCaixa @default(ABERTO)
+  saldoInicial          Decimal     @db.Decimal(10, 2)
+  saldoFinalContado     Decimal?    @db.Decimal(10, 2)
+  saldoFinalEsperado    Decimal?    @db.Decimal(10, 2)
+  trocoProximoDia       Decimal?    @db.Decimal(10, 2)
+  diferenca             Decimal?    @db.Decimal(10, 2)
   observacoesAbertura   String?
   observacoesFechamento String?
-  abertoEm              DateTime     @default(now())
+  abertoEm              DateTime    @default(now())
   fechadoEm             DateTime?
 
   userId String
   user   User   @relation(fields: [userId], references: [id])
+
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   vendas        Venda[]
   movimentacoes MovimentacaoCaixa[]
 
   @@index([userId, status])
   @@index([abertoEm])
+  @@index([tenantId])
   @@map("caixas")
 }
 
-// ============ CONFIGURACAO DA EMPRESA (SINGLETON) ============
-//
-// Apenas UM registro por instalacao do sistema. Controller usa findFirst +
-// update/create (upsert manual) em vez de id fixo — assim a chave primaria
-// segue o padrao uuid e nao precisa de seed especial.
+// ============ CONFIGURACAO DA EMPRESA (UMA POR TENANT) ============
 
 model ConfiguracaoEmpresa {
-  id           String   @id @default(uuid())
+  id           String    @id @default(uuid())
   razaoSocial  String
   nomeFantasia String?
   cnpj         String?
@@ -629,11 +707,12 @@ model ConfiguracaoEmpresa {
   cep          String?
   logotipo     String?
   observacoes  String?
-  // Politica de caixa do sistema (singleton). Default INDEPENDENTE preserva
-  // o comportamento legado: cada operador abre o proprio caixa.
   tipoCaixa    TipoCaixa @default(INDEPENDENTE)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenantId String?  @unique
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("configuracao_empresa")
 }
@@ -655,170 +734,132 @@ model MovimentacaoCaixa {
   user   User   @relation(fields: [userId], references: [id])
 
   vendaId        String?
-  venda          Venda?         @relation(fields: [vendaId], references: [id])
+  venda          Venda?        @relation(fields: [vendaId], references: [id])
   contaPagarId   String?
-  contaPagar     ContaPagar?    @relation(fields: [contaPagarId], references: [id])
+  contaPagar     ContaPagar?   @relation(fields: [contaPagarId], references: [id])
   contaReceberId String?
-  contaReceber   ContaReceber?  @relation(fields: [contaReceberId], references: [id])
+  contaReceber   ContaReceber? @relation(fields: [contaReceberId], references: [id])
+
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([caixaId, createdAt])
+  @@index([tenantId])
   @@map("movimentacoes_caixa")
 }
 
 // ============ ORCAMENTOS / ORDENS DE SERVICO ============
-//
-// Documento comercial pre-venda (ORCAMENTO) ou em execucao (ORDEM_SERVICO).
-// Diferente de Venda, NAO baixa estoque ao ser criado e NAO depende de
-// caixa aberto. Quando concluido (status ENTREGUE), pode ser convertido em
-// Venda — a partir desse momento ganha vendaId e a baixa de estoque +
-// registro no caixa acontecem.
-//
-// Calculo dos itens:
-//   - Para itens com unidade em area (largura/altura preenchidos):
-//       totalEm = largura * altura
-//       valorTotalEm = totalEm * valorProduto
-//       subtotal = valorTotalEm * quantidade + acertoTotal
-//   - Para itens lineares (largura/altura zerados):
-//       subtotal = quantidade * valorProduto
-//
-// Tabela de preco e um multiplicador unico (AV/PZ/AT) aplicado sobre o
-// VALOR PRODUTO de cada item no front antes de salvar — o backend grava
-// ja com o valor final.
+
 model Orcamento {
-  id             String          @id @default(uuid())
-  numero         Int             @unique @default(autoincrement())
-  tipo           TipoOrcamento   @default(ORCAMENTO)
-  status         StatusOrcamento @default(RASCUNHO)
-  tabelaPreco    TabelaPreco     @default(AV)
+  id          String          @id @default(uuid())
+  numero      Int             @unique @default(autoincrement())
+  tipo        TipoOrcamento   @default(ORCAMENTO)
+  status      StatusOrcamento @default(RASCUNHO)
+  tabelaPreco TabelaPreco     @default(AV)
 
-  // Dados do cliente — clienteId opcional permite orcamentos para
-  // prospects ainda nao cadastrados; nesse caso, descricaoCliente vira
-  // texto livre. Quando clienteId existe, descricaoCliente fica como
-  // snapshot do nome no momento da emissao.
-  clienteId       String?
-  cliente         Cliente?  @relation(fields: [clienteId], references: [id])
+  clienteId        String?
+  cliente          Cliente? @relation(fields: [clienteId], references: [id])
   descricaoCliente String?
-  contato         String?
-  telefone        String?
+  contato          String?
+  telefone         String?
 
-  // Documento (snapshot tipo Imprimir 1a/2a via — meramente informativo)
-  via             Int       @default(1)
+  via Int @default(1)
 
-  // Texto exibido no rodape do orcamento. Quando imprimirObservacoes for
-  // false, o documento gerado nao mostra o campo (cliente nao precisa ver
-  // anotacao interna).
-  observacoes          String?
-  imprimirObservacoes  Boolean   @default(true)
-  // Texto-padrao de garantia/avisos exibido em destaque no orcamento
-  // (campo "Sempre guarde esse comprovante…" da tela original).
-  rodape          String?
+  observacoes         String?
+  imprimirObservacoes Boolean @default(true)
+  rodape              String?
 
-  // Imprimir o valor unitario por metro quadrado em itens com area
-  // (campo "Marcar para Mostrar Valor do Metro na Impressao").
-  mostrarValorMetro    Boolean   @default(false)
-  // Imprimir os totais (produtos/servicos/desconto/total) — corresponde
-  // ao radio "Marcar para sair os Valores na Impressao".
-  imprimirValores      Boolean   @default(true)
+  mostrarValorMetro Boolean @default(false)
+  imprimirValores   Boolean @default(true)
 
-  // Totais calculados pelo backend a partir dos itens (saneados em criar/
-  // atualizar). Mantemos os 4 campos separados para refletir a tela:
-  // produtos, servicos, deslocamento, desconto.
-  valorProdutos   Decimal   @default(0) @db.Decimal(10, 2)
-  valorServicos   Decimal   @default(0) @db.Decimal(10, 2)
-  deslocamento    Decimal   @default(0) @db.Decimal(10, 2)
-  desconto        Decimal   @default(0) @db.Decimal(10, 2)
-  total           Decimal   @default(0) @db.Decimal(10, 2)
+  valorProdutos Decimal @default(0) @db.Decimal(10, 2)
+  valorServicos Decimal @default(0) @db.Decimal(10, 2)
+  deslocamento  Decimal @default(0) @db.Decimal(10, 2)
+  desconto      Decimal @default(0) @db.Decimal(10, 2)
+  total         Decimal @default(0) @db.Decimal(10, 2)
 
   formaCondicaoPagamento String?
 
-  // Datas-chave do ciclo de vida (preenchidas a cada transicao de status).
-  dataAprovacao   DateTime?
-  dataEntrega     DateTime?
-  dataRejeicao    DateTime?
-  motivoRejeicao  String?
-  dataCancelamento DateTime?
+  dataAprovacao      DateTime?
+  dataEntrega        DateTime?
+  dataRejeicao       DateTime?
+  motivoRejeicao     String?
+  dataCancelamento   DateTime?
   motivoCancelamento String?
 
-  // Quem criou o orcamento (sempre obrigatorio) e quem e o responsavel
-  // tecnico/comercial pelo trabalho (opcional, escolhido em um dropdown).
-  userId         String
-  user           User      @relation("OrcamentoCriador", fields: [userId], references: [id])
-  responsavelId  String?
-  responsavel    User?     @relation("OrcamentoResponsavel", fields: [responsavelId], references: [id])
+  userId        String
+  user          User    @relation("OrcamentoCriador", fields: [userId], references: [id])
+  responsavelId String?
+  responsavel   User?   @relation("OrcamentoResponsavel", fields: [responsavelId], references: [id])
 
-  // Quando convertido, aponta para a venda gerada. UNIQUE garante que
-  // cada orcamento gera no maximo uma venda.
-  vendaId        String?   @unique
-  venda          Venda?    @relation(fields: [vendaId], references: [id], onDelete: SetNull)
+  vendaId String? @unique
+  venda   Venda?  @relation(fields: [vendaId], references: [id], onDelete: SetNull)
 
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  itens          ItemOrcamento[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  itens ItemOrcamento[]
 
   @@index([clienteId])
   @@index([status])
   @@index([tipo, status])
+  @@index([tenantId])
   @@map("orcamentos")
 }
 
 model ItemOrcamento {
-  id            String   @id @default(uuid())
+  id String @id @default(uuid())
 
-  // produtoId obrigatorio porque preco/unidade/tipo (PRODUTO|SERVICO) sao
-  // lidos do cadastro. descricao guardada como snapshot no momento do
-  // lancamento (caso o produto seja renomeado depois).
-  produtoId     String
-  produto       Produto  @relation(fields: [produtoId], references: [id])
-  descricao     String
+  produtoId String
+  produto   Produto @relation(fields: [produtoId], references: [id])
+  descricao String
 
-  // Quantidade aceita decimal para itens vendidos por metro/peso.
-  quantidade    Decimal  @db.Decimal(10, 3)
+  quantidade Decimal @db.Decimal(10, 3)
 
-  // Valor unitario ja com a tabela de preco aplicada (multiplicador
-  // resolvido no front).
-  valorUnitario Decimal  @db.Decimal(10, 4)
+  valorUnitario Decimal @db.Decimal(10, 4)
 
-  // Calculo por area: largura/altura em metros (ou unidade do produto).
-  // totalEm e o produto largura*altura quando ambos > 0; caso contrario
-  // 0 (item linear). subtotal sempre populado.
-  largura       Decimal? @db.Decimal(10, 3)
-  altura        Decimal? @db.Decimal(10, 3)
-  totalEm       Decimal  @default(0) @db.Decimal(10, 4)
-  acertoTotal   Decimal  @default(0) @db.Decimal(10, 2)
-  subtotal      Decimal  @db.Decimal(10, 2)
+  largura     Decimal? @db.Decimal(10, 3)
+  altura      Decimal? @db.Decimal(10, 3)
+  totalEm     Decimal  @default(0) @db.Decimal(10, 4)
+  acertoTotal Decimal  @default(0) @db.Decimal(10, 2)
+  subtotal    Decimal  @db.Decimal(10, 2)
 
-  // Campos descritivos da grafica/sinalizacao (livres).
-  formato       String?
-  vias          String?
-  cores         String?
-  complemento   String?
+  formato     String?
+  vias        String?
+  cores       String?
+  complemento String?
 
-  ordem         Int      @default(0)
+  ordem Int @default(0)
 
   orcamentoId String
   orcamento   Orcamento @relation(fields: [orcamentoId], references: [id], onDelete: Cascade)
 
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   @@index([orcamentoId, ordem])
+  @@index([tenantId])
   @@map("itens_orcamento")
 }
 
 // ============ FIDELIDADE / PONTOS ============
 
-// Singleton — apenas 1 registro. Controller usa findFirst + upsert.
 model ConfiguracaoFidelidade {
-  id               String  @id @default(uuid())
-  ativo            Boolean @default(true)
-  // Quantos reais gastos geram 1 ponto (ex: 1.00 = R$1 por ponto)
-  reaisPorPonto    Decimal @default(1) @db.Decimal(10, 2)
-  // Quantos pontos equivalem a R$ 1,00 de desconto (ex: 100)
-  pontosParaUmReal Int     @default(100)
-  // Minimo de pontos para poder resgatar
-  minimoResgate    Int     @default(100)
-  // Maximo de desconto como % do total da venda (0-100)
-  maximoDescPct    Decimal @default(50) @db.Decimal(5, 2)
+  id               String   @id @default(uuid())
+  ativo            Boolean  @default(true)
+  reaisPorPonto    Decimal  @default(1) @db.Decimal(10, 2)
+  pontosParaUmReal Int      @default(100)
+  minimoResgate    Int      @default(100)
+  maximoDescPct    Decimal  @default(50) @db.Decimal(5, 2)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+
+  tenantId String?  @unique
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   @@map("configuracao_fidelidade")
 }
 
@@ -832,6 +873,10 @@ model PontosCliente {
   clienteId String  @unique
   cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
 
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
   @@map("pontos_cliente")
 }
 
@@ -851,8 +896,12 @@ model MovimentacaoPontos {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   @@index([clienteId, createdAt(sort: Desc)])
   @@index([vendaId])
+  @@index([tenantId])
   @@map("movimentacoes_pontos")
 }
 
@@ -878,9 +927,13 @@ model Tarefa {
   criadoPorId String
   criadoPor   User   @relation("TarefaCriador", fields: [criadoPorId], references: [id])
 
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   @@index([status, prazo])
   @@index([responsavelId, status])
   @@index([clienteId])
+  @@index([tenantId])
   @@map("tarefas")
 }
 
@@ -890,7 +943,6 @@ model Interacao {
   id        String        @id @default(uuid())
   tipo      TipoInteracao @default(ANOTACAO)
   descricao String
-  // data permite retroagir (ex: registrar ligacao de ontem)
   data      DateTime      @default(now())
   createdAt DateTime      @default(now())
 
@@ -900,87 +952,77 @@ model Interacao {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   @@index([clienteId, data(sort: Desc)])
+  @@index([tenantId])
   @@map("interacoes")
 }
 
 // ============ CRM — FUNIL DE VENDAS (OPORTUNIDADES) ============
-//
-// Oportunidade representa um lead/negocio em movimento no funil. Diferente
-// de Orcamento (documento formal com itens e valores) ou Venda (transacao
-// concluida), Oportunidade e um conceito leve focado em prospeccao.
-//
-// Ciclo: LEAD -> QUALIFICADO -> PROPOSTA -> NEGOCIACAO -> GANHO/PERDIDO.
-// Quando GANHO, vendaId pode ser preenchido se ja existir venda; nao gera
-// venda automatica (decisao do usuario). Quando PERDIDO, motivoPerda
-// obrigatorio.
-//
-// origem e String livre (INDICACAO, INSTAGRAM, GOOGLE, WALK_IN, etc) — nao
-// e enum para nao engessar; o front oferece os valores comuns no dropdown.
+
 model Oportunidade {
-  id          String     @id @default(uuid())
-  numero      Int        @unique @default(autoincrement())
-  titulo      String
-  descricao   String?
-  etapa       EtapaFunil @default(LEAD)
+  id        String     @id @default(uuid())
+  numero    Int        @unique @default(autoincrement())
+  titulo    String
+  descricao String?
+  etapa     EtapaFunil @default(LEAD)
 
-  // 0..100. Quando o usuario nao informa, controller aplica default da etapa.
-  probabilidade Int      @default(0)
+  probabilidade Int @default(0)
 
-  // Valor estimado do negocio (R$). Pode mudar conforme a oportunidade
-  // avanca. Distinto de "valor fechado" (que so existe se virou venda).
   valorEstimado Decimal? @db.Decimal(10, 2)
 
-  // Data prevista de fechamento — usada para forecasting.
   dataFechamentoPrevista DateTime?
 
-  // Como o lead chegou ate a empresa.
-  origem      String?
+  origem String?
 
-  // Datas terminais
-  dataGanho     DateTime?
-  dataPerdida   DateTime?
-  motivoPerda   String?
+  dataGanho   DateTime?
+  dataPerdida DateTime?
+  motivoPerda String?
 
-  clienteId   String?
-  cliente     Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
 
-  // Vendedor responsavel (quem trabalha a oportunidade)
   responsavelId String?
   responsavel   User?   @relation("OportunidadeResponsavel", fields: [responsavelId], references: [id])
 
-  // Quem criou a oportunidade
   criadoPorId String
-  criadoPor   User    @relation("OportunidadeCriador", fields: [criadoPorId], references: [id])
+  criadoPor   User   @relation("OportunidadeCriador", fields: [criadoPorId], references: [id])
 
-  // Quando GANHO, pode vincular a venda gerada (UNIQUE - 1:1 com Venda)
   vendaId String? @unique
   venda   Venda?  @relation(fields: [vendaId], references: [id], onDelete: SetNull)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   historico HistoricoOportunidade[]
 
   @@index([etapa])
   @@index([responsavelId, etapa])
   @@index([clienteId])
+  @@index([tenantId])
   @@map("oportunidades")
 }
 
 // ============ CRM — TAGS / ETIQUETAS DE CLIENTE ============
-//
-// Tags livres atribuidas a clientes (B2B, ATACADO, VIP, INADIMPLENTE, etc).
-// Diferente dos segmentos RFM (que sao calculados), tags sao definidas
-// manualmente pelo usuario. Um cliente pode ter N tags.
+
 model Tag {
   id        String   @id @default(uuid())
-  nome      String   @unique
+  nome      String
   cor       String   @default("#4f8ef7")
   createdAt DateTime @default(now())
 
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   clientes ClienteTag[]
 
+  @@unique([tenantId, nome])
+  @@index([tenantId])
   @@map("tags")
 }
 
@@ -992,18 +1034,17 @@ model ClienteTag {
   cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
   tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   @@id([clienteId, tagId])
   @@index([tagId])
+  @@index([tenantId])
   @@map("cliente_tags")
 }
 
 // ============ CRM — CONTATOS DO CLIENTE (B2B) ============
-//
-// Para clientes PJ, um Cliente (a empresa) pode ter varios Contatos
-// (comprador, financeiro, decisor, etc). Cada contato tem dados proprios
-// de identificacao e a flag `principal` define o contato default.
-// Regra de negocio (no controller): apenas um Contato por Cliente pode
-// ter principal = true.
+
 model Contato {
   id          String   @id @default(uuid())
   nome        String
@@ -1018,26 +1059,23 @@ model Contato {
   clienteId String
   cliente   Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
 
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   @@index([clienteId])
+  @@index([tenantId])
   @@map("contatos")
 }
 
 // ============ CRM — PESQUISA NPS POS-VENDA ============
-//
-// Gerada automaticamente apos cada Venda CONCLUIDA que tem clienteId.
-// O cliente acessa via link publico ?nps=<token> (sem login). Nota
-// segue padrao NPS (0-10):
-//   0-6  = Detrator
-//   7-8  = Neutro
-//   9-10 = Promotor
-// Comentario e opcional. Cada Venda gera no maximo UMA pesquisa.
+
 model PesquisaNps {
-  id           String   @id @default(uuid())
-  token        String   @unique
+  id           String    @id @default(uuid())
+  token        String    @unique
   nota         Int?
   comentario   String?
   respondidaEm DateTime?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
 
   vendaId String @unique
   venda   Venda  @relation(fields: [vendaId], references: [id], onDelete: Cascade)
@@ -1045,74 +1083,61 @@ model PesquisaNps {
   clienteId String?
   cliente   Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
 
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   @@index([clienteId, respondidaEm])
   @@index([createdAt])
+  @@index([tenantId])
   @@map("pesquisas_nps")
 }
 
 // ============ CRM — TEMPLATES DE MENSAGEM ============
-//
-// Modelos prontos para WhatsApp/Email/SMS com variaveis interpoladas
-// no front: {{nome}}, {{primeiroNome}}, {{telefone}}, {{email}}, {{cidade}},
-// {{ultimaCompra}}, {{totalGasto}}, {{valorEmAberto}}.
-//
-// O backend so persiste o template; a interpolacao acontece no front quando
-// o usuario clica num cliente especifico para abrir wa.me / mailto / sms:.
+
 model TemplateMensagem {
   id        String       @id @default(uuid())
-  nome      String       @unique
+  nome      String
   tipo      TipoTemplate
-  assunto   String?      // usado apenas em EMAIL
+  assunto   String?
   corpo     String       @db.Text
   ativo     Boolean      @default(true)
   ordem     Int          @default(0)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, nome])
   @@index([tipo, ativo])
+  @@index([tenantId])
   @@map("templates_mensagem")
 }
 
 // ============ CRM — REGRAS DE AUTOMACAO ============
-//
-// Cada regra observa um gatilho (tipo) e cria uma Tarefa automaticamente
-// quando o gatilho dispara. Anti-duplicacao via LogAutomacao: uma mesma
-// regra nao cria 2x a tarefa para o mesmo contexto (cliente/orcamento/venda)
-// dentro da mesma janela.
-//
-// Execucao acontece via endpoint POST /automacoes/executar (manual ou cron
-// externo — Vercel Cron, GitHub Actions, etc).
-//
-// Variaveis suportadas em tituloTarefa e descricaoTarefa:
-//   {{nomeCliente}} {{recenciaDias}} {{valorVenda}} {{numeroOrcamento}}
-//   {{diasParado}}  {{descricaoOrcamento}}
+
 model RegraAutomacao {
-  id          String             @id @default(uuid())
-  nome        String
-  tipo        TipoRegraAutomacao
-  ativo       Boolean            @default(true)
+  id    String             @id @default(uuid())
+  nome  String
+  tipo  TipoRegraAutomacao
+  ativo Boolean            @default(true)
 
-  // Parametros (uso depende do tipo):
-  //   CLIENTE_INATIVO    -> diasGatilho (sem compra ha X dias)
-  //   ORCAMENTO_PARADO   -> diasGatilho (parado AGUARDANDO ha X dias)
-  //   POS_VENDA_FOLLOWUP -> diasGatilho (X dias apos a venda), valorMinimo (opcional)
   diasGatilho Int?
-  valorMinimo Decimal?           @db.Decimal(10, 2)
+  valorMinimo Decimal? @db.Decimal(10, 2)
 
-  // Acao: criar uma Tarefa
   tituloTarefa     String
   descricaoTarefa  String?
   prioridadeTarefa PrioridadeTarefa @default(MEDIA)
-  prazoEmDias      Int            @default(7)
+  prazoEmDias      Int              @default(7)
 
-  // Responsavel da tarefa criada:
-  //   null = ultimo vendedor envolvido (ou criador da venda/orcamento)
-  //   preenchido = sempre esse usuario
   responsavelId String?
   responsavel   User?   @relation("RegraAutomacaoResponsavel", fields: [responsavelId], references: [id])
 
   ultimaExecucao DateTime?
   totalDisparos  Int       @default(0)
+
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1120,41 +1145,43 @@ model RegraAutomacao {
   logs LogAutomacao[]
 
   @@index([tipo, ativo])
+  @@index([tenantId])
   @@map("regras_automacao")
 }
 
-// Registro de cada disparo da regra. Usado para anti-duplicacao e auditoria.
 model LogAutomacao {
-  id          String   @id @default(uuid())
-  regraId     String
-  regra       RegraAutomacao @relation(fields: [regraId], references: [id], onDelete: Cascade)
+  id      String         @id @default(uuid())
+  regraId String
+  regra   RegraAutomacao @relation(fields: [regraId], references: [id], onDelete: Cascade)
 
-  // Contexto que disparou (so um dos tres preenchido por log)
   clienteId   String?
   orcamentoId String?
   vendaId     String?
 
-  // Tarefa criada como resultado (null se houve erro/skip)
-  tarefaId    String?
-  resultado   String   @default("CRIADA") // CRIADA, SKIP_DUPLICADA, SKIP_SEM_RESPONSAVEL, ERRO
+  tarefaId  String?
+  resultado String  @default("CRIADA")
 
-  createdAt   DateTime @default(now())
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
 
   @@index([regraId, createdAt(sort: Desc)])
   @@index([clienteId, regraId])
   @@index([orcamentoId, regraId])
   @@index([vendaId, regraId])
+  @@index([tenantId])
   @@map("logs_automacao")
 }
 
-// Log de mudancas de etapa — permite calcular tempo medio em cada etapa
-// e exibir timeline no detalhe da oportunidade.
+// ============ HISTORICO DE OPORTUNIDADES ============
+
 model HistoricoOportunidade {
-  id            String     @id @default(uuid())
+  id            String      @id @default(uuid())
   etapaAnterior EtapaFunil?
   etapaNova     EtapaFunil
   observacao    String?
-  createdAt     DateTime   @default(now())
+  createdAt     DateTime    @default(now())
 
   oportunidadeId String
   oportunidade   Oportunidade @relation(fields: [oportunidadeId], references: [id], onDelete: Cascade)
@@ -1162,25 +1189,22 @@ model HistoricoOportunidade {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
   @@index([oportunidadeId, createdAt])
+  @@index([tenantId])
   @@map("historico_oportunidades")
 }
 
 // ============ AUDITORIA ============
-//
-// Log central de auditoria. Populado por middleware automatico em mutacoes
-// (POST/PUT/PATCH/DELETE) e por chamadas explicitas em eventos especiais
-// (LOGIN, LOGIN_FALHO, LOGOUT). Apenas ADMIN visualiza.
-//
-// `dadosAntes` guarda snapshot do registro antes do update/delete; `dadosDepois`
-// guarda o payload da request; `diff` lista somente os campos que mudaram em
-// UPDATEs. Campos sensiveis (senha*) sao removidos antes de persistir.
+
 model LogAuditoria {
   id          String   @id @default(uuid())
-  acao        String   // CREATE | UPDATE | DELETE | LOGIN | LOGOUT | LOGIN_FALHO | OUTRA
-  modulo      String   // CLIENTES | PRODUTOS | FINANCEIRO | AUTH | ...
-  entidadeId  String?  // id do recurso afetado, quando aplicavel
-  metodo      String?  // POST | PUT | PATCH | DELETE
+  acao        String
+  modulo      String
+  entidadeId  String?
+  metodo      String?
   rota        String?
   statusCode  Int?
   sucesso     Boolean  @default(true)
@@ -1195,12 +1219,16 @@ model LogAuditoria {
 
   usuarioId    String?
   usuario      User?   @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
-  usuarioNome  String? // snapshot do nome para sobreviver a delecao do User
+  usuarioNome  String?
   usuarioEmail String?
+
+  tenantId String?
+  tenant   Empresa? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([usuarioId, createdAt])
   @@index([modulo, createdAt])
   @@index([acao, createdAt])
   @@index([createdAt])
+  @@index([tenantId])
   @@map("logs_auditoria")
 }

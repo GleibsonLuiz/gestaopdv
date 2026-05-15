@@ -34,7 +34,9 @@ export async function exigirAutorizacaoGerencial(req) {
     e.status = 403;
     throw e;
   }
-  const aut = await prisma.user.findUnique({ where: { email: emailAutorizacao } });
+  // ETAPA 1 multi-tenant: User.email agora e composto (tenantId, email).
+  // Ver authController.login para o mesmo padrao.
+  const aut = await prisma.user.findFirst({ where: { email: emailAutorizacao } });
   if (!aut || !aut.ativo || (aut.role !== "ADMIN" && aut.role !== "GERENTE")) {
     const e = new Error("Usuario autorizador invalido (precisa ser ADMIN ou GERENTE ativo)");
     e.status = 403;

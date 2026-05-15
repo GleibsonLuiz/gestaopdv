@@ -10,7 +10,12 @@ export async function login(req, res, next) {
       return res.status(400).json({ erro: "Email e senha sao obrigatorios" });
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    // ETAPA 1 multi-tenant: User.email virou @@unique([tenantId, email]),
+    // entao findUnique nao aceita mais filtrar so por email. findFirst
+    // funciona porque ainda ha um unico tenant (DEFAULT) no banco; a
+    // ETAPA 3 (middleware) vai trocar isso por findFirst com filtro
+    // explicito de tenantId.
+    const user = await prisma.user.findFirst({ where: { email } });
     if (!user || !user.ativo) {
       registrarEvento({
         acao: "LOGIN_FALHO", modulo: "AUTH", sucesso: false,

@@ -18,6 +18,7 @@ import Relatorios from "./Relatorios.jsx";
 import Projeto from "./Projeto.jsx";
 import Sistema from "./Sistema.jsx";
 import Configuracoes from "./Configuracoes.jsx";
+import Empresa from "./Empresa.jsx";
 import TrocarSenhaModal from "./TrocarSenhaModal.jsx";
 import Aparencia from "./Aparencia.jsx";
 import Tarefas from "./Tarefas.jsx";
@@ -548,8 +549,8 @@ export default function App() {
           )}
           {tela === "empresa" && (user.role === "ADMIN" || user.role === "GERENTE") && (
             <>
-              <PageHeader titulo="Empresa" subtitulo="Dados do emitente exibidos em recibos, comprovantes e relatórios" />
-              <Configuracoes user={user} />
+              <PageHeader titulo="Empresa" subtitulo="Identidade do tenant, dados fiscais e estatísticas" />
+              <Empresa user={user} />
             </>
           )}
           {tela === "relatorios" && (

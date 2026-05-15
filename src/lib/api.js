@@ -132,6 +132,11 @@ export const api = {
   // Multi-tenant signup publico — cria Empresa + admin User em transacao
   // e ja retorna { token, user, empresa } pronto para auto-login.
   signup: (dados) => request("/tenants/signup", { method: "POST", body: dados, auth: false }),
+
+  // Empresa (tenant) do usuario logado — GET retorna nome + cnpj +
+  // estatisticas; PUT permite editar nome/cnpj (so ADMIN).
+  obterEmpresa: () => request("/empresa"),
+  atualizarEmpresa: (dados) => request("/empresa", { method: "PUT", body: dados }),
   trocarSenha: (senhaAtual, senhaNova) =>
     request("/auth/senha", { method: "PUT", body: { senhaAtual, senhaNova } }),
 

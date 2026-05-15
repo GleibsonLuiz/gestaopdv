@@ -289,6 +289,229 @@ export async function relatorioFunilCrm(req, res, next) {
   }
 }
 
+// ============ RELATORIO DE FORECAST / PREVISAO DE RECEITA ============
+//
+// Projecao de fechamento dos proximos N meses com base nas oportunidades
+// abertas que tem dataFechamentoPrevista preenchida.
+//
+// Valor ponderado = valor estimado x (probabilidade / 100), usado como
+// melhor estimativa de receita.
+//
+// Filtros:
+//   mesesFuturos          -> horizonte (1/3/6/12 meses, default 3)
+//   responsavelId         -> 1 vendedor
+//   origem                -> filtro de origem
+//
+// Retorno:
+//   resumo                -> totais do horizonte
+//   porMes                -> linha por mes com previsto/ponderado/ganho
+//   porVendedor           -> pipeline futuro por vendedor
+//   porOrigem             -> pipeline futuro por origem
+//   semDataPrevista       -> count de opp abertas sem dataFechamentoPrevista
+//   oportunidades         -> detalhamento agrupado por mes
+
+export async function relatorioForecastCrm(req, res, next) {
+  try {
+    const { mesesFuturos, responsavelId, origem } = req.query;
+    const horizonte = parseInt(mesesFuturos || "3", 10);
+
+    const agora = new Date();
+    const inicioMesAtual = new Date(agora.getFullYear(), agora.getMonth(), 1);
+    const fimHorizonte = new Date(agora.getFullYear(), agora.getMonth() + horizonte + 1, 0, 23, 59, 59, 999);
+
+    const whereAbertas = {
+      etapa: { notIn: ["GANHO", "PERDIDO"] },
+      dataFechamentoPrevista: { gte: inicioMesAtual, lte: fimHorizonte },
+    };
+    const whereGanhas = {
+      etapa: "GANHO",
+      OR: [
+        { dataGanho: { gte: inicioMesAtual, lte: fimHorizonte } },
+        {
+          AND: [
+            { dataGanho: null },
+            { updatedAt: { gte: inicioMesAtual, lte: fimHorizonte } },
+          ],
+        },
+      ],
+    };
+    if (responsavelId) {
+      whereAbertas.responsavelId = responsavelId;
+      whereGanhas.responsavelId = responsavelId;
+    }
+    if (origem) {
+      whereAbertas.origem = origem;
+      whereGanhas.origem = origem;
+    }
+
+    const whereSemData = {
+      etapa: { notIn: ["GANHO", "PERDIDO"] },
+      dataFechamentoPrevista: null,
+      ...(responsavelId ? { responsavelId } : {}),
+      ...(origem ? { origem } : {}),
+    };
+
+    const [abertas, ganhas, semData] = await Promise.all([
+      prisma.oportunidade.findMany({
+        where: whereAbertas,
+        orderBy: { dataFechamentoPrevista: "asc" },
+        include: {
+          cliente: { select: { id: true, nome: true } },
+          responsavel: { select: { id: true, nome: true } },
+        },
+      }),
+      prisma.oportunidade.findMany({
+        where: whereGanhas,
+        select: {
+          etapa: true, dataGanho: true, updatedAt: true,
+          valorEstimado: true, responsavelId: true,
+          responsavel: { select: { id: true, nome: true } },
+          origem: true,
+        },
+      }),
+      prisma.oportunidade.findMany({
+        where: whereSemData,
+        select: {
+          id: true, numero: true, titulo: true,
+          valorEstimado: true, probabilidade: true,
+          etapa: true, origem: true,
+          cliente: { select: { id: true, nome: true } },
+          responsavel: { select: { id: true, nome: true } },
+        },
+      }),
+    ]);
+
+    // ===== POR MES =====
+    const meses = [];
+    for (let i = 0; i <= horizonte; i++) {
+      const d = new Date(agora.getFullYear(), agora.getMonth() + i, 1);
+      meses.push({
+        ym: ymKey(d),
+        ano: d.getFullYear(),
+        mesIdx: d.getMonth(),
+        previstoQtd: 0,
+        valorEstimado: 0,
+        valorPonderado: 0,
+        ganhoQtd: 0,
+        valorGanho: 0,
+      });
+    }
+    const mapaMes = new Map(meses.map(m => [m.ym, m]));
+
+    for (const o of abertas) {
+      if (!o.dataFechamentoPrevista) continue;
+      const key = ymKey(o.dataFechamentoPrevista);
+      const m = mapaMes.get(key);
+      if (!m) continue;
+      const v = toNum(o.valorEstimado);
+      const p = toNum(o.probabilidade) / 100;
+      m.previstoQtd += 1;
+      m.valorEstimado += v;
+      m.valorPonderado += v * p;
+    }
+
+    for (const o of ganhas) {
+      const dataRef = o.dataGanho || o.updatedAt;
+      if (!dataRef) continue;
+      const key = ymKey(dataRef);
+      const m = mapaMes.get(key);
+      if (!m) continue;
+      m.ganhoQtd += 1;
+      m.valorGanho += toNum(o.valorEstimado);
+    }
+
+    // ===== POR VENDEDOR (somente abertas) =====
+    const mapaResp = new Map();
+    for (const o of abertas) {
+      const id = o.responsavelId || "_sem_";
+      const nome = o.responsavel?.nome || "(sem responsável)";
+      const a = mapaResp.get(id) || { id, nome, quantidade: 0, valorEstimado: 0, valorPonderado: 0 };
+      const v = toNum(o.valorEstimado);
+      const p = toNum(o.probabilidade) / 100;
+      a.quantidade += 1;
+      a.valorEstimado += v;
+      a.valorPonderado += v * p;
+      mapaResp.set(id, a);
+    }
+    const porVendedor = Array.from(mapaResp.values())
+      .sort((a, b) => b.valorPonderado - a.valorPonderado);
+
+    // ===== POR ORIGEM =====
+    const mapaOrigem = new Map();
+    for (const o of abertas) {
+      const key = o.origem || "(sem origem)";
+      const a = mapaOrigem.get(key) || { origem: key, quantidade: 0, valorEstimado: 0, valorPonderado: 0 };
+      const v = toNum(o.valorEstimado);
+      const p = toNum(o.probabilidade) / 100;
+      a.quantidade += 1;
+      a.valorEstimado += v;
+      a.valorPonderado += v * p;
+      mapaOrigem.set(key, a);
+    }
+    const porOrigem = Array.from(mapaOrigem.values())
+      .sort((a, b) => b.valorPonderado - a.valorPonderado);
+
+    // ===== DETALHAMENTO =====
+    const detalhe = abertas.map(o => ({
+      id: o.id, numero: o.numero, titulo: o.titulo,
+      cliente: o.cliente?.nome || null,
+      responsavel: o.responsavel?.nome || null,
+      etapa: o.etapa,
+      probabilidade: o.probabilidade,
+      valorEstimado: toNum(o.valorEstimado),
+      valorPonderado: toNum(o.valorEstimado) * (toNum(o.probabilidade) / 100),
+      dataFechamentoPrevista: o.dataFechamentoPrevista,
+      origem: o.origem,
+      mes: ymKey(o.dataFechamentoPrevista),
+    }));
+
+    // ===== RESUMO =====
+    const totalPrevistoQtd = meses.reduce((s, m) => s + m.previstoQtd, 0);
+    const totalValorEstimado = meses.reduce((s, m) => s + m.valorEstimado, 0);
+    const totalValorPonderado = meses.reduce((s, m) => s + m.valorPonderado, 0);
+    const totalGanhoQtd = meses.reduce((s, m) => s + m.ganhoQtd, 0);
+    const totalValorGanho = meses.reduce((s, m) => s + m.valorGanho, 0);
+
+    const semDataDetalhe = semData.map(o => ({
+      id: o.id, numero: o.numero, titulo: o.titulo,
+      cliente: o.cliente?.nome || null,
+      responsavel: o.responsavel?.nome || null,
+      etapa: o.etapa,
+      probabilidade: o.probabilidade,
+      valorEstimado: toNum(o.valorEstimado),
+      origem: o.origem,
+    }));
+
+    res.json({
+      filtros: {
+        mesesFuturos: horizonte,
+        responsavelId: responsavelId || null,
+        origem: origem || null,
+      },
+      geradoEm: new Date().toISOString(),
+      resumo: {
+        horizonte,
+        inicio: inicioMesAtual.toISOString(),
+        fim: fimHorizonte.toISOString(),
+        totalPrevistoQtd,
+        totalValorEstimado,
+        totalValorPonderado,
+        totalGanhoQtd,
+        totalValorGanho,
+        semDataPrevistaQtd: semData.length,
+        semDataPrevistaValor: semData.reduce((s, o) => s + toNum(o.valorEstimado), 0),
+      },
+      porMes: meses,
+      porVendedor,
+      porOrigem,
+      semDataPrevista: semDataDetalhe,
+      oportunidades: detalhe,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // ============ RELATORIO DE ATIVIDADES & CADENCIA ============
 //
 // Visao da "respiracao comercial" — quem esta acionando clientes,

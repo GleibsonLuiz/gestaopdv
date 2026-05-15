@@ -484,6 +484,14 @@ export const api = {
     const q = qs.toString();
     return request(`/relatorios/crm/atividades${q ? `?${q}` : ""}`);
   },
+  relatorioForecastCrm: ({ mesesFuturos = "", responsavelId = "", origem = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (mesesFuturos) qs.set("mesesFuturos", mesesFuturos);
+    if (responsavelId) qs.set("responsavelId", responsavelId);
+    if (origem) qs.set("origem", origem);
+    const q = qs.toString();
+    return request(`/relatorios/crm/forecast${q ? `?${q}` : ""}`);
+  },
 
   listarContasPagar: ({ search = "", status = "", fornecedorId = "", dataInicio = "", dataFim = "", vencidas = "" } = {}) => {
     const qs = new URLSearchParams();

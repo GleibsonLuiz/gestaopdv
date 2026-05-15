@@ -108,6 +108,7 @@ function RelatoriosCrm() {
     { id: "carteira", label: "👥 Carteira de Clientes (RFM)", cor: C.green },
     { id: "nps", label: "😊 NPS & Satisfação", cor: C.yellow },
     { id: "atividades", label: "📞 Atividades & Cadência", cor: "#7c3aed" },
+    { id: "forecast", label: "🔮 Forecast", cor: C.accent },
   ];
   const [sub, setSub] = useState("funil");
 
@@ -133,6 +134,7 @@ function RelatoriosCrm() {
       {sub === "carteira" && <RelatorioCarteiraCrm key="cc" />}
       {sub === "nps" && <RelatorioNpsCrm key="cn" />}
       {sub === "atividades" && <RelatorioAtividadesCrm key="ca" />}
+      {sub === "forecast" && <RelatorioForecastCrm key="cfx" />}
     </div>
   );
 }
@@ -1478,6 +1480,299 @@ function RelatorioPerformanceCrm() {
                 ])}
             />
           )}
+        </>
+      )}
+    </BlocoRelatorio>
+  );
+}
+
+// ============ RELATÓRIO DE FORECAST / PREVISÃO ============
+function RelatorioForecastCrm() {
+  const [mesesFuturos, setMesesFuturos] = useState("3");
+  const [responsavelId, setResponsavelId] = useState("");
+  const [origem, setOrigem] = useState("");
+  const [usuarios, setUsuarios] = useState([]);
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
+  }, []);
+
+  const gerar = useCallback(async () => {
+    setCarregando(true); setErro("");
+    try {
+      const r = await api.relatorioForecastCrm({ mesesFuturos, responsavelId, origem });
+      setDados(r);
+    } catch (err) { setErro(err.message); }
+    finally { setCarregando(false); }
+  }, [mesesFuturos, responsavelId, origem]);
+
+  async function exportar() {
+    if (!dados) return;
+    const doc = await criarPDF("Relatório de Forecast / Previsão de Receita (CRM)");
+    addLinha(doc, `Horizonte: próximos ${dados.resumo.horizonte} meses`);
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 4,
+      head: [["Indicador", "Valor"]],
+      body: [
+        ["Oportunidades previstas no horizonte", fmtNum(dados.resumo.totalPrevistoQtd)],
+        ["Valor estimado total", fmtBRL(dados.resumo.totalValorEstimado)],
+        ["Valor ponderado (previsão realista)", fmtBRL(dados.resumo.totalValorPonderado)],
+        ["Já ganhas no horizonte", fmtNum(dados.resumo.totalGanhoQtd)],
+        ["Valor já ganho", fmtBRL(dados.resumo.totalValorGanho)],
+        ["Opp abertas SEM data prevista", fmtNum(dados.resumo.semDataPrevistaQtd)],
+        ["Valor das opp sem data prevista", fmtBRL(dados.resumo.semDataPrevistaValor)],
+      ],
+      theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+      styles: { fontSize: 10 },
+    });
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 6,
+      head: [["Mês", "Opp previstas", "Valor estimado", "Valor ponderado", "Ganhas", "Valor ganho"]],
+      body: dados.porMes.map(m => [
+        fmtMes(m.ym),
+        fmtNum(m.previstoQtd),
+        fmtBRL(m.valorEstimado),
+        fmtBRL(m.valorPonderado),
+        fmtNum(m.ganhoQtd),
+        fmtBRL(m.valorGanho),
+      ]),
+      theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+      styles: { fontSize: 9 },
+    });
+
+    if (dados.porVendedor.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["#", "Vendedor", "Opp", "Valor estimado", "Valor ponderado"]],
+        body: dados.porVendedor.map((v, i) => [
+          i + 1, v.nome, fmtNum(v.quantidade),
+          fmtBRL(v.valorEstimado), fmtBRL(v.valorPonderado),
+        ]),
+        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        styles: { fontSize: 9 },
+      });
+    }
+
+    if (dados.porOrigem.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["Origem", "Opp", "Valor estimado", "Valor ponderado"]],
+        body: dados.porOrigem.map(o => [
+          o.origem, fmtNum(o.quantidade),
+          fmtBRL(o.valorEstimado), fmtBRL(o.valorPonderado),
+        ]),
+        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        styles: { fontSize: 9 },
+      });
+    }
+
+    if (dados.oportunidades.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["#", "Título", "Cliente", "Vendedor", "Etapa", "Prob.", "Valor", "Ponderado", "Previsão"]],
+        body: dados.oportunidades.map(o => [
+          `#${o.numero}`, o.titulo, o.cliente || "—", o.responsavel || "—",
+          ROTULO_ETAPA[o.etapa] || o.etapa,
+          `${o.probabilidade}%`,
+          fmtBRL(o.valorEstimado),
+          fmtBRL(o.valorPonderado),
+          fmtData(o.dataFechamentoPrevista),
+        ]),
+        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        styles: { fontSize: 8 },
+      });
+    }
+
+    doc.save(`relatorio-forecast-crm-${hoje()}.pdf`);
+  }
+
+  const maxMes = dados ? Math.max(1, ...dados.porMes.map(m => m.valorEstimado)) : 1;
+
+  return (
+    <BlocoRelatorio
+      titulo="Relatório de Forecast / Previsão de Receita (CRM)" cor={C.accent}
+      filtros={
+        <>
+          <CampoSelect label="Horizonte" value={mesesFuturos} onChange={setMesesFuturos}>
+            <option value="1">1 mês</option>
+            <option value="3">3 meses</option>
+            <option value="6">6 meses</option>
+            <option value="12">12 meses</option>
+          </CampoSelect>
+          <CampoSelectBusca label="Responsável" opcoes={usuarios} value={responsavelId} onChange={setResponsavelId} placeholder="Todos" />
+          <CampoSelect label="Origem" value={origem} onChange={setOrigem}>
+            <option value="">Todas</option>
+            {ORIGENS_FUNIL.map(o => <option key={o} value={o}>{o}</option>)}
+          </CampoSelect>
+        </>
+      }
+      onGerar={gerar} onExportar={exportar} carregando={carregando}
+      erro={erro} dados={dados}
+    >
+      {dados && (
+        <>
+          <Resumo cards={[
+            { rotulo: "Opp no horizonte", valor: fmtNum(dados.resumo.totalPrevistoQtd), cor: C.accent },
+            { rotulo: "Valor estimado", valor: fmtBRL(dados.resumo.totalValorEstimado), cor: C.purple },
+            { rotulo: "Previsão realista", valor: fmtBRL(dados.resumo.totalValorPonderado), cor: C.green },
+            { rotulo: "Já ganhas", valor: fmtNum(dados.resumo.totalGanhoQtd), cor: C.green },
+            { rotulo: "Valor ganho", valor: fmtBRL(dados.resumo.totalValorGanho), cor: "#22c55e" },
+            { rotulo: "Sem data prevista", valor: fmtNum(dados.resumo.semDataPrevistaQtd), cor: dados.resumo.semDataPrevistaQtd > 0 ? C.yellow : C.muted },
+          ]} />
+
+          {/* Forecast visual por mês */}
+          <div style={{
+            background: C.card, border: `1px solid ${C.border}`,
+            borderRadius: 12, padding: 16, marginBottom: 16,
+          }}>
+            <div style={{ color: C.white, fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
+              Previsão por mês (estimado · ponderado · ganho)
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {dados.porMes.map(m => {
+                const pctEstimado = (m.valorEstimado / maxMes) * 100;
+                const pctPonderado = (m.valorPonderado / maxMes) * 100;
+                const pctGanho = (m.valorGanho / maxMes) * 100;
+                return (
+                  <div key={m.ym}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                      <div style={{ color: C.text, fontSize: 12, fontWeight: 700 }}>
+                        {fmtMes(m.ym)} <span style={{ color: C.muted, fontWeight: 500 }}>· {fmtNum(m.previstoQtd)} prev.</span>
+                      </div>
+                      <div style={{ color: C.muted, fontSize: 11 }}>
+                        Pond: <strong style={{ color: C.green }}>{fmtBRL(m.valorPonderado)}</strong> · Est: {fmtBRL(m.valorEstimado)} · Ganho: <strong style={{ color: "#22c55e" }}>{fmtBRL(m.valorGanho)}</strong>
+                      </div>
+                    </div>
+                    <div style={{ position: "relative", height: 18, background: C.surface, borderRadius: 4, overflow: "hidden" }}>
+                      <div style={{
+                        position: "absolute", left: 0, top: 0,
+                        width: `${pctEstimado}%`, height: "100%",
+                        background: C.purple, opacity: 0.3,
+                      }} />
+                      <div style={{
+                        position: "absolute", left: 0, top: 0,
+                        width: `${pctPonderado}%`, height: "100%",
+                        background: C.green, opacity: 0.6,
+                      }} />
+                      <div style={{
+                        position: "absolute", left: 0, top: 0,
+                        width: `${pctGanho}%`, height: "100%",
+                        background: "#22c55e",
+                      }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", gap: 14, marginTop: 12, fontSize: 11, color: C.muted, flexWrap: "wrap" }}>
+              <span><span style={{ display: "inline-block", width: 10, height: 10, background: C.purple, opacity: 0.3, marginRight: 4, verticalAlign: "middle" }} /> Estimado</span>
+              <span><span style={{ display: "inline-block", width: 10, height: 10, background: C.green, opacity: 0.6, marginRight: 4, verticalAlign: "middle" }} /> Ponderado (× probabilidade)</span>
+              <span><span style={{ display: "inline-block", width: 10, height: 10, background: "#22c55e", marginRight: 4, verticalAlign: "middle" }} /> Já ganho</span>
+            </div>
+          </div>
+
+          <Tabela
+            titulo={`Forecast por mês (${dados.porMes.length})`}
+            colunas={["Mês", "Opp previstas", "Valor estimado", "Valor ponderado", "Ganhas", "Valor ganho"]}
+            alinhamentos={["left", "right", "right", "right", "right", "right"]}
+            linhas={dados.porMes.map(m => [
+              fmtMes(m.ym),
+              fmtNum(m.previstoQtd),
+              fmtBRL(m.valorEstimado),
+              fmtBRL(m.valorPonderado),
+              fmtNum(m.ganhoQtd),
+              fmtBRL(m.valorGanho),
+            ])}
+          />
+
+          {dados.porVendedor.length > 0 && (
+            <Tabela
+              titulo={`Pipeline futuro por vendedor (${dados.porVendedor.length})`}
+              colunas={["#", "Vendedor", "Opp", "Valor estimado", "Valor ponderado"]}
+              alinhamentos={["center", "left", "right", "right", "right"]}
+              linhas={dados.porVendedor.map((v, i) => [
+                i + 1, v.nome, fmtNum(v.quantidade),
+                fmtBRL(v.valorEstimado), fmtBRL(v.valorPonderado),
+              ])}
+            />
+          )}
+
+          {dados.porOrigem.length > 0 && (
+            <Tabela
+              titulo="Pipeline futuro por origem"
+              colunas={["Origem", "Opp", "Valor estimado", "Valor ponderado"]}
+              alinhamentos={["left", "right", "right", "right"]}
+              linhas={dados.porOrigem.map(o => [
+                o.origem, fmtNum(o.quantidade),
+                fmtBRL(o.valorEstimado), fmtBRL(o.valorPonderado),
+              ])}
+            />
+          )}
+
+          {dados.semDataPrevista.length > 0 && (
+            <div style={{
+              background: C.yellow + "11", border: `1px solid ${C.yellow}55`,
+              borderRadius: 12, padding: 16, marginBottom: 16,
+            }}>
+              <div style={{ color: C.yellow, fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
+                ⚠️ Oportunidades abertas SEM data de fechamento prevista ({dados.semDataPrevista.length})
+              </div>
+              <div style={{ color: C.muted, fontSize: 11, marginBottom: 10 }}>
+                Estas não entram no forecast — preencha a data prevista pra incluir no pipeline.
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: C.surface }}>
+                      {["#", "Título", "Cliente", "Vendedor", "Etapa", "Prob.", "Valor"].map((h, i) => (
+                        <th key={i} style={{
+                          padding: "8px 12px", textAlign: i >= 5 ? "right" : "left",
+                          color: C.muted, fontSize: 10, fontWeight: 700,
+                          textTransform: "uppercase", letterSpacing: 0.5,
+                          borderBottom: `1px solid ${C.border}`,
+                        }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dados.semDataPrevista.map(o => (
+                      <tr key={o.id} style={{ borderBottom: `1px solid ${C.border}55` }}>
+                        <td style={{ padding: "8px 12px", color: C.text }}>#{o.numero}</td>
+                        <td style={{ padding: "8px 12px", color: C.text }}>{o.titulo}</td>
+                        <td style={{ padding: "8px 12px", color: C.muted }}>{o.cliente || "—"}</td>
+                        <td style={{ padding: "8px 12px", color: C.muted }}>{o.responsavel || "—"}</td>
+                        <td style={{ padding: "8px 12px", color: COR_ETAPA[o.etapa], fontWeight: 700 }}>
+                          {ROTULO_ETAPA[o.etapa] || o.etapa}
+                        </td>
+                        <td style={{ padding: "8px 12px", textAlign: "right", color: C.muted }}>{o.probabilidade}%</td>
+                        <td style={{ padding: "8px 12px", textAlign: "right", color: C.text }}>{fmtBRL(o.valorEstimado)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          <Tabela
+            titulo={`Detalhamento de oportunidades no forecast (${dados.oportunidades.length})`}
+            colunas={["#", "Título", "Cliente", "Vendedor", "Etapa", "Prob.", "Valor", "Ponderado", "Previsão"]}
+            alinhamentos={["center", "left", "left", "left", "left", "right", "right", "right", "left"]}
+            linhas={dados.oportunidades.map(o => [
+              `#${o.numero}`, o.titulo, o.cliente || "—", o.responsavel || "—",
+              ROTULO_ETAPA[o.etapa] || o.etapa,
+              `${o.probabilidade}%`,
+              fmtBRL(o.valorEstimado),
+              fmtBRL(o.valorPonderado),
+              fmtData(o.dataFechamentoPrevista),
+            ])}
+            vazioTexto="Nenhuma oportunidade com data prevista no horizonte."
+          />
         </>
       )}
     </BlocoRelatorio>

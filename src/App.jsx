@@ -192,7 +192,8 @@ export default function App() {
 
   function podeVer(t) {
     if (t === "projeto" || t === "aparencia") return true;
-    if (t === "sistema" || t === "empresa" || t === "logs") return user?.role === "ADMIN";
+    if (t === "sistema" || t === "logs") return user?.role === "ADMIN";
+    if (t === "empresa") return user?.role === "ADMIN" || user?.role === "GERENTE";
     return podeAcessar(user, TELA_MODULO[t]);
   }
 
@@ -361,7 +362,7 @@ export default function App() {
           {user.role === "ADMIN" && (
             <Item icone="🧑‍💼" label="Funcionários" ativo={tela === "funcionarios"} onClick={() => navegar("funcionarios")} />
           )}
-          {user.role === "ADMIN" && (
+          {(user.role === "ADMIN" || user.role === "GERENTE") && (
             <Item icone="🏢" label="Empresa" ativo={tela === "empresa"} onClick={() => navegar("empresa")} />
           )}
           <Item icone="📋" label="Projeto" ativo={tela === "projeto"} onClick={() => navegar("projeto")} />
@@ -545,7 +546,7 @@ export default function App() {
               <Caixa user={user} />
             </>
           )}
-          {tela === "empresa" && user.role === "ADMIN" && (
+          {tela === "empresa" && (user.role === "ADMIN" || user.role === "GERENTE") && (
             <>
               <PageHeader titulo="Empresa" subtitulo="Dados do emitente exibidos em recibos, comprovantes e relatórios" />
               <Configuracoes user={user} />

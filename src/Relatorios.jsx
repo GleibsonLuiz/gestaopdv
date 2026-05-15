@@ -104,6 +104,7 @@ export default function Relatorios() {
 function RelatoriosCrm() {
   const SUB_ABAS = [
     { id: "funil", label: "📊 Funil de Vendas", cor: "#7c3aed" },
+    { id: "performance", label: "🏅 Performance Comercial", cor: C.accent },
   ];
   const [sub, setSub] = useState("funil");
 
@@ -125,6 +126,7 @@ function RelatoriosCrm() {
       </div>
 
       {sub === "funil" && <RelatorioFunilCrm key="cf" />}
+      {sub === "performance" && <RelatorioPerformanceCrm key="cp" />}
     </div>
   );
 }
@@ -1259,6 +1261,261 @@ function RelatorioFunilCrm() {
         </>
       )}
     </BlocoRelatorio>
+  );
+}
+
+// ============ RELATÓRIO DE PERFORMANCE COMERCIAL (CRM) ============
+function RelatorioPerformanceCrm() {
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+  const [responsavelId, setResponsavelId] = useState("");
+  const [usuarios, setUsuarios] = useState([]);
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
+  }, []);
+
+  const gerar = useCallback(async () => {
+    setCarregando(true); setErro("");
+    try {
+      const r = await api.relatorioPerformanceCrm({ dataInicio, dataFim, responsavelId });
+      setDados(r);
+    } catch (err) { setErro(err.message); }
+    finally { setCarregando(false); }
+  }, [dataInicio, dataFim, responsavelId]);
+
+  async function exportar() {
+    if (!dados) return;
+    const doc = await criarPDF("Relatório de Performance Comercial (CRM)");
+    addPeriodo(doc, dataInicio, dataFim);
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 4,
+      head: [["Indicador", "Valor"]],
+      body: [
+        ["Vendedores no relatório", fmtNum(dados.resumo.totalVendedores)],
+        ["Faturamento total", fmtBRL(dados.resumo.totalFaturamento)],
+        ["Vendas concluídas", fmtNum(dados.resumo.totalVendas)],
+        ["Oportunidades criadas", fmtNum(dados.resumo.totalOppCriadas)],
+        ["Oportunidades ganhas", fmtNum(dados.resumo.totalOppGanhas)],
+        ["Oportunidades perdidas", fmtNum(dados.resumo.totalOppPerdidas)],
+        ["Conversão geral", `${dados.resumo.conversaoGeral.toFixed(1)}%`],
+        ["Valor ganho (pipeline fechado)", fmtBRL(dados.resumo.totalValorGanho)],
+        ["Ciclo médio (dias)", dados.resumo.cicloMedioGeral.toFixed(1)],
+        ["Interações registradas", fmtNum(dados.resumo.totalInteracoes)],
+        ["Tarefas concluídas", fmtNum(dados.resumo.totalTarefasConcluidas)],
+      ],
+      theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+      styles: { fontSize: 10 },
+    });
+
+    if (dados.topFaturamento.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["🏆 Top faturamento", "", ""]],
+        body: [],
+        styles: { fontSize: 11, fontStyle: "bold" }, theme: "plain",
+      });
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY,
+        head: [["#", "Vendedor", "Faturamento", "Vendas"]],
+        body: dados.topFaturamento.map((v, i) => [
+          i + 1, v.nome, fmtBRL(v.faturamento), fmtNum(v.vendasQtd),
+        ]),
+        theme: "striped", headStyles: { fillColor: [34, 197, 94] },
+        styles: { fontSize: 9 },
+      });
+    }
+
+    if (dados.topConversao.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["🎯 Top conversão (min. 3 oportunidades fechadas)", "", ""]],
+        body: [],
+        styles: { fontSize: 11, fontStyle: "bold" }, theme: "plain",
+      });
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY,
+        head: [["#", "Vendedor", "Taxa", "Ganhas/Fechadas"]],
+        body: dados.topConversao.map((v, i) => [
+          i + 1, v.nome,
+          `${v.taxaConversao.toFixed(1)}%`,
+          `${v.oppGanhas}/${v.oppGanhas + v.oppPerdidas}`,
+        ]),
+        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        styles: { fontSize: 9 },
+      });
+    }
+
+    if (dados.topAtividade.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["💬 Top atividade", "", ""]],
+        body: [],
+        styles: { fontSize: 11, fontStyle: "bold" }, theme: "plain",
+      });
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY,
+        head: [["#", "Vendedor", "Interações", "Tarefas conc."]],
+        body: dados.topAtividade.map((v, i) => [
+          i + 1, v.nome, fmtNum(v.interacoes), fmtNum(v.tarefasConcluidas),
+        ]),
+        theme: "striped", headStyles: { fillColor: [245, 158, 11] },
+        styles: { fontSize: 9 },
+      });
+    }
+
+    if (dados.porVendedor.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["Vendedor", "Role", "Vendas", "Faturamento", "Ticket", "Opp criadas", "Ganhas", "Conv.", "Pipeline", "Interações", "Tarefas (SLA)"]],
+        body: dados.porVendedor.map(v => [
+          v.nome, v.role,
+          fmtNum(v.vendasQtd), fmtBRL(v.faturamento), fmtBRL(v.ticketMedio),
+          fmtNum(v.oppCriadas), fmtNum(v.oppGanhas),
+          `${v.taxaConversao.toFixed(1)}%`,
+          fmtBRL(v.valorPipelineAberto),
+          fmtNum(v.interacoes),
+          `${v.tarefasConcluidas} (${v.slaTarefas.toFixed(0)}%)`,
+        ]),
+        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        styles: { fontSize: 7 },
+      });
+    }
+
+    doc.save(`relatorio-performance-crm-${hoje()}.pdf`);
+  }
+
+  return (
+    <BlocoRelatorio
+      titulo="Relatório de Performance Comercial (CRM)" cor={C.accent}
+      filtros={
+        <>
+          <CampoData label="De" value={dataInicio} onChange={setDataInicio} />
+          <CampoData label="Até" value={dataFim} onChange={setDataFim} />
+          <CampoSelectBusca label="Vendedor" opcoes={usuarios} value={responsavelId} onChange={setResponsavelId} placeholder="Todos" />
+        </>
+      }
+      onGerar={gerar} onExportar={exportar} carregando={carregando}
+      erro={erro} dados={dados}
+    >
+      {dados && (
+        <>
+          <Resumo cards={[
+            { rotulo: "Vendedores", valor: fmtNum(dados.resumo.totalVendedores), cor: C.accent },
+            { rotulo: "Faturamento", valor: fmtBRL(dados.resumo.totalFaturamento), cor: C.green },
+            { rotulo: "Vendas", valor: fmtNum(dados.resumo.totalVendas), cor: C.accent },
+            { rotulo: "Opp ganhas", valor: fmtNum(dados.resumo.totalOppGanhas), cor: C.green },
+            { rotulo: "Conversão", valor: `${dados.resumo.conversaoGeral.toFixed(1)}%`, cor: dados.resumo.conversaoGeral >= 30 ? C.green : C.yellow },
+            { rotulo: "Ciclo médio", valor: `${dados.resumo.cicloMedioGeral.toFixed(1)}d`, cor: C.yellow },
+            { rotulo: "Interações", valor: fmtNum(dados.resumo.totalInteracoes), cor: C.purple },
+            { rotulo: "Tarefas conc.", valor: fmtNum(dados.resumo.totalTarefasConcluidas), cor: "#7c3aed" },
+          ]} />
+
+          {/* Pódio de Top performers */}
+          <div style={{
+            display: "grid", gap: 12, marginBottom: 16,
+            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+          }}>
+            <CardPodio titulo="🏆 Top Faturamento" cor={C.green} itens={dados.topFaturamento.map(v => ({
+              nome: v.nome,
+              valor: fmtBRL(v.faturamento),
+              detalhe: `${fmtNum(v.vendasQtd)} venda${v.vendasQtd === 1 ? "" : "s"}`,
+            }))} vazioTexto="Sem vendas no período" />
+            <CardPodio titulo="🎯 Top Conversão" cor="#7c3aed" itens={dados.topConversao.map(v => ({
+              nome: v.nome,
+              valor: `${v.taxaConversao.toFixed(1)}%`,
+              detalhe: `${v.oppGanhas}/${v.oppGanhas + v.oppPerdidas} fechadas`,
+            }))} vazioTexto="Min. 3 oportunidades fechadas" />
+            <CardPodio titulo="💬 Top Atividade" cor={C.yellow} itens={dados.topAtividade.map(v => ({
+              nome: v.nome,
+              valor: fmtNum(v.interacoes),
+              detalhe: `${fmtNum(v.tarefasConcluidas)} tarefa${v.tarefasConcluidas === 1 ? "" : "s"}`,
+            }))} vazioTexto="Sem interações registradas" />
+          </div>
+
+          <Tabela
+            titulo={`Performance por vendedor (${dados.porVendedor.length})`}
+            colunas={["Vendedor", "Role", "Vendas", "Faturamento", "Ticket", "Opp criadas", "Ganhas", "Conv.", "Pipeline", "Interações", "Tarefas (SLA)"]}
+            alinhamentos={["left", "left", "right", "right", "right", "right", "right", "right", "right", "right", "right"]}
+            linhas={dados.porVendedor.map(v => [
+              v.nome, v.role,
+              fmtNum(v.vendasQtd), fmtBRL(v.faturamento), fmtBRL(v.ticketMedio),
+              fmtNum(v.oppCriadas), fmtNum(v.oppGanhas),
+              `${v.taxaConversao.toFixed(1)}%`,
+              fmtBRL(v.valorPipelineAberto),
+              fmtNum(v.interacoes),
+              `${v.tarefasConcluidas} (${v.slaTarefas.toFixed(0)}%)`,
+            ])}
+            vazioTexto="Nenhum vendedor ativo encontrado."
+          />
+
+          {dados.porVendedor.some(v => v.interacoes > 0) && (
+            <Tabela
+              titulo="Detalhamento de interações por tipo"
+              colunas={["Vendedor", "Ligação", "WhatsApp", "E-mail", "Visita", "Reunião", "Anotação", "Total"]}
+              alinhamentos={["left", "right", "right", "right", "right", "right", "right", "right"]}
+              linhas={dados.porVendedor
+                .filter(v => v.interacoes > 0)
+                .map(v => [
+                  v.nome,
+                  fmtNum(v.interacoesLigacao),
+                  fmtNum(v.interacoesWhatsapp),
+                  fmtNum(v.interacoesEmail),
+                  fmtNum(v.interacoesVisita),
+                  fmtNum(v.interacoesReuniao),
+                  fmtNum(v.interacoesAnotacao),
+                  fmtNum(v.interacoes),
+                ])}
+            />
+          )}
+        </>
+      )}
+    </BlocoRelatorio>
+  );
+}
+
+// Card pódio (top 3 em estilo medalha). Itens: { nome, valor, detalhe }
+function CardPodio({ titulo, cor, itens, vazioTexto }) {
+  const medalhas = ["🥇", "🥈", "🥉"];
+  return (
+    <div style={{
+      background: C.card, border: `1px solid ${C.border}`,
+      borderRadius: 12, padding: 14, position: "relative", overflow: "hidden",
+    }}>
+      <div style={{ position: "absolute", top: 0, left: 0, width: 4, height: "100%", background: cor }} />
+      <div style={{ color: C.white, fontSize: 13, fontWeight: 700, marginBottom: 10 }}>
+        {titulo}
+      </div>
+      {itens.length === 0 ? (
+        <div style={{ color: C.muted, fontSize: 12, textAlign: "center", padding: "16px 0" }}>
+          {vazioTexto}
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {itens.map((item, i) => (
+            <div key={i} style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: "6px 8px", background: C.surface, borderRadius: 8,
+            }}>
+              <span style={{ fontSize: 18 }}>{medalhas[i] || `${i + 1}.`}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: C.text, fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {item.nome}
+                </div>
+                <div style={{ color: C.muted, fontSize: 10 }}>{item.detalhe}</div>
+              </div>
+              <div style={{ color: cor, fontSize: 14, fontWeight: 800, whiteSpace: "nowrap" }}>
+                {item.valor}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -288,3 +288,273 @@ export async function relatorioFunilCrm(req, res, next) {
     next(err);
   }
 }
+
+// ============ RELATORIO DE PERFORMANCE COMERCIAL ============
+//
+// Visao consolidada de atividade comercial por vendedor — diferente do
+// relatorio de Comissoes (que foca em remuneracao), este foca em acao:
+// prospectar, fechar, conversar, executar tarefas.
+//
+// Filtros:
+//   dataInicio, dataFim   -> base para todos os agregados
+//   responsavelId         -> 1 vendedor (ou todos, default)
+//
+// Retorno:
+//   resumo                -> KPIs gerais do periodo
+//   porVendedor           -> uma linha por User (VENDEDOR/GERENTE ativo)
+//                            com prospeccao + fechamento + atividade
+//   topFaturamento        -> top 3 por faturamento
+//   topConversao          -> top 3 por taxa de conversao (min 3 opp fechadas)
+//   topAtividade          -> top 3 por interacoes registradas
+export async function relatorioPerformanceCrm(req, res, next) {
+  try {
+    const { dataInicio, dataFim, responsavelId } = req.query;
+    const di = parseDataInicio(dataInicio);
+    const df = parseDataFim(dataFim);
+
+    const filtroPeriodo = {};
+    if (di || df) filtroPeriodo.gte = di || undefined;
+    if (df) filtroPeriodo.lte = df;
+    const temFiltroPeriodo = di || df;
+
+    const whereUsuarios = {
+      ativo: true,
+      role: { in: ["GERENTE", "VENDEDOR"] },
+    };
+    if (responsavelId) whereUsuarios.id = responsavelId;
+
+    const whereOppPeriodo = temFiltroPeriodo ? { createdAt: filtroPeriodo } : {};
+    const whereVendaPeriodo = {
+      status: "CONCLUIDA",
+      ...(temFiltroPeriodo ? { createdAt: filtroPeriodo } : {}),
+    };
+    const whereInteracaoPeriodo = temFiltroPeriodo ? { data: filtroPeriodo } : {};
+    const whereTarefaConcluidaPeriodo = temFiltroPeriodo
+      ? { status: "CONCLUIDA", concluidaEm: filtroPeriodo }
+      : { status: "CONCLUIDA" };
+
+    if (responsavelId) {
+      whereOppPeriodo.responsavelId = responsavelId;
+      whereVendaPeriodo.userId = responsavelId;
+      whereInteracaoPeriodo.userId = responsavelId;
+      whereTarefaConcluidaPeriodo.responsavelId = responsavelId;
+    }
+
+    const [usuarios, oportunidades, vendas, interacoes, tarefasConcluidas, tarefasAbertas] = await Promise.all([
+      prisma.user.findMany({
+        where: whereUsuarios,
+        select: { id: true, nome: true, role: true },
+      }),
+      prisma.oportunidade.findMany({
+        where: whereOppPeriodo,
+        select: {
+          responsavelId: true, criadoPorId: true, etapa: true,
+          valorEstimado: true, createdAt: true, dataGanho: true,
+        },
+      }),
+      prisma.venda.findMany({
+        where: whereVendaPeriodo,
+        select: { userId: true, total: true, createdAt: true },
+      }),
+      prisma.interacao.findMany({
+        where: whereInteracaoPeriodo,
+        select: { userId: true, tipo: true },
+      }),
+      prisma.tarefa.findMany({
+        where: whereTarefaConcluidaPeriodo,
+        select: { responsavelId: true, prazo: true, concluidaEm: true },
+      }),
+      prisma.tarefa.findMany({
+        where: {
+          status: { in: ["ABERTA", "EM_ANDAMENTO"] },
+          ...(responsavelId ? { responsavelId } : {}),
+        },
+        select: { responsavelId: true, prazo: true },
+      }),
+    ]);
+
+    const agora = new Date();
+
+    // ===== POR VENDEDOR =====
+    const mapa = new Map();
+    for (const u of usuarios) {
+      mapa.set(u.id, {
+        id: u.id,
+        nome: u.nome,
+        role: u.role,
+        // Prospeccao / Funil
+        oppCriadas: 0,
+        oppGanhas: 0,
+        oppPerdidas: 0,
+        oppAbertas: 0,
+        valorPipelineAberto: 0,
+        valorGanho: 0,
+        cicloMedioDias: 0,
+        _somaCiclo: 0,
+        _countCiclo: 0,
+        // Vendas concretas
+        vendasQtd: 0,
+        faturamento: 0,
+        ticketMedio: 0,
+        // Atividade
+        interacoes: 0,
+        interacoesLigacao: 0,
+        interacoesWhatsapp: 0,
+        interacoesEmail: 0,
+        interacoesVisita: 0,
+        interacoesReuniao: 0,
+        interacoesAnotacao: 0,
+        // Tarefas
+        tarefasConcluidas: 0,
+        tarefasConcluidasNoPrazo: 0,
+        tarefasConcluidasAtrasadas: 0,
+        tarefasAbertasAtrasadas: 0,
+        tarefasAbertasTotal: 0,
+      });
+    }
+
+    for (const o of oportunidades) {
+      const id = o.responsavelId;
+      if (!id) continue;
+      const a = mapa.get(id);
+      if (!a) continue;
+      const valor = toNum(o.valorEstimado);
+      a.oppCriadas += 1;
+      if (o.etapa === "GANHO") {
+        a.oppGanhas += 1;
+        a.valorGanho += valor;
+        if (o.dataGanho && o.createdAt) {
+          const ciclo = diasEntre(o.createdAt, o.dataGanho);
+          if (ciclo !== null) { a._somaCiclo += ciclo; a._countCiclo += 1; }
+        }
+      } else if (o.etapa === "PERDIDO") {
+        a.oppPerdidas += 1;
+      } else {
+        a.oppAbertas += 1;
+        a.valorPipelineAberto += valor;
+      }
+    }
+
+    for (const v of vendas) {
+      const a = mapa.get(v.userId);
+      if (!a) continue;
+      a.vendasQtd += 1;
+      a.faturamento += toNum(v.total);
+    }
+
+    for (const i of interacoes) {
+      const a = mapa.get(i.userId);
+      if (!a) continue;
+      a.interacoes += 1;
+      switch (i.tipo) {
+        case "LIGACAO": a.interacoesLigacao += 1; break;
+        case "WHATSAPP": a.interacoesWhatsapp += 1; break;
+        case "EMAIL": a.interacoesEmail += 1; break;
+        case "VISITA": a.interacoesVisita += 1; break;
+        case "REUNIAO": a.interacoesReuniao += 1; break;
+        case "ANOTACAO": a.interacoesAnotacao += 1; break;
+      }
+    }
+
+    for (const t of tarefasConcluidas) {
+      if (!t.responsavelId) continue;
+      const a = mapa.get(t.responsavelId);
+      if (!a) continue;
+      a.tarefasConcluidas += 1;
+      if (t.prazo && t.concluidaEm) {
+        if (t.concluidaEm <= t.prazo) a.tarefasConcluidasNoPrazo += 1;
+        else a.tarefasConcluidasAtrasadas += 1;
+      } else {
+        a.tarefasConcluidasNoPrazo += 1;
+      }
+    }
+
+    for (const t of tarefasAbertas) {
+      if (!t.responsavelId) continue;
+      const a = mapa.get(t.responsavelId);
+      if (!a) continue;
+      a.tarefasAbertasTotal += 1;
+      if (t.prazo && new Date(t.prazo) < agora) a.tarefasAbertasAtrasadas += 1;
+    }
+
+    const porVendedor = Array.from(mapa.values()).map(a => {
+      const oppFechadas = a.oppGanhas + a.oppPerdidas;
+      const taxaConversao = oppFechadas > 0 ? (a.oppGanhas / oppFechadas) * 100 : 0;
+      const ticketMedio = a.vendasQtd > 0 ? a.faturamento / a.vendasQtd : 0;
+      const cicloMedioDias = a._countCiclo > 0 ? a._somaCiclo / a._countCiclo : 0;
+      const slaTarefas = a.tarefasConcluidas > 0
+        ? (a.tarefasConcluidasNoPrazo / a.tarefasConcluidas) * 100
+        : 0;
+      delete a._somaCiclo;
+      delete a._countCiclo;
+      return {
+        ...a,
+        taxaConversao,
+        ticketMedio,
+        cicloMedioDias,
+        slaTarefas,
+      };
+    });
+
+    // ===== TOP RANKINGS =====
+    const ordenado = (key) => [...porVendedor].sort((a, b) => b[key] - a[key]);
+
+    const topFaturamento = ordenado("faturamento").filter(v => v.faturamento > 0).slice(0, 3);
+    const topConversao = porVendedor
+      .filter(v => (v.oppGanhas + v.oppPerdidas) >= 3)
+      .sort((a, b) => b.taxaConversao - a.taxaConversao)
+      .slice(0, 3);
+    const topAtividade = ordenado("interacoes").filter(v => v.interacoes > 0).slice(0, 3);
+
+    // ===== RESUMO =====
+    const totalFaturamento = porVendedor.reduce((s, v) => s + v.faturamento, 0);
+    const totalVendas = porVendedor.reduce((s, v) => s + v.vendasQtd, 0);
+    const totalValorGanho = porVendedor.reduce((s, v) => s + v.valorGanho, 0);
+    const totalOppCriadas = porVendedor.reduce((s, v) => s + v.oppCriadas, 0);
+    const totalOppGanhas = porVendedor.reduce((s, v) => s + v.oppGanhas, 0);
+    const totalOppPerdidas = porVendedor.reduce((s, v) => s + v.oppPerdidas, 0);
+    const totalInteracoes = porVendedor.reduce((s, v) => s + v.interacoes, 0);
+    const totalTarefasConcluidas = porVendedor.reduce((s, v) => s + v.tarefasConcluidas, 0);
+
+    const fechadas = totalOppGanhas + totalOppPerdidas;
+    const conversaoGeral = fechadas > 0 ? (totalOppGanhas / fechadas) * 100 : 0;
+    const cicloMedioGeral = (() => {
+      const somas = porVendedor.reduce((acc, v) => {
+        acc.s += v.cicloMedioDias * v.oppGanhas;
+        acc.c += v.oppGanhas;
+        return acc;
+      }, { s: 0, c: 0 });
+      return somas.c > 0 ? somas.s / somas.c : 0;
+    })();
+
+    porVendedor.sort((a, b) => b.faturamento - a.faturamento || b.valorGanho - a.valorGanho);
+
+    res.json({
+      filtros: {
+        dataInicio: di ? di.toISOString() : null,
+        dataFim: df ? df.toISOString() : null,
+        responsavelId: responsavelId || null,
+      },
+      geradoEm: new Date().toISOString(),
+      resumo: {
+        totalVendedores: porVendedor.length,
+        totalFaturamento,
+        totalVendas,
+        totalValorGanho,
+        totalOppCriadas,
+        totalOppGanhas,
+        totalOppPerdidas,
+        conversaoGeral,
+        cicloMedioGeral,
+        totalInteracoes,
+        totalTarefasConcluidas,
+      },
+      porVendedor,
+      topFaturamento,
+      topConversao,
+      topAtividade,
+    });
+  } catch (err) {
+    next(err);
+  }
+}

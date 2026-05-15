@@ -448,6 +448,14 @@ export const api = {
     const q = qs.toString();
     return request(`/relatorios/crm/funil${q ? `?${q}` : ""}`);
   },
+  relatorioPerformanceCrm: ({ dataInicio = "", dataFim = "", responsavelId = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (dataInicio) qs.set("dataInicio", dataInicio);
+    if (dataFim) qs.set("dataFim", dataFim);
+    if (responsavelId) qs.set("responsavelId", responsavelId);
+    const q = qs.toString();
+    return request(`/relatorios/crm/performance${q ? `?${q}` : ""}`);
+  },
 
   listarContasPagar: ({ search = "", status = "", fornecedorId = "", dataInicio = "", dataFim = "", vencidas = "" } = {}) => {
     const qs = new URLSearchParams();

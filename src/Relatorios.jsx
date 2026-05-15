@@ -109,6 +109,7 @@ function RelatoriosCrm() {
     { id: "nps", label: "😊 NPS & Satisfação", cor: C.yellow },
     { id: "atividades", label: "📞 Atividades & Cadência", cor: "#7c3aed" },
     { id: "forecast", label: "🔮 Forecast", cor: C.accent },
+    { id: "perdas", label: "💔 Motivos de Perda", cor: C.red },
   ];
   const [sub, setSub] = useState("funil");
 
@@ -135,6 +136,7 @@ function RelatoriosCrm() {
       {sub === "nps" && <RelatorioNpsCrm key="cn" />}
       {sub === "atividades" && <RelatorioAtividadesCrm key="ca" />}
       {sub === "forecast" && <RelatorioForecastCrm key="cfx" />}
+      {sub === "perdas" && <RelatorioPerdasCrm key="cpr" />}
     </div>
   );
 }
@@ -1480,6 +1482,407 @@ function RelatorioPerformanceCrm() {
                 ])}
             />
           )}
+        </>
+      )}
+    </BlocoRelatorio>
+  );
+}
+
+// ============ RELATÓRIO DE MOTIVOS DE PERDA (LOSS ANALYSIS) ============
+function RelatorioPerdasCrm() {
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+  const [responsavelId, setResponsavelId] = useState("");
+  const [origem, setOrigem] = useState("");
+  const [buscaMotivo, setBuscaMotivo] = useState("");
+  const [usuarios, setUsuarios] = useState([]);
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
+  }, []);
+
+  const gerar = useCallback(async () => {
+    setCarregando(true); setErro("");
+    try {
+      const r = await api.relatorioPerdasCrm({ dataInicio, dataFim, responsavelId, origem, buscaMotivo });
+      setDados(r);
+    } catch (err) { setErro(err.message); }
+    finally { setCarregando(false); }
+  }, [dataInicio, dataFim, responsavelId, origem, buscaMotivo]);
+
+  async function exportar() {
+    if (!dados) return;
+    const doc = await criarPDF("Relatório de Motivos de Perda (CRM)");
+    addPeriodo(doc, dataInicio, dataFim);
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 4,
+      head: [["Indicador", "Valor"]],
+      body: [
+        ["Oportunidades perdidas no período", fmtNum(dados.resumo.totalPerdidas)],
+        ["Valor total perdido", fmtBRL(dados.resumo.valorPerdidoTotal)],
+        ["Ticket médio perdido", fmtBRL(dados.resumo.ticketMedioPerdido)],
+        ["Taxa de perda (vs ganhas)", `${dados.resumo.taxaPerda.toFixed(1)}%`],
+        ["Ganhas no mesmo período", fmtNum(dados.resumo.totalGanhasNoMesmoPeriodo)],
+        ["Com motivo preenchido", `${fmtNum(dados.resumo.comMotivo)} (${dados.resumo.totalPerdidas > 0 ? ((dados.resumo.comMotivo / dados.resumo.totalPerdidas) * 100).toFixed(0) : 0}%)`],
+        ["Sem motivo registrado", fmtNum(dados.resumo.semMotivo)],
+        ["Ciclo médio até a perda (dias)", dados.resumo.cicloMedioPerdaDias.toFixed(1)],
+      ],
+      theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+      styles: { fontSize: 10 },
+    });
+
+    if (dados.porMotivo.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["#", "Motivo", "Qtd", "% perdas", "Valor perdido", "% valor"]],
+        body: dados.porMotivo.map((m, i) => [
+          i + 1, m.motivo,
+          fmtNum(m.quantidade),
+          `${m.percentualPerdas.toFixed(1)}%`,
+          fmtBRL(m.valorPerdido),
+          `${m.percentualValor.toFixed(1)}%`,
+        ]),
+        theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+        styles: { fontSize: 9 },
+      });
+    }
+
+    if (dados.porResponsavel.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["#", "Vendedor", "Perdidas", "Valor perdido", "Ticket médio"]],
+        body: dados.porResponsavel.map((v, i) => [
+          i + 1, v.nome, fmtNum(v.quantidade), fmtBRL(v.valorPerdido), fmtBRL(v.ticketMedio),
+        ]),
+        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        styles: { fontSize: 9 },
+      });
+    }
+
+    if (dados.porOrigem.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["Origem", "Qtd perdidas", "Valor perdido"]],
+        body: dados.porOrigem.map(o => [o.origem, fmtNum(o.quantidade), fmtBRL(o.valorPerdido)]),
+        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        styles: { fontSize: 9 },
+      });
+    }
+
+    if (dados.evolucaoMensal.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["Mês", "Perdidas", "Valor perdido"]],
+        body: dados.evolucaoMensal.map(e => [fmtMes(e.mes), fmtNum(e.quantidade), fmtBRL(e.valorPerdido)]),
+        theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+        styles: { fontSize: 9 },
+      });
+    }
+
+    if (dados.topPerdas.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["💸 Top vazamentos (oportunidades de maior valor perdidas)", "", "", "", "", ""]],
+        body: [],
+        styles: { fontSize: 11, fontStyle: "bold" }, theme: "plain",
+      });
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY,
+        head: [["#", "Título", "Cliente", "Vendedor", "Motivo", "Valor"]],
+        body: dados.topPerdas.map(o => [
+          `#${o.numero}`, o.titulo, o.cliente || "—", o.responsavel || "—",
+          o.motivoPerda || "(sem motivo)",
+          fmtBRL(o.valorEstimado),
+        ]),
+        theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+        styles: { fontSize: 8 },
+      });
+    }
+
+    if (dados.oportunidades.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["#", "Título", "Cliente", "Vendedor", "Motivo", "Origem", "Valor", "Dias", "Perdida em"]],
+        body: dados.oportunidades.map(o => [
+          `#${o.numero}`, o.titulo, o.cliente || "—", o.responsavel || "—",
+          o.motivoPerda || "(sem motivo)", o.origem || "—",
+          fmtBRL(o.valorEstimado),
+          fmtNum(o.diasNoFunil),
+          fmtData(o.dataPerdida),
+        ]),
+        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        styles: { fontSize: 7 },
+      });
+    }
+
+    doc.save(`relatorio-perdas-crm-${hoje()}.pdf`);
+  }
+
+  // Helper pra heatmap: pega celula motivo+origem ou retorna 0.
+  function celula(motivo, origem) {
+    if (!dados?.cruzamentoMotivoOrigem?.celulas) return null;
+    return dados.cruzamentoMotivoOrigem.celulas.find(
+      c => c.motivo === motivo && c.origem === origem
+    );
+  }
+
+  const maxCelulaValor = dados
+    ? Math.max(0, ...(dados.cruzamentoMotivoOrigem?.celulas || []).map(c => c.valorPerdido))
+    : 0;
+
+  return (
+    <BlocoRelatorio
+      titulo="Relatório de Motivos de Perda (CRM)" cor={C.red}
+      filtros={
+        <>
+          <CampoData label="Perdidas de" value={dataInicio} onChange={setDataInicio} />
+          <CampoData label="Perdidas até" value={dataFim} onChange={setDataFim} />
+          <CampoSelectBusca label="Responsável" opcoes={usuarios} value={responsavelId} onChange={setResponsavelId} placeholder="Todos" />
+          <CampoSelect label="Origem" value={origem} onChange={setOrigem}>
+            <option value="">Todas</option>
+            {ORIGENS_FUNIL.map(o => <option key={o} value={o}>{o}</option>)}
+          </CampoSelect>
+          <div style={{ display: "flex", flexDirection: "column", minWidth: 160 }}>
+            <label style={labelStyle}>Buscar motivo</label>
+            <input
+              type="text" value={buscaMotivo}
+              onChange={e => setBuscaMotivo(e.target.value)}
+              placeholder="ex: preço, concorrente"
+              style={inputStyle}
+            />
+          </div>
+        </>
+      }
+      onGerar={gerar} onExportar={exportar} carregando={carregando}
+      erro={erro} dados={dados}
+    >
+      {dados && (
+        <>
+          <Resumo cards={[
+            { rotulo: "Perdidas", valor: fmtNum(dados.resumo.totalPerdidas), cor: C.red },
+            { rotulo: "Valor perdido", valor: fmtBRL(dados.resumo.valorPerdidoTotal), cor: C.red },
+            { rotulo: "Ticket médio", valor: fmtBRL(dados.resumo.ticketMedioPerdido), cor: C.yellow },
+            { rotulo: "Taxa de perda", valor: `${dados.resumo.taxaPerda.toFixed(1)}%`, cor: dados.resumo.taxaPerda <= 30 ? C.green : C.red },
+            { rotulo: "Ganhas no período", valor: fmtNum(dados.resumo.totalGanhasNoMesmoPeriodo), cor: C.green },
+            { rotulo: "Sem motivo", valor: fmtNum(dados.resumo.semMotivo), cor: dados.resumo.semMotivo > 0 ? C.yellow : C.muted },
+            { rotulo: "Ciclo até perda", valor: `${dados.resumo.cicloMedioPerdaDias.toFixed(1)}d`, cor: C.purple },
+          ]} />
+
+          {dados.resumo.totalPerdidas === 0 && (
+            <div style={{
+              background: C.green + "11", border: `1px solid ${C.green}55`,
+              borderRadius: 12, padding: 20, marginBottom: 16, textAlign: "center",
+              color: C.green, fontSize: 14, fontWeight: 600,
+            }}>
+              🎉 Nenhuma oportunidade perdida no período selecionado.
+            </div>
+          )}
+
+          {dados.porMotivo.length > 0 && (
+            <div style={{
+              background: C.card, border: `1px solid ${C.border}`,
+              borderRadius: 12, padding: 16, marginBottom: 16,
+            }}>
+              <div style={{ color: C.white, fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
+                Top motivos por valor perdido
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {dados.porMotivo.slice(0, 10).map((m, i) => {
+                  const pct = dados.resumo.valorPerdidoTotal > 0
+                    ? (m.valorPerdido / dados.resumo.valorPerdidoTotal) * 100
+                    : 0;
+                  return (
+                    <div key={i}>
+                      <div style={{
+                        display: "flex", justifyContent: "space-between",
+                        alignItems: "baseline", marginBottom: 3, gap: 8,
+                      }}>
+                        <div style={{ color: C.text, fontSize: 12, fontWeight: 600, flex: 1, minWidth: 0,
+                          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                        }}>
+                          {i + 1}. {m.motivo}
+                        </div>
+                        <div style={{ color: C.muted, fontSize: 11, whiteSpace: "nowrap" }}>
+                          {fmtNum(m.quantidade)} opp · <strong style={{ color: C.red }}>{fmtBRL(m.valorPerdido)}</strong>
+                        </div>
+                      </div>
+                      <div style={{
+                        position: "relative", height: 14, background: C.surface,
+                        borderRadius: 4, overflow: "hidden",
+                      }}>
+                        <div style={{
+                          width: `${pct}%`, height: "100%",
+                          background: C.red, opacity: 0.6,
+                        }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {dados.cruzamentoMotivoOrigem &&
+            dados.cruzamentoMotivoOrigem.motivos.length > 0 &&
+            dados.cruzamentoMotivoOrigem.origens.length > 0 && (
+            <div style={{
+              background: C.card, border: `1px solid ${C.border}`,
+              borderRadius: 12, padding: 16, marginBottom: 16,
+            }}>
+              <div style={{ color: C.white, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+                Cruzamento Motivo × Origem (heat-map)
+              </div>
+              <div style={{ color: C.muted, fontSize: 11, marginBottom: 12 }}>
+                Intensidade da cor = valor perdido. Vazio = nenhuma perda nessa combinação.
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ borderCollapse: "collapse", fontSize: 11 }}>
+                  <thead>
+                    <tr>
+                      <th style={{
+                        padding: "6px 10px", color: C.muted, fontSize: 10,
+                        fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5,
+                        borderBottom: `1px solid ${C.border}`, textAlign: "left",
+                      }}>Motivo \ Origem</th>
+                      {dados.cruzamentoMotivoOrigem.origens.map(og => (
+                        <th key={og} style={{
+                          padding: "6px 10px", color: C.muted, fontSize: 10,
+                          fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5,
+                          borderBottom: `1px solid ${C.border}`, textAlign: "center", minWidth: 70,
+                        }}>{og}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dados.cruzamentoMotivoOrigem.motivos.map(motivo => (
+                      <tr key={motivo}>
+                        <td style={{
+                          padding: "6px 10px", color: C.text, fontWeight: 600,
+                          borderBottom: `1px solid ${C.border}55`,
+                          whiteSpace: "nowrap", maxWidth: 200,
+                          overflow: "hidden", textOverflow: "ellipsis",
+                        }}>{motivo}</td>
+                        {dados.cruzamentoMotivoOrigem.origens.map(og => {
+                          const c = celula(motivo, og);
+                          const intensidade = c && maxCelulaValor > 0
+                            ? c.valorPerdido / maxCelulaValor
+                            : 0;
+                          return (
+                            <td key={og} style={{
+                              padding: "8px 6px", textAlign: "center",
+                              background: c ? `rgba(239, 68, 68, ${0.1 + intensidade * 0.6})` : "transparent",
+                              color: intensidade > 0.5 ? C.white : C.text,
+                              borderBottom: `1px solid ${C.border}55`,
+                              fontSize: 11, fontWeight: c ? 700 : 400,
+                            }}>
+                              {c ? (
+                                <>
+                                  <div>{fmtNum(c.quantidade)}</div>
+                                  <div style={{ fontSize: 9, opacity: 0.8 }}>{fmtBRL(c.valorPerdido)}</div>
+                                </>
+                              ) : "—"}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {dados.porResponsavel.length > 0 && (
+            <Tabela
+              titulo={`Perdas por vendedor (${dados.porResponsavel.length})`}
+              colunas={["#", "Vendedor", "Perdidas", "Valor perdido", "Ticket médio"]}
+              alinhamentos={["center", "left", "right", "right", "right"]}
+              linhas={dados.porResponsavel.map((v, i) => [
+                i + 1, v.nome,
+                fmtNum(v.quantidade), fmtBRL(v.valorPerdido), fmtBRL(v.ticketMedio),
+              ])}
+            />
+          )}
+
+          {dados.porOrigem.length > 0 && (
+            <Tabela
+              titulo={`Perdas por origem (${dados.porOrigem.length})`}
+              colunas={["Origem", "Qtd perdidas", "Valor perdido"]}
+              alinhamentos={["left", "right", "right"]}
+              linhas={dados.porOrigem.map(o => [o.origem, fmtNum(o.quantidade), fmtBRL(o.valorPerdido)])}
+            />
+          )}
+
+          {dados.evolucaoMensal.length > 0 && (
+            <Tabela
+              titulo={`Evolução mensal (${dados.evolucaoMensal.length} ${dados.evolucaoMensal.length === 1 ? "mês" : "meses"})`}
+              colunas={["Mês", "Perdidas", "Valor perdido"]}
+              alinhamentos={["left", "right", "right"]}
+              linhas={dados.evolucaoMensal.map(e => [fmtMes(e.mes), fmtNum(e.quantidade), fmtBRL(e.valorPerdido)])}
+            />
+          )}
+
+          {dados.topPerdas.length > 0 && (
+            <div style={{
+              background: C.red + "11", border: `1px solid ${C.red}55`,
+              borderRadius: 12, padding: 16, marginBottom: 16,
+            }}>
+              <div style={{ color: C.red, fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
+                💸 Top vazamentos — oportunidades de maior valor perdidas ({dados.topPerdas.length})
+              </div>
+              <div style={{ color: C.muted, fontSize: 11, marginBottom: 10 }}>
+                Casos onde os maiores valores escaparam. Ideal para análise post-mortem.
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: C.surface }}>
+                      {["#", "Título", "Cliente", "Vendedor", "Motivo", "Valor"].map((h, i) => (
+                        <th key={i} style={{
+                          padding: "8px 12px", textAlign: i === 5 ? "right" : "left",
+                          color: C.muted, fontSize: 10, fontWeight: 700,
+                          textTransform: "uppercase", letterSpacing: 0.5,
+                          borderBottom: `1px solid ${C.border}`,
+                        }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dados.topPerdas.map(o => (
+                      <tr key={o.id} style={{ borderBottom: `1px solid ${C.border}55` }}>
+                        <td style={{ padding: "8px 12px", color: C.text }}>#{o.numero}</td>
+                        <td style={{ padding: "8px 12px", color: C.text }}>{o.titulo}</td>
+                        <td style={{ padding: "8px 12px", color: C.muted }}>{o.cliente || "—"}</td>
+                        <td style={{ padding: "8px 12px", color: C.muted }}>{o.responsavel || "—"}</td>
+                        <td style={{ padding: "8px 12px", color: C.muted }}>{o.motivoPerda || "(sem motivo)"}</td>
+                        <td style={{ padding: "8px 12px", textAlign: "right", color: C.red, fontWeight: 700 }}>
+                          {fmtBRL(o.valorEstimado)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          <Tabela
+            titulo={`Detalhamento (${dados.oportunidades.length} oportunidade${dados.oportunidades.length === 1 ? "" : "s"} — até 200)`}
+            colunas={["#", "Título", "Cliente", "Vendedor", "Motivo", "Origem", "Valor", "Dias", "Perdida em"]}
+            alinhamentos={["center", "left", "left", "left", "left", "left", "right", "right", "left"]}
+            linhas={dados.oportunidades.map(o => [
+              `#${o.numero}`, o.titulo, o.cliente || "—", o.responsavel || "—",
+              o.motivoPerda || "(sem motivo)", o.origem || "—",
+              fmtBRL(o.valorEstimado),
+              fmtNum(o.diasNoFunil),
+              fmtData(o.dataPerdida),
+            ])}
+            vazioTexto="Nenhuma oportunidade perdida no período."
+          />
         </>
       )}
     </BlocoRelatorio>

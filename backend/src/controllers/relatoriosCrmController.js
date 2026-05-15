@@ -1459,3 +1459,222 @@ export async function relatorioPerformanceCrm(req, res, next) {
     next(err);
   }
 }
+
+// ============ RELATORIO DE MOTIVOS DE PERDA (LOSS ANALYSIS) ============
+//
+// Onde o dinheiro esta escapando: agregacoes dedicadas das oportunidades
+// PERDIDAS, complementar ao Funil (que mostra so um resumo). Inclui
+// cruzamento motivo x origem, evolucao mensal e ranking dos "vazamentos"
+// mais caros (top oportunidades de alto valor que foram perdidas).
+//
+// Filtros:
+//   dataInicio, dataFim   -> filtram dataPerdida (data efetiva da perda)
+//   responsavelId         -> 1 vendedor (ou todos)
+//   origem                -> origem do lead
+//   buscaMotivo           -> substring no motivoPerda (case-insensitive)
+//
+// Retorno:
+//   resumo                -> KPIs gerais de perda
+//   porMotivo             -> agrupamento exato; top 20
+//   porResponsavel        -> ranking de quem mais perdeu (valor + qtd)
+//   porOrigem             -> perdas por origem do lead
+//   evolucaoMensal        -> serie temporal: mes -> qtd + valor perdido
+//   topPerdas             -> top 20 oportunidades de maior valor perdido
+//   cruzamentoMotivoOrigem -> heat-map textual: motivo x origem
+//   oportunidades         -> detalhamento limitado a 200 linhas
+export async function relatorioPerdasCrm(req, res, next) {
+  try {
+    const { dataInicio, dataFim, responsavelId, origem, buscaMotivo } = req.query;
+    const di = parseDataInicio(dataInicio);
+    const df = parseDataFim(dataFim);
+
+    const where = { etapa: "PERDIDO" };
+    if (di || df) where.dataPerdida = {};
+    if (di) where.dataPerdida.gte = di;
+    if (df) where.dataPerdida.lte = df;
+    if (responsavelId) where.responsavelId = responsavelId;
+    if (origem) where.origem = origem;
+    if (buscaMotivo && String(buscaMotivo).trim()) {
+      where.motivoPerda = { contains: String(buscaMotivo).trim(), mode: "insensitive" };
+    }
+
+    const [perdidas, totalGanhasNoMesmoPeriodo] = await Promise.all([
+      prisma.oportunidade.findMany({
+        where,
+        orderBy: { dataPerdida: "desc" },
+        include: {
+          cliente: { select: { id: true, nome: true } },
+          responsavel: { select: { id: true, nome: true } },
+        },
+      }),
+      prisma.oportunidade.count({
+        where: {
+          etapa: "GANHO",
+          ...(di || df ? { dataGanho: { gte: di || undefined, lte: df || undefined } } : {}),
+          ...(responsavelId ? { responsavelId } : {}),
+          ...(origem ? { origem } : {}),
+        },
+      }),
+    ]);
+
+    // ===== RESUMO =====
+    const totalPerdidas = perdidas.length;
+    const valorPerdidoTotal = perdidas.reduce((s, o) => s + toNum(o.valorEstimado), 0);
+    const ticketMedioPerdido = totalPerdidas > 0 ? valorPerdidoTotal / totalPerdidas : 0;
+    const totalFechadas = totalPerdidas + totalGanhasNoMesmoPeriodo;
+    const taxaPerda = totalFechadas > 0 ? (totalPerdidas / totalFechadas) * 100 : 0;
+    const comMotivo = perdidas.filter(o => o.motivoPerda && o.motivoPerda.trim()).length;
+    const semMotivo = totalPerdidas - comMotivo;
+    const cicloMedioPerdaDias = (() => {
+      const validas = perdidas.filter(o => o.dataPerdida && o.createdAt);
+      if (validas.length === 0) return 0;
+      const soma = validas.reduce((s, o) => s + (diasEntre(o.createdAt, o.dataPerdida) ?? 0), 0);
+      return soma / validas.length;
+    })();
+
+    // ===== POR MOTIVO =====
+    const mapaMotivo = new Map();
+    for (const o of perdidas) {
+      const key = (o.motivoPerda && o.motivoPerda.trim()) || "(sem motivo)";
+      const a = mapaMotivo.get(key) || { motivo: key, quantidade: 0, valorPerdido: 0 };
+      a.quantidade += 1;
+      a.valorPerdido += toNum(o.valorEstimado);
+      mapaMotivo.set(key, a);
+    }
+    const porMotivo = Array.from(mapaMotivo.values())
+      .map(m => ({
+        ...m,
+        percentualPerdas: totalPerdidas > 0 ? (m.quantidade / totalPerdidas) * 100 : 0,
+        percentualValor: valorPerdidoTotal > 0 ? (m.valorPerdido / valorPerdidoTotal) * 100 : 0,
+      }))
+      .sort((a, b) => b.valorPerdido - a.valorPerdido || b.quantidade - a.quantidade)
+      .slice(0, 20);
+
+    // ===== POR RESPONSAVEL =====
+    const mapaResp = new Map();
+    for (const o of perdidas) {
+      const id = o.responsavelId || "_sem_";
+      const nome = o.responsavel?.nome || "(sem responsavel)";
+      const a = mapaResp.get(id) || { id, nome, quantidade: 0, valorPerdido: 0 };
+      a.quantidade += 1;
+      a.valorPerdido += toNum(o.valorEstimado);
+      mapaResp.set(id, a);
+    }
+    const porResponsavel = Array.from(mapaResp.values())
+      .map(r => ({
+        ...r,
+        ticketMedio: r.quantidade > 0 ? r.valorPerdido / r.quantidade : 0,
+      }))
+      .sort((a, b) => b.valorPerdido - a.valorPerdido || b.quantidade - a.quantidade);
+
+    // ===== POR ORIGEM =====
+    const mapaOrigem = new Map();
+    for (const o of perdidas) {
+      const key = o.origem || "(sem origem)";
+      const a = mapaOrigem.get(key) || { origem: key, quantidade: 0, valorPerdido: 0 };
+      a.quantidade += 1;
+      a.valorPerdido += toNum(o.valorEstimado);
+      mapaOrigem.set(key, a);
+    }
+    const porOrigem = Array.from(mapaOrigem.values())
+      .sort((a, b) => b.valorPerdido - a.valorPerdido || b.quantidade - a.quantidade);
+
+    // ===== EVOLUCAO MENSAL =====
+    const mapaMes = new Map();
+    for (const o of perdidas) {
+      if (!o.dataPerdida) continue;
+      const key = ymKey(o.dataPerdida);
+      const a = mapaMes.get(key) || { mes: key, quantidade: 0, valorPerdido: 0 };
+      a.quantidade += 1;
+      a.valorPerdido += toNum(o.valorEstimado);
+      mapaMes.set(key, a);
+    }
+    const evolucaoMensal = Array.from(mapaMes.values())
+      .sort((a, b) => a.mes.localeCompare(b.mes));
+
+    // ===== TOP PERDAS (oportunidades de maior valor que vazaram) =====
+    const topPerdas = [...perdidas]
+      .filter(o => toNum(o.valorEstimado) > 0)
+      .sort((a, b) => toNum(b.valorEstimado) - toNum(a.valorEstimado))
+      .slice(0, 20)
+      .map(o => ({
+        id: o.id, numero: o.numero, titulo: o.titulo,
+        cliente: o.cliente?.nome || null,
+        responsavel: o.responsavel?.nome || null,
+        valorEstimado: toNum(o.valorEstimado),
+        motivoPerda: o.motivoPerda,
+        origem: o.origem,
+        dataPerdida: o.dataPerdida,
+      }));
+
+    // ===== CRUZAMENTO MOTIVO x ORIGEM =====
+    // Estrutura: motivos sao linhas, origens sao colunas. Top 8 motivos por
+    // valor + "Outros" agrupado. Top 6 origens por qtd + "Outras" agrupada.
+    const topMotivosArr = porMotivo.slice(0, 8).map(m => m.motivo);
+    const topOrigensArr = porOrigem.slice(0, 6).map(o => o.origem);
+
+    function cubeKey(motivo, origem) {
+      const m = topMotivosArr.includes(motivo) ? motivo : "Outros motivos";
+      const og = topOrigensArr.includes(origem) ? origem : "Outras origens";
+      return `${m}|||${og}`;
+    }
+    const matriz = new Map();
+    for (const o of perdidas) {
+      const motivo = (o.motivoPerda && o.motivoPerda.trim()) || "(sem motivo)";
+      const og = o.origem || "(sem origem)";
+      const k = cubeKey(motivo, og);
+      const a = matriz.get(k) || { motivo: k.split("|||")[0], origem: k.split("|||")[1], quantidade: 0, valorPerdido: 0 };
+      a.quantidade += 1;
+      a.valorPerdido += toNum(o.valorEstimado);
+      matriz.set(k, a);
+    }
+    const cruzamentoMotivoOrigem = {
+      motivos: [...topMotivosArr, ...(porMotivo.length > 8 ? ["Outros motivos"] : [])],
+      origens: [...topOrigensArr, ...(porOrigem.length > 6 ? ["Outras origens"] : [])],
+      celulas: Array.from(matriz.values()),
+    };
+
+    // ===== DETALHAMENTO =====
+    const detalhe = perdidas.slice(0, 200).map(o => ({
+      id: o.id, numero: o.numero, titulo: o.titulo,
+      cliente: o.cliente?.nome || null,
+      responsavel: o.responsavel?.nome || null,
+      valorEstimado: toNum(o.valorEstimado),
+      origem: o.origem,
+      motivoPerda: o.motivoPerda,
+      createdAt: o.createdAt,
+      dataPerdida: o.dataPerdida,
+      diasNoFunil: diasEntre(o.createdAt, o.dataPerdida) || 0,
+    }));
+
+    res.json({
+      filtros: {
+        dataInicio: di ? di.toISOString() : null,
+        dataFim: df ? df.toISOString() : null,
+        responsavelId: responsavelId || null,
+        origem: origem || null,
+        buscaMotivo: buscaMotivo || null,
+      },
+      geradoEm: new Date().toISOString(),
+      resumo: {
+        totalPerdidas,
+        valorPerdidoTotal,
+        ticketMedioPerdido,
+        taxaPerda,
+        totalGanhasNoMesmoPeriodo,
+        comMotivo,
+        semMotivo,
+        cicloMedioPerdaDias,
+      },
+      porMotivo,
+      porResponsavel,
+      porOrigem,
+      evolucaoMensal,
+      topPerdas,
+      cruzamentoMotivoOrigem,
+      oportunidades: detalhe,
+    });
+  } catch (err) {
+    next(err);
+  }
+}

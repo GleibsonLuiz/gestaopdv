@@ -520,6 +520,16 @@ export const api = {
     const q = qs.toString();
     return request(`/relatorios/crm/forecast${q ? `?${q}` : ""}`);
   },
+  relatorioPerdasCrm: ({ dataInicio = "", dataFim = "", responsavelId = "", origem = "", buscaMotivo = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (dataInicio) qs.set("dataInicio", dataInicio);
+    if (dataFim) qs.set("dataFim", dataFim);
+    if (responsavelId) qs.set("responsavelId", responsavelId);
+    if (origem) qs.set("origem", origem);
+    if (buscaMotivo) qs.set("buscaMotivo", buscaMotivo);
+    const q = qs.toString();
+    return request(`/relatorios/crm/perdas${q ? `?${q}` : ""}`);
+  },
 
   listarContasPagar: ({ search = "", status = "", fornecedorId = "", dataInicio = "", dataFim = "", vencidas = "" } = {}) => {
     const qs = new URLSearchParams();

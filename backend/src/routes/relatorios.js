@@ -7,6 +7,7 @@ import {
   relatorioEstoque,
   relatorioCaixas,
 } from "../controllers/relatoriosController.js";
+import { relatorioFunilCrm } from "../controllers/relatoriosCrmController.js";
 
 const router = Router();
 
@@ -18,5 +19,6 @@ router.get("/compras", relatorioCompras);
 router.get("/financeiro", relatorioFinanceiro);
 router.get("/estoque", relatorioEstoque);
 router.get("/caixas", relatorioCaixas);
+router.get("/crm/funil", relatorioFunilCrm);
 
 export default router;

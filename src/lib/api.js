@@ -439,6 +439,15 @@ export const api = {
     const q = qs.toString();
     return request(`/relatorios/caixas${q ? `?${q}` : ""}`);
   },
+  relatorioFunilCrm: ({ dataInicio = "", dataFim = "", responsavelId = "", origem = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (dataInicio) qs.set("dataInicio", dataInicio);
+    if (dataFim) qs.set("dataFim", dataFim);
+    if (responsavelId) qs.set("responsavelId", responsavelId);
+    if (origem) qs.set("origem", origem);
+    const q = qs.toString();
+    return request(`/relatorios/crm/funil${q ? `?${q}` : ""}`);
+  },
 
   listarContasPagar: ({ search = "", status = "", fornecedorId = "", dataInicio = "", dataFim = "", vencidas = "" } = {}) => {
     const qs = new URLSearchParams();

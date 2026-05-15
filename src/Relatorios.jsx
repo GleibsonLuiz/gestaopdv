@@ -3,7 +3,7 @@ import { C } from "./lib/theme.js";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { api, BASE_URL } from "./lib/api.js";
-import { useConfiguracaoEmpresa, formatarEndereco, obterConfiguracaoCache } from "./HeaderRelatorio.jsx";
+import { formatarEndereco, obterConfiguracaoCache } from "./HeaderRelatorio.jsx";
 import SelectBusca from "./components/SelectBusca.jsx";
 
 
@@ -43,7 +43,31 @@ const ABAS = [
   { id: "estoque", label: "📦 Estoque", cor: C.purple },
   { id: "caixas", label: "💵 Caixas (DRE)", cor: C.red },
   { id: "comissoes", label: "🏆 Comissões", cor: C.purple },
+  { id: "crm", label: "🎯 CRM", cor: "#7c3aed" },
 ];
+
+const ORIGENS_FUNIL = [
+  "INDICACAO", "INSTAGRAM", "FACEBOOK", "GOOGLE",
+  "WHATSAPP", "WALK_IN", "SITE", "TELEFONE", "OUTROS",
+];
+
+const ROTULO_ETAPA = {
+  LEAD: "Lead",
+  QUALIFICADO: "Qualificado",
+  PROPOSTA: "Proposta",
+  NEGOCIACAO: "Negociação",
+  GANHO: "Ganho",
+  PERDIDO: "Perdido",
+};
+
+const COR_ETAPA = {
+  LEAD: C.muted,
+  QUALIFICADO: C.accent,
+  PROPOSTA: "#7c3aed",
+  NEGOCIACAO: C.yellow,
+  GANHO: C.green,
+  PERDIDO: C.red,
+};
 
 export default function Relatorios() {
   const [aba, setAba] = useState("vendas");
@@ -71,6 +95,36 @@ export default function Relatorios() {
       {aba === "estoque" && <RelatorioEstoque key="e" />}
       {aba === "caixas" && <RelatorioCaixas key="x" />}
       {aba === "comissoes" && <RelatorioComissoesLista key="m" />}
+      {aba === "crm" && <RelatoriosCrm key="r" />}
+    </div>
+  );
+}
+
+// ============ HUB CRM (SUB-ABAS) ============
+function RelatoriosCrm() {
+  const SUB_ABAS = [
+    { id: "funil", label: "📊 Funil de Vendas", cor: "#7c3aed" },
+  ];
+  const [sub, setSub] = useState("funil");
+
+  return (
+    <div>
+      <div style={{
+        display: "flex", gap: 4, padding: 4, marginBottom: 18,
+        background: C.surface, border: `1px solid ${C.border}`,
+        borderRadius: 10, width: "fit-content", flexWrap: "wrap",
+      }}>
+        {SUB_ABAS.map(a => (
+          <button key={a.id} onClick={() => setSub(a.id)} style={{
+            padding: "8px 14px", borderRadius: 8, border: "none",
+            background: sub === a.id ? a.cor + "22" : "transparent",
+            color: sub === a.id ? a.cor : C.muted,
+            fontWeight: sub === a.id ? 700 : 600, fontSize: 12, cursor: "pointer",
+          }}>{a.label}</button>
+        ))}
+      </div>
+
+      {sub === "funil" && <RelatorioFunilCrm key="cf" />}
     </div>
   );
 }
@@ -920,6 +974,287 @@ function RelatorioComissoesLista() {
               fmtBRL(v.comissao),
             ])}
             vazioTexto="Nenhuma venda no período."
+          />
+        </>
+      )}
+    </BlocoRelatorio>
+  );
+}
+
+// ============ RELATÓRIO DE FUNIL CRM ============
+function RelatorioFunilCrm() {
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+  const [responsavelId, setResponsavelId] = useState("");
+  const [origem, setOrigem] = useState("");
+  const [usuarios, setUsuarios] = useState([]);
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
+  }, []);
+
+  const gerar = useCallback(async () => {
+    setCarregando(true); setErro("");
+    try {
+      const r = await api.relatorioFunilCrm({ dataInicio, dataFim, responsavelId, origem });
+      setDados(r);
+    } catch (err) { setErro(err.message); }
+    finally { setCarregando(false); }
+  }, [dataInicio, dataFim, responsavelId, origem]);
+
+  async function exportar() {
+    if (!dados) return;
+    const doc = await criarPDF("Relatório de Funil de Vendas (CRM)");
+    addPeriodo(doc, dataInicio, dataFim);
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 4,
+      head: [["Indicador", "Valor"]],
+      body: [
+        ["Total de oportunidades", fmtNum(dados.resumo.totalOportunidades)],
+        ["Abertas (em andamento)", fmtNum(dados.resumo.abertas)],
+        ["Ganhas", fmtNum(dados.resumo.ganhas)],
+        ["Perdidas", fmtNum(dados.resumo.perdidas)],
+        ["Taxa de conversão", `${dados.resumo.taxaConversao.toFixed(1)}%`],
+        ["Valor estimado em aberto", fmtBRL(dados.resumo.valorEstimadoAberto)],
+        ["Valor ponderado em aberto", fmtBRL(dados.resumo.valorPonderadoAberto)],
+        ["Valor ganho (fechado)", fmtBRL(dados.resumo.valorGanho)],
+        ["Ticket médio (ganho)", fmtBRL(dados.resumo.ticketMedioGanho)],
+        ["Ciclo médio de venda (dias)", dados.resumo.cicloMedioGanhoDias.toFixed(1)],
+      ],
+      theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+      styles: { fontSize: 10 },
+    });
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 6,
+      head: [["Etapa", "Qtd", "Valor estimado", "Valor ponderado"]],
+      body: dados.porEtapa.map(e => [
+        ROTULO_ETAPA[e.etapa] || e.etapa,
+        fmtNum(e.quantidade),
+        fmtBRL(e.valorEstimado),
+        fmtBRL(e.valorPonderado),
+      ]),
+      theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+      styles: { fontSize: 9 },
+    });
+
+    if (dados.conversaoEtapaEtapa.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["De", "Para", "Qtd na etapa de origem", "Qtd avançou", "Taxa"]],
+        body: dados.conversaoEtapaEtapa.map(c => [
+          ROTULO_ETAPA[c.de] || c.de,
+          ROTULO_ETAPA[c.para] || c.para,
+          fmtNum(c.qtdDe),
+          fmtNum(c.qtdPara),
+          `${c.taxa.toFixed(1)}%`,
+        ]),
+        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        styles: { fontSize: 9 },
+      });
+    }
+
+    if (dados.porResponsavel.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["#", "Vendedor", "Total", "Abertas", "Ganhas", "Perdidas", "Conv.", "Valor ganho"]],
+        body: dados.porResponsavel.map((v, i) => [
+          i + 1, v.nome,
+          fmtNum(v.quantidade), fmtNum(v.abertas),
+          fmtNum(v.ganhas), fmtNum(v.perdidas),
+          `${v.taxaConversao.toFixed(1)}%`,
+          fmtBRL(v.valorGanho),
+        ]),
+        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        styles: { fontSize: 9 },
+      });
+    }
+
+    if (dados.porOrigem.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["Origem", "Qtd", "Ganhas", "Perdidas", "Conv.", "Valor ganho"]],
+        body: dados.porOrigem.map(o => [
+          o.origem, fmtNum(o.quantidade),
+          fmtNum(o.ganhas), fmtNum(o.perdidas),
+          `${o.taxaConversao.toFixed(1)}%`, fmtBRL(o.valorGanho),
+        ]),
+        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        styles: { fontSize: 9 },
+      });
+    }
+
+    if (dados.motivosPerda.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["Motivo de perda", "Qtd", "Valor perdido"]],
+        body: dados.motivosPerda.map(m => [m.motivo, fmtNum(m.quantidade), fmtBRL(m.valorPerdido)]),
+        theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+        styles: { fontSize: 9 },
+      });
+    }
+
+    if (dados.oportunidades.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["#", "Título", "Cliente", "Vendedor", "Etapa", "Prob.", "Valor", "Dias etapa"]],
+        body: dados.oportunidades.map(o => [
+          `#${o.numero}`, o.titulo, o.cliente || "—",
+          o.responsavel || "—", ROTULO_ETAPA[o.etapa] || o.etapa,
+          `${o.probabilidade}%`, fmtBRL(o.valorEstimado), fmtNum(o.diasNaEtapa),
+        ]),
+        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        styles: { fontSize: 8 },
+      });
+    }
+
+    doc.save(`relatorio-funil-crm-${hoje()}.pdf`);
+  }
+
+  const maxFunil = dados
+    ? Math.max(1, ...dados.porEtapa.map(e => e.quantidade))
+    : 1;
+
+  return (
+    <BlocoRelatorio
+      titulo="Relatório de Funil de Vendas (CRM)" cor="#7c3aed"
+      filtros={
+        <>
+          <CampoData label="Criadas de" value={dataInicio} onChange={setDataInicio} />
+          <CampoData label="Criadas até" value={dataFim} onChange={setDataFim} />
+          <CampoSelectBusca label="Responsável" opcoes={usuarios} value={responsavelId} onChange={setResponsavelId} placeholder="Todos" />
+          <CampoSelect label="Origem" value={origem} onChange={setOrigem}>
+            <option value="">Todas</option>
+            {ORIGENS_FUNIL.map(o => <option key={o} value={o}>{o}</option>)}
+          </CampoSelect>
+        </>
+      }
+      onGerar={gerar} onExportar={exportar} carregando={carregando}
+      erro={erro} dados={dados}
+    >
+      {dados && (
+        <>
+          <Resumo cards={[
+            { rotulo: "Oportunidades", valor: fmtNum(dados.resumo.totalOportunidades), cor: "#7c3aed" },
+            { rotulo: "Abertas", valor: fmtNum(dados.resumo.abertas), cor: C.accent },
+            { rotulo: "Ganhas", valor: fmtNum(dados.resumo.ganhas), cor: C.green },
+            { rotulo: "Perdidas", valor: fmtNum(dados.resumo.perdidas), cor: C.red },
+            { rotulo: "Conversão", valor: `${dados.resumo.taxaConversao.toFixed(1)}%`, cor: dados.resumo.taxaConversao >= 30 ? C.green : C.yellow },
+            { rotulo: "Valor ganho", valor: fmtBRL(dados.resumo.valorGanho), cor: C.green },
+            { rotulo: "Pipeline (ponderado)", valor: fmtBRL(dados.resumo.valorPonderadoAberto), cor: C.purple },
+            { rotulo: "Ciclo médio", valor: `${dados.resumo.cicloMedioGanhoDias.toFixed(1)}d`, cor: C.yellow },
+          ]} />
+
+          {/* Funil visual */}
+          <div style={{
+            background: C.card, border: `1px solid ${C.border}`,
+            borderRadius: 12, padding: 16, marginBottom: 16,
+          }}>
+            <div style={{ color: C.white, fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
+              Distribuição por etapa
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {dados.porEtapa.map(e => {
+                const pct = (e.quantidade / maxFunil) * 100;
+                return (
+                  <div key={e.etapa} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{
+                      width: 110, color: COR_ETAPA[e.etapa], fontSize: 12, fontWeight: 700,
+                    }}>{ROTULO_ETAPA[e.etapa]}</div>
+                    <div style={{ flex: 1, position: "relative", height: 26, background: C.surface, borderRadius: 6, overflow: "hidden" }}>
+                      <div style={{
+                        width: `${pct}%`, height: "100%",
+                        background: COR_ETAPA[e.etapa],
+                        opacity: 0.7,
+                        transition: "width 300ms ease",
+                      }} />
+                      <div style={{
+                        position: "absolute", inset: 0,
+                        display: "flex", alignItems: "center", padding: "0 10px",
+                        color: C.white, fontSize: 12, fontWeight: 700,
+                        gap: 8,
+                      }}>
+                        <span>{fmtNum(e.quantidade)}</span>
+                        <span style={{ color: C.muted, fontWeight: 500 }}>·</span>
+                        <span style={{ color: C.muted, fontWeight: 500 }}>{fmtBRL(e.valorEstimado)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {dados.conversaoEtapaEtapa.length > 0 && (
+            <Tabela
+              titulo="Conversão etapa a etapa (do total que já passou por cada etapa)"
+              colunas={["De", "Para", "Passou por (origem)", "Avançou (destino)", "Taxa"]}
+              alinhamentos={["left", "left", "right", "right", "right"]}
+              linhas={dados.conversaoEtapaEtapa.map(c => [
+                ROTULO_ETAPA[c.de] || c.de,
+                ROTULO_ETAPA[c.para] || c.para,
+                fmtNum(c.qtdDe),
+                fmtNum(c.qtdPara),
+                `${c.taxa.toFixed(1)}%`,
+              ])}
+            />
+          )}
+
+          {dados.porResponsavel.length > 0 && (
+            <Tabela
+              titulo={`Performance por responsável (${dados.porResponsavel.length})`}
+              colunas={["#", "Vendedor", "Total", "Abertas", "Ganhas", "Perdidas", "Conv.", "Valor ganho"]}
+              alinhamentos={["center", "left", "right", "right", "right", "right", "right", "right"]}
+              linhas={dados.porResponsavel.map((v, i) => [
+                i + 1, v.nome,
+                fmtNum(v.quantidade), fmtNum(v.abertas),
+                fmtNum(v.ganhas), fmtNum(v.perdidas),
+                `${v.taxaConversao.toFixed(1)}%`,
+                fmtBRL(v.valorGanho),
+              ])}
+            />
+          )}
+
+          {dados.porOrigem.length > 0 && (
+            <Tabela
+              titulo="Por origem"
+              colunas={["Origem", "Qtd", "Ganhas", "Perdidas", "Conv.", "Valor ganho"]}
+              alinhamentos={["left", "right", "right", "right", "right", "right"]}
+              linhas={dados.porOrigem.map(o => [
+                o.origem, fmtNum(o.quantidade),
+                fmtNum(o.ganhas), fmtNum(o.perdidas),
+                `${o.taxaConversao.toFixed(1)}%`,
+                fmtBRL(o.valorGanho),
+              ])}
+            />
+          )}
+
+          {dados.motivosPerda.length > 0 && (
+            <Tabela
+              titulo={`Motivos de perda (${dados.motivosPerda.length})`}
+              colunas={["Motivo", "Qtd", "Valor perdido"]}
+              alinhamentos={["left", "right", "right"]}
+              linhas={dados.motivosPerda.map(m => [
+                m.motivo, fmtNum(m.quantidade), fmtBRL(m.valorPerdido),
+              ])}
+            />
+          )}
+
+          <Tabela
+            titulo={`Detalhamento (${dados.oportunidades.length} oportunidade${dados.oportunidades.length === 1 ? "" : "s"})`}
+            colunas={["#", "Título", "Cliente", "Vendedor", "Etapa", "Prob.", "Valor", "Dias etapa"]}
+            alinhamentos={["center", "left", "left", "left", "left", "right", "right", "right"]}
+            linhas={dados.oportunidades.map(o => [
+              `#${o.numero}`, o.titulo, o.cliente || "—",
+              o.responsavel || "—", ROTULO_ETAPA[o.etapa] || o.etapa,
+              `${o.probabilidade}%`, fmtBRL(o.valorEstimado),
+              fmtNum(o.diasNaEtapa),
+            ])}
+            vazioTexto="Nenhuma oportunidade no período."
           />
         </>
       )}

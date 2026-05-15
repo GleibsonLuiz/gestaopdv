@@ -289,6 +289,229 @@ export async function relatorioFunilCrm(req, res, next) {
   }
 }
 
+// ============ RELATORIO DE CARTEIRA DE CLIENTES (RFM) ============
+//
+// Visao da base instalada de clientes, segmentada via RFM
+// (Recencia/Frequencia/Monetario) na janela escolhida. Reusa a logica
+// usada em clienteController e dashboardCrmController.
+//
+// Filtros:
+//   janelaDias    -> janela RFM (default 365)
+//   segmento      -> filtra detalhamento por VIP/RECORRENTE/...
+//   tagId         -> filtra clientes que tem essa tag
+//   statusFunil   -> LEAD/CLIENTE_ATIVO/CLIENTE_INATIVO/PERDIDO
+//   cidade        -> filtra por cidade
+//
+// Retorno:
+//   resumo                -> KPIs gerais (LTV, retencao, churn, ticket medio)
+//   porSegmento           -> distribuicao 6 segmentos (qtd, monetario, %)
+//   porCidade             -> top 10 cidades por monetario
+//   porTag                -> cobertura por tag (qtd + monetario)
+//   topLtv                -> top 20 clientes por gasto total
+//   clientes              -> detalhamento completo (com filtros aplicados)
+
+const SEGMENTOS_RFM = ["VIP", "RECORRENTE", "NOVO", "EM_RISCO", "INATIVO", "PROSPECT"];
+
+function classificarSegmento({ qtdCompras, totalGasto, recenciaDias, mediaTotal }) {
+  if (qtdCompras === 0) return recenciaDias === null ? "PROSPECT" : "INATIVO";
+  if (recenciaDias >= 180) return "INATIVO";
+  if (qtdCompras >= 3 && totalGasto >= mediaTotal * 1.5 && recenciaDias < 60) return "VIP";
+  if (qtdCompras >= 3 && recenciaDias < 90) return "RECORRENTE";
+  if (qtdCompras === 1 && recenciaDias <= 30) return "NOVO";
+  if (recenciaDias >= 90 && recenciaDias < 180) return "EM_RISCO";
+  return qtdCompras > 0 ? "RECORRENTE" : "PROSPECT";
+}
+
+export async function relatorioCarteiraCrm(req, res, next) {
+  try {
+    const { janelaDias, segmento, tagId, statusFunil, cidade } = req.query;
+    const dias = parseInt(janelaDias || "365", 10);
+    const desde = new Date(Date.now() - dias * 86400000);
+
+    const whereCliente = { ativo: true };
+    if (statusFunil) whereCliente.statusFunil = statusFunil;
+    if (cidade) whereCliente.cidade = cidade;
+    if (tagId) whereCliente.tags = { some: { tagId } };
+
+    const [clientes, vendasJanela, tags] = await Promise.all([
+      prisma.cliente.findMany({
+        where: whereCliente,
+        include: {
+          tags: { include: { tag: { select: { id: true, nome: true, cor: true } } } },
+        },
+      }),
+      prisma.venda.findMany({
+        where: { status: "CONCLUIDA", createdAt: { gte: desde } },
+        select: { clienteId: true, total: true, createdAt: true },
+      }),
+      prisma.tag.findMany({ select: { id: true, nome: true, cor: true } }),
+    ]);
+
+    // ===== RFM POR CLIENTE =====
+    const aggPorCliente = new Map();
+    for (const v of vendasJanela) {
+      if (!v.clienteId) continue;
+      const a = aggPorCliente.get(v.clienteId) || { qtd: 0, total: 0, ultima: null, primeira: null };
+      a.qtd += 1;
+      a.total += toNum(v.total);
+      if (!a.ultima || v.createdAt > a.ultima) a.ultima = v.createdAt;
+      if (!a.primeira || v.createdAt < a.primeira) a.primeira = v.createdAt;
+      aggPorCliente.set(v.clienteId, a);
+    }
+    const valores = Array.from(aggPorCliente.values());
+    const mediaTotal = valores.length ? valores.reduce((s, x) => s + x.total, 0) / valores.length : 0;
+    const hoje = Date.now();
+
+    const enriquecidos = clientes.map(c => {
+      const a = aggPorCliente.get(c.id);
+      const qtdCompras = a?.qtd || 0;
+      const totalGasto = a?.total || 0;
+      const recenciaDias = a?.ultima
+        ? Math.floor((hoje - a.ultima.getTime()) / 86400000)
+        : null;
+      const seg = classificarSegmento({ qtdCompras, totalGasto, recenciaDias, mediaTotal });
+      const ticketMedio = qtdCompras > 0 ? totalGasto / qtdCompras : 0;
+      return {
+        id: c.id,
+        nome: c.nome,
+        cpfCnpj: c.cpfCnpj,
+        email: c.email,
+        telefone: c.telefone,
+        cidade: c.cidade,
+        estado: c.estado,
+        statusFunil: c.statusFunil,
+        origem: c.origem,
+        createdAt: c.createdAt,
+        primeiraCompra: a?.primeira || null,
+        ultimaCompra: a?.ultima || null,
+        qtdCompras,
+        totalGasto,
+        ticketMedio,
+        recenciaDias,
+        segmento: seg,
+        tags: c.tags.map(ct => ({
+          id: ct.tag.id,
+          nome: ct.tag.nome,
+          cor: ct.tag.cor,
+        })),
+      };
+    });
+
+    // ===== POR SEGMENTO =====
+    const mapaSeg = {};
+    for (const s of SEGMENTOS_RFM) {
+      mapaSeg[s] = { segmento: s, quantidade: 0, monetario: 0, ticketMedio: 0 };
+    }
+    for (const c of enriquecidos) {
+      mapaSeg[c.segmento].quantidade += 1;
+      mapaSeg[c.segmento].monetario += c.totalGasto;
+    }
+    const totalBase = enriquecidos.length;
+    const totalMonetario = enriquecidos.reduce((s, c) => s + c.totalGasto, 0);
+    const porSegmento = SEGMENTOS_RFM.map(s => {
+      const m = mapaSeg[s];
+      return {
+        ...m,
+        ticketMedio: m.quantidade > 0 ? m.monetario / m.quantidade : 0,
+        percentualBase: totalBase > 0 ? (m.quantidade / totalBase) * 100 : 0,
+        percentualFaturamento: totalMonetario > 0 ? (m.monetario / totalMonetario) * 100 : 0,
+      };
+    });
+
+    // ===== POR CIDADE =====
+    const mapaCidade = new Map();
+    for (const c of enriquecidos) {
+      const key = c.cidade || "(sem cidade)";
+      const a = mapaCidade.get(key) || { cidade: key, estado: c.estado || "—", quantidade: 0, monetario: 0 };
+      a.quantidade += 1;
+      a.monetario += c.totalGasto;
+      mapaCidade.set(key, a);
+    }
+    const porCidade = Array.from(mapaCidade.values())
+      .sort((a, b) => b.monetario - a.monetario || b.quantidade - a.quantidade)
+      .slice(0, 10);
+
+    // ===== POR TAG =====
+    const mapaTag = new Map();
+    for (const t of tags) {
+      mapaTag.set(t.id, {
+        id: t.id, nome: t.nome, cor: t.cor,
+        quantidade: 0, monetario: 0,
+      });
+    }
+    for (const c of enriquecidos) {
+      for (const t of c.tags) {
+        const a = mapaTag.get(t.id);
+        if (!a) continue;
+        a.quantidade += 1;
+        a.monetario += c.totalGasto;
+      }
+    }
+    const porTag = Array.from(mapaTag.values())
+      .filter(t => t.quantidade > 0)
+      .sort((a, b) => b.monetario - a.monetario);
+
+    // ===== TOP LTV =====
+    const topLtv = [...enriquecidos]
+      .filter(c => c.totalGasto > 0)
+      .sort((a, b) => b.totalGasto - a.totalGasto)
+      .slice(0, 20);
+
+    // ===== DETALHAMENTO FILTRADO =====
+    const detalhe = segmento
+      ? enriquecidos.filter(c => c.segmento === segmento)
+      : enriquecidos;
+    detalhe.sort((a, b) => b.totalGasto - a.totalGasto);
+
+    // ===== RESUMO =====
+    const comCompra = enriquecidos.filter(c => c.qtdCompras > 0);
+    const taxaRetencao = totalBase > 0 ? (comCompra.length / totalBase) * 100 : 0;
+    const inativos = enriquecidos.filter(c => c.segmento === "INATIVO" && c.qtdCompras > 0).length;
+    const churnRate = comCompra.length > 0 ? (inativos / comCompra.length) * 100 : 0;
+    const ltvMedio = comCompra.length > 0
+      ? comCompra.reduce((s, c) => s + c.totalGasto, 0) / comCompra.length
+      : 0;
+    const ticketMedioBase = comCompra.length > 0
+      ? comCompra.reduce((s, c) => s + c.ticketMedio, 0) / comCompra.length
+      : 0;
+    const frequenciaMedia = comCompra.length > 0
+      ? comCompra.reduce((s, c) => s + c.qtdCompras, 0) / comCompra.length
+      : 0;
+    const recenciaMedia = comCompra.length > 0
+      ? comCompra.reduce((s, c) => s + (c.recenciaDias || 0), 0) / comCompra.length
+      : 0;
+
+    res.json({
+      filtros: {
+        janelaDias: dias,
+        segmento: segmento || null,
+        tagId: tagId || null,
+        statusFunil: statusFunil || null,
+        cidade: cidade || null,
+      },
+      geradoEm: new Date().toISOString(),
+      resumo: {
+        totalClientes: totalBase,
+        clientesComCompra: comCompra.length,
+        taxaRetencao,
+        churnRate,
+        ltvMedio,
+        ticketMedio: ticketMedioBase,
+        frequenciaMedia,
+        recenciaMedia,
+        faturamentoTotal: totalMonetario,
+      },
+      porSegmento,
+      porCidade,
+      porTag,
+      topLtv,
+      clientes: detalhe,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // ============ RELATORIO DE PERFORMANCE COMERCIAL ============
 //
 // Visao consolidada de atividade comercial por vendedor — diferente do

@@ -105,6 +105,7 @@ function RelatoriosCrm() {
   const SUB_ABAS = [
     { id: "funil", label: "📊 Funil de Vendas", cor: "#7c3aed" },
     { id: "performance", label: "🏅 Performance Comercial", cor: C.accent },
+    { id: "carteira", label: "👥 Carteira de Clientes (RFM)", cor: C.green },
   ];
   const [sub, setSub] = useState("funil");
 
@@ -127,6 +128,7 @@ function RelatoriosCrm() {
 
       {sub === "funil" && <RelatorioFunilCrm key="cf" />}
       {sub === "performance" && <RelatorioPerformanceCrm key="cp" />}
+      {sub === "carteira" && <RelatorioCarteiraCrm key="cc" />}
     </div>
   );
 }
@@ -1472,6 +1474,262 @@ function RelatorioPerformanceCrm() {
                 ])}
             />
           )}
+        </>
+      )}
+    </BlocoRelatorio>
+  );
+}
+
+// ============ RELATÓRIO DE CARTEIRA DE CLIENTES (RFM) ============
+const SEGMENTOS_INFO = {
+  VIP: { label: "VIP", cor: "#f59e0b", icone: "👑" },
+  RECORRENTE: { label: "Recorrente", cor: C.green, icone: "🔄" },
+  NOVO: { label: "Novo", cor: C.accent, icone: "🌟" },
+  EM_RISCO: { label: "Em risco", cor: C.yellow, icone: "⚠️" },
+  INATIVO: { label: "Inativo", cor: C.muted, icone: "💤" },
+  PROSPECT: { label: "Prospect", cor: "#7c3aed", icone: "🌱" },
+};
+
+const STATUS_FUNIL_INFO = {
+  LEAD: "Lead",
+  CLIENTE_ATIVO: "Cliente ativo",
+  CLIENTE_INATIVO: "Cliente inativo",
+  PERDIDO: "Perdido",
+};
+
+function RelatorioCarteiraCrm() {
+  const [janelaDias, setJanelaDias] = useState("365");
+  const [segmento, setSegmento] = useState("");
+  const [tagId, setTagId] = useState("");
+  const [statusFunil, setStatusFunil] = useState("");
+  const [tags, setTags] = useState([]);
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    api.listarTags().then(setTags).catch(() => {});
+  }, []);
+
+  const gerar = useCallback(async () => {
+    setCarregando(true); setErro("");
+    try {
+      const r = await api.relatorioCarteiraCrm({ janelaDias, segmento, tagId, statusFunil });
+      setDados(r);
+    } catch (err) { setErro(err.message); }
+    finally { setCarregando(false); }
+  }, [janelaDias, segmento, tagId, statusFunil]);
+
+  async function exportar() {
+    if (!dados) return;
+    const doc = await criarPDF("Relatório de Carteira de Clientes (RFM)");
+    addLinha(doc, `Janela RFM: últimos ${dados.filtros.janelaDias} dias`);
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 4,
+      head: [["Indicador", "Valor"]],
+      body: [
+        ["Total de clientes ativos", fmtNum(dados.resumo.totalClientes)],
+        ["Clientes com compra na janela", fmtNum(dados.resumo.clientesComCompra)],
+        ["Taxa de retenção", `${dados.resumo.taxaRetencao.toFixed(1)}%`],
+        ["Churn rate", `${dados.resumo.churnRate.toFixed(1)}%`],
+        ["LTV médio", fmtBRL(dados.resumo.ltvMedio)],
+        ["Ticket médio (cliente)", fmtBRL(dados.resumo.ticketMedio)],
+        ["Frequência média", `${dados.resumo.frequenciaMedia.toFixed(1)} compras/cliente`],
+        ["Recência média", `${dados.resumo.recenciaMedia.toFixed(0)} dias`],
+        ["Faturamento total (janela)", fmtBRL(dados.resumo.faturamentoTotal)],
+      ],
+      theme: "striped", headStyles: { fillColor: [34, 197, 94] },
+      styles: { fontSize: 10 },
+    });
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 6,
+      head: [["Segmento", "Clientes", "% base", "Faturamento", "% fat.", "Ticket médio"]],
+      body: dados.porSegmento.map(s => [
+        SEGMENTOS_INFO[s.segmento]?.label || s.segmento,
+        fmtNum(s.quantidade),
+        `${s.percentualBase.toFixed(1)}%`,
+        fmtBRL(s.monetario),
+        `${s.percentualFaturamento.toFixed(1)}%`,
+        fmtBRL(s.ticketMedio),
+      ]),
+      theme: "striped", headStyles: { fillColor: [34, 197, 94] },
+      styles: { fontSize: 9 },
+    });
+
+    if (dados.porCidade.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["#", "Cidade", "UF", "Clientes", "Faturamento"]],
+        body: dados.porCidade.map((c, i) => [
+          i + 1, c.cidade, c.estado, fmtNum(c.quantidade), fmtBRL(c.monetario),
+        ]),
+        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        styles: { fontSize: 9 },
+      });
+    }
+
+    if (dados.porTag.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["Tag", "Clientes", "Faturamento"]],
+        body: dados.porTag.map(t => [t.nome, fmtNum(t.quantidade), fmtBRL(t.monetario)]),
+        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        styles: { fontSize: 9 },
+      });
+    }
+
+    if (dados.topLtv.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["#", "Cliente", "Cidade", "Compras", "Total gasto", "Ticket médio", "Última compra", "Segmento"]],
+        body: dados.topLtv.map((c, i) => [
+          i + 1, c.nome, c.cidade || "—",
+          fmtNum(c.qtdCompras), fmtBRL(c.totalGasto), fmtBRL(c.ticketMedio),
+          fmtData(c.ultimaCompra), SEGMENTOS_INFO[c.segmento]?.label || c.segmento,
+        ]),
+        theme: "striped", headStyles: { fillColor: [245, 158, 11] },
+        styles: { fontSize: 8 },
+      });
+    }
+
+    doc.save(`relatorio-carteira-crm-${hoje()}.pdf`);
+  }
+
+  return (
+    <BlocoRelatorio
+      titulo="Relatório de Carteira de Clientes (RFM)" cor={C.green}
+      filtros={
+        <>
+          <CampoSelect label="Janela RFM" value={janelaDias} onChange={setJanelaDias}>
+            <option value="90">90 dias</option>
+            <option value="180">180 dias</option>
+            <option value="365">365 dias</option>
+            <option value="730">2 anos</option>
+          </CampoSelect>
+          <CampoSelect label="Segmento" value={segmento} onChange={setSegmento}>
+            <option value="">Todos</option>
+            {Object.entries(SEGMENTOS_INFO).map(([k, v]) =>
+              <option key={k} value={k}>{v.icone} {v.label}</option>
+            )}
+          </CampoSelect>
+          <CampoSelectBusca label="Tag" opcoes={tags} value={tagId} onChange={setTagId} placeholder="Todas" />
+          <CampoSelect label="Status no funil" value={statusFunil} onChange={setStatusFunil}>
+            <option value="">Todos</option>
+            {Object.entries(STATUS_FUNIL_INFO).map(([k, v]) =>
+              <option key={k} value={k}>{v}</option>
+            )}
+          </CampoSelect>
+        </>
+      }
+      onGerar={gerar} onExportar={exportar} carregando={carregando}
+      erro={erro} dados={dados}
+    >
+      {dados && (
+        <>
+          <Resumo cards={[
+            { rotulo: "Clientes ativos", valor: fmtNum(dados.resumo.totalClientes), cor: C.accent },
+            { rotulo: "Com compra", valor: fmtNum(dados.resumo.clientesComCompra), cor: C.green },
+            { rotulo: "Retenção", valor: `${dados.resumo.taxaRetencao.toFixed(1)}%`, cor: dados.resumo.taxaRetencao >= 50 ? C.green : C.yellow },
+            { rotulo: "Churn", valor: `${dados.resumo.churnRate.toFixed(1)}%`, cor: dados.resumo.churnRate <= 20 ? C.green : C.red },
+            { rotulo: "LTV médio", valor: fmtBRL(dados.resumo.ltvMedio), cor: "#f59e0b" },
+            { rotulo: "Ticket médio", valor: fmtBRL(dados.resumo.ticketMedio), cor: C.purple },
+            { rotulo: "Frequência média", valor: dados.resumo.frequenciaMedia.toFixed(1), cor: C.accent },
+            { rotulo: "Faturamento", valor: fmtBRL(dados.resumo.faturamentoTotal), cor: C.green },
+          ]} />
+
+          {/* Distribuição visual por segmento */}
+          <div style={{
+            background: C.card, border: `1px solid ${C.border}`,
+            borderRadius: 12, padding: 16, marginBottom: 16,
+          }}>
+            <div style={{ color: C.white, fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
+              Distribuição por segmento
+            </div>
+            <div style={{
+              display: "grid", gap: 10,
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            }}>
+              {dados.porSegmento.map(s => {
+                const info = SEGMENTOS_INFO[s.segmento];
+                return (
+                  <div key={s.segmento} style={{
+                    background: C.surface, border: `1px solid ${C.border}`,
+                    borderRadius: 10, padding: 12, position: "relative", overflow: "hidden",
+                  }}>
+                    <div style={{ position: "absolute", top: 0, left: 0, width: 4, height: "100%", background: info.cor }} />
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                      <span style={{ fontSize: 18 }}>{info.icone}</span>
+                      <span style={{ color: info.cor, fontSize: 12, fontWeight: 700 }}>{info.label}</span>
+                    </div>
+                    <div style={{ color: C.white, fontSize: 18, fontWeight: 800 }}>
+                      {fmtNum(s.quantidade)} <span style={{ color: C.muted, fontSize: 10, fontWeight: 500 }}>clientes</span>
+                    </div>
+                    <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>
+                      {fmtBRL(s.monetario)} · {s.percentualBase.toFixed(1)}% base
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {dados.porCidade.length > 0 && (
+            <Tabela
+              titulo={`Top cidades (${dados.porCidade.length})`}
+              colunas={["#", "Cidade", "UF", "Clientes", "Faturamento"]}
+              alinhamentos={["center", "left", "center", "right", "right"]}
+              linhas={dados.porCidade.map((c, i) => [
+                i + 1, c.cidade, c.estado, fmtNum(c.quantidade), fmtBRL(c.monetario),
+              ])}
+            />
+          )}
+
+          {dados.porTag.length > 0 && (
+            <Tabela
+              titulo={`Cobertura por tag (${dados.porTag.length})`}
+              colunas={["Tag", "Clientes", "Faturamento"]}
+              alinhamentos={["left", "right", "right"]}
+              linhas={dados.porTag.map(t => [
+                <span key={t.id} style={{
+                  display: "inline-block", padding: "2px 8px", borderRadius: 12,
+                  background: t.cor + "33", color: t.cor, fontWeight: 700, fontSize: 11,
+                }}>{t.nome}</span>,
+                fmtNum(t.quantidade),
+                fmtBRL(t.monetario),
+              ])}
+            />
+          )}
+
+          {dados.topLtv.length > 0 && (
+            <Tabela
+              titulo={`Top 20 LTV (clientes mais valiosos)`}
+              colunas={["#", "Cliente", "Cidade", "Compras", "Total gasto", "Ticket médio", "Última compra", "Segmento"]}
+              alinhamentos={["center", "left", "left", "right", "right", "right", "left", "left"]}
+              linhas={dados.topLtv.map((c, i) => [
+                i + 1, c.nome, c.cidade || "—",
+                fmtNum(c.qtdCompras), fmtBRL(c.totalGasto), fmtBRL(c.ticketMedio),
+                fmtData(c.ultimaCompra),
+                SEGMENTOS_INFO[c.segmento]?.label || c.segmento,
+              ])}
+            />
+          )}
+
+          <Tabela
+            titulo={`Detalhamento ${segmento ? `(segmento: ${SEGMENTOS_INFO[segmento]?.label})` : ""} — ${dados.clientes.length} cliente${dados.clientes.length === 1 ? "" : "s"}`}
+            colunas={["Cliente", "Cidade", "Compras", "Total gasto", "Última compra", "Recência", "Segmento", "Status"]}
+            alinhamentos={["left", "left", "right", "right", "left", "right", "left", "left"]}
+            linhas={dados.clientes.map(c => [
+              c.nome, c.cidade || "—",
+              fmtNum(c.qtdCompras), fmtBRL(c.totalGasto),
+              fmtData(c.ultimaCompra),
+              c.recenciaDias !== null ? `${c.recenciaDias}d` : "—",
+              SEGMENTOS_INFO[c.segmento]?.label || c.segmento,
+              STATUS_FUNIL_INFO[c.statusFunil] || c.statusFunil,
+            ])}
+            vazioTexto="Nenhum cliente encontrado com os filtros."
+          />
         </>
       )}
     </BlocoRelatorio>

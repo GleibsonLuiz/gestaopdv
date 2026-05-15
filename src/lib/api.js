@@ -456,6 +456,16 @@ export const api = {
     const q = qs.toString();
     return request(`/relatorios/crm/performance${q ? `?${q}` : ""}`);
   },
+  relatorioCarteiraCrm: ({ janelaDias = "", segmento = "", tagId = "", statusFunil = "", cidade = "" } = {}) => {
+    const qs = new URLSearchParams();
+    if (janelaDias) qs.set("janelaDias", janelaDias);
+    if (segmento) qs.set("segmento", segmento);
+    if (tagId) qs.set("tagId", tagId);
+    if (statusFunil) qs.set("statusFunil", statusFunil);
+    if (cidade) qs.set("cidade", cidade);
+    const q = qs.toString();
+    return request(`/relatorios/crm/carteira${q ? `?${q}` : ""}`);
+  },
 
   listarContasPagar: ({ search = "", status = "", fornecedorId = "", dataInicio = "", dataFim = "", vencidas = "" } = {}) => {
     const qs = new URLSearchParams();

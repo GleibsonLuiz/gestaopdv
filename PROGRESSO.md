@@ -1167,6 +1167,8 @@ GET /funcionarios → 20 registros
 
 **🎉 Projeto completo — 14/14 etapas MVP + 10 melhorias pós-MVP + 10 prioridades CRM + 9/9 etapas Multi-Tenant + 13/13 etapas Admin Master entregues.**
 
+Em 2026-05-16, **Fornecedores NF-e ready**: extensão do cadastro de fornecedores espelhando o que a ETAPA 14 fez em Produto. 16 campos novos no schema (nomeFantasia, tipoPessoa, endereço segregado completo com códigos IBGE, ie+ieIsenta, im, indIEDest 1/2/9, crt 1/2/3, emailNFe). Migration aplicada no Neon. Controller valida regras SEFAZ (indIEDest=1 exige IE; indIEDest=2 exige IE nula). Form refatorado em 3 seções (Dados básicos / Fiscais / Endereço), toggle PF↔PJ que troca a máscara do documento, ViaCEP estendido para popular código IBGE do município, tabela estática de 27 UFs para código IBGE da UF. Stub `consultarCnpjCadastral` deixado pronto para futura integração com BrasilAPI.
+
 Em 2026-05-16, **ETAPA 14 — Tributação fiscal NF-e ready**: extensão do cadastro de produtos para conformidade SEFAZ. Bloco fiscal completo (NCM, CEST, CFOP, Origem, CST/CSOSN, PIS/COFINS, cBenef, pesos) no model `Produto` + 2 enums novos (`OrigemMercadoria`, `RegimeTributario`). Nova lib `backend/src/lib/validacoesFiscais.js` com validação de NCM (8 dígitos), CEST (7), CFOP saída (5/6/7+3), GTIN com checksum Módulo 10 (rejeição SEFAZ 833) e coerência regime×CST×CSOSN. Form do produto refatorado em **3 abas** via novo componente `<Abas>` — Dados Gerais / Classificação / Tributação. Cálculo automático preço de venda a partir de custo + margem no controller. Seed dos 20 produtos de papelaria atualizado com NCMs reais da TIPI (cadernos 4820.20.00, canetas 9608.10.00, etc) + defaults Simples Nacional (CSOSN 102, CST 49). Pronto para emissão NF-e/NFC-e na próxima etapa.
 
 Em 2026-05-16, **ETAPA 13 Admin Master — Limites por plano com enforcement**: fechamento da onda admin-master. Nova lib `backend/src/lib/planoLimites.js` com matriz de limites por plano (FREE/TRIAL/STARTER/PRO/ENTERPRISE) e helpers `aplicarLimite`/`obterUsoELimites`. Guards adicionados em 4 controllers (`clientes`, `produtos`, `usuarios`, `vendasMes`) que respondem 402 com payload `{recurso, atual, limite, plano, limiteAtingido}` quando o tenant excede o plano. `GET /empresa` agora retorna snapshot completo (`plano`, `expiraEm`, `limites`, `uso`) consumido pelo novo `<BlocoPlano>` em [src/Empresa.jsx](src/Empresa.jsx) — badge colorido por plano, aviso de expiração (verde/amarelo/vermelho), grid 4×1 de barras de progresso por recurso. Smoke-test confirmou 402 contra tenant DEFAULT (já estourado em `usuarios` 4/3 e `vendasMes` 357/200).
@@ -1218,6 +1220,39 @@ Extensão do cadastro de produtos para conformidade fiscal brasileira. O `Produt
 **Seed** ([backend/prisma/seed.js](backend/prisma/seed.js)):
 - Adicionados NCMs reais da TIPI nos 20 produtos de papelaria: cadernos 4820.20.00, canetas 9608.10.00, lápis 9609.10.00, borracha 4016.92.00, papel sulfite 4802.56.99, tesoura 8213.00.00, cola 3506.10.10, mochila 4202.92.00, calculadora 8470.10.00, etc.
 - Default fiscal: Simples Nacional + CSOSN 102 + CST 49 (PIS/COFINS) + alíquota zero (recolhido no DAS).
+
+### Sessão — 2026-05-16 (Fornecedores NF-e ready)
+
+Extensão do cadastro de Fornecedores para conformidade NF-e — espelha o que a ETAPA 14 fez em Produto. O `Fornecedor` ganha bloco fiscal completo + endereço segregado padrão SEFAZ.
+
+**Schema** ([backend/prisma/schema.prisma:426](backend/prisma/schema.prisma#L426)):
+- 16 campos novos no `Fornecedor`: `nomeFantasia`, `tipoPessoa` (PF/PJ), endereço segregado (`numero`, `complemento`, `bairro`, `codMunicipioIBGE`, `codUFIBGE`, `codPais` default `1058`, `nomePais` default `BRASIL`), bloco fiscal (`ie`, `ieIsenta` boolean default false, `im`, `indIEDest` 1/2/9, `crt` 1/2/3), `emailNFe`.
+- Migration manual em `backend/prisma/migrations/20260516210000_fornecedor_fiscal_nfe/migration.sql` — todos os campos opcionais, default seguro nos NOT NULL. Aplicada em produção (Neon) via `prisma migrate deploy`.
+
+**Backend** ([backend/src/controllers/fornecedorController.js](backend/src/controllers/fornecedorController.js)):
+- `validarFiscal(data)` espelha as regras SEFAZ:
+  - `indIEDest=1` (Contribuinte) → IE obrigatória e `ieIsenta=false`.
+  - `indIEDest=2` (Isento) → IE deve ser null e `ieIsenta=true`.
+  - `crt ∈ {1, 2, 3}` ou null; `tipoPessoa ∈ {PF, PJ}` ou null.
+- `criar` valida antes do INSERT; `atualizar` faz validação incremental (busca registro atual + merge antes de validar) para não exigir todos os campos em PATCHes parciais.
+- Auto-correção: se `ieIsenta=true`, força `ie=null` server-side.
+- Busca textual estendida para incluir `nomeFantasia`.
+
+**Frontend** ([src/Fornecedores.jsx](src/Fornecedores.jsx)):
+- Modal refatorado em **3 seções** (`<Secao>` do `FormularioLuxuoso`): Dados básicos / Dados fiscais / Endereço.
+- Toggle PF/PJ que troca dinamicamente a máscara do documento (CPF 11d vs CNPJ 14d) e o `maxLength`.
+- ViaCEP estendido para popular logradouro, bairro, cidade, UF **e o `codMunicipioIBGE`** (campo `ibge` do response).
+- Tabela `COD_UF_IBGE` estática (27 UFs) preenche `codUFIBGE` automaticamente ao escolher o estado.
+- Checkbox "Isento de IE" desabilita o campo IE e força `indIEDest=2` (consistente com regra fiscal).
+- Espelho da validação `indIEDest=1 → IE obrigatória` no client antes do POST, para feedback imediato.
+- Stub `consultarCnpjCadastral(cnpjDigits)` reservado para integração futura com BrasilAPI / Receita Federal (preencher razão social/nome fantasia ao digitar CNPJ).
+- Lista mostra `nomeFantasia` como subtítulo discreto abaixo do nome.
+
+**Conscientemente não feito:**
+- Validação de dígitos verificadores do CPF/CNPJ (apenas formato e tamanho). O backend confia no front + no recibo do CNPJ pela Receita.
+- Cálculo do dígito verificador da IE (varia por UF, alta complexidade — fica para etapa de homologação NF-e real).
+- Integração efetiva com BrasilAPI/Serpro — apenas a estrutura está pronta.
+
 **Fix do seed multi-tenant (mesma sessão):**
 - Trocado import para o `prisma` estendido + `tenantStorage` de [backend/src/lib/prisma.js](backend/src/lib/prisma.js).
 - Adicionada `seedEmpresa()` que cria/encontra o tenant Maxcollor (CNPJ 18.145.637/0001-31) via `prismaRaw` antes de qualquer outra coisa. `TENANT_ID` é resolvido aí.

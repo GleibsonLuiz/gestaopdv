@@ -423,16 +423,53 @@ model Cliente {
   @@map("clientes")
 }
 
+// Cadastro de Fornecedores preparado para emissao futura de NF-e/NFS-e.
+// Os campos fiscais (ie, indIEDest, crt, codigos IBGE) sao opcionais hoje
+// mas obedecem a estrutura exigida pela SEFAZ para evitar retrabalho.
 model Fornecedor {
   id        String   @id @default(uuid())
-  nome      String
-  cnpj      String?
-  email     String?
-  telefone  String?
-  endereco  String?
-  cidade    String?
-  estado    String?
-  cep       String?
+  // `nome` = razao social (nome juridico). `nomeFantasia` e o nome de mercado.
+  nome           String
+  nomeFantasia   String?
+  // Pessoa fisica ou juridica: "PF" | "PJ". Usado para validar formato do
+  // documento (cnpj armazena CPF tambem; nao desdobra em duas colunas).
+  tipoPessoa     String?
+  cnpj           String?
+  email          String?
+  telefone       String?
+
+  // --- Endereco segregado (padrao SEFAZ) ---
+  // Os antigos `endereco`/`cidade`/`estado` foram mantidos para retrocompat
+  // com codigo legado, mas o cadastro novo deve usar os campos segregados.
+  endereco         String?
+  cidade           String?
+  estado           String?
+  cep              String?
+  numero           String?
+  complemento      String?
+  bairro           String?
+  codMunicipioIBGE String?
+  codUFIBGE        String?
+  codPais          String  @default("1058")
+  nomePais         String  @default("BRASIL")
+
+  // --- Dados fiscais / tributarios ---
+  // Inscricao Estadual: aceita string ou null. Se ieIsenta=true, ie deve
+  // ser null (validado no controller).
+  ie         String?
+  ieIsenta   Boolean @default(false)
+  // Inscricao Municipal (necessaria para servicos / NFS-e).
+  im         String?
+  // Indicador de IE do destinatario (campo indIEDest da NF-e):
+  // 1 = Contribuinte ICMS, 2 = Isento, 9 = Nao contribuinte.
+  indIEDest  Int?
+  // Codigo de Regime Tributario (CRT):
+  // 1 = Simples Nacional, 2 = Simples Nacional/Excesso, 3 = Regime Normal.
+  crt        Int?
+
+  // E-mail dedicado para recebimento de XML/DANFE da NF-e.
+  emailNFe   String?
+
   ativo     Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

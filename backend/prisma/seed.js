@@ -1,15 +1,47 @@
-import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { permissoesPadrao, IDS_MODULOS } from "../src/lib/permissoes.js";
+import prisma, { prismaRaw, tenantStorage } from "../src/lib/prisma.js";
 
-const prisma = new PrismaClient();
+// Multi-tenant: o seed precisa de um tenant (Empresa) para ancorar todos
+// os registros. Usamos o prisma ESTENDIDO + tenantStorage.run() no main()
+// para que tenantId seja injetado automaticamente em todas as queries.
+// Os 7 upserts (admin, funcionarios, categorias, fornecedores, clientes,
+// produtos, servicos) usam `where: { tenantId_<campo>: {...} }` por causa
+// dos compound unique no schema.
+
+// TENANT_ID resolvido em main() — preenchido antes de tenantStorage.run().
+let TENANT_ID = null;
+
+// ==================== TENANT (EMPRESA) ====================
+//
+// O seed usa um tenant fixo "MAXCOLLOR" baseado no CNPJ — encontra ou cria
+// na primeira execucao. Usa prismaRaw (sem extension) porque ainda nao
+// temos contexto de tenant (estamos definindo ele agora).
+
+async function seedEmpresa() {
+  const dados = {
+    nome: "MAXCOLLOR GRAFICA RAPIDA E COPIADORA",
+    cnpj: "18.145.637/0001-31",
+    ativo: true,
+  };
+  const existente = await prismaRaw.empresa.findFirst({
+    where: { cnpj: dados.cnpj },
+  });
+  if (existente) {
+    return prismaRaw.empresa.update({
+      where: { id: existente.id },
+      data: { nome: dados.nome, ativo: true },
+    });
+  }
+  return prismaRaw.empresa.create({ data: dados });
+}
 
 // ==================== USUÁRIO ADMIN ====================
 
 async function seedAdmin() {
   const senhaHash = await bcrypt.hash("admin123", 10);
   return prisma.user.upsert({
-    where: { email: "admin@gestaopro.local" },
+    where: { tenantId_email: { tenantId: TENANT_ID, email: "admin@gestaopro.local" } },
     update: { nome: "GLEIBSON LUIZ NUNES SILVA", permissoes: IDS_MODULOS },
     create: {
       nome: "GLEIBSON LUIZ NUNES SILVA",
@@ -84,7 +116,7 @@ async function seedFuncionarios() {
   for (const f of FUNCIONARIOS) {
     const permissoes = permissoesPadrao(f.role);
     const funcionario = await prisma.user.upsert({
-      where: { email: f.email },
+      where: { tenantId_email: { tenantId: TENANT_ID, email: f.email } },
       update: {
         nome: f.nome,
         role: f.role,
@@ -169,7 +201,7 @@ async function seedCategorias() {
   const result = [];
   for (const nome of CATEGORIAS) {
     const c = await prisma.categoria.upsert({
-      where: { nome },
+      where: { tenantId_nome: { tenantId: TENANT_ID, nome } },
       update: {},
       create: { nome },
     });
@@ -207,7 +239,7 @@ async function seedFornecedores() {
   const result = [];
   for (const f of FORNECEDORES) {
     const fornecedor = await prisma.fornecedor.upsert({
-      where: { cnpj: f.cnpj },
+      where: { tenantId_cnpj: { tenantId: TENANT_ID, cnpj: f.cnpj } },
       update: {
         nome: f.nome,
         email: f.email,
@@ -251,7 +283,7 @@ async function seedClientes() {
   const result = [];
   for (const c of CLIENTES) {
     const cliente = await prisma.cliente.upsert({
-      where: { cpfCnpj: c.cpfCnpj },
+      where: { tenantId_cpfCnpj: { tenantId: TENANT_ID, cpfCnpj: c.cpfCnpj } },
       update: {
         nome: c.nome,
         email: c.email,
@@ -326,7 +358,7 @@ async function seedProdutos(categorias, fornecedores) {
       aliquotaCofins: 0,
     };
     const produto = await prisma.produto.upsert({
-      where: { codigo: p.codigo },
+      where: { tenantId_codigo: { tenantId: TENANT_ID, codigo: p.codigo } },
       update: {
         nome: p.nome,
         descricao,
@@ -366,7 +398,7 @@ async function seedProdutos(categorias, fornecedores) {
   };
   for (const s of SERVICOS_BASE) {
     const servico = await prisma.produto.upsert({
-      where: { codigo: s.codigo },
+      where: { tenantId_codigo: { tenantId: TENANT_ID, codigo: s.codigo } },
       update: {
         nome: s.nome,
         descricao: s.descricao,
@@ -433,8 +465,16 @@ async function seedCompras(adminId, fornecedores, produtos) {
     dataCompra.setDate(dataCompra.getDate() - diasAtras);
 
     await prisma.$transaction(async (tx) => {
+      // Compra.numero e sequencial por tenant (ETAPA 8 multi-tenant).
+      // Calculo do MAX+1 dentro da transacao garante consistencia.
+      const agg = await tx.compra.aggregate({
+        where: { tenantId: TENANT_ID },
+        _max: { numero: true },
+      });
+      const numero = (agg._max?.numero || 0) + 1;
       const compra = await tx.compra.create({
         data: {
+          numero,
           fornecedorId: fornecedor.id,
           total,
           observacoes: `NF-${String(1000 + i).padStart(4, "0")}`,
@@ -607,6 +647,19 @@ async function seedContasReceber(clientes) {
 async function main() {
   console.log("Iniciando seed do banco de dados...\n");
 
+  console.log("→ Tenant (Empresa) — Maxcollor");
+  const empresa = await seedEmpresa();
+  TENANT_ID = empresa.id;
+  console.log(`  tenantId = ${TENANT_ID}`);
+
+  // A partir daqui, todas as queries via `prisma` (estendido) recebem
+  // tenantId injetado automaticamente. Ver backend/src/lib/prisma.js.
+  return tenantStorage.run({ tenantId: TENANT_ID }, async () => {
+    return executarSeed();
+  });
+}
+
+async function executarSeed() {
   console.log("→ Convertendo registros existentes para CAIXA ALTA");
   await uppercaseExistingData();
 

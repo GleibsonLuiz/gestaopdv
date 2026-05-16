@@ -1218,11 +1218,16 @@ Extensão do cadastro de produtos para conformidade fiscal brasileira. O `Produt
 **Seed** ([backend/prisma/seed.js](backend/prisma/seed.js)):
 - Adicionados NCMs reais da TIPI nos 20 produtos de papelaria: cadernos 4820.20.00, canetas 9608.10.00, lápis 9609.10.00, borracha 4016.92.00, papel sulfite 4802.56.99, tesoura 8213.00.00, cola 3506.10.10, mochila 4202.92.00, calculadora 8470.10.00, etc.
 - Default fiscal: Simples Nacional + CSOSN 102 + CST 49 (PIS/COFINS) + alíquota zero (recolhido no DAS).
-- ⚠ Seed completo não foi executado nesta sessão por **bug pré-existente** em `seedAdmin`/`seedFuncionarios` (`where: { email }` sem `tenantId_email` após a migração multi-tenant). Os blocos de produto/serviço fiscais estão corretos; só não puderam ser validados via seed end-to-end. Cadastro/edição via UI funciona normalmente.
+**Fix do seed multi-tenant (mesma sessão):**
+- Trocado import para o `prisma` estendido + `tenantStorage` de [backend/src/lib/prisma.js](backend/src/lib/prisma.js).
+- Adicionada `seedEmpresa()` que cria/encontra o tenant Maxcollor (CNPJ 18.145.637/0001-31) via `prismaRaw` antes de qualquer outra coisa. `TENANT_ID` é resolvido aí.
+- `main()` agora chama `seedEmpresa()` primeiro e envolve `executarSeed()` em `tenantStorage.run({ tenantId })` — todas as queries subsequentes recebem `tenantId` injetado automaticamente pelo extension (incluindo nested writes via `propagarTenantEmCreate`).
+- Convertidos os 7 `where` compound: `User.upsert` (admin + 19 funcionários), `Categoria.upsert`, `Fornecedor.upsert`, `Cliente.upsert`, `Produto.upsert` (20 produtos + 4 serviços) — todos com `where: { tenantId_<campo>: { tenantId, <campo>: ... } }`.
+- `Compra.create` agora calcula `numero` via `MAX(numero) + 1` por tenant dentro da transação (mesmo padrão do `lib/proximoNumero.js`).
+- **Resultado:** seed end-to-end OK. Banco populado: 20 users, 8 categorias, 20 fornecedores, 20 clientes, 24 produtos (20 PRODUTO + 4 SERVICO, todos com NCM/CFOP/CSOSN), 20 compras, 39 movimentações, 20 contas a pagar, 20 contas a receber.
 
 ### Lacunas conhecidas (polimento opcional)
 
-- **Seed multi-tenant:** `User.upsert` em `seedAdmin` e `seedFuncionarios` ainda usam `where: { email }`, incompatível com o compound unique `[tenantId, email]` da migração multi-tenant. Fix: passar `tenantId_email: { tenantId, email }`.
 - **Etapa 13 (Relatórios):** sem filtro por cliente no relatório de vendas (campo aceito no backend, mas não exposto no UI).
 - **Permissões:** quando um vendedor sem `DASHBOARD` é redirecionado pelo `useEffect`, há um flicker breve (mostra a tela errada por ~1 frame). Fix opcional: usar `podeVer(tela)` direto na renderização para evitar render inicial.
 - **Anexos do Financeiro:** ao deletar uma conta (com `prisma.contaPagar.delete`), o cascade do DB remove o registro `Anexo` mas o arquivo físico em `backend/uploads/` fica órfão. Adicionar limpeza do disco antes do delete da conta.

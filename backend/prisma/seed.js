@@ -19,9 +19,12 @@ let TENANT_ID = null;
 // temos contexto de tenant (estamos definindo ele agora).
 
 async function seedEmpresa() {
+  // CNPJ armazenado SEM mascara (so digitos) pra casar com criarEmpresa/signup
+  // que aplicam .replace(/\D/g, "") antes de salvar. Sem isso, o seed criava
+  // tenant duplicado quando empresa original ja existia com CNPJ sanitizado.
   const dados = {
     nome: "MAXCOLLOR GRAFICA RAPIDA E COPIADORA",
-    cnpj: "18.145.637/0001-31",
+    cnpj: "18145637000131",
     ativo: true,
   };
   const existente = await prismaRaw.empresa.findFirst({

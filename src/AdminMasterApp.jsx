@@ -172,12 +172,14 @@ const TABS = [
   { id: "logs", label: "📜 Logs", cor: C.yellow },
 ];
 
+// Cores hex literais (nao var CSS) porque sao usadas em concatenacao com "33"
+// pra alpha — `var(--x)33` seria CSS invalido e o botao nao recebia fundo.
 const PLANOS_INFO = {
   TRIAL: { cor: "#f59e0b", icone: "🎫", label: "Trial" },
-  FREE: { cor: C.muted, icone: "🆓", label: "Free" },
-  STARTER: { cor: C.accent, icone: "🚀", label: "Starter" },
-  PRO: { cor: C.purple, icone: "💎", label: "Pro" },
-  ENTERPRISE: { cor: C.green, icone: "🏆", label: "Enterprise" },
+  FREE: { cor: "#64748b", icone: "🆓", label: "Free" },
+  STARTER: { cor: "#4f8ef7", icone: "🚀", label: "Starter" },
+  PRO: { cor: "#7c3aed", icone: "💎", label: "Pro" },
+  ENTERPRISE: { cor: "#22c55e", icone: "🏆", label: "Enterprise" },
 };
 
 function Painel({ user, onSair }) {

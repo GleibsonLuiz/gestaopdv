@@ -284,18 +284,33 @@ export async function aniversariantes(req, res, next) {
       return res.status(400).json({ erro: "Mes invalido (1-12)" });
     }
 
-    const condDia = dia ? `AND EXTRACT(DAY FROM "dataNascimento") = ${dia}` : "";
+    // Multi-tenant: $queryRaw bypassa o Prisma Extension, adicionamos
+    // filtro tenantId manualmente. mes e dia ja foram sanitizados via
+    // parseInt; usamos template tag $queryRaw que faz binding seguro.
+    const tenantId = req.tenantId;
 
-    const linhas = await prisma.$queryRawUnsafe(`
-      SELECT id, nome, telefone, email, cidade, estado, "dataNascimento",
-             "statusFunil", origem
-      FROM clientes
-      WHERE ativo = true
-        AND "dataNascimento" IS NOT NULL
-        AND EXTRACT(MONTH FROM "dataNascimento") = ${mes}
-        ${condDia}
-      ORDER BY EXTRACT(DAY FROM "dataNascimento") ASC, nome ASC
-    `);
+    const linhas = dia
+      ? await prisma.$queryRaw`
+          SELECT id, nome, telefone, email, cidade, estado, "dataNascimento",
+                 "statusFunil", origem
+          FROM clientes
+          WHERE ativo = true
+            AND "dataNascimento" IS NOT NULL
+            AND EXTRACT(MONTH FROM "dataNascimento") = ${mes}
+            AND EXTRACT(DAY FROM "dataNascimento") = ${dia}
+            AND "tenantId" = ${tenantId}
+          ORDER BY EXTRACT(DAY FROM "dataNascimento") ASC, nome ASC
+        `
+      : await prisma.$queryRaw`
+          SELECT id, nome, telefone, email, cidade, estado, "dataNascimento",
+                 "statusFunil", origem
+          FROM clientes
+          WHERE ativo = true
+            AND "dataNascimento" IS NOT NULL
+            AND EXTRACT(MONTH FROM "dataNascimento") = ${mes}
+            AND "tenantId" = ${tenantId}
+          ORDER BY EXTRACT(DAY FROM "dataNascimento") ASC, nome ASC
+        `;
 
     // Carrega tags em uma segunda query
     const ids = linhas.map((l) => l.id);

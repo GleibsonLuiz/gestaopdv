@@ -55,6 +55,12 @@ export async function resumo(req, res, next) {
     const userId = req.user?.sub || req.user?.id || null;
     const tipoCaixa = await obterTipoCaixa();
 
+    // Multi-tenant: o Prisma Extension filtra automaticamente delegates do
+    // Prisma (count/findMany/aggregate/groupBy/etc), mas NAO intercepta
+    // $queryRaw. Pegamos o tenantId aqui e adicionamos manualmente em cada
+    // raw query abaixo. Se faltar em alguma, dados vazariam entre tenants.
+    const tenantId = req.tenantId;
+
     const [
       totalClientesAtivos,
       totalProdutosAtivos,
@@ -126,7 +132,9 @@ export async function resumo(req, res, next) {
           COUNT(*)::int AS qtd,
           COALESCE(SUM(total), 0)::float AS total
         FROM vendas
-        WHERE status = 'CONCLUIDA' AND "createdAt" >= ${seteDiasAtras}
+        WHERE status = 'CONCLUIDA'
+          AND "createdAt" >= ${seteDiasAtras}
+          AND "tenantId" = ${tenantId}
         GROUP BY DATE("createdAt")
         ORDER BY dia ASC
       `,
@@ -163,6 +171,7 @@ export async function resumo(req, res, next) {
         WHERE ativo = true
           AND "tipoItem" = 'PRODUTO'
           AND estoque <= "estoqueMinimo"
+          AND "tenantId" = ${tenantId}
         ORDER BY (estoque - "estoqueMinimo") ASC, nome ASC
         LIMIT 10
       `,
@@ -252,7 +261,9 @@ export async function resumo(req, res, next) {
         FROM itens_venda iv
         JOIN vendas v ON v.id = iv."vendaId"
         JOIN produtos p ON p.id = iv."produtoId"
-        WHERE v.status = 'CONCLUIDA' AND v."createdAt" >= ${mesInicio}
+        WHERE v.status = 'CONCLUIDA'
+          AND v."createdAt" >= ${mesInicio}
+          AND v."tenantId" = ${tenantId}
       `,
 
       // Valor imobilizado em estoque: SUM(estoque * precoCusto) de produtos
@@ -262,7 +273,9 @@ export async function resumo(req, res, next) {
           COALESCE(SUM(estoque * COALESCE("precoCusto", 0)), 0)::float AS valor,
           COALESCE(SUM(estoque), 0)::int AS quantidade
         FROM produtos
-        WHERE ativo = true AND "tipoItem" = 'PRODUTO'
+        WHERE ativo = true
+          AND "tipoItem" = 'PRODUTO'
+          AND "tenantId" = ${tenantId}
       `,
 
       // Meta mensal estimada: média do faturamento dos últimos 3 meses
@@ -277,6 +290,7 @@ export async function resumo(req, res, next) {
           WHERE status = 'CONCLUIDA'
             AND "createdAt" >= ${tresMesesAtras}
             AND "createdAt" < ${mesInicio}
+            AND "tenantId" = ${tenantId}
           GROUP BY mes
         ) AS t
       `,
@@ -292,7 +306,9 @@ export async function resumo(req, res, next) {
         JOIN vendas v ON v.id = iv."vendaId"
         JOIN produtos p ON p.id = iv."produtoId"
         LEFT JOIN categorias c ON c.id = p."categoriaId"
-        WHERE v.status = 'CONCLUIDA' AND v."createdAt" >= ${mesInicio}
+        WHERE v.status = 'CONCLUIDA'
+          AND v."createdAt" >= ${mesInicio}
+          AND v."tenantId" = ${tenantId}
         GROUP BY c.id, c.nome
         ORDER BY total DESC
         LIMIT 5
@@ -306,7 +322,9 @@ export async function resumo(req, res, next) {
           COUNT(*)::int AS qtd,
           COALESCE(SUM(total), 0)::float AS total
         FROM vendas
-        WHERE status = 'CONCLUIDA' AND "createdAt" >= ${mesInicio}
+        WHERE status = 'CONCLUIDA'
+          AND "createdAt" >= ${mesInicio}
+          AND "tenantId" = ${tenantId}
         GROUP BY hora
         ORDER BY hora ASC
       `,
@@ -318,11 +336,13 @@ export async function resumo(req, res, next) {
         FROM clientes c
         WHERE c.ativo = true
           AND c."createdAt" < ${sessentaDiasAtras}
+          AND c."tenantId" = ${tenantId}
           AND NOT EXISTS (
             SELECT 1 FROM vendas v
             WHERE v."clienteId" = c.id
               AND v.status = 'CONCLUIDA'
               AND v."createdAt" >= ${sessentaDiasAtras}
+              AND v."tenantId" = ${tenantId}
           )
       `,
 

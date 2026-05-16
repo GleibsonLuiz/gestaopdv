@@ -30,6 +30,10 @@ export async function listar(req, res, next) {
     const amanha = new Date(hoje);
     amanha.setDate(amanha.getDate() + 1);
 
+    // Multi-tenant: $queryRaw bypassa o Prisma Extension, entao adicionamos
+    // filtro tenantId manualmente para nao vazar dados entre empresas.
+    const tenantId = req.tenantId;
+
     const [estoqueBaixo, contasPagar, contasReceber, tarefas] = await Promise.all([
       prisma.$queryRaw`
         SELECT id, codigo, nome, estoque, "estoqueMinimo", unidade
@@ -37,6 +41,7 @@ export async function listar(req, res, next) {
         WHERE ativo = true
           AND "tipoItem" = 'PRODUTO'
           AND estoque <= "estoqueMinimo"
+          AND "tenantId" = ${tenantId}
         ORDER BY (estoque - "estoqueMinimo") ASC, nome ASC
       `,
       prisma.contaPagar.findMany({

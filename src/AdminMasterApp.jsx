@@ -315,6 +315,7 @@ function AbaEmpresas({ onMudou }) {
   const [modalCriar, setModalCriar] = useState(false);
   const [modalSuspender, setModalSuspender] = useState(null); // empresa
   const [modalPlano, setModalPlano] = useState(null); // empresa
+  const [modalDetalhes, setModalDetalhes] = useState(null); // empresa (com _saude)
   const [resetando, setResetando] = useState(null); // id
   const [busca, setBusca] = useState("");
   const [filtroPlano, setFiltroPlano] = useState("TODOS");
@@ -619,7 +620,16 @@ function AbaEmpresas({ onMudou }) {
                   return (
                     <tr key={e.id} style={{ borderBottom: `1px solid ${C.border}55` }}>
                       <td style={{ padding: "9px 10px", color: C.text, fontWeight: 600 }}>
-                        {e.nome}
+                        <button
+                          type="button"
+                          onClick={() => setModalDetalhes(e)}
+                          title="Ver detalhes"
+                          style={{
+                            background: "transparent", border: "none", padding: 0,
+                            color: C.text, fontWeight: 600, fontSize: 12,
+                            cursor: "pointer", textAlign: "left",
+                          }}
+                        >{e.nome}</button>
                         <div style={{ color: C.muted, fontSize: 10, fontFamily: "monospace", marginTop: 1 }}>
                           {e.cnpj ? mascararCnpj(e.cnpj) : "Sem CNPJ"}
                         </div>
@@ -657,6 +667,7 @@ function AbaEmpresas({ onMudou }) {
                       <td style={{ padding: "9px 10px", color: C.muted }}>{fmtData(e.criadaEm)}</td>
                       <td style={{ padding: "9px 10px" }}>
                         <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                          <button onClick={() => setModalDetalhes(e)} title="Ver detalhes" style={btnAcao(C.text)}>👁</button>
                           <button onClick={() => impersonar(e)} title="Entrar como admin" style={btnAcao(C.accent)}>👤</button>
                           <button onClick={() => setModalPlano(e)} title="Alterar plano" style={btnAcao(planoInfo.cor)}>🎫</button>
                           <a href={api.adminMasterExportEmpresaUrl(e.id) + "?t=" + Date.now()}
@@ -699,6 +710,16 @@ function AbaEmpresas({ onMudou }) {
           empresa={modalPlano}
           onCancelar={() => setModalPlano(null)}
           onSalva={() => { setModalPlano(null); carregar(); onMudou?.(); }}
+        />
+      )}
+      {modalDetalhes && (
+        <ModalDetalhesEmpresa
+          empresa={modalDetalhes}
+          onCancelar={() => setModalDetalhes(null)}
+          onAlterarPlano={() => { const e = modalDetalhes; setModalDetalhes(null); setModalPlano(e); }}
+          onSuspender={() => { const e = modalDetalhes; setModalDetalhes(null); setModalSuspender(e); }}
+          onReativar={async () => { const e = modalDetalhes; setModalDetalhes(null); await ativar(e); }}
+          onImpersonar={() => { const e = modalDetalhes; setModalDetalhes(null); impersonar(e); }}
         />
       )}
     </>
@@ -1425,6 +1446,285 @@ function ModalPlano({ empresa, onCancelar, onSalva }) {
           }}>{salvando ? "Salvando..." : "💾 Salvar"}</button>
         </div>
       </form>
+    </div>
+  );
+}
+
+// ============ MODAL: DETALHES DA EMPRESA (DRILL-DOWN) ============
+// Painel unificado pra investigar uma empresa especifica sem ter que pular
+// entre as abas Empresas/Users/Logs. Busca users e logs ao montar.
+function ModalDetalhesEmpresa({ empresa, onCancelar, onAlterarPlano, onSuspender, onReativar, onImpersonar }) {
+  const [users, setUsers] = useState(null);
+  const [logs, setLogs] = useState(null);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      try {
+        const [u, l] = await Promise.all([
+          api.adminMasterListarUsers(empresa.id),
+          api.adminMasterLogs({ tenantId: empresa.id, limit: 20 }),
+        ]);
+        if (cancelado) return;
+        setUsers(u.users || []);
+        setLogs(l.logs || []);
+      } catch (err) {
+        if (!cancelado) setErro(err.message);
+      }
+    })();
+    return () => { cancelado = true; };
+  }, [empresa.id]);
+
+  const planoInfo = PLANOS_INFO[empresa.plano] || PLANOS_INFO.TRIAL;
+  const limites = LIMITES_PLANO_UI[empresa.plano] || LIMITES_PLANO_UI.TRIAL;
+  const diasDesdeCriacao = Math.floor((Date.now() - new Date(empresa.criadaEm).getTime()) / 86400000);
+  const { diasParaExpirar, expirou, expirando } = empresa._saude || {};
+
+  const recursos = [
+    { id: "usuarios", label: "Usuários",  atual: empresa.estatisticas?.usuarios ?? 0, limite: limites.usuarios },
+    { id: "clientes", label: "Clientes",  atual: empresa.estatisticas?.clientes ?? 0, limite: limites.clientes },
+    { id: "produtos", label: "Produtos",  atual: empresa.estatisticas?.produtos ?? 0, limite: limites.produtos },
+  ];
+
+  return (
+    <div onClick={onCancelar} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: 20, zIndex: 200,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: C.card, border: `1px solid ${C.border}`, borderRadius: 14,
+        width: "100%", maxWidth: 760, maxHeight: "90vh", overflow: "auto",
+        padding: 24,
+      }}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 18 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ color: C.white, fontSize: 18, fontWeight: 800, marginBottom: 4 }}>
+              {empresa.nome}
+            </div>
+            <div style={{ color: C.muted, fontSize: 11, fontFamily: "monospace" }}>
+              {empresa.cnpj ? mascararCnpj(empresa.cnpj) : "Sem CNPJ"} · ID {empresa.id.slice(0, 8)}
+            </div>
+            <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+              <span style={{
+                display: "inline-block", padding: "3px 10px", borderRadius: 10,
+                fontSize: 10, fontWeight: 700,
+                background: planoInfo.cor + "33", color: planoInfo.cor,
+              }}>{planoInfo.icone} {planoInfo.label}</span>
+              <span style={{
+                display: "inline-block", padding: "3px 10px", borderRadius: 10,
+                fontSize: 10, fontWeight: 700,
+                background: empresa.ativo ? C.green + "33" : C.red + "33",
+                color: empresa.ativo ? C.green : C.red,
+              }}>{empresa.ativo ? "● ATIVA" : "● SUSPENSA"}</span>
+              {diasParaExpirar !== null && diasParaExpirar !== undefined && (
+                <span style={{
+                  display: "inline-block", padding: "3px 10px", borderRadius: 10,
+                  fontSize: 10, fontWeight: 700,
+                  background: (expirou ? C.red : expirando ? C.yellow : C.muted) + "22",
+                  color: expirou ? C.red : expirando ? C.yellow : C.muted,
+                }}>
+                  {expirou ? `Expirou ${-diasParaExpirar}d atrás` : `Expira em ${diasParaExpirar}d`}
+                </span>
+              )}
+            </div>
+          </div>
+          <button onClick={onCancelar} style={{
+            background: "transparent", border: "none", color: C.muted,
+            fontSize: 20, cursor: "pointer", padding: 4,
+          }}>✕</button>
+        </div>
+
+        {erro && (
+          <div style={{
+            background: C.red + "22", border: `1px solid ${C.red}55`,
+            color: C.red, borderRadius: 8, padding: "8px 12px", fontSize: 12, marginBottom: 12,
+          }}>{erro}</div>
+        )}
+
+        {/* KPIs operacionais */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8, marginBottom: 18 }}>
+          {[
+            { label: "Vendas",          valor: fmtNum(empresa.estatisticas?.vendas ?? 0),         cor: C.accent },
+            { label: "Faturamento",     valor: fmtBRL(empresa.estatisticas?.faturamentoTotal ?? 0),cor: C.green },
+            { label: "Dias no sistema", valor: fmtNum(diasDesdeCriacao),                           cor: C.purple },
+            { label: "Criada em",       valor: fmtData(empresa.criadaEm),                          cor: C.muted },
+          ].map((k, i) => (
+            <div key={i} style={{
+              background: C.surface, border: `1px solid ${C.border}`,
+              borderRadius: 8, padding: "8px 10px",
+            }}>
+              <div style={{ color: C.muted, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{k.label}</div>
+              <div style={{ color: k.cor, fontSize: 14, fontWeight: 800, marginTop: 2 }}>{k.valor}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Uso vs Limite */}
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+            Uso vs. Limite do plano
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {recursos.map(r => {
+              const ilim = r.limite == null;
+              const pct = ilim ? 0 : Math.min(100, (r.atual / r.limite) * 100);
+              const cor = ilim ? C.muted : pct >= 100 ? C.red : pct >= 90 ? "#fb923c" : pct >= 70 ? C.yellow : C.green;
+              return (
+                <div key={r.id}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 3 }}>
+                    <span style={{ color: C.text, fontWeight: 600 }}>{r.label}</span>
+                    <span style={{ color: cor, fontWeight: 700, fontFamily: "monospace" }}>
+                      {fmtNum(r.atual)} / {ilim ? "∞" : fmtNum(r.limite)}
+                      {!ilim && ` (${pct.toFixed(0)}%)`}
+                    </span>
+                  </div>
+                  <div style={{ height: 6, background: C.surface, borderRadius: 3, overflow: "hidden" }}>
+                    <div style={{
+                      width: ilim ? "100%" : `${pct}%`,
+                      height: "100%", background: cor,
+                      opacity: ilim ? 0.3 : 1,
+                    }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {empresa.observacoesPlano && (
+          <div style={{
+            background: C.surface, border: `1px solid ${C.border}`,
+            borderRadius: 8, padding: "8px 12px", fontSize: 12, color: C.text,
+            marginBottom: 18,
+          }}>
+            <div style={{ color: C.muted, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>
+              Observações (interno)
+            </div>
+            {empresa.observacoesPlano}
+          </div>
+        )}
+
+        {/* Users */}
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+            Usuários ({users?.length ?? "..."})
+          </div>
+          {users === null ? (
+            <div style={{ color: C.muted, fontSize: 12 }}>Carregando...</div>
+          ) : users.length === 0 ? (
+            <div style={{ color: C.muted, fontSize: 12 }}>Nenhum usuário.</div>
+          ) : (
+            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
+              {users.slice(0, 10).map(u => (
+                <div key={u.id} style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "6px 10px", borderBottom: `1px solid ${C.border}55`, fontSize: 12,
+                }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ color: C.text, fontWeight: 600 }}>{u.nome}</div>
+                    <div style={{ color: C.muted, fontSize: 10 }}>{u.email}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                    <span style={{
+                      padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700,
+                      background: C.purple + "22", color: C.purple,
+                    }}>{u.role}</span>
+                    {!u.ativo && (
+                      <span style={{
+                        padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700,
+                        background: C.red + "22", color: C.red,
+                      }}>INATIVO</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {users.length > 10 && (
+                <div style={{ padding: "6px 10px", fontSize: 10, color: C.muted, textAlign: "center" }}>
+                  +{users.length - 10} usuário(s)
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Logs */}
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+            Últimos eventos
+          </div>
+          {logs === null ? (
+            <div style={{ color: C.muted, fontSize: 12 }}>Carregando...</div>
+          ) : logs.length === 0 ? (
+            <div style={{ color: C.muted, fontSize: 12 }}>Sem eventos registrados.</div>
+          ) : (
+            <div style={{
+              background: C.surface, border: `1px solid ${C.border}`,
+              borderRadius: 8, overflow: "hidden", maxHeight: 220, overflowY: "auto",
+            }}>
+              {logs.map(l => (
+                <div key={l.id} style={{
+                  padding: "6px 10px", borderBottom: `1px solid ${C.border}55`, fontSize: 11,
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                    <span style={{
+                      color: l.sucesso ? C.green : C.red, fontWeight: 700, fontSize: 10,
+                    }}>{l.acao}</span>
+                    <span style={{ color: C.muted, fontSize: 10, fontFamily: "monospace", whiteSpace: "nowrap" }}>
+                      {fmtData(l.createdAt)}
+                    </span>
+                  </div>
+                  {l.mensagem && (
+                    <div style={{ color: C.text, fontSize: 11, marginTop: 2 }}>{l.mensagem}</div>
+                  )}
+                  {l.usuarioNome && (
+                    <div style={{ color: C.muted, fontSize: 10, marginTop: 1 }}>por {l.usuarioNome}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Acoes */}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", borderTop: `1px solid ${C.border}`, paddingTop: 14 }}>
+          <button onClick={onAlterarPlano} style={{
+            background: planoInfo.cor + "22", color: planoInfo.cor,
+            border: `1px solid ${planoInfo.cor}55`, borderRadius: 8,
+            padding: "8px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer",
+          }}>🎫 Alterar plano</button>
+          <button onClick={onImpersonar} style={{
+            background: C.accent + "22", color: C.accent,
+            border: `1px solid ${C.accent}55`, borderRadius: 8,
+            padding: "8px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer",
+          }}>👤 Entrar como admin</button>
+          {empresa.ativo ? (
+            <button onClick={onSuspender} style={{
+              background: C.red + "22", color: C.red,
+              border: `1px solid ${C.red}55`, borderRadius: 8,
+              padding: "8px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer",
+            }}>⏸ Suspender</button>
+          ) : (
+            <button onClick={onReativar} style={{
+              background: C.green + "22", color: C.green,
+              border: `1px solid ${C.green}55`, borderRadius: 8,
+              padding: "8px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer",
+            }}>▶ Reativar</button>
+          )}
+          <a href={api.adminMasterExportEmpresaUrl(empresa.id) + "?t=" + Date.now()}
+            style={{
+              background: C.purple + "22", color: C.purple,
+              border: `1px solid ${C.purple}55`, borderRadius: 8,
+              padding: "8px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer",
+              textDecoration: "none", display: "inline-block",
+            }}>📥 Exportar JSON</a>
+          <button onClick={onCancelar} style={{ ...btnSecundario, marginLeft: "auto" }}>
+            Fechar
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -146,6 +146,33 @@ d:/gestao-pdv/
 
 ## Histórico de sessões
 
+### Sessão — 2026-05-16 (Admin Master — ETAPA 13: Limites por plano com enforcement)
+
+Fechamento da onda admin-master. ETAPAs 10-12 já tinham introduzido o conceito de plano (TRIAL/FREE/STARTER/PRO/ENTERPRISE) e expiraEm no model `Empresa`, mas só como metadado — nada bloqueava o uso real. ETAPA 13 fecha o ciclo: **limites por plano efetivamente aplicados** + **snapshot de uso visível pro tenant**.
+
+**Entregue:**
+- **`backend/src/lib/planoLimites.js` (novo):**
+  - `LIMITES_PLANO` com matriz de 4 recursos × 5 planos (`clientes`, `produtos`, `usuarios`, `vendasMes`); `null` = ilimitado. Exemplo: FREE 30/50/1/50 · TRIAL 50/100/3/200 · PRO 5k/10k/20/∞ · ENTERPRISE tudo ilimitado.
+  - `verificarLimite(tenantId, recurso)` → consulta plano do tenant + conta uso via `prismaRaw` (bypass extension pra evitar AsyncLocalStorage em jobs cross-tenant).
+  - `aplicarLimite(req, res, recurso)` helper: se estourou, já responde 402 com body `{ erro, recurso, atual, limite, plano, limiteAtingido: true }` e retorna `false` (caller aborta). Skip silencioso quando `req.tenantId` ausente (rotas admin-master).
+  - `obterUsoELimites(tenantId)` snapshot completo pro GET /empresa.
+- **Controllers de `create` ganharam guard `aplicarLimite`:**
+  - [clienteController.js:458](backend/src/controllers/clienteController.js#L458) — `aplicarLimite(req, res, "clientes")`
+  - [produtoController.js:85](backend/src/controllers/produtoController.js#L85) — `aplicarLimite(req, res, "produtos")`
+  - [funcionarioController.js:88](backend/src/controllers/funcionarioController.js#L88) — `aplicarLimite(req, res, "usuarios")`
+  - [vendaController.js:109](backend/src/controllers/vendaController.js#L109) — `aplicarLimite(req, res, "vendasMes")` (resetado mensalmente, usa `inicioMes()`)
+- **`empresaController.obter` agora retorna `plano`, `expiraEm`, `limites`, `uso`** no payload — fonte única do BlocoPlano.
+- **[src/Empresa.jsx](src/Empresa.jsx):** novo componente `<BlocoPlano>` entre identidade e dados fiscais. Mostra badge do plano (5 cores/ícones), aviso de expiração (vermelho se expirou, amarelo se ≤7 dias), e grid 4×1 de barras de progresso uso/limite com cor dinâmica (verde <70% / amarelo 70-90% / vermelho ≥90%). Ilimitado mostra `∞`. Texto de upgrade no rodapé.
+
+**Smoke-test (rodado contra Neon):**
+```
+GET /empresa → plano TRIAL, uso { clientes:7, produtos:54, usuarios:4, vendasMes:357 } vs limites { 50, 100, 3, 200 }
+POST /funcionarios (usuarios 4/3 já estourado) → 402 com payload completo
+POST /vendas      (vendasMes 357/200 estourado) → 402 com payload completo
+POST /clientes    (7/50, dentro do limite)      → 201 (depois deletado via raw pra limpar)
+```
+Build do frontend OK (901 modules), nenhum import quebrado. Limpeza: cliente teste deletado, role do super-admin revertido de ADMIN→GERENTE (foi elevado momentaneamente pra testar o guard de /funcionarios).
+
 ### Sessão — 2026-05-15 (Relatórios CRM — Funil de Vendas)
 
 Análise do sistema vs CRMs profissionais (Salesforce/HubSpot/Pipedrive) identificou gap claro: 6 abas operacionais em Relatórios (Vendas/Compras/Financeiro/Estoque/Caixas/Comissões), **zero relatórios de relacionamento**. Apresentadas 7 propostas (Funil, Performance Comercial, Motivos de Perda, Carteira/RFM, Atividades & Cadência, NPS, Forecast); usuário aprovou começar pelo **Funil de Vendas** com sub-tabs em uma única aba "🎯 CRM" e conversão etapa-a-etapa baseada em `HistoricoOportunidade`.
@@ -1137,7 +1164,10 @@ GET /funcionarios → 20 registros
 
 ## Onde paramos
 
-**🎉 Projeto completo — 13/13 etapas + 10 melhorias pós-MVP + 10 prioridades CRM Profissional entregues.**
+**🎉 Projeto completo — 13/13 etapas MVP + 10 melhorias pós-MVP + 10 prioridades CRM + 9/9 etapas Multi-Tenant + 13/13 etapas Admin Master entregues.**
+
+Em 2026-05-16, **ETAPA 13 Admin Master — Limites por plano com enforcement**: fechamento da onda admin-master. Nova lib `backend/src/lib/planoLimites.js` com matriz de limites por plano (FREE/TRIAL/STARTER/PRO/ENTERPRISE) e helpers `aplicarLimite`/`obterUsoELimites`. Guards adicionados em 4 controllers (`clientes`, `produtos`, `usuarios`, `vendasMes`) que respondem 402 com payload `{recurso, atual, limite, plano, limiteAtingido}` quando o tenant excede o plano. `GET /empresa` agora retorna snapshot completo (`plano`, `expiraEm`, `limites`, `uso`) consumido pelo novo `<BlocoPlano>` em [src/Empresa.jsx](src/Empresa.jsx) — badge colorido por plano, aviso de expiração (verde/amarelo/vermelho), grid 4×1 de barras de progresso por recurso. Smoke-test confirmou 402 contra tenant DEFAULT (já estourado em `usuarios` 4/3 e `vendasMes` 357/200).
+
 
 Todas as etapas planejadas foram entregues e o produto continuou a receber polimento. Em 2026-04-30, uma onda adicionou: hard-delete em cadastros, tela administrativa **Sistema** com Reset Total, **mini sidebar retrátil** (72↔240px com persistência), **sistema de temas** (4 paletas via CSS vars + modal Aparência), **PDV com atalhos/troco/cupom**, **Clientes com máscaras + ViaCEP**, **financeiro avançado** (juros/multa/desconto/recorrência/anexos), **permissões por módulo com bloqueio no backend** e a aba **Extras** documentando tudo dentro do próprio app.
 

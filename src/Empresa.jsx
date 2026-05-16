@@ -246,7 +246,17 @@ export default function Empresa({ user }) {
         </div>
       </div>
 
-      {/* ============ BLOCO 2: DADOS FISCAIS (CONFIGURACAO EMPRESA) ============ */}
+      {/* ============ BLOCO 2: PLANO + USO vs LIMITES (ETAPA 13) ============ */}
+      {dados.plano && (
+        <BlocoPlano
+          plano={dados.plano}
+          expiraEm={dados.expiraEm}
+          uso={dados.uso}
+          limites={dados.limites}
+        />
+      )}
+
+      {/* ============ BLOCO 3: DADOS FISCAIS (CONFIGURACAO EMPRESA) ============ */}
       <div style={{
         background: C.card, border: `1px solid ${C.border}`,
         borderRadius: 12, padding: 4, marginBottom: 20,
@@ -262,6 +272,125 @@ export default function Empresa({ user }) {
         <div style={{ padding: 12 }}>
           <Configuracoes user={user} />
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ============ BLOCO PLANO + USO vs LIMITES ============
+function BlocoPlano({ plano, expiraEm, uso, limites }) {
+  const planosInfo = {
+    TRIAL: { cor: "#f59e0b", icone: "🎫", label: "Trial" },
+    FREE: { cor: C.muted, icone: "🆓", label: "Free" },
+    STARTER: { cor: C.accent, icone: "🚀", label: "Starter" },
+    PRO: { cor: C.purple, icone: "💎", label: "Pro" },
+    ENTERPRISE: { cor: C.green, icone: "🏆", label: "Enterprise" },
+  };
+  const info = planosInfo[plano] || planosInfo.FREE;
+
+  const diasParaExpirar = expiraEm
+    ? Math.ceil((new Date(expiraEm).getTime() - Date.now()) / 86400000)
+    : null;
+  const expirou = diasParaExpirar !== null && diasParaExpirar < 0;
+  const expirando = diasParaExpirar !== null && diasParaExpirar >= 0 && diasParaExpirar <= 7;
+
+  const recursos = [
+    { id: "clientes", label: "Clientes ativos", icone: "👥" },
+    { id: "produtos", label: "Produtos ativos", icone: "📦" },
+    { id: "usuarios", label: "Usuários ativos", icone: "🧑‍💼" },
+    { id: "vendasMes", label: "Vendas no mês", icone: "🛒" },
+  ];
+
+  return (
+    <div style={{
+      background: C.card, border: `1px solid ${C.border}`,
+      borderRadius: 12, padding: 20, marginBottom: 20,
+    }}>
+      <div style={{
+        display: "flex", justifyContent: "space-between",
+        alignItems: "flex-start", flexWrap: "wrap", gap: 12, marginBottom: 16,
+      }}>
+        <div>
+          <div style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+            Plano atual
+          </div>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 10, marginTop: 6,
+          }}>
+            <span style={{
+              padding: "6px 14px", borderRadius: 12,
+              fontSize: 16, fontWeight: 800,
+              background: info.cor + "33", color: info.cor,
+            }}>{info.icone} {info.label.toUpperCase()}</span>
+            {expiraEm && (
+              <span style={{
+                color: expirou ? C.red : (expirando ? C.yellow : C.muted),
+                fontSize: 12, fontWeight: expirou || expirando ? 700 : 500,
+              }}>
+                {expirou
+                  ? `⚠️ Plano expirou em ${fmtData(expiraEm)}`
+                  : expirando
+                    ? `⚠️ Expira em ${diasParaExpirar}d (${fmtData(expiraEm)})`
+                    : `Expira em ${diasParaExpirar}d (${fmtData(expiraEm)})`}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div style={{
+        display: "grid", gap: 10,
+        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+      }}>
+        {recursos.map(r => {
+          const usado = uso?.[r.id] ?? 0;
+          const limite = limites?.[r.id];
+          const ilimitado = limite === null || limite === undefined;
+          const pct = ilimitado ? 0 : Math.min(100, Math.round((usado / limite) * 100));
+          const critico = !ilimitado && pct >= 90;
+          const atencao = !ilimitado && pct >= 70 && pct < 90;
+          const cor = critico ? C.red : atencao ? C.yellow : C.green;
+          return (
+            <div key={r.id} style={{
+              background: C.surface, border: `1px solid ${C.border}`,
+              borderRadius: 10, padding: "12px 14px",
+            }}>
+              <div style={{
+                display: "flex", justifyContent: "space-between",
+                alignItems: "baseline", marginBottom: 6,
+              }}>
+                <div style={{ color: C.text, fontSize: 12, fontWeight: 700 }}>
+                  {r.icone} {r.label}
+                </div>
+                <div style={{ color: ilimitado ? C.green : (critico ? C.red : C.muted), fontSize: 11, fontWeight: 700 }}>
+                  {ilimitado
+                    ? `${fmtNum(usado)} / ∞`
+                    : `${fmtNum(usado)} / ${fmtNum(limite)}`}
+                </div>
+              </div>
+              {!ilimitado && (
+                <div style={{ position: "relative", height: 8, background: C.bg, borderRadius: 4, overflow: "hidden" }}>
+                  <div style={{
+                    width: `${pct}%`, height: "100%",
+                    background: cor, transition: "width 300ms ease",
+                  }} />
+                </div>
+              )}
+              {!ilimitado && critico && (
+                <div style={{ color: C.red, fontSize: 10, fontWeight: 700, marginTop: 4 }}>
+                  ⚠️ Limite quase atingido — considere fazer upgrade
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{
+        marginTop: 12, padding: "8px 12px",
+        background: C.bg, borderRadius: 8, fontSize: 11, color: C.muted,
+      }}>
+        Para alterar o plano ou ampliar limites, entre em contato com o suporte.
       </div>
     </div>
   );

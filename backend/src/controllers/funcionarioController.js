@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import prisma from "../lib/prisma.js";
 import { sanitizarPermissoes, permissoesPadrao, IDS_MODULOS } from "../lib/permissoes.js";
+import { aplicarLimite } from "../lib/planoLimites.js";
 
 const ROLES_VALIDAS = new Set(["ADMIN", "GERENTE", "VENDEDOR"]);
 
@@ -82,6 +83,9 @@ export async function criar(req, res, next) {
     if (!ROLES_VALIDAS.has(role)) {
       return res.status(400).json({ erro: "Role invalida (use ADMIN, GERENTE ou VENDEDOR)" });
     }
+
+    // ETAPA 13: limite por plano
+    if (!await aplicarLimite(req, res, "usuarios")) return;
 
     const senhaHash = await bcrypt.hash(senha, 10);
 

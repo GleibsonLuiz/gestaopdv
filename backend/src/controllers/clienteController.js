@@ -1,4 +1,5 @@
 import prisma from "../lib/prisma.js";
+import { aplicarLimite } from "../lib/planoLimites.js";
 
 const norm = (v) => (v === undefined || v === null || v === "" ? null : v);
 
@@ -454,6 +455,8 @@ export async function criar(req, res, next) {
     if (req.body.statusFunil && !STATUS_FUNIL.includes(req.body.statusFunil)) {
       return res.status(400).json({ erro: "Status do funil invalido" });
     }
+    // ETAPA 13: limite por plano
+    if (!await aplicarLimite(req, res, "clientes")) return;
     const cliente = await prisma.cliente.create({
       data: {
         nome: String(nome).trim(),

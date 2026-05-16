@@ -1,4 +1,5 @@
 import prisma from "../lib/prisma.js";
+import { aplicarLimite } from "../lib/planoLimites.js";
 
 const norm = (v) => (v === undefined || v === null || v === "" ? null : v);
 
@@ -79,6 +80,9 @@ export async function criar(req, res, next) {
     const nome = req.body?.nome ? String(req.body.nome).trim() : "";
     if (!codigo) return res.status(400).json({ erro: "Codigo e obrigatorio" });
     if (!nome) return res.status(400).json({ erro: "Nome e obrigatorio" });
+
+    // ETAPA 13: limite por plano
+    if (!await aplicarLimite(req, res, "produtos")) return;
 
     const tipoItem = normalizarTipoItem(req.body.tipoItem);
     if (tipoItem === null) return res.status(400).json({ erro: "Tipo de item invalido (use PRODUTO ou SERVICO)" });

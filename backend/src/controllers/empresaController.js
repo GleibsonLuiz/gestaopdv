@@ -1,4 +1,5 @@
 import prisma from "../lib/prisma.js";
+import { obterUsoELimites } from "../lib/planoLimites.js";
 
 // ============ EMPRESA (TENANT) DO USUARIO LOGADO ============
 //
@@ -27,6 +28,10 @@ export async function obter(req, res, next) {
       },
     });
     if (!empresa) return res.status(404).json({ erro: "Empresa nao encontrada" });
+
+    // ETAPA 13: snapshot de uso vs limites por plano
+    const planoInfo = await obterUsoELimites(req.tenantId);
+
     res.json({
       id: empresa.id,
       nome: empresa.nome,
@@ -40,6 +45,10 @@ export async function obter(req, res, next) {
         produtos: empresa._count.produtos,
         vendas: empresa._count.vendas,
       },
+      plano: planoInfo.plano,
+      expiraEm: planoInfo.expiraEm,
+      limites: planoInfo.limites,
+      uso: planoInfo.uso,
     });
   } catch (err) {
     next(err);

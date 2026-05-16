@@ -3,6 +3,7 @@ import prisma from "../lib/prisma.js";
 import { exigirCaixaAberto, registrarNoCaixaAberto, calcularTotaisCaixa, exigirAutorizacaoGerencial } from "./caixaController.js";
 import { parseDate, calcularValores, gerarSerieRecorrencia } from "../lib/contas.js";
 import { criarComNumeroRetry } from "../lib/proximoNumero.js";
+import { aplicarLimite } from "../lib/planoLimites.js";
 
 const FORMAS_VALIDAS = new Set([
   "DINHEIRO", "CARTAO_CREDITO", "CARTAO_DEBITO", "PIX", "BOLETO", "CREDIARIO",
@@ -105,6 +106,8 @@ export async function criar(req, res, next) {
     if (!Array.isArray(itens) || itens.length === 0) {
       return res.status(400).json({ erro: "Informe ao menos um item" });
     }
+    // ETAPA 13: limite mensal de vendas por plano
+    if (!await aplicarLimite(req, res, "vendasMes")) return;
     if (desconto === null || Number.isNaN(desconto) || desconto < 0) {
       return res.status(400).json({ erro: "Desconto invalido" });
     }

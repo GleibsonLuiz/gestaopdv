@@ -268,27 +268,31 @@ async function seedClientes() {
 
 // ==================== PRODUTOS (20) ====================
 
+// ETAPA 14: NCMs reais de papelaria (tabela TIPI) + CFOP de saida intraestadual
+// (5102 = venda de mercadoria adquirida ou recebida de terceiros). Tudo em
+// Simples Nacional (CSOSN 102 = sem permissao de credito) que e o cenario
+// padrao da loja-exemplo. cstPis/cstCofins "49" = outras operacoes de saida.
 const PRODUTOS_BASE = [
-  { codigo: "PAP-0001", nome: "CADERNO UNIVERSITÁRIO 200 FLS TILIBRA",   cat: "PAPEL",        precoCusto: 14.50, precoVenda: 24.90, est: 0, min: 10, unidade: "UN" },
-  { codigo: "PAP-0002", nome: "CANETA ESFEROGRÁFICA AZUL BIC CRISTAL",   cat: "ESCRITA",      precoCusto:  0.85, precoVenda:  1.99, est: 0, min: 50, unidade: "UN" },
-  { codigo: "PAP-0003", nome: "CANETA ESFEROGRÁFICA PRETA BIC CRISTAL",  cat: "ESCRITA",      precoCusto:  0.85, precoVenda:  1.99, est: 0, min: 50, unidade: "UN" },
-  { codigo: "PAP-0004", nome: "CANETA ESFEROGRÁFICA VERMELHA BIC",       cat: "ESCRITA",      precoCusto:  0.85, precoVenda:  1.99, est: 0, min: 30, unidade: "UN" },
-  { codigo: "PAP-0005", nome: "LÁPIS PRETO HB FABER-CASTELL",            cat: "ESCRITA",      precoCusto:  0.45, precoVenda:  1.20, est: 0, min: 80, unidade: "UN" },
-  { codigo: "PAP-0006", nome: "BORRACHA BRANCA MERCUR PEQUENA",          cat: "ESCOLAR",      precoCusto:  0.55, precoVenda:  1.50, est: 0, min: 40, unidade: "UN" },
-  { codigo: "PAP-0007", nome: "APONTADOR COM DEPÓSITO FABER-CASTELL",    cat: "ESCOLAR",      precoCusto:  1.80, precoVenda:  3.99, est: 0, min: 25, unidade: "UN" },
-  { codigo: "PAP-0008", nome: "RÉGUA ACRÍLICA 30CM WALEU",               cat: "ESCOLAR",      precoCusto:  1.20, precoVenda:  2.99, est: 0, min: 30, unidade: "UN" },
-  { codigo: "PAP-0009", nome: "TESOURA ESCOLAR 13CM TRAMONTINA",         cat: "ESCOLAR",      precoCusto:  4.50, precoVenda:  9.90, est: 0, min: 20, unidade: "UN" },
-  { codigo: "PAP-0010", nome: "COLA BRANCA TENAZ 90G HENKEL",            cat: "ESCOLAR",      precoCusto:  3.20, precoVenda:  6.50, est: 0, min: 25, unidade: "UN" },
-  { codigo: "PAP-0011", nome: "COLA BASTÃO PRITT 21G",                   cat: "ESCOLAR",      precoCusto:  4.80, precoVenda:  9.90, est: 0, min: 20, unidade: "UN" },
-  { codigo: "PAP-0012", nome: "PAPEL SULFITE A4 500FLS CHAMEX",          cat: "PAPEL",        precoCusto: 22.00, precoVenda: 32.90, est: 0, min: 15, unidade: "UN" },
-  { codigo: "PAP-0013", nome: "PASTA POLIONDA OFÍCIO AZUL",              cat: "ORGANIZAÇÃO",  precoCusto:  4.20, precoVenda:  7.99, est: 0, min: 20, unidade: "UN" },
-  { codigo: "PAP-0014", nome: "GRAMPEADOR 26/6 MAPED MÉDIO",             cat: "ESCRITÓRIO",   precoCusto: 18.00, precoVenda: 34.90, est: 0, min: 10, unidade: "UN" },
-  { codigo: "PAP-0015", nome: "GRAMPOS 26/6 CAIXA C/ 5000",              cat: "ESCRITÓRIO",   precoCusto:  6.00, precoVenda: 12.90, est: 0, min: 15, unidade: "CX" },
-  { codigo: "PAP-0016", nome: "MARCA TEXTO AMARELO PILOT SPOTLITER",     cat: "ESCRITA",      precoCusto:  2.40, precoVenda:  4.99, est: 0, min: 30, unidade: "UN" },
-  { codigo: "PAP-0017", nome: "CANETA MARCADOR QUADRO BRANCO PILOT",     cat: "ESCRITA",      precoCusto:  4.10, precoVenda:  8.90, est: 0, min: 20, unidade: "UN" },
-  { codigo: "PAP-0018", nome: "ESTOJO ESCOLAR 3 DIVISÓRIAS",             cat: "ORGANIZAÇÃO",  precoCusto: 12.00, precoVenda: 24.90, est: 0, min: 15, unidade: "UN" },
-  { codigo: "PAP-0019", nome: "MOCHILA ESCOLAR REFORÇADA",               cat: "ORGANIZAÇÃO",  precoCusto: 65.00, precoVenda: 129.90, est: 0, min: 5,  unidade: "UN" },
-  { codigo: "PAP-0020", nome: "CALCULADORA CASIO HR-100 COM BOBINA",     cat: "TECNOLOGIA",   precoCusto: 145.00, precoVenda: 249.90, est: 0, min: 3,  unidade: "UN" },
+  { codigo: "PAP-0001", nome: "CADERNO UNIVERSITÁRIO 200 FLS TILIBRA",   cat: "PAPEL",        precoCusto: 14.50, precoVenda: 24.90, est: 0, min: 10, unidade: "UN", ncm: "48202000", cfop: "5102" },
+  { codigo: "PAP-0002", nome: "CANETA ESFEROGRÁFICA AZUL BIC CRISTAL",   cat: "ESCRITA",      precoCusto:  0.85, precoVenda:  1.99, est: 0, min: 50, unidade: "UN", ncm: "96081000", cfop: "5102" },
+  { codigo: "PAP-0003", nome: "CANETA ESFEROGRÁFICA PRETA BIC CRISTAL",  cat: "ESCRITA",      precoCusto:  0.85, precoVenda:  1.99, est: 0, min: 50, unidade: "UN", ncm: "96081000", cfop: "5102" },
+  { codigo: "PAP-0004", nome: "CANETA ESFEROGRÁFICA VERMELHA BIC",       cat: "ESCRITA",      precoCusto:  0.85, precoVenda:  1.99, est: 0, min: 30, unidade: "UN", ncm: "96081000", cfop: "5102" },
+  { codigo: "PAP-0005", nome: "LÁPIS PRETO HB FABER-CASTELL",            cat: "ESCRITA",      precoCusto:  0.45, precoVenda:  1.20, est: 0, min: 80, unidade: "UN", ncm: "96091000", cfop: "5102" },
+  { codigo: "PAP-0006", nome: "BORRACHA BRANCA MERCUR PEQUENA",          cat: "ESCOLAR",      precoCusto:  0.55, precoVenda:  1.50, est: 0, min: 40, unidade: "UN", ncm: "40169200", cfop: "5102" },
+  { codigo: "PAP-0007", nome: "APONTADOR COM DEPÓSITO FABER-CASTELL",    cat: "ESCOLAR",      precoCusto:  1.80, precoVenda:  3.99, est: 0, min: 25, unidade: "UN", ncm: "82141000", cfop: "5102" },
+  { codigo: "PAP-0008", nome: "RÉGUA ACRÍLICA 30CM WALEU",               cat: "ESCOLAR",      precoCusto:  1.20, precoVenda:  2.99, est: 0, min: 30, unidade: "UN", ncm: "90171090", cfop: "5102" },
+  { codigo: "PAP-0009", nome: "TESOURA ESCOLAR 13CM TRAMONTINA",         cat: "ESCOLAR",      precoCusto:  4.50, precoVenda:  9.90, est: 0, min: 20, unidade: "UN", ncm: "82130000", cfop: "5102" },
+  { codigo: "PAP-0010", nome: "COLA BRANCA TENAZ 90G HENKEL",            cat: "ESCOLAR",      precoCusto:  3.20, precoVenda:  6.50, est: 0, min: 25, unidade: "UN", ncm: "35061010", cfop: "5102" },
+  { codigo: "PAP-0011", nome: "COLA BASTÃO PRITT 21G",                   cat: "ESCOLAR",      precoCusto:  4.80, precoVenda:  9.90, est: 0, min: 20, unidade: "UN", ncm: "35061010", cfop: "5102" },
+  { codigo: "PAP-0012", nome: "PAPEL SULFITE A4 500FLS CHAMEX",          cat: "PAPEL",        precoCusto: 22.00, precoVenda: 32.90, est: 0, min: 15, unidade: "UN", ncm: "48025699", cfop: "5102" },
+  { codigo: "PAP-0013", nome: "PASTA POLIONDA OFÍCIO AZUL",              cat: "ORGANIZAÇÃO",  precoCusto:  4.20, precoVenda:  7.99, est: 0, min: 20, unidade: "UN", ncm: "39261000", cfop: "5102" },
+  { codigo: "PAP-0014", nome: "GRAMPEADOR 26/6 MAPED MÉDIO",             cat: "ESCRITÓRIO",   precoCusto: 18.00, precoVenda: 34.90, est: 0, min: 10, unidade: "UN", ncm: "83052000", cfop: "5102" },
+  { codigo: "PAP-0015", nome: "GRAMPOS 26/6 CAIXA C/ 5000",              cat: "ESCRITÓRIO",   precoCusto:  6.00, precoVenda: 12.90, est: 0, min: 15, unidade: "CX", ncm: "83059000", cfop: "5102" },
+  { codigo: "PAP-0016", nome: "MARCA TEXTO AMARELO PILOT SPOTLITER",     cat: "ESCRITA",      precoCusto:  2.40, precoVenda:  4.99, est: 0, min: 30, unidade: "UN", ncm: "96082000", cfop: "5102" },
+  { codigo: "PAP-0017", nome: "CANETA MARCADOR QUADRO BRANCO PILOT",     cat: "ESCRITA",      precoCusto:  4.10, precoVenda:  8.90, est: 0, min: 20, unidade: "UN", ncm: "96082000", cfop: "5102" },
+  { codigo: "PAP-0018", nome: "ESTOJO ESCOLAR 3 DIVISÓRIAS",             cat: "ORGANIZAÇÃO",  precoCusto: 12.00, precoVenda: 24.90, est: 0, min: 15, unidade: "UN", ncm: "42022200", cfop: "5102" },
+  { codigo: "PAP-0019", nome: "MOCHILA ESCOLAR REFORÇADA",               cat: "ORGANIZAÇÃO",  precoCusto: 65.00, precoVenda: 129.90, est: 0, min: 5,  unidade: "UN", ncm: "42029200", cfop: "5102" },
+  { codigo: "PAP-0020", nome: "CALCULADORA CASIO HR-100 COM BOBINA",     cat: "TECNOLOGIA",   precoCusto: 145.00, precoVenda: 249.90, est: 0, min: 3,  unidade: "UN", ncm: "84701000", cfop: "5102" },
 ];
 
 // Servicos sao itens vendiveis sem controle de estoque — papelaria tipica
@@ -307,6 +311,20 @@ async function seedProdutos(categorias, fornecedores) {
     const p = PRODUTOS_BASE[i];
     const fornecedor = fornecedores[i % fornecedores.length];
     const descricao = `${p.nome} - PRODUTO DE PAPELARIA`;
+    // ETAPA 14: dados fiscais padrao Simples Nacional, CSOSN 102, CST 49
+    // para PIS/COFINS (outras operacoes de saida, aliquota zero — recolhido no DAS).
+    const dadosFiscais = {
+      ncm: p.ncm,
+      cfopPadrao: p.cfop,
+      origem: "NACIONAL",
+      regimeTributario: "SIMPLES_NACIONAL",
+      csosnIcms: "102",
+      aliquotaIcms: 0,
+      cstPis: "49",
+      aliquotaPis: 0,
+      cstCofins: "49",
+      aliquotaCofins: 0,
+    };
     const produto = await prisma.produto.upsert({
       where: { codigo: p.codigo },
       update: {
@@ -314,6 +332,7 @@ async function seedProdutos(categorias, fornecedores) {
         descricao,
         tipoItem: "PRODUTO",
         unidade: p.unidade,
+        ...dadosFiscais,
       },
       create: {
         codigo: p.codigo,
@@ -327,11 +346,24 @@ async function seedProdutos(categorias, fornecedores) {
         unidade: p.unidade,
         categoriaId: catByName.get(p.cat) || null,
         fornecedorId: fornecedor.id,
+        ...dadosFiscais,
       },
     });
     result.push(produto);
   }
-  // Servicos: sem fornecedor, sem estoque/minimo, tipoItem = SERVICO.
+  // Servicos: sem fornecedor, sem estoque/minimo, tipoItem = SERVICO. Como
+  // servico nao tem NCM/CFOP de mercadoria, mantemos so o regime + PIS/COFINS
+  // basico (CST 49). Emissao real de NFS-e tem regras municipais separadas.
+  const dadosFiscaisServico = {
+    origem: "NACIONAL",
+    regimeTributario: "SIMPLES_NACIONAL",
+    csosnIcms: "102",
+    aliquotaIcms: 0,
+    cstPis: "49",
+    aliquotaPis: 0,
+    cstCofins: "49",
+    aliquotaCofins: 0,
+  };
   for (const s of SERVICOS_BASE) {
     const servico = await prisma.produto.upsert({
       where: { codigo: s.codigo },
@@ -341,6 +373,7 @@ async function seedProdutos(categorias, fornecedores) {
         tipoItem: "SERVICO",
         precoVenda: s.precoVenda,
         unidade: s.unidade,
+        ...dadosFiscaisServico,
       },
       create: {
         codigo: s.codigo,
@@ -354,6 +387,7 @@ async function seedProdutos(categorias, fornecedores) {
         unidade: s.unidade,
         categoriaId: catByName.get(s.cat) || null,
         fornecedorId: null,
+        ...dadosFiscaisServico,
       },
     });
     result.push(servico);

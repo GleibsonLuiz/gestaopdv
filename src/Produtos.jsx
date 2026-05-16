@@ -6,6 +6,7 @@ import ActionsMenu from "./components/ActionsMenu.jsx";
 import EtiquetaPrecoModal from "./components/EtiquetaPrecoModal.jsx";
 import { FormularioLuxuoso, Secao, Linha, Campo as CampoLux } from "./components/FormularioLuxuoso.jsx";
 import SelectBusca from "./components/SelectBusca.jsx";
+import { Abas } from "./components/AbasFormulario.jsx";
 
 
 const VAZIO = {
@@ -15,6 +16,16 @@ const VAZIO = {
   precoVenda: "", precoCusto: "",
   estoque: "0", estoqueMinimo: "0", unidade: "UN",
   categoriaId: "", fornecedorId: "",
+  // ETAPA 14: bloco fiscal (NF-e/NFC-e). Tudo opcional no cadastro.
+  ncm: "", cest: "", cfopPadrao: "", origem: "NACIONAL",
+  unidadeTributavel: "",
+  regimeTributario: "SIMPLES_NACIONAL",
+  cstIcms: "", csosnIcms: "",
+  aliquotaIcms: "",
+  cstPis: "", aliquotaPis: "",
+  cstCofins: "", aliquotaCofins: "",
+  codBeneficioFiscal: "",
+  pesoLiquido: "", pesoBruto: "",
 };
 
 // Resolve url relativa do backend (/uploads/...) para URL absoluta consumivel
@@ -180,6 +191,23 @@ export default function Produtos({ user }) {
       unidade: p.unidade || "UN",
       categoriaId: p.categoriaId || "",
       fornecedorId: p.fornecedorId || "",
+      // ETAPA 14: bloco fiscal
+      ncm: p.ncm || "",
+      cest: p.cest || "",
+      cfopPadrao: p.cfopPadrao || "",
+      origem: p.origem || "NACIONAL",
+      unidadeTributavel: p.unidadeTributavel || "",
+      regimeTributario: p.regimeTributario || "SIMPLES_NACIONAL",
+      cstIcms: p.cstIcms || "",
+      csosnIcms: p.csosnIcms || "",
+      aliquotaIcms: p.aliquotaIcms != null ? String(p.aliquotaIcms) : "",
+      cstPis: p.cstPis || "",
+      aliquotaPis: p.aliquotaPis != null ? String(p.aliquotaPis) : "",
+      cstCofins: p.cstCofins || "",
+      aliquotaCofins: p.aliquotaCofins != null ? String(p.aliquotaCofins) : "",
+      codBeneficioFiscal: p.codBeneficioFiscal || "",
+      pesoLiquido: p.pesoLiquido != null ? String(p.pesoLiquido) : "",
+      pesoBruto: p.pesoBruto != null ? String(p.pesoBruto) : "",
     });
     setErroForm("");
     setNovaCategoria("");
@@ -264,6 +292,23 @@ export default function Produtos({ user }) {
         unidade: form.unidade,
         categoriaId: form.categoriaId || null,
         fornecedorId: form.fornecedorId || null,
+        // ETAPA 14: bloco fiscal
+        ncm: form.ncm || null,
+        cest: form.cest || null,
+        cfopPadrao: form.cfopPadrao || null,
+        origem: form.origem,
+        unidadeTributavel: form.unidadeTributavel || null,
+        regimeTributario: form.regimeTributario,
+        cstIcms: form.cstIcms || null,
+        csosnIcms: form.csosnIcms || null,
+        aliquotaIcms: form.aliquotaIcms === "" ? null : form.aliquotaIcms,
+        cstPis: form.cstPis || null,
+        aliquotaPis: form.aliquotaPis === "" ? null : form.aliquotaPis,
+        cstCofins: form.cstCofins || null,
+        aliquotaCofins: form.aliquotaCofins === "" ? null : form.aliquotaCofins,
+        codBeneficioFiscal: form.codBeneficioFiscal || null,
+        pesoLiquido: form.pesoLiquido === "" ? null : form.pesoLiquido,
+        pesoBruto: form.pesoBruto === "" ? null : form.pesoBruto,
       };
       const produtoSalvo = editando
         ? await api.atualizarProduto(editando.id, payload)
@@ -533,195 +578,215 @@ export default function Produtos({ user }) {
         textoSalvar="Criar produto"
         editando={!!editando}
         erro={erroForm}
-        larguraMax={860}
+        larguraMax={920}
       >
-        <Secao legenda="Identificação">
-          <Linha style={{ gridTemplateColumns: "150px 1fr 80px" }}>
-            <CampoLux label="Código" obrigatorio>
-              <div style={{ display: "flex", gap: 6 }}>
-                <input
-                  className="lux-input"
-                  value={form.codigo}
-                  onChange={e => setForm({ ...form, codigo: e.target.value })}
-                  style={{ flex: 1 }}
-                  autoFocus
-                />
-                <button type="button" onClick={sugerirCodigo} title="Sugerir próximo código"
-                  style={{
-                    background: C.surface, border: `1px solid ${C.border}`,
-                    color: C.accent, borderRadius: 10, padding: "0 12px",
-                    fontSize: 16, cursor: "pointer", fontWeight: 600,
-                  }}>↻</button>
-              </div>
-            </CampoLux>
-            <CampoLux label="Nome" obrigatorio>
-              <input
-                className="lux-input"
-                value={form.nome}
-                onChange={e => setForm({ ...form, nome: e.target.value })}
-                placeholder="Ex.: Caneta esferográfica azul BIC"
-              />
-            </CampoLux>
-            <CampoLux label="Unidade">
-              <input
-                className="lux-input"
-                value={form.unidade}
-                onChange={e => setForm({ ...form, unidade: e.target.value.toUpperCase().slice(0, 6) })}
-                placeholder="UN, KG, LT..."
-              />
-            </CampoLux>
-          </Linha>
-          <Linha style={{ gridTemplateColumns: "1fr 2fr", alignItems: "stretch" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <CampoLux label="Código de barras">
-                <input
-                  className="lux-input"
-                  value={form.codigoBarras}
-                  onChange={e => setForm({ ...form, codigoBarras: e.target.value.replace(/\s/g, "") })}
-                  placeholder="EAN-13, EAN-8, GTIN…"
-                  inputMode="numeric"
-                  style={{ fontFamily: "ui-monospace, monospace" }}
-                />
-              </CampoLux>
-              <CampoLux label="Referência">
-                <input
-                  className="lux-input"
-                  value={form.referencia}
-                  onChange={e => setForm({ ...form, referencia: e.target.value.toUpperCase() })}
-                  placeholder="Código do fabricante / fornecedor"
-                />
-              </CampoLux>
-            </div>
-            <CampoLux label="Descrição">
-              <textarea
-                className="lux-textarea"
-                value={form.descricao}
-                onChange={e => setForm({ ...form, descricao: e.target.value })}
-                rows={4}
-                placeholder="Detalhes complementares do produto…"
-                style={{ height: "100%", minHeight: 90, resize: "vertical" }}
-              />
-            </CampoLux>
-          </Linha>
-        </Secao>
+        <Abas
+          abas={[
+            { id: "gerais",  icone: "📋", label: "Dados Gerais" },
+            { id: "classif", icone: "🏷️", label: "Classificacao" },
+            { id: "fiscal",  icone: "📊", label: "Tributacao / NF-e" },
+          ]}
+        >
+          {(ativa) => (
+            <>
+              {ativa === 0 && (
+                <>
+                  <Secao legenda="Identificação">
+                    <Linha style={{ gridTemplateColumns: "150px 1fr 80px" }}>
+                      <CampoLux label="Código" obrigatorio>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <input
+                            className="lux-input"
+                            value={form.codigo}
+                            onChange={e => setForm({ ...form, codigo: e.target.value })}
+                            style={{ flex: 1 }}
+                            autoFocus
+                          />
+                          <button type="button" onClick={sugerirCodigo} title="Sugerir próximo código"
+                            style={{
+                              background: C.surface, border: `1px solid ${C.border}`,
+                              color: C.accent, borderRadius: 10, padding: "0 12px",
+                              fontSize: 16, cursor: "pointer", fontWeight: 600,
+                            }}>↻</button>
+                        </div>
+                      </CampoLux>
+                      <CampoLux label="Nome" obrigatorio>
+                        <input
+                          className="lux-input"
+                          value={form.nome}
+                          onChange={e => setForm({ ...form, nome: e.target.value })}
+                          placeholder="Ex.: Caneta esferográfica azul BIC"
+                        />
+                      </CampoLux>
+                      <CampoLux label="Unidade">
+                        <input
+                          className="lux-input"
+                          value={form.unidade}
+                          onChange={e => setForm({ ...form, unidade: e.target.value.toUpperCase().slice(0, 6) })}
+                          placeholder="UN, KG, LT..."
+                        />
+                      </CampoLux>
+                    </Linha>
+                    <Linha style={{ gridTemplateColumns: "1fr 2fr", alignItems: "stretch" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                        <CampoLux label="Código de barras">
+                          <input
+                            className="lux-input"
+                            value={form.codigoBarras}
+                            onChange={e => setForm({ ...form, codigoBarras: e.target.value.replace(/\s/g, "") })}
+                            placeholder="EAN-13, EAN-8, GTIN…"
+                            inputMode="numeric"
+                            style={{ fontFamily: "ui-monospace, monospace" }}
+                          />
+                        </CampoLux>
+                        <CampoLux label="Referência">
+                          <input
+                            className="lux-input"
+                            value={form.referencia}
+                            onChange={e => setForm({ ...form, referencia: e.target.value.toUpperCase() })}
+                            placeholder="Código do fabricante / fornecedor"
+                          />
+                        </CampoLux>
+                      </div>
+                      <CampoLux label="Descrição">
+                        <textarea
+                          className="lux-textarea"
+                          value={form.descricao}
+                          onChange={e => setForm({ ...form, descricao: e.target.value })}
+                          rows={4}
+                          placeholder="Detalhes complementares do produto…"
+                          style={{ height: "100%", minHeight: 90, resize: "vertical" }}
+                        />
+                      </CampoLux>
+                    </Linha>
+                  </Secao>
 
-        <Secao legenda="Imagem e tipo do item">
-          <Linha style={{ gridTemplateColumns: "1fr 1fr", alignItems: "stretch" }}>
-            <CampoLux label="Foto do produto" hint="JPG, PNG ou WEBP · máx 2 MB">
-              <DropzoneImagem
-                preview={imagemPreview}
-                onSelecionar={escolherImagem}
-                onLimpar={limparImagem}
-                inputRef={inputImagemRef}
-              />
-            </CampoLux>
-            <CampoLux label="Tipo do item">
-              <SeletorTipoItem
-                valor={form.tipoItem}
-                onMudar={t => setForm(f => ({ ...f, tipoItem: t }))}
-              />
-            </CampoLux>
-          </Linha>
-        </Secao>
+                  <Secao legenda="Imagem e tipo do item">
+                    <Linha style={{ gridTemplateColumns: "1fr 1fr", alignItems: "stretch" }}>
+                      <CampoLux label="Foto do produto" hint="JPG, PNG ou WEBP · máx 2 MB">
+                        <DropzoneImagem
+                          preview={imagemPreview}
+                          onSelecionar={escolherImagem}
+                          onLimpar={limparImagem}
+                          inputRef={inputImagemRef}
+                        />
+                      </CampoLux>
+                      <CampoLux label="Tipo do item">
+                        <SeletorTipoItem
+                          valor={form.tipoItem}
+                          onMudar={t => setForm(f => ({ ...f, tipoItem: t }))}
+                        />
+                      </CampoLux>
+                    </Linha>
+                  </Secao>
 
-        <Secao legenda="Preços e estoque">
-          <Linha style={{ gridTemplateColumns: "80px 80px 1fr 1fr", alignItems: "end" }}>
-            <CampoLux label={form.tipoItem === "SERVICO" ? "Estoque (n/a)" : "Estoque atual"}>
-              <input
-                className="lux-input"
-                type="number" min="0"
-                value={form.tipoItem === "SERVICO" ? "" : form.estoque}
-                onChange={e => setForm({ ...form, estoque: e.target.value })}
-                disabled={form.tipoItem === "SERVICO"}
-                placeholder={form.tipoItem === "SERVICO" ? "♾" : "0"}
-                style={form.tipoItem === "SERVICO" ? { background: C.bg, color: C.muted, borderStyle: "dashed", cursor: "not-allowed" } : undefined}
-              />
-            </CampoLux>
-            <CampoLux label={form.tipoItem === "SERVICO" ? "Mínimo (n/a)" : "Estoque mínimo"}>
-              <input
-                className="lux-input"
-                type="number" min="0"
-                value={form.tipoItem === "SERVICO" ? "" : form.estoqueMinimo}
-                onChange={e => setForm({ ...form, estoqueMinimo: e.target.value })}
-                disabled={form.tipoItem === "SERVICO"}
-                placeholder={form.tipoItem === "SERVICO" ? "—" : "0"}
-                style={form.tipoItem === "SERVICO" ? { background: C.bg, color: C.muted, borderStyle: "dashed", cursor: "not-allowed" } : undefined}
-              />
-            </CampoLux>
-            <CampoLux label="Preço de custo (R$)">
-              <input
-                className="lux-input"
-                type="number" step="0.01" min="0"
-                value={form.precoCusto}
-                onChange={e => setForm({ ...form, precoCusto: e.target.value })}
-                placeholder="0,00"
-              />
-            </CampoLux>
-            <CampoLux label="Preço de venda" obrigatorio>
-              <input
-                className="lux-input"
-                type="number" step="0.01" min="0"
-                value={form.precoVenda}
-                onChange={e => setForm({ ...form, precoVenda: e.target.value })}
-                placeholder="0,00"
-              />
-            </CampoLux>
-          </Linha>
-          <Linha cols={1}>
-            <CampoLux label="Cálculo de markup">
-              <CalculoMarkup
-                precoCusto={form.precoCusto}
-                markup={markup}
-                onChange={setMarkup}
-                onAplicar={(valor) => setForm(f => ({ ...f, precoVenda: valor }))}
-              />
-            </CampoLux>
-          </Linha>
-        </Secao>
+                  <Secao legenda="Preços e estoque">
+                    <Linha style={{ gridTemplateColumns: "80px 80px 1fr 1fr", alignItems: "end" }}>
+                      <CampoLux label={form.tipoItem === "SERVICO" ? "Estoque (n/a)" : "Estoque atual"}>
+                        <input
+                          className="lux-input"
+                          type="number" min="0"
+                          value={form.tipoItem === "SERVICO" ? "" : form.estoque}
+                          onChange={e => setForm({ ...form, estoque: e.target.value })}
+                          disabled={form.tipoItem === "SERVICO"}
+                          placeholder={form.tipoItem === "SERVICO" ? "♾" : "0"}
+                          style={form.tipoItem === "SERVICO" ? { background: C.bg, color: C.muted, borderStyle: "dashed", cursor: "not-allowed" } : undefined}
+                        />
+                      </CampoLux>
+                      <CampoLux label={form.tipoItem === "SERVICO" ? "Mínimo (n/a)" : "Estoque mínimo"}>
+                        <input
+                          className="lux-input"
+                          type="number" min="0"
+                          value={form.tipoItem === "SERVICO" ? "" : form.estoqueMinimo}
+                          onChange={e => setForm({ ...form, estoqueMinimo: e.target.value })}
+                          disabled={form.tipoItem === "SERVICO"}
+                          placeholder={form.tipoItem === "SERVICO" ? "—" : "0"}
+                          style={form.tipoItem === "SERVICO" ? { background: C.bg, color: C.muted, borderStyle: "dashed", cursor: "not-allowed" } : undefined}
+                        />
+                      </CampoLux>
+                      <CampoLux label="Preço de custo (R$)">
+                        <input
+                          className="lux-input"
+                          type="number" step="0.01" min="0"
+                          value={form.precoCusto}
+                          onChange={e => setForm({ ...form, precoCusto: e.target.value })}
+                          placeholder="0,00"
+                        />
+                      </CampoLux>
+                      <CampoLux label="Preço de venda" obrigatorio>
+                        <input
+                          className="lux-input"
+                          type="number" step="0.01" min="0"
+                          value={form.precoVenda}
+                          onChange={e => setForm({ ...form, precoVenda: e.target.value })}
+                          placeholder="0,00"
+                        />
+                      </CampoLux>
+                    </Linha>
+                    <Linha cols={1}>
+                      <CampoLux label="Cálculo de markup">
+                        <CalculoMarkup
+                          precoCusto={form.precoCusto}
+                          markup={markup}
+                          onChange={setMarkup}
+                          onAplicar={(valor) => setForm(f => ({ ...f, precoVenda: valor }))}
+                        />
+                      </CampoLux>
+                    </Linha>
+                  </Secao>
+                </>
+              )}
 
-        <Secao legenda="Categorização">
-          <Linha cols={2}>
-            <CampoLux label="Fornecedor">
-              <SelectBusca
-                opcoes={fornecedores}
-                value={form.fornecedorId}
-                onChange={v => setForm({ ...form, fornecedorId: v })}
-                subLabelFn={f => f.cnpj}
-                placeholder="— Sem fornecedor —"
-                className="lux-input"
-              />
-            </CampoLux>
-            <CampoLux label="Categoria">
-              <SelectBusca
-                opcoes={categorias}
-                value={form.categoriaId}
-                onChange={v => setForm({ ...form, categoriaId: v })}
-                placeholder="— Sem categoria —"
-                className="lux-input"
-              />
-            </CampoLux>
-          </Linha>
-          <Linha cols={1}>
-            <CampoLux label="Nova categoria">
-              <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  className="lux-input"
-                  value={novaCategoria}
-                  onChange={e => setNovaCategoria(e.target.value)}
-                  placeholder="Nome da nova categoria"
-                  style={{ flex: 1 }}
-                  onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); criarCategoriaInline(); } }}
-                />
-                <button type="button" onClick={criarCategoriaInline} disabled={!novaCategoria.trim()} style={{
-                  background: novaCategoria.trim() ? `linear-gradient(135deg, ${C.accent}, ${C.purple})` : C.muted,
-                  color: C.white, border: "none",
-                  borderRadius: 10, padding: "0 16px", fontWeight: 700, fontSize: 12,
-                  cursor: novaCategoria.trim() ? "pointer" : "default",
-                }}>+ Adicionar</button>
-              </div>
-            </CampoLux>
-          </Linha>
-        </Secao>
+              {ativa === 1 && (
+                <Secao legenda="Categoria e fornecedor">
+                  <Linha cols={2}>
+                    <CampoLux label="Fornecedor">
+                      <SelectBusca
+                        opcoes={fornecedores}
+                        value={form.fornecedorId}
+                        onChange={v => setForm({ ...form, fornecedorId: v })}
+                        subLabelFn={f => f.cnpj}
+                        placeholder="— Sem fornecedor —"
+                        className="lux-input"
+                      />
+                    </CampoLux>
+                    <CampoLux label="Categoria">
+                      <SelectBusca
+                        opcoes={categorias}
+                        value={form.categoriaId}
+                        onChange={v => setForm({ ...form, categoriaId: v })}
+                        placeholder="— Sem categoria —"
+                        className="lux-input"
+                      />
+                    </CampoLux>
+                  </Linha>
+                  <Linha cols={1}>
+                    <CampoLux label="Nova categoria">
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <input
+                          className="lux-input"
+                          value={novaCategoria}
+                          onChange={e => setNovaCategoria(e.target.value)}
+                          placeholder="Nome da nova categoria"
+                          style={{ flex: 1 }}
+                          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); criarCategoriaInline(); } }}
+                        />
+                        <button type="button" onClick={criarCategoriaInline} disabled={!novaCategoria.trim()} style={{
+                          background: novaCategoria.trim() ? `linear-gradient(135deg, ${C.accent}, ${C.purple})` : C.muted,
+                          color: C.white, border: "none",
+                          borderRadius: 10, padding: "0 16px", fontWeight: 700, fontSize: 12,
+                          cursor: novaCategoria.trim() ? "pointer" : "default",
+                        }}>+ Adicionar</button>
+                      </div>
+                    </CampoLux>
+                  </Linha>
+                </Secao>
+              )}
+
+              {ativa === 2 && <AbaFiscal form={form} setForm={setForm} />}
+            </>
+          )}
+        </Abas>
       </FormularioLuxuoso>
     </div>
   );
@@ -889,6 +954,200 @@ function SubCampo({ label, children }) {
       </label>
       {children}
     </div>
+  );
+}
+
+// ETAPA 14: aba dedicada aos campos fiscais (NF-e/NFC-e). Tudo opcional
+// no cadastro — o backend bloqueia formato invalido, mas aceita vazio.
+function AbaFiscal({ form, setForm }) {
+  const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
+  const ehSimples = form.regimeTributario !== "REGIME_NORMAL";
+  return (
+    <>
+      <Secao legenda="Identificação fiscal">
+        <Linha cols={3}>
+          <CampoLux label="NCM" hint="8 dígitos (Nomenclatura Comum do Mercosul)">
+            <input
+              className="lux-input"
+              value={form.ncm}
+              onChange={e => setForm({ ...form, ncm: e.target.value.replace(/\D/g, "").slice(0, 8) })}
+              placeholder="00000000"
+              inputMode="numeric"
+              maxLength={8}
+              style={{ fontFamily: "ui-monospace, monospace" }}
+            />
+          </CampoLux>
+          <CampoLux label="CEST" hint="Só p/ produtos com ST (Conv. 92/2015)">
+            <input
+              className="lux-input"
+              value={form.cest}
+              onChange={e => setForm({ ...form, cest: e.target.value.replace(/\D/g, "").slice(0, 7) })}
+              placeholder="0000000"
+              inputMode="numeric"
+              maxLength={7}
+              style={{ fontFamily: "ui-monospace, monospace" }}
+            />
+          </CampoLux>
+          <CampoLux label="CFOP padrão de saída" hint="Inicia com 5, 6 ou 7">
+            <input
+              className="lux-input"
+              value={form.cfopPadrao}
+              onChange={e => setForm({ ...form, cfopPadrao: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+              placeholder="5102"
+              inputMode="numeric"
+              maxLength={4}
+              style={{ fontFamily: "ui-monospace, monospace" }}
+            />
+          </CampoLux>
+        </Linha>
+        <Linha cols={2}>
+          <CampoLux label="Origem da mercadoria">
+            <select className="lux-input lux-select" value={form.origem} onChange={set("origem")}>
+              <option value="NACIONAL">0 — Nacional</option>
+              <option value="ESTRANGEIRA_IMP_DIRETA">1 — Estrangeira (importação direta)</option>
+              <option value="ESTRANGEIRA_ADQUIRIDA_BR">2 — Estrangeira (mercado interno)</option>
+              <option value="NACIONAL_IMP_SUP_40">3 — Nacional, CI &gt; 40% e ≤ 70%</option>
+              <option value="NACIONAL_PROC_BAS">4 — Nacional, proc. produtivo básico</option>
+              <option value="NACIONAL_IMP_INF_40">5 — Nacional, CI ≤ 40%</option>
+              <option value="ESTRANGEIRA_IMP_SEM_SIM">6 — Estrangeira direta sem similar</option>
+              <option value="ESTRANGEIRA_ADQ_SEM_SIM">7 — Estrangeira interna sem similar</option>
+              <option value="NACIONAL_IMP_SUP_70">8 — Nacional, CI &gt; 70%</option>
+            </select>
+          </CampoLux>
+          <CampoLux label="Regime tributário do item">
+            <select className="lux-input lux-select" value={form.regimeTributario} onChange={set("regimeTributario")}>
+              <option value="SIMPLES_NACIONAL">Simples Nacional</option>
+              <option value="SIMPLES_EXCESSO_SUBLIMITE">Simples — excesso sublimite</option>
+              <option value="REGIME_NORMAL">Regime Normal (Presumido/Real)</option>
+            </select>
+          </CampoLux>
+        </Linha>
+      </Secao>
+
+      <Secao legenda="ICMS">
+        <Linha cols={2}>
+          {ehSimples ? (
+            <CampoLux label="CSOSN" hint="Código de Situação no Simples (3 ou 4 dígitos)">
+              <input
+                className="lux-input"
+                value={form.csosnIcms}
+                onChange={e => setForm({ ...form, csosnIcms: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+                placeholder="102"
+                maxLength={4}
+                inputMode="numeric"
+                style={{ fontFamily: "ui-monospace, monospace" }}
+              />
+            </CampoLux>
+          ) : (
+            <CampoLux label="CST ICMS" hint="3 dígitos — Tabela B SEFAZ">
+              <input
+                className="lux-input"
+                value={form.cstIcms}
+                onChange={e => setForm({ ...form, cstIcms: e.target.value.replace(/\D/g, "").slice(0, 3) })}
+                placeholder="000"
+                maxLength={3}
+                inputMode="numeric"
+                style={{ fontFamily: "ui-monospace, monospace" }}
+              />
+            </CampoLux>
+          )}
+          <CampoLux label="Alíquota ICMS (%)">
+            <input
+              className="lux-input"
+              type="number" step="0.01" min="0" max="100"
+              value={form.aliquotaIcms}
+              onChange={set("aliquotaIcms")}
+              placeholder="0,00"
+            />
+          </CampoLux>
+        </Linha>
+      </Secao>
+
+      <Secao legenda="PIS / COFINS">
+        <Linha cols={4}>
+          <CampoLux label="CST PIS">
+            <input
+              className="lux-input"
+              value={form.cstPis}
+              onChange={e => setForm({ ...form, cstPis: e.target.value.replace(/\D/g, "").slice(0, 2) })}
+              placeholder="01"
+              maxLength={2}
+              inputMode="numeric"
+              style={{ fontFamily: "ui-monospace, monospace" }}
+            />
+          </CampoLux>
+          <CampoLux label="Alíq. PIS (%)">
+            <input
+              className="lux-input"
+              type="number" step="0.0001" min="0" max="100"
+              value={form.aliquotaPis}
+              onChange={set("aliquotaPis")}
+              placeholder="1,65"
+            />
+          </CampoLux>
+          <CampoLux label="CST COFINS">
+            <input
+              className="lux-input"
+              value={form.cstCofins}
+              onChange={e => setForm({ ...form, cstCofins: e.target.value.replace(/\D/g, "").slice(0, 2) })}
+              placeholder="01"
+              maxLength={2}
+              inputMode="numeric"
+              style={{ fontFamily: "ui-monospace, monospace" }}
+            />
+          </CampoLux>
+          <CampoLux label="Alíq. COFINS (%)">
+            <input
+              className="lux-input"
+              type="number" step="0.0001" min="0" max="100"
+              value={form.aliquotaCofins}
+              onChange={set("aliquotaCofins")}
+              placeholder="7,60"
+            />
+          </CampoLux>
+        </Linha>
+      </Secao>
+
+      <Secao legenda="Complementares">
+        <Linha cols={3}>
+          <CampoLux label="cBenef" hint="Código de Benefício Fiscal (UF)">
+            <input
+              className="lux-input"
+              value={form.codBeneficioFiscal}
+              onChange={e => setForm({ ...form, codBeneficioFiscal: e.target.value.toUpperCase().slice(0, 10) })}
+              placeholder="—"
+              maxLength={10}
+            />
+          </CampoLux>
+          <CampoLux label="Unidade tributável" hint="Vazio = usa comercial">
+            <input
+              className="lux-input"
+              value={form.unidadeTributavel}
+              onChange={e => setForm({ ...form, unidadeTributavel: e.target.value.toUpperCase().slice(0, 6) })}
+              placeholder="UN, KG..."
+            />
+          </CampoLux>
+          <CampoLux label="Peso (líquido / bruto kg)">
+            <div style={{ display: "flex", gap: 6 }}>
+              <input
+                className="lux-input"
+                type="number" step="0.001" min="0"
+                value={form.pesoLiquido}
+                onChange={set("pesoLiquido")}
+                placeholder="0,000"
+              />
+              <input
+                className="lux-input"
+                type="number" step="0.001" min="0"
+                value={form.pesoBruto}
+                onChange={set("pesoBruto")}
+                placeholder="0,000"
+              />
+            </div>
+          </CampoLux>
+        </Linha>
+      </Secao>
+    </>
   );
 }
 

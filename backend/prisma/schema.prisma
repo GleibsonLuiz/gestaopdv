@@ -197,6 +197,33 @@ enum TipoNotificacao {
   NOVIDADE
 }
 
+// ETAPA 14: Origem da mercadoria (Tabela A da NT 2011/004 SEFAZ).
+// Vai no campo <orig> do XML da NF-e/NFC-e. Obrigatorio em toda nota
+// fiscal eletronica. O nome do enum maquia o codigo numerico, mas a
+// posicao na lista (NACIONAL = 0, ESTRANGEIRA_IMP_DIRETA = 1, ...)
+// preserva o mapeamento direto para o XML.
+enum OrigemMercadoria {
+  NACIONAL                      // 0
+  ESTRANGEIRA_IMP_DIRETA        // 1
+  ESTRANGEIRA_ADQUIRIDA_BR      // 2
+  NACIONAL_IMP_SUP_40           // 3 (Conteudo Importacao > 40% e <= 70%)
+  NACIONAL_PROC_BAS             // 4 (processos produtivos basicos)
+  NACIONAL_IMP_INF_40           // 5 (CI <= 40%)
+  ESTRANGEIRA_IMP_SEM_SIM       // 6 (importacao direta, sem similar nacional)
+  ESTRANGEIRA_ADQ_SEM_SIM       // 7 (adquirida no BR, sem similar nacional)
+  NACIONAL_IMP_SUP_70           // 8 (CI > 70%)
+}
+
+// ETAPA 14: Regime tributario do item. Define se vamos popular cstIcms
+// (regime normal) OU csosnIcms (Simples Nacional) no XML da NF-e.
+// Guardado por produto (nao so por empresa) porque permite cenarios
+// mistos — empresa Simples revendendo produto com ST embutido, etc.
+enum RegimeTributario {
+  SIMPLES_NACIONAL              // CRT=1 — usa CSOSN
+  SIMPLES_EXCESSO_SUBLIMITE     // CRT=2 — usa CSOSN
+  REGIME_NORMAL                 // CRT=3 — usa CST do ICMS
+}
+
 // ============ MULTI-TENANT ============
 //
 // Empresa = tenant. Cada registro de negocio (cliente, produto, venda, etc)
@@ -454,6 +481,71 @@ model Produto {
   estoqueMinimo Int      @default(0)
   unidade       String   @default("UN")
   ativo         Boolean  @default(true)
+
+  // ============ ETAPA 14: BLOCO FISCAL (NF-e / NFC-e) ============
+  //
+  // Todos os campos sao opcionais no cadastro — viram obrigatorios na
+  // emissao da nota fiscal (validado no controller de NF-e na etapa 15).
+  // A regra agora e: se o cliente preencher, tem que estar bem-formado.
+
+  // NCM (Nomenclatura Comum do Mercosul) — 8 digitos. Obrigatorio em
+  // 100% das NF-e (rejeicao 778 se vazio/invalido). Tem que constar na
+  // TIPI; aqui validamos so formato.
+  ncm              String?            @db.VarChar(8)
+
+  // CEST (Codigo Especificador da Substituicao Tributaria) — 7 digitos.
+  // Condicionalmente obrigatorio (so para itens com ST, Conv. 92/2015).
+  cest             String?            @db.VarChar(7)
+
+  // CFOP padrao de saida (4 digitos, comeca com 5/6/7). Default usado
+  // ao emitir nota; pode ser sobrescrito por operacao (interestadual
+  // muda 5xxx -> 6xxx).
+  cfopPadrao       String?            @db.VarChar(4)
+
+  // Origem (Tabela A) — sempre presente no XML. Default NACIONAL cobre
+  // ~95% dos casos em papelaria/comercio brasileiro.
+  origem           OrigemMercadoria   @default(NACIONAL)
+
+  // Unidade tributavel — pode diferir da comercial (ex: vende em CX,
+  // tributa em UN). Vazio = usa o campo `unidade` na emissao.
+  unidadeTributavel String?           @db.VarChar(6)
+
+  // Regime do item — define qual dos dois campos (cstIcms/csosnIcms)
+  // sera populado no XML. Default SIMPLES_NACIONAL = cenario mais comum.
+  regimeTributario RegimeTributario   @default(SIMPLES_NACIONAL)
+
+  // CST do ICMS — 3 digitos (Tabela B SEFAZ). So em REGIME_NORMAL.
+  // Exemplos: "000" tributada integral, "020" com red. BC, "040" isenta,
+  // "060" ICMS ja retido por ST, "090" outras.
+  cstIcms          String?            @db.VarChar(3)
+
+  // CSOSN — 4 digitos (Tabela B Simples). So em SIMPLES_*.
+  // Exemplos: "101" com permissao de credito, "102" sem permissao,
+  // "500" ICMS cobrado por ST, "900" outras.
+  csosnIcms        String?            @db.VarChar(4)
+
+  // Aliquota efetiva do ICMS (%). No Simples costuma ficar zerada
+  // (recolhido no DAS); em regime normal varia 7-25% por UF/produto.
+  aliquotaIcms     Decimal?           @db.Decimal(5, 2)
+
+  // PIS / COFINS — CST de 2 digitos + aliquota. Obrigatorios em toda
+  // NF-e modelo 55 e NFC-e modelo 65. Em Simples geralmente "49"
+  // (outras operacoes de saida) com aliquota 0.
+  cstPis           String?            @db.VarChar(2)
+  aliquotaPis      Decimal?           @db.Decimal(7, 4)
+  cstCofins        String?            @db.VarChar(2)
+  aliquotaCofins   Decimal?           @db.Decimal(7, 4)
+
+  // cBenef — Codigo de Beneficio Fiscal (ate 10 chars). Obrigatorio
+  // quando o produto goza de algum beneficio (red. BC, diferimento,
+  // isencao especifica). Cada UF publica sua tabela.
+  codBeneficioFiscal String?          @db.VarChar(10)
+
+  // Pesos em kg (3 casas). Nao obrigatorios na NF-e, mas SEFAZ
+  // recomenda — usados em notas de transporte e auditoria fiscal.
+  pesoLiquido      Decimal?           @db.Decimal(10, 3)
+  pesoBruto        Decimal?           @db.Decimal(10, 3)
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

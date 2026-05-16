@@ -1,5 +1,10 @@
 import prisma from "../lib/prisma.js";
 import { aplicarLimite } from "../lib/planoLimites.js";
+import {
+  validarNcm, validarCest, validarCfopSaida, validarGtin,
+  validarTributacaoIcms, validarCst2Digitos,
+  ORIGENS_VALIDAS, REGIMES_VALIDOS,
+} from "../lib/validacoesFiscais.js";
 
 const norm = (v) => (v === undefined || v === null || v === "" ? null : v);
 
@@ -87,13 +92,22 @@ export async function criar(req, res, next) {
     const tipoItem = normalizarTipoItem(req.body.tipoItem);
     if (tipoItem === null) return res.status(400).json({ erro: "Tipo de item invalido (use PRODUTO ou SERVICO)" });
 
-    const precoVenda = toNumber(req.body.precoVenda);
-    if (precoVenda === null || Number.isNaN(precoVenda) || precoVenda < 0) {
-      return res.status(400).json({ erro: "Preco de venda invalido" });
-    }
+    let precoVenda = toNumber(req.body.precoVenda);
     const precoCusto = req.body.precoCusto !== undefined ? toNumber(req.body.precoCusto) : null;
     if (precoCusto !== null && (Number.isNaN(precoCusto) || precoCusto < 0)) {
       return res.status(400).json({ erro: "Preco de custo invalido" });
+    }
+
+    // ETAPA 14: calculo automatico custo + margem -> preco. Roda apenas
+    // quando o cliente NAO enviou precoVenda explicito e enviou custo + margem.
+    const margemLucro = toNumber(req.body.margemLucro);
+    if ((precoVenda === null || precoVenda === 0)
+        && precoCusto && precoCusto > 0
+        && margemLucro && margemLucro > 0 && margemLucro < 100) {
+      precoVenda = Number((precoCusto / (1 - margemLucro / 100)).toFixed(2));
+    }
+    if (precoVenda === null || Number.isNaN(precoVenda) || precoVenda < 0) {
+      return res.status(400).json({ erro: "Preco de venda invalido" });
     }
 
     // Servicos nao tem estoque: ignora qualquer valor enviado e zera os campos.
@@ -106,10 +120,38 @@ export async function criar(req, res, next) {
       if (Number.isNaN(estoqueMinimo) || estoqueMinimo < 0) return res.status(400).json({ erro: "Estoque minimo invalido" });
     }
 
+    // ETAPA 14: validacoes fiscais. Todos os campos sao opcionais no cadastro
+    // (viram obrigatorios na emissao da NF-e), mas se vier, tem que estar bem-formado.
+    const gtin = validarGtin(req.body.codigoBarras);
+    if (!gtin.ok) return res.status(400).json({ erro: gtin.erro });
+
+    const ncm = validarNcm(req.body.ncm);
+    if (!ncm.ok) return res.status(400).json({ erro: ncm.erro });
+    const cest = validarCest(req.body.cest);
+    if (!cest.ok) return res.status(400).json({ erro: cest.erro });
+    const cfop = validarCfopSaida(req.body.cfopPadrao);
+    if (!cfop.ok) return res.status(400).json({ erro: cfop.erro });
+
+    const origem = req.body.origem || "NACIONAL";
+    if (!ORIGENS_VALIDAS.has(origem)) return res.status(400).json({ erro: "Origem da mercadoria invalida" });
+
+    const regime = req.body.regimeTributario || "SIMPLES_NACIONAL";
+    if (!REGIMES_VALIDOS.has(regime)) return res.status(400).json({ erro: "Regime tributario invalido" });
+
+    const tribIcms = validarTributacaoIcms({
+      regime, cstIcms: req.body.cstIcms, csosnIcms: req.body.csosnIcms,
+    });
+    if (!tribIcms.ok) return res.status(400).json({ erro: tribIcms.erro });
+
+    const cstPis = validarCst2Digitos(req.body.cstPis, "PIS");
+    if (!cstPis.ok) return res.status(400).json({ erro: cstPis.erro });
+    const cstCofins = validarCst2Digitos(req.body.cstCofins, "COFINS");
+    if (!cstCofins.ok) return res.status(400).json({ erro: cstCofins.erro });
+
     const produto = await prisma.produto.create({
       data: {
         codigo,
-        codigoBarras: norm(req.body.codigoBarras),
+        codigoBarras: gtin.valor,
         referencia: norm(req.body.referencia),
         nome,
         descricao: norm(req.body.descricao),
@@ -121,6 +163,24 @@ export async function criar(req, res, next) {
         unidade: req.body.unidade ? String(req.body.unidade).trim().toUpperCase().slice(0, 6) : "UN",
         categoriaId: norm(req.body.categoriaId),
         fornecedorId: norm(req.body.fornecedorId),
+        // Bloco fiscal NF-e
+        ncm: ncm.valor,
+        cest: cest.valor,
+        cfopPadrao: cfop.valor,
+        origem,
+        unidadeTributavel: req.body.unidadeTributavel
+          ? String(req.body.unidadeTributavel).trim().toUpperCase().slice(0, 6) : null,
+        regimeTributario: regime,
+        cstIcms: regime === "REGIME_NORMAL" ? (norm(req.body.cstIcms) || null) : null,
+        csosnIcms: regime !== "REGIME_NORMAL" ? (norm(req.body.csosnIcms) || null) : null,
+        aliquotaIcms: toNumber(req.body.aliquotaIcms),
+        cstPis: cstPis.valor,
+        aliquotaPis: toNumber(req.body.aliquotaPis),
+        cstCofins: cstCofins.valor,
+        aliquotaCofins: toNumber(req.body.aliquotaCofins),
+        codBeneficioFiscal: norm(req.body.codBeneficioFiscal),
+        pesoLiquido: toNumber(req.body.pesoLiquido),
+        pesoBruto: toNumber(req.body.pesoBruto),
       },
       include: INCLUDE_REL,
     });
@@ -149,7 +209,7 @@ export async function atualizar(req, res, next) {
       data.nome = n;
     }
     if (req.body.descricao !== undefined) data.descricao = norm(req.body.descricao);
-    if (req.body.codigoBarras !== undefined) data.codigoBarras = norm(req.body.codigoBarras);
+    // codigoBarras eh validado mais abaixo no bloco fiscal (ETAPA 14, checksum GTIN).
     if (req.body.referencia !== undefined) data.referencia = norm(req.body.referencia);
     if (req.body.tipoItem !== undefined) {
       const t = normalizarTipoItem(req.body.tipoItem);
@@ -172,6 +232,15 @@ export async function atualizar(req, res, next) {
       if (v !== null && (Number.isNaN(v) || v < 0)) return res.status(400).json({ erro: "Preco de custo invalido" });
       data.precoCusto = v;
     }
+    // ETAPA 14: calculo auto preco. So aplica se o cliente enviou margemLucro
+    // explicito sem mandar precoVenda (caso contrario o que ele digitou prevalece).
+    if (req.body.margemLucro !== undefined && req.body.precoVenda === undefined) {
+      const m = toNumber(req.body.margemLucro);
+      const c = data.precoCusto ?? (req.body.precoCusto !== undefined ? toNumber(req.body.precoCusto) : null);
+      if (m && m > 0 && m < 100 && c && c > 0) {
+        data.precoVenda = Number((c / (1 - m / 100)).toFixed(2));
+      }
+    }
     // Estoque so e aceito quando o item NAO esta sendo marcado como SERVICO
     // (campo ja zerado acima nesse caso).
     if (req.body.estoque !== undefined && data.tipoItem !== "SERVICO") {
@@ -190,6 +259,85 @@ export async function atualizar(req, res, next) {
     if (req.body.categoriaId !== undefined) data.categoriaId = norm(req.body.categoriaId);
     if (req.body.fornecedorId !== undefined) data.fornecedorId = norm(req.body.fornecedorId);
     if (req.body.ativo !== undefined) data.ativo = !!req.body.ativo;
+
+    // ETAPA 14: bloco fiscal — todos opcionais, valida so quando enviado.
+    if (req.body.codigoBarras !== undefined) {
+      const gtin = validarGtin(req.body.codigoBarras);
+      if (!gtin.ok) return res.status(400).json({ erro: gtin.erro });
+      data.codigoBarras = gtin.valor;
+    }
+    if (req.body.ncm !== undefined) {
+      const r = validarNcm(req.body.ncm);
+      if (!r.ok) return res.status(400).json({ erro: r.erro });
+      data.ncm = r.valor;
+    }
+    if (req.body.cest !== undefined) {
+      const r = validarCest(req.body.cest);
+      if (!r.ok) return res.status(400).json({ erro: r.erro });
+      data.cest = r.valor;
+    }
+    if (req.body.cfopPadrao !== undefined) {
+      const r = validarCfopSaida(req.body.cfopPadrao);
+      if (!r.ok) return res.status(400).json({ erro: r.erro });
+      data.cfopPadrao = r.valor;
+    }
+    if (req.body.origem !== undefined) {
+      if (!ORIGENS_VALIDAS.has(req.body.origem)) {
+        return res.status(400).json({ erro: "Origem da mercadoria invalida" });
+      }
+      data.origem = req.body.origem;
+    }
+    if (req.body.unidadeTributavel !== undefined) {
+      data.unidadeTributavel = req.body.unidadeTributavel
+        ? String(req.body.unidadeTributavel).trim().toUpperCase().slice(0, 6) : null;
+    }
+
+    // Regime + CST/CSOSN sao validados em conjunto porque a coerencia
+    // depende dos tres. Recuperamos o regime atual do banco se nao veio
+    // no body — necessario pra saber se cstIcms ou csosnIcms eh valido.
+    const regimeAtual = req.body.regimeTributario !== undefined
+      ? req.body.regimeTributario
+      : null;
+    if (regimeAtual !== null && !REGIMES_VALIDOS.has(regimeAtual)) {
+      return res.status(400).json({ erro: "Regime tributario invalido" });
+    }
+    if (regimeAtual !== null || req.body.cstIcms !== undefined || req.body.csosnIcms !== undefined) {
+      const atual = regimeAtual ?? await prisma.produto
+        .findUnique({ where: { id: req.params.id }, select: { regimeTributario: true } })
+        .then(p => p?.regimeTributario || "SIMPLES_NACIONAL");
+      const tribIcms = validarTributacaoIcms({
+        regime: atual,
+        cstIcms: req.body.cstIcms,
+        csosnIcms: req.body.csosnIcms,
+      });
+      if (!tribIcms.ok) return res.status(400).json({ erro: tribIcms.erro });
+      if (regimeAtual !== null) data.regimeTributario = regimeAtual;
+      // Mutuamente exclusivos — zera o campo que nao se aplica ao regime.
+      if (atual === "REGIME_NORMAL") {
+        if (req.body.cstIcms !== undefined) data.cstIcms = norm(req.body.cstIcms);
+        data.csosnIcms = null;
+      } else {
+        if (req.body.csosnIcms !== undefined) data.csosnIcms = norm(req.body.csosnIcms);
+        data.cstIcms = null;
+      }
+    }
+
+    if (req.body.aliquotaIcms !== undefined) data.aliquotaIcms = toNumber(req.body.aliquotaIcms);
+    if (req.body.cstPis !== undefined) {
+      const r = validarCst2Digitos(req.body.cstPis, "PIS");
+      if (!r.ok) return res.status(400).json({ erro: r.erro });
+      data.cstPis = r.valor;
+    }
+    if (req.body.aliquotaPis !== undefined) data.aliquotaPis = toNumber(req.body.aliquotaPis);
+    if (req.body.cstCofins !== undefined) {
+      const r = validarCst2Digitos(req.body.cstCofins, "COFINS");
+      if (!r.ok) return res.status(400).json({ erro: r.erro });
+      data.cstCofins = r.valor;
+    }
+    if (req.body.aliquotaCofins !== undefined) data.aliquotaCofins = toNumber(req.body.aliquotaCofins);
+    if (req.body.codBeneficioFiscal !== undefined) data.codBeneficioFiscal = norm(req.body.codBeneficioFiscal);
+    if (req.body.pesoLiquido !== undefined) data.pesoLiquido = toNumber(req.body.pesoLiquido);
+    if (req.body.pesoBruto !== undefined) data.pesoBruto = toNumber(req.body.pesoBruto);
 
     const produto = await prisma.produto.update({
       where: { id: req.params.id },

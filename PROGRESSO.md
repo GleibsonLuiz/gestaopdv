@@ -66,7 +66,7 @@ d:/gestao-pdv/
 
 ---
 
-## Etapas (13 totais)
+## Etapas (14 totais)
 
 | # | Etapa | Status | Notas |
 |---|-------|--------|-------|
@@ -83,6 +83,7 @@ d:/gestao-pdv/
 | 11 | Financeiro | ✅ Concluído | ContaPagar/ContaReceber: CRUD + pagar/receber/reabrir/cancelar + KPIs |
 | 12 | Notificações e Alertas | ✅ Concluído | Sino no header + drawer com alertas (estoque + contas), polling 60s |
 | 13 | Relatórios + Exportação PDF | ✅ Concluído | 4 relatórios (vendas/compras/financeiro/estoque) com export PDF (jsPDF + autotable) |
+| 14 | Tributação fiscal NF-e ready | ✅ Concluído | Produto estendido com NCM/CEST/CFOP/Origem/CST/CSOSN/PIS/COFINS/cBenef + form em 3 abas + validações fiscais (NCM, CFOP, GTIN com checksum) |
 
 ### ~~Lacuna conhecida na Etapa 9 (Compras)~~ — ✅ Resolvida
 
@@ -1164,7 +1165,9 @@ GET /funcionarios → 20 registros
 
 ## Onde paramos
 
-**🎉 Projeto completo — 13/13 etapas MVP + 10 melhorias pós-MVP + 10 prioridades CRM + 9/9 etapas Multi-Tenant + 13/13 etapas Admin Master entregues.**
+**🎉 Projeto completo — 14/14 etapas MVP + 10 melhorias pós-MVP + 10 prioridades CRM + 9/9 etapas Multi-Tenant + 13/13 etapas Admin Master entregues.**
+
+Em 2026-05-16, **ETAPA 14 — Tributação fiscal NF-e ready**: extensão do cadastro de produtos para conformidade SEFAZ. Bloco fiscal completo (NCM, CEST, CFOP, Origem, CST/CSOSN, PIS/COFINS, cBenef, pesos) no model `Produto` + 2 enums novos (`OrigemMercadoria`, `RegimeTributario`). Nova lib `backend/src/lib/validacoesFiscais.js` com validação de NCM (8 dígitos), CEST (7), CFOP saída (5/6/7+3), GTIN com checksum Módulo 10 (rejeição SEFAZ 833) e coerência regime×CST×CSOSN. Form do produto refatorado em **3 abas** via novo componente `<Abas>` — Dados Gerais / Classificação / Tributação. Cálculo automático preço de venda a partir de custo + margem no controller. Seed dos 20 produtos de papelaria atualizado com NCMs reais da TIPI (cadernos 4820.20.00, canetas 9608.10.00, etc) + defaults Simples Nacional (CSOSN 102, CST 49). Pronto para emissão NF-e/NFC-e na próxima etapa.
 
 Em 2026-05-16, **ETAPA 13 Admin Master — Limites por plano com enforcement**: fechamento da onda admin-master. Nova lib `backend/src/lib/planoLimites.js` com matriz de limites por plano (FREE/TRIAL/STARTER/PRO/ENTERPRISE) e helpers `aplicarLimite`/`obterUsoELimites`. Guards adicionados em 4 controllers (`clientes`, `produtos`, `usuarios`, `vendasMes`) que respondem 402 com payload `{recurso, atual, limite, plano, limiteAtingido}` quando o tenant excede o plano. `GET /empresa` agora retorna snapshot completo (`plano`, `expiraEm`, `limites`, `uso`) consumido pelo novo `<BlocoPlano>` em [src/Empresa.jsx](src/Empresa.jsx) — badge colorido por plano, aviso de expiração (verde/amarelo/vermelho), grid 4×1 de barras de progresso por recurso. Smoke-test confirmou 402 contra tenant DEFAULT (já estourado em `usuarios` 4/3 e `vendasMes` 357/200).
 
@@ -1185,8 +1188,41 @@ Em 2026-05-14, **CRM Profissional — 10 prioridades**: maior salto de produto d
 
 Estado em 2026-05-14: CRM completo, `vite build` OK em todos os 10 commits da sequência.
 
+### Sessão — 2026-05-16 (ETAPA 14: Tributação NF-e ready)
+
+Extensão do cadastro de produtos para conformidade fiscal brasileira. O `Produto` ganha bloco fiscal completo preparado para emissão futura de **NF-e (modelo 55)** e **NFC-e (modelo 65)**.
+
+**Schema** ([backend/prisma/schema.prisma](backend/prisma/schema.prisma)):
+- 2 enums novos: `OrigemMercadoria` (Tabela A da NT 2011/004 — NACIONAL ... NACIONAL_IMP_SUP_70) e `RegimeTributario` (SIMPLES_NACIONAL / SIMPLES_EXCESSO_SUBLIMITE / REGIME_NORMAL).
+- 16 campos novos no `Produto`: `ncm` (8), `cest` (7), `cfopPadrao` (4), `origem`, `unidadeTributavel`, `regimeTributario`, `cstIcms` (3, exclusivo c/ csosnIcms), `csosnIcms` (4), `aliquotaIcms`, `cstPis` (2), `aliquotaPis`, `cstCofins` (2), `aliquotaCofins`, `codBeneficioFiscal` (cBenef), `pesoLiquido`, `pesoBruto`.
+- Todos opcionais no cadastro — viram obrigatórios na emissão (próxima etapa).
+- Migration aplicada via `prisma db push` (padrão do projeto, sem migration files).
+
+**Backend** ([backend/src/lib/validacoesFiscais.js](backend/src/lib/validacoesFiscais.js) novo):
+- `validarNcm` — 8 dígitos numéricos (rejeição 778 da SEFAZ).
+- `validarCest` — 7 dígitos, opcional.
+- `validarCfopSaida` — 4 dígitos começando em 5/6/7.
+- `validarGtin` — 8/12/13/14 dígitos com checksum Módulo 10 pesos 3/1 (rejeição 833). Aceita literal "SEM GTIN" para itens sem código.
+- `validarTributacaoIcms` — coerência regime×CST×CSOSN (mutuamente exclusivos).
+- `validarCst2Digitos` — PIS/COFINS.
+
+**Controller** ([backend/src/controllers/produtoController.js](backend/src/controllers/produtoController.js)):
+- `criar` valida bloco fiscal completo + GTIN com checksum + **cálculo automático preço × margem** (se vier `precoCusto` + `margemLucro` sem `precoVenda` explícito).
+- `atualizar` aplica validação incremental — só toca campos enviados. Zera o campo mutuamente exclusivo ao trocar regime (REGIME_NORMAL ↔ SIMPLES).
+
+**Frontend** ([src/Produtos.jsx](src/Produtos.jsx) + [src/components/AbasFormulario.jsx](src/components/AbasFormulario.jsx) novo):
+- Modal de cadastro refatorado em **3 abas**: 📋 Dados Gerais (identificação + imagem + preços/estoque), 🏷️ Classificação (categoria + fornecedor), 📊 Tributação / NF-e (todos os campos fiscais).
+- Campo CST/CSOSN troca dinamicamente conforme o regime tributário escolhido.
+- Componente `<Abas>` genérico em paleta C (sem Tailwind, consistente com o padrão).
+
+**Seed** ([backend/prisma/seed.js](backend/prisma/seed.js)):
+- Adicionados NCMs reais da TIPI nos 20 produtos de papelaria: cadernos 4820.20.00, canetas 9608.10.00, lápis 9609.10.00, borracha 4016.92.00, papel sulfite 4802.56.99, tesoura 8213.00.00, cola 3506.10.10, mochila 4202.92.00, calculadora 8470.10.00, etc.
+- Default fiscal: Simples Nacional + CSOSN 102 + CST 49 (PIS/COFINS) + alíquota zero (recolhido no DAS).
+- ⚠ Seed completo não foi executado nesta sessão por **bug pré-existente** em `seedAdmin`/`seedFuncionarios` (`where: { email }` sem `tenantId_email` após a migração multi-tenant). Os blocos de produto/serviço fiscais estão corretos; só não puderam ser validados via seed end-to-end. Cadastro/edição via UI funciona normalmente.
+
 ### Lacunas conhecidas (polimento opcional)
 
+- **Seed multi-tenant:** `User.upsert` em `seedAdmin` e `seedFuncionarios` ainda usam `where: { email }`, incompatível com o compound unique `[tenantId, email]` da migração multi-tenant. Fix: passar `tenantId_email: { tenantId, email }`.
 - **Etapa 13 (Relatórios):** sem filtro por cliente no relatório de vendas (campo aceito no backend, mas não exposto no UI).
 - **Permissões:** quando um vendedor sem `DASHBOARD` é redirecionado pelo `useEffect`, há um flicker breve (mostra a tela errada por ~1 frame). Fix opcional: usar `podeVer(tela)` direto na renderização para evitar render inicial.
 - **Anexos do Financeiro:** ao deletar uma conta (com `prisma.contaPagar.delete`), o cascade do DB remove o registro `Anexo` mas o arquivo físico em `backend/uploads/` fica órfão. Adicionar limpeza do disco antes do delete da conta.

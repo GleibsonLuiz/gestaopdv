@@ -3,8 +3,12 @@ import { authRequired, requireSuperAdmin } from "../middlewares/auth.js";
 import {
   listarEmpresas, estatisticasGlobais, criarEmpresa, alterarStatus,
   resetarEmpresa, listarUsers, alterarSuperAdmin, impersonate,
-  logsGlobal, metricas,
+  logsGlobal, metricas, alterarPlano, exportarEmpresa,
 } from "../controllers/adminMasterController.js";
+import {
+  criar as criarNotificacao, listarTodas as listarTodasNotificacoes,
+  alterarAtiva as alterarAtivaNotificacao, deletar as deletarNotificacao,
+} from "../controllers/notificacaoController.js";
 
 const router = Router();
 
@@ -24,5 +28,13 @@ router.patch("/users/:id/super-admin", alterarSuperAdmin);
 router.post("/impersonate/:userId", impersonate);
 router.get("/logs", logsGlobal);
 router.get("/metricas", metricas);
+
+// ETAPA 12 — plano + notificacoes + export
+router.patch("/empresas/:id/plano", alterarPlano);
+router.get("/empresas/:id/export", exportarEmpresa);
+router.get("/notificacoes", listarTodasNotificacoes);
+router.post("/notificacoes", criarNotificacao);
+router.patch("/notificacoes/:id", alterarAtivaNotificacao);
+router.delete("/notificacoes/:id", deletarNotificacao);
 
 export default router;

@@ -20,6 +20,7 @@ export async function login(req, res, next) {
           select: {
             id: true, nome: true, cnpj: true, ativo: true,
             motivoSuspensao: true, suspensaEm: true,
+            plano: true, expiraEm: true,
           },
         },
       },
@@ -59,6 +60,24 @@ export async function login(req, res, next) {
           : "Conta indisponivel. Contate o suporte.",
         motivoSuspensao: motivo,
         suspensaEm: user.tenant?.suspensaEm || null,
+      });
+    }
+
+    // ETAPA 12: bloqueio por plano expirado. Super-admin pode renovar via
+    // /admin-master. Mensagem clara pra cliente saber o que precisa.
+    if (user.tenant.expiraEm && new Date(user.tenant.expiraEm) < new Date()) {
+      const data = new Date(user.tenant.expiraEm).toLocaleDateString("pt-BR");
+      registrarEvento({
+        acao: "LOGIN_FALHO", modulo: "AUTH", sucesso: false,
+        usuarioId: user.id, usuarioNome: user.nome, usuarioEmail: user.email,
+        mensagem: `Plano ${user.tenant.plano} expirado em ${data}`,
+        req, tenantId: user.tenantId,
+      });
+      return res.status(403).json({
+        erro: `Plano ${user.tenant.plano} expirado em ${data}. Contate o suporte para renovar.`,
+        planoExpirado: true,
+        plano: user.tenant.plano,
+        expiraEm: user.tenant.expiraEm,
       });
     }
 

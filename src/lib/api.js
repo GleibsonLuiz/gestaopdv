@@ -176,6 +176,25 @@ export const api = {
   },
   adminMasterMetricas: (diasAtras = 30) =>
     request(`/admin-master/metricas?diasAtras=${diasAtras}`),
+
+  // ETAPA 12
+  adminMasterAlterarPlano: (id, dados) =>
+    request(`/admin-master/empresas/${id}/plano`, { method: "PATCH", body: dados }),
+  adminMasterExportEmpresaUrl: (id) =>
+    `${BASE_URL}/admin-master/empresas/${id}/export`,
+  adminMasterListarNotificacoes: () =>
+    request("/admin-master/notificacoes"),
+  adminMasterCriarNotificacao: (dados) =>
+    request("/admin-master/notificacoes", { method: "POST", body: dados }),
+  adminMasterAlterarAtivaNotificacao: (id, ativa) =>
+    request(`/admin-master/notificacoes/${id}`, { method: "PATCH", body: { ativa } }),
+  adminMasterDeletarNotificacao: (id) =>
+    request(`/admin-master/notificacoes/${id}`, { method: "DELETE" }),
+
+  // Notificacoes do user logado (banner global)
+  notificacoesMinhas: () => request("/notificacoes"),
+  notificacoesMarcarLida: (id) =>
+    request(`/notificacoes/${id}/marcar-lida`, { method: "POST" }),
   trocarSenha: (senhaAtual, senhaNova) =>
     request("/auth/senha", { method: "PUT", body: { senhaAtual, senhaNova } }),
 

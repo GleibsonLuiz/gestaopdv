@@ -174,6 +174,29 @@ enum StatusClienteFunil {
   PERDIDO
 }
 
+// ETAPA 12: planos comerciais. Cada um pode ter limites (decididos no
+// codigo, nao no banco — facil ajustar sem migration).
+//   TRIAL      - 14 dias, todas features liberadas
+//   FREE       - permanente, limitado (ex: max 50 clientes, 100 produtos)
+//   STARTER    - pago, limite expandido
+//   PRO        - pago, sem limites
+//   ENTERPRISE - customizado
+enum Plano {
+  TRIAL
+  FREE
+  STARTER
+  PRO
+  ENTERPRISE
+}
+
+// ETAPA 12: tipo da notificacao define cor e icone no banner do usuario.
+enum TipoNotificacao {
+  INFO
+  AVISO
+  MANUTENCAO
+  NOVIDADE
+}
+
 // ============ MULTI-TENANT ============
 //
 // Empresa = tenant. Cada registro de negocio (cliente, produto, venda, etc)
@@ -194,6 +217,13 @@ model Empresa {
   // setado pelo super-admin no momento do PATCH /admin-master/empresas/:id/status.
   motivoSuspensao String?
   suspensaEm      DateTime?
+  // ETAPA 12: plano comercial. TRIAL e o default (14 dias gratis). expiraEm
+  // controla validade do plano atual — quando vence, login retorna 403 com
+  // motivo "Plano expirado em XX/XX/XXXX". Super-admin renova via tela
+  // /admin-master.
+  plano       Plano    @default(TRIAL)
+  expiraEm    DateTime?
+  observacoesPlano String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -294,6 +324,8 @@ model User {
   historicoOportunidades   HistoricoOportunidade[]
   regrasAutomacao          RegraAutomacao[]        @relation("RegraAutomacaoResponsavel")
   logsAuditoria            LogAuditoria[]
+  notificacoesCriadas      Notificacao[]           @relation("NotificacaoCriador")
+  notificacoesLidas        NotificacaoLida[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -1255,4 +1287,47 @@ model LogAuditoria {
   @@index([createdAt])
   @@index([tenantId])
   @@map("logs_auditoria")
+}
+
+// ============ ETAPA 12 — NOTIFICACOES BROADCAST ============
+//
+// Mensagens enviadas pelo super-admin para TODOS os tenants (ex: aviso de
+// manutencao, anuncio de feature). Nao tem tenantId — sao globais. Cada
+// user marca individualmente como "lida" via NotificacaoLida (junction).
+//
+// O frontend mostra como banner no topo do app principal, com botao "X"
+// que chama POST /notificacoes/:id/marcar-lida.
+model Notificacao {
+  id        String          @id @default(uuid())
+  titulo    String
+  mensagem  String          @db.Text
+  tipo      TipoNotificacao @default(INFO)
+  // ativa=false esconde dos users mesmo que nao tenham marcado como lida
+  ativa     Boolean         @default(true)
+  // Quando preenchido, notificacao some automaticamente apos a data
+  expiraEm  DateTime?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  criadoPorId String
+  criadoPor   User   @relation("NotificacaoCriador", fields: [criadoPorId], references: [id])
+
+  lidas NotificacaoLida[]
+
+  @@index([ativa, createdAt(sort: Desc)])
+  @@map("notificacoes")
+}
+
+model NotificacaoLida {
+  notificacaoId String
+  notificacao   Notificacao @relation(fields: [notificacaoId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  lidaEm DateTime @default(now())
+
+  @@id([notificacaoId, userId])
+  @@index([userId])
+  @@map("notificacoes_lidas")
 }

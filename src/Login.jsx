@@ -114,11 +114,13 @@ export default function Login({ onSuccess }) {
       onSuccess?.(user);
     } catch (e2) {
       setStatus('error');
-      // ETAPA 11: se o backend retornou motivoSuspensao (empresa desativada
-      // pelo super-admin), mostramos o motivo destacado.
+      // ETAPA 11: motivoSuspensao (empresa desativada).
+      // ETAPA 12: planoExpirado (plano vencido).
       const motivo = e2?.data?.motivoSuspensao;
       if (motivo) {
         setErr(`⏸ Conta suspensa: ${motivo}`);
+      } else if (e2?.data?.planoExpirado) {
+        setErr(`🎫 ${e2.message}`);
       } else {
         setErr(e2?.message || 'Nao conseguimos validar essas credenciais.');
       }

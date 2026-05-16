@@ -494,6 +494,152 @@ export async function logsGlobal(req, res, next) {
   }
 }
 
+// ============ ETAPA 12 ============
+
+const PLANOS = new Set(["TRIAL", "FREE", "STARTER", "PRO", "ENTERPRISE"]);
+
+// PATCH /admin-master/empresas/:id/plano — altera plano + expiracao.
+export async function alterarPlano(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { plano, expiraEm, observacoes } = req.body || {};
+    if (!plano || !PLANOS.has(String(plano).toUpperCase())) {
+      return res.status(400).json({
+        erro: `Plano invalido. Use: ${[...PLANOS].join(", ")}`,
+      });
+    }
+    let expira = null;
+    if (expiraEm) {
+      const d = new Date(expiraEm);
+      if (isNaN(d.getTime())) {
+        return res.status(400).json({ erro: "expiraEm invalido (use ISO date)" });
+      }
+      expira = d;
+    }
+    const obs = observacoes ? String(observacoes).trim().slice(0, 500) : null;
+
+    const atualizada = await prismaRaw.empresa.update({
+      where: { id },
+      data: {
+        plano: String(plano).toUpperCase(),
+        expiraEm: expira,
+        observacoesPlano: obs,
+      },
+    }).catch(err => {
+      if (err.code === "P2025") return null;
+      throw err;
+    });
+    if (!atualizada) return res.status(404).json({ erro: "Empresa nao encontrada" });
+
+    registrarEvento({
+      acao: "PLANO_ALTERADO", modulo: "ADMIN_MASTER", sucesso: true,
+      usuarioId: req.user.sub, usuarioNome: req.user.nome,
+      tenantId: id,
+      mensagem: `Plano alterado para ${atualizada.plano}${expira ? `, expira em ${expira.toISOString().slice(0, 10)}` : ""}`,
+      req,
+    });
+
+    res.json({
+      ok: true,
+      empresa: {
+        id: atualizada.id,
+        plano: atualizada.plano,
+        expiraEm: atualizada.expiraEm,
+        observacoesPlano: atualizada.observacoesPlano,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /admin-master/empresas/:id/export — dump JSON com todos os dados
+// da empresa. Util para portabilidade (LGPD) ou backup manual.
+export async function exportarEmpresa(req, res, next) {
+  try {
+    const { id } = req.params;
+    const empresa = await prismaRaw.empresa.findUnique({ where: { id } });
+    if (!empresa) return res.status(404).json({ erro: "Empresa nao encontrada" });
+
+    // Coleta todos os dados do tenant em paralelo. prismaRaw evita filtro
+    // automatico do extension (que filtraria pelo tenant do super-admin).
+    const t = { tenantId: id };
+    const [
+      users, configuracaoEmpresa, configuracoesComissao,
+      configuracaoFidelidade, formasPagamentoCustom,
+      clientes, fornecedores, categorias, produtos,
+      vendas, compras, caixas,
+      orcamentos, oportunidades, tarefas, interacoes,
+      tags, contatos, pesquisasNps,
+      templatesMensagem, regrasAutomacao,
+      contasPagar, contasReceber,
+    ] = await Promise.all([
+      prismaRaw.user.findMany({
+        where: t,
+        select: {
+          id: true, nome: true, email: true, role: true, ativo: true,
+          permissoes: true, superAdmin: true, createdAt: true,
+          // NAO inclui senha (hash) — fora do export por seguranca
+        },
+      }),
+      prismaRaw.configuracaoEmpresa.findFirst({ where: t }),
+      prismaRaw.configuracaoComissao.findMany({ where: t }),
+      prismaRaw.configuracaoFidelidade.findFirst({ where: t }),
+      prismaRaw.formaPagamentoCustom.findMany({ where: t }),
+      prismaRaw.cliente.findMany({ where: t, include: { contatos: true, tags: true } }),
+      prismaRaw.fornecedor.findMany({ where: t }),
+      prismaRaw.categoria.findMany({ where: t }),
+      prismaRaw.produto.findMany({ where: t }),
+      prismaRaw.venda.findMany({ where: t, include: { itens: true } }),
+      prismaRaw.compra.findMany({ where: t, include: { itens: true } }),
+      prismaRaw.caixa.findMany({ where: t, include: { movimentacoes: true } }),
+      prismaRaw.orcamento.findMany({ where: t, include: { itens: true } }),
+      prismaRaw.oportunidade.findMany({ where: t, include: { historico: true } }),
+      prismaRaw.tarefa.findMany({ where: t }),
+      prismaRaw.interacao.findMany({ where: t }),
+      prismaRaw.tag.findMany({ where: t }),
+      prismaRaw.contato.findMany({ where: t }),
+      prismaRaw.pesquisaNps.findMany({ where: t }),
+      prismaRaw.templateMensagem.findMany({ where: t }),
+      prismaRaw.regraAutomacao.findMany({ where: t }),
+      prismaRaw.contaPagar.findMany({ where: t }),
+      prismaRaw.contaReceber.findMany({ where: t }),
+    ]);
+
+    registrarEvento({
+      acao: "EMPRESA_EXPORTADA", modulo: "ADMIN_MASTER", sucesso: true,
+      usuarioId: req.user.sub, usuarioNome: req.user.nome,
+      tenantId: id,
+      mensagem: `Export JSON gerado para "${empresa.nome}"`,
+      req,
+    });
+
+    const filename = `export-${empresa.nome.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${new Date().toISOString().slice(0, 10)}.json`;
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.json({
+      versao: 1,
+      geradoEm: new Date().toISOString(),
+      empresa,
+      usuarios: users,
+      configuracaoEmpresa,
+      configuracoesComissao,
+      configuracaoFidelidade,
+      formasPagamentoCustom,
+      cadastros: { clientes, fornecedores, categorias, produtos },
+      operacional: { vendas, compras, caixas },
+      crm: {
+        orcamentos, oportunidades, tarefas, interacoes,
+        tags, contatos, pesquisasNps,
+        templatesMensagem, regrasAutomacao,
+      },
+      financeiro: { contasPagar, contasReceber },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // GET /admin-master/metricas — uso e engajamento por empresa.
 export async function metricas(req, res, next) {
   try {

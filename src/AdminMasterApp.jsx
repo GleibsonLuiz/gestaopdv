@@ -167,9 +167,18 @@ function Login({ onSuccess }) {
 const TABS = [
   { id: "empresas", label: "🏢 Empresas", cor: C.accent },
   { id: "users", label: "👥 Usuários", cor: C.purple },
+  { id: "notificacoes", label: "📢 Notificações", cor: C.red },
   { id: "metricas", label: "📈 Métricas", cor: C.green },
   { id: "logs", label: "📜 Logs", cor: C.yellow },
 ];
+
+const PLANOS_INFO = {
+  TRIAL: { cor: "#f59e0b", icone: "🎫", label: "Trial" },
+  FREE: { cor: C.muted, icone: "🆓", label: "Free" },
+  STARTER: { cor: C.accent, icone: "🚀", label: "Starter" },
+  PRO: { cor: C.purple, icone: "💎", label: "Pro" },
+  ENTERPRISE: { cor: C.green, icone: "🏆", label: "Enterprise" },
+};
 
 function Painel({ user, onSair }) {
   const [tab, setTab] = useState("empresas");
@@ -258,6 +267,7 @@ function Painel({ user, onSair }) {
 
       {tab === "empresas" && <AbaEmpresas onMudou={carregarKpis} />}
       {tab === "users" && <AbaUsers />}
+      {tab === "notificacoes" && <AbaNotificacoes />}
       {tab === "metricas" && <AbaMetricas />}
       {tab === "logs" && <AbaLogs />}
     </Tela>
@@ -271,6 +281,7 @@ function AbaEmpresas({ onMudou }) {
   const [erro, setErro] = useState("");
   const [modalCriar, setModalCriar] = useState(false);
   const [modalSuspender, setModalSuspender] = useState(null); // empresa
+  const [modalPlano, setModalPlano] = useState(null); // empresa
   const [resetando, setResetando] = useState(null); // id
 
   async function carregar() {
@@ -371,7 +382,7 @@ function AbaEmpresas({ onMudou }) {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
                 <tr style={{ background: C.surface }}>
-                  {["Empresa", "CNPJ", "Status", "Users", "Vendas", "Faturamento", "Criada", "Ações"].map((h, i) => (
+                  {["Empresa", "Plano", "Status", "Users", "Vendas", "Faturamento", "Criada", "Ações"].map((h, i) => (
                     <th key={i} style={{
                       padding: "9px 10px", textAlign: i >= 3 && i <= 5 ? "right" : "left",
                       color: C.muted, fontSize: 10, fontWeight: 700,
@@ -382,41 +393,72 @@ function AbaEmpresas({ onMudou }) {
                 </tr>
               </thead>
               <tbody>
-                {empresas.map(e => (
-                  <tr key={e.id} style={{ borderBottom: `1px solid ${C.border}55` }}>
-                    <td style={{ padding: "9px 10px", color: C.text, fontWeight: 600 }}>{e.nome}</td>
-                    <td style={{ padding: "9px 10px", color: C.muted, fontFamily: "monospace", fontSize: 11 }}>
-                      {e.cnpj ? mascararCnpj(e.cnpj) : "—"}
-                    </td>
-                    <td style={{ padding: "9px 10px" }}>
-                      <span style={{
-                        display: "inline-block", padding: "2px 8px", borderRadius: 10,
-                        fontSize: 10, fontWeight: 700,
-                        background: e.ativo ? C.green + "33" : C.red + "33",
-                        color: e.ativo ? C.green : C.red,
-                      }}>{e.ativo ? "● ATIVA" : "● SUSPENSA"}</span>
-                    </td>
-                    <td style={{ padding: "9px 10px", textAlign: "right", color: C.text }}>{fmtNum(e.estatisticas.usuarios)}</td>
-                    <td style={{ padding: "9px 10px", textAlign: "right", color: C.text }}>{fmtNum(e.estatisticas.vendas)}</td>
-                    <td style={{ padding: "9px 10px", textAlign: "right", color: C.green, fontWeight: 600 }}>
-                      {fmtBRL(e.estatisticas.faturamentoTotal)}
-                    </td>
-                    <td style={{ padding: "9px 10px", color: C.muted }}>{fmtData(e.criadaEm)}</td>
-                    <td style={{ padding: "9px 10px" }}>
-                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                        <button onClick={() => impersonar(e)} title="Entrar como admin" style={btnAcao(C.accent)}>👤</button>
-                        <button onClick={() => resetar(e)} disabled={resetando === e.id} title="Reset total" style={btnAcao(C.yellow)}>
-                          {resetando === e.id ? "..." : "🗑"}
-                        </button>
-                        {e.ativo ? (
-                          <button onClick={() => setModalSuspender(e)} title="Suspender" style={btnAcao(C.red)}>⏸</button>
-                        ) : (
-                          <button onClick={() => ativar(e)} title="Reativar" style={btnAcao(C.green)}>▶</button>
+                {empresas.map(e => {
+                  const planoInfo = PLANOS_INFO[e.plano] || PLANOS_INFO.TRIAL;
+                  const diasParaExpirar = e.expiraEm
+                    ? Math.ceil((new Date(e.expiraEm).getTime() - Date.now()) / 86400000)
+                    : null;
+                  const expirou = diasParaExpirar !== null && diasParaExpirar < 0;
+                  const expirando = diasParaExpirar !== null && diasParaExpirar >= 0 && diasParaExpirar <= 7;
+                  return (
+                    <tr key={e.id} style={{ borderBottom: `1px solid ${C.border}55` }}>
+                      <td style={{ padding: "9px 10px", color: C.text, fontWeight: 600 }}>
+                        {e.nome}
+                        <div style={{ color: C.muted, fontSize: 10, fontFamily: "monospace", marginTop: 1 }}>
+                          {e.cnpj ? mascararCnpj(e.cnpj) : "Sem CNPJ"}
+                        </div>
+                      </td>
+                      <td style={{ padding: "9px 10px" }}>
+                        <span style={{
+                          display: "inline-block", padding: "2px 8px", borderRadius: 10,
+                          fontSize: 10, fontWeight: 700,
+                          background: planoInfo.cor + "33",
+                          color: planoInfo.cor,
+                        }}>{planoInfo.icone} {planoInfo.label}</span>
+                        {diasParaExpirar !== null && (
+                          <div style={{
+                            fontSize: 10, marginTop: 2,
+                            color: expirou ? C.red : (expirando ? C.yellow : C.muted),
+                            fontWeight: expirou || expirando ? 700 : 500,
+                          }}>
+                            {expirou ? `Expirou ${-diasParaExpirar}d atrás` : `${diasParaExpirar}d restantes`}
+                          </div>
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td style={{ padding: "9px 10px" }}>
+                        <span style={{
+                          display: "inline-block", padding: "2px 8px", borderRadius: 10,
+                          fontSize: 10, fontWeight: 700,
+                          background: e.ativo ? C.green + "33" : C.red + "33",
+                          color: e.ativo ? C.green : C.red,
+                        }}>{e.ativo ? "● ATIVA" : "● SUSPENSA"}</span>
+                      </td>
+                      <td style={{ padding: "9px 10px", textAlign: "right", color: C.text }}>{fmtNum(e.estatisticas.usuarios)}</td>
+                      <td style={{ padding: "9px 10px", textAlign: "right", color: C.text }}>{fmtNum(e.estatisticas.vendas)}</td>
+                      <td style={{ padding: "9px 10px", textAlign: "right", color: C.green, fontWeight: 600 }}>
+                        {fmtBRL(e.estatisticas.faturamentoTotal)}
+                      </td>
+                      <td style={{ padding: "9px 10px", color: C.muted }}>{fmtData(e.criadaEm)}</td>
+                      <td style={{ padding: "9px 10px" }}>
+                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                          <button onClick={() => impersonar(e)} title="Entrar como admin" style={btnAcao(C.accent)}>👤</button>
+                          <button onClick={() => setModalPlano(e)} title="Alterar plano" style={btnAcao(planoInfo.cor)}>🎫</button>
+                          <a href={api.adminMasterExportEmpresaUrl(e.id) + "?t=" + Date.now()}
+                            title="Baixar JSON com todos os dados"
+                            style={{ ...btnAcao(C.purple), textDecoration: "none", display: "inline-flex" }}>📥</a>
+                          <button onClick={() => resetar(e)} disabled={resetando === e.id} title="Reset total" style={btnAcao(C.yellow)}>
+                            {resetando === e.id ? "..." : "🗑"}
+                          </button>
+                          {e.ativo ? (
+                            <button onClick={() => setModalSuspender(e)} title="Suspender" style={btnAcao(C.red)}>⏸</button>
+                          ) : (
+                            <button onClick={() => ativar(e)} title="Reativar" style={btnAcao(C.green)}>▶</button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -434,6 +476,13 @@ function AbaEmpresas({ onMudou }) {
           empresa={modalSuspender}
           onCancelar={() => setModalSuspender(null)}
           onSuspensa={() => { setModalSuspender(null); carregar(); onMudou?.(); }}
+        />
+      )}
+      {modalPlano && (
+        <ModalPlano
+          empresa={modalPlano}
+          onCancelar={() => setModalPlano(null)}
+          onSalva={() => { setModalPlano(null); carregar(); onMudou?.(); }}
         />
       )}
     </>
@@ -816,6 +865,348 @@ function ModalSuspender({ empresa, onCancelar, onSuspensa }) {
             fontWeight: 800, fontSize: 12, cursor: salvando ? "default" : "pointer",
             opacity: salvando ? 0.6 : 1,
           }}>{salvando ? "Suspendendo..." : "⏸ Suspender"}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ============ ABA: NOTIFICAÇÕES ============
+function AbaNotificacoes() {
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(true);
+  const [modalCriar, setModalCriar] = useState(false);
+
+  async function carregar() {
+    setCarregando(true);
+    try {
+      const r = await api.adminMasterListarNotificacoes();
+      setDados(r);
+    } catch (err) {
+      alert(`Erro: ${err.message}`);
+    } finally {
+      setCarregando(false);
+    }
+  }
+  useEffect(() => { carregar(); }, []);
+
+  async function toggleAtiva(n) {
+    try {
+      await api.adminMasterAlterarAtivaNotificacao(n.id, !n.ativa);
+      await carregar();
+    } catch (err) {
+      alert(`Erro: ${err.message}`);
+    }
+  }
+
+  async function deletar(n) {
+    if (!confirm(`Apagar permanentemente a notificação "${n.titulo}"?`)) return;
+    try {
+      await api.adminMasterDeletarNotificacao(n.id);
+      await carregar();
+    } catch (err) {
+      alert(`Erro: ${err.message}`);
+    }
+  }
+
+  const ns = dados?.notificacoes || [];
+  const totalUsers = dados?.totalUsers || 0;
+
+  return (
+    <>
+      <div style={{
+        background: C.card, border: `1px solid ${C.border}`,
+        borderRadius: 12, overflow: "hidden",
+      }}>
+        <div style={{
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          padding: "12px 16px", borderBottom: `1px solid ${C.border}`,
+        }}>
+          <div style={{ color: C.white, fontSize: 14, fontWeight: 700 }}>
+            Notificações broadcast ({ns.length})
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={carregar} disabled={carregando} style={btnSecundario}>
+              🔄 {carregando ? "..." : "Atualizar"}
+            </button>
+            <button onClick={() => setModalCriar(true)} style={{
+              background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+              color: C.white, border: "none", borderRadius: 8,
+              padding: "8px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer",
+            }}>+ Nova notificação</button>
+          </div>
+        </div>
+
+        {ns.length === 0 && !carregando ? (
+          <div style={{ padding: 30, textAlign: "center", color: C.muted, fontSize: 13 }}>
+            Nenhuma notificação enviada ainda. Use o botão "+ Nova notificação" para avisar todos os clientes sobre manutenção, novidades, etc.
+          </div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: C.surface }}>
+                  {["Tipo", "Título", "Mensagem", "Status", "Leituras", "Expira", "Criada", "Ações"].map((h, i) => (
+                    <th key={i} style={{
+                      padding: "9px 10px", textAlign: "left",
+                      color: C.muted, fontSize: 10, fontWeight: 700,
+                      textTransform: "uppercase", letterSpacing: 0.5,
+                      borderBottom: `1px solid ${C.border}`,
+                    }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {ns.map(n => {
+                  const tipoInfo = {
+                    INFO: { cor: C.accent, icone: "📢" },
+                    AVISO: { cor: C.yellow, icone: "⚠️" },
+                    MANUTENCAO: { cor: C.red, icone: "🛠️" },
+                    NOVIDADE: { cor: C.purple, icone: "✨" },
+                  }[n.tipo] || { cor: C.accent, icone: "📢" };
+                  const expirou = n.expiraEm && new Date(n.expiraEm) < new Date();
+                  return (
+                    <tr key={n.id} style={{ borderBottom: `1px solid ${C.border}55`, opacity: !n.ativa || expirou ? 0.5 : 1 }}>
+                      <td style={{ padding: "9px 10px" }}>
+                        <span style={{
+                          padding: "2px 8px", borderRadius: 10,
+                          fontSize: 10, fontWeight: 700,
+                          background: tipoInfo.cor + "33",
+                          color: tipoInfo.cor,
+                        }}>{tipoInfo.icone} {n.tipo}</span>
+                      </td>
+                      <td style={{ padding: "9px 10px", color: C.text, fontWeight: 600 }}>{n.titulo}</td>
+                      <td style={{ padding: "9px 10px", color: C.muted, maxWidth: 300, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {n.mensagem}
+                      </td>
+                      <td style={{ padding: "9px 10px" }}>
+                        <span style={{
+                          fontSize: 10, fontWeight: 700,
+                          color: n.ativa ? C.green : C.muted,
+                        }}>{n.ativa ? "● ATIVA" : "● INATIVA"}</span>
+                      </td>
+                      <td style={{ padding: "9px 10px", color: C.text, fontSize: 11 }}>
+                        {n.leituras}/{totalUsers}
+                        <div style={{ height: 3, background: C.surface, borderRadius: 2, marginTop: 2, overflow: "hidden" }}>
+                          <div style={{
+                            width: `${totalUsers > 0 ? (n.leituras / totalUsers) * 100 : 0}%`,
+                            height: "100%", background: C.green,
+                          }} />
+                        </div>
+                      </td>
+                      <td style={{ padding: "9px 10px", color: expirou ? C.red : C.muted, fontSize: 11 }}>
+                        {n.expiraEm ? fmtData(n.expiraEm) : "—"}
+                      </td>
+                      <td style={{ padding: "9px 10px", color: C.muted, fontSize: 11 }}>{fmtData(n.createdAt)}</td>
+                      <td style={{ padding: "9px 10px" }}>
+                        <div style={{ display: "flex", gap: 4 }}>
+                          <button onClick={() => toggleAtiva(n)} title={n.ativa ? "Desativar" : "Ativar"} style={btnAcao(n.ativa ? C.yellow : C.green)}>
+                            {n.ativa ? "⏸" : "▶"}
+                          </button>
+                          <button onClick={() => deletar(n)} title="Apagar permanentemente" style={btnAcao(C.red)}>🗑</button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {modalCriar && (
+        <ModalCriarNotificacao
+          onCancelar={() => setModalCriar(false)}
+          onCriada={() => { setModalCriar(false); carregar(); }}
+        />
+      )}
+    </>
+  );
+}
+
+// ============ MODAL: NOVA NOTIFICAÇÃO ============
+function ModalCriarNotificacao({ onCancelar, onCriada }) {
+  const [titulo, setTitulo] = useState("");
+  const [mensagem, setMensagem] = useState("");
+  const [tipo, setTipo] = useState("INFO");
+  const [expiraEm, setExpiraEm] = useState("");
+  const [erro, setErro] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    setSalvando(true); setErro("");
+    try {
+      await api.adminMasterCriarNotificacao({
+        titulo: titulo.trim(),
+        mensagem: mensagem.trim(),
+        tipo,
+        expiraEm: expiraEm || undefined,
+      });
+      onCriada();
+    } catch (err) {
+      setErro(err.message);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div onClick={() => !salvando && onCancelar()} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: 20, zIndex: 200,
+    }}>
+      <form onClick={e => e.stopPropagation()} onSubmit={submit} style={{
+        background: C.card, border: `1px solid ${C.border}`, borderRadius: 14,
+        width: "100%", maxWidth: 520, padding: 26, maxHeight: "90vh", overflowY: "auto",
+      }}>
+        <div style={{ color: C.white, fontSize: 18, fontWeight: 800, marginBottom: 6 }}>
+          📢 Nova notificação broadcast
+        </div>
+        <div style={{ color: C.muted, fontSize: 12, marginBottom: 18 }}>
+          Será exibida como banner no topo do app pra TODOS os usuários até cada um marcar como lida.
+        </div>
+
+        <label style={labelStyle}>Tipo</label>
+        <select value={tipo} onChange={e => setTipo(e.target.value)} style={inputStyle}>
+          <option value="INFO">📢 Informativo</option>
+          <option value="AVISO">⚠️ Aviso</option>
+          <option value="MANUTENCAO">🛠️ Manutenção</option>
+          <option value="NOVIDADE">✨ Novidade</option>
+        </select>
+
+        <label style={{ ...labelStyle, marginTop: 12 }}>Título *</label>
+        <input value={titulo} onChange={e => setTitulo(e.target.value)}
+          required maxLength={200} style={inputStyle}
+          placeholder="Ex: Manutenção programada amanhã às 02h" />
+
+        <label style={{ ...labelStyle, marginTop: 12 }}>Mensagem *</label>
+        <textarea value={mensagem} onChange={e => setMensagem(e.target.value)}
+          required rows={4} style={{ ...inputStyle, resize: "vertical", minHeight: 80 }}
+          placeholder="Detalhes da mensagem que o usuário vai ler no banner." />
+
+        <label style={{ ...labelStyle, marginTop: 12 }}>Expira em (opcional)</label>
+        <input type="datetime-local" value={expiraEm}
+          onChange={e => setExpiraEm(e.target.value)} style={inputStyle} />
+
+        {erro && (
+          <div style={{
+            marginTop: 12, padding: "8px 12px", borderRadius: 8,
+            background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red, fontSize: 12,
+          }}>{erro}</div>
+        )}
+
+        <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
+          <button type="button" onClick={onCancelar} disabled={salvando} style={{ ...btnSecundario, flex: 1 }}>
+            Cancelar
+          </button>
+          <button type="submit" disabled={salvando} style={{
+            flex: 1,
+            background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+            color: C.white, border: "none", borderRadius: 8,
+            padding: "9px 18px", fontWeight: 800, fontSize: 12,
+            cursor: salvando ? "default" : "pointer",
+            opacity: salvando ? 0.6 : 1,
+          }}>{salvando ? "Enviando..." : "📢 Enviar para todos"}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ============ MODAL: ALTERAR PLANO ============
+function ModalPlano({ empresa, onCancelar, onSalva }) {
+  const hoje = new Date();
+  const em30 = new Date(hoje); em30.setDate(em30.getDate() + 30);
+  const [plano, setPlano] = useState(empresa.plano || "TRIAL");
+  const [expiraEm, setExpiraEm] = useState(
+    empresa.expiraEm ? empresa.expiraEm.slice(0, 10) : em30.toISOString().slice(0, 10)
+  );
+  const [observacoes, setObservacoes] = useState(empresa.observacoesPlano || "");
+  const [erro, setErro] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    setSalvando(true); setErro("");
+    try {
+      await api.adminMasterAlterarPlano(empresa.id, {
+        plano,
+        expiraEm: expiraEm || null,
+        observacoes: observacoes.trim() || null,
+      });
+      onSalva();
+    } catch (err) {
+      setErro(err.message);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div onClick={() => !salvando && onCancelar()} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: 20, zIndex: 200,
+    }}>
+      <form onClick={e => e.stopPropagation()} onSubmit={submit} style={{
+        background: C.card, border: `1px solid ${C.border}`, borderRadius: 14,
+        width: "100%", maxWidth: 460, padding: 26,
+      }}>
+        <div style={{ color: C.white, fontSize: 18, fontWeight: 800, marginBottom: 6 }}>
+          🎫 Alterar plano
+        </div>
+        <div style={{ color: C.muted, fontSize: 12, marginBottom: 18 }}>
+          Plano de <strong style={{ color: C.text }}>{empresa.nome}</strong>
+        </div>
+
+        <label style={labelStyle}>Plano</label>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 6, marginBottom: 12 }}>
+          {Object.entries(PLANOS_INFO).map(([k, info]) => (
+            <button key={k} type="button" onClick={() => setPlano(k)} style={{
+              padding: "10px 8px", borderRadius: 8,
+              background: plano === k ? info.cor + "33" : C.surface,
+              border: `2px solid ${plano === k ? info.cor : C.border}`,
+              color: plano === k ? info.cor : C.muted,
+              fontWeight: 700, fontSize: 11, cursor: "pointer",
+            }}>{info.icone}<br />{info.label}</button>
+          ))}
+        </div>
+
+        <label style={{ ...labelStyle, marginTop: 10 }}>Expira em</label>
+        <input type="date" value={expiraEm}
+          onChange={e => setExpiraEm(e.target.value)} style={inputStyle} />
+        <div style={{ color: C.muted, fontSize: 10, marginTop: 4 }}>
+          Deixe vazio pra plano sem expiração (ex: Enterprise vitalício).
+        </div>
+
+        <label style={{ ...labelStyle, marginTop: 12 }}>Observações (interno)</label>
+        <textarea value={observacoes} onChange={e => setObservacoes(e.target.value)}
+          rows={3} maxLength={500}
+          style={{ ...inputStyle, resize: "vertical", minHeight: 60 }}
+          placeholder="Ex: Pagou anual com 10% desconto. Próxima cobrança 10/05/2027." />
+
+        {erro && (
+          <div style={{
+            marginTop: 10, padding: "8px 12px", borderRadius: 8,
+            background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red, fontSize: 12,
+          }}>{erro}</div>
+        )}
+
+        <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
+          <button type="button" onClick={onCancelar} disabled={salvando} style={{ ...btnSecundario, flex: 1 }}>
+            Cancelar
+          </button>
+          <button type="submit" disabled={salvando} style={{
+            flex: 1,
+            background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+            color: C.white, border: "none", borderRadius: 8,
+            padding: "9px 18px", fontWeight: 800, fontSize: 12,
+            cursor: salvando ? "default" : "pointer",
+            opacity: salvando ? 0.6 : 1,
+          }}>{salvando ? "Salvando..." : "💾 Salvar"}</button>
         </div>
       </form>
     </div>

@@ -168,6 +168,28 @@ export default function App() {
     });
   }
 
+  // ETAPA 12: banner de notificacoes broadcast (super-admin -> todos clientes).
+  // Carrega ao logar e a cada 5 minutos. User dismissa via X (marcar-lida).
+  const [notificacoes, setNotificacoes] = useState([]);
+  useEffect(() => {
+    if (!user) { setNotificacoes([]); return; }
+    let ativo = true;
+    async function buscar() {
+      try {
+        const r = await api.notificacoesMinhas();
+        if (ativo) setNotificacoes(r.notificacoes || []);
+      } catch { /* silencioso */ }
+    }
+    buscar();
+    const id = setInterval(buscar, 5 * 60 * 1000);
+    return () => { ativo = false; clearInterval(id); };
+  }, [user]);
+
+  async function fecharNotificacao(notifId) {
+    setNotificacoes(ns => ns.filter(n => n.id !== notifId));
+    try { await api.notificacoesMarcarLida(notifId); } catch { /* silencioso */ }
+  }
+
   function navegar(t) {
     setTela(t);
     setSidebarAberta(false);
@@ -270,6 +292,48 @@ export default function App() {
           }}>← Voltar ao Admin Master</a>
         </div>
       )}
+      {/* ETAPA 12: banner de notificacoes broadcast — uma por vez, mais recente */}
+      {notificacoes.length > 0 && (() => {
+        const n = notificacoes[0];
+        const cor = n.tipo === "MANUTENCAO" ? "#ef4444"
+          : n.tipo === "AVISO" ? "#f59e0b"
+          : n.tipo === "NOVIDADE" ? "#7c3aed"
+          : "#4f8ef7";
+        const icone = n.tipo === "MANUTENCAO" ? "🛠️"
+          : n.tipo === "AVISO" ? "⚠️"
+          : n.tipo === "NOVIDADE" ? "✨"
+          : "📢";
+        return (
+          <div style={{
+            background: cor, color: "#ffffff",
+            padding: "10px 16px",
+            display: "flex", alignItems: "center", gap: 12,
+            fontSize: 13,
+          }}>
+            <span style={{ fontSize: 18 }}>{icone}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 800, lineHeight: 1.2 }}>{n.titulo}</div>
+              <div style={{ fontSize: 12, opacity: 0.9, marginTop: 2 }}>{n.mensagem}</div>
+            </div>
+            {notificacoes.length > 1 && (
+              <span style={{
+                background: "rgba(0,0,0,0.25)", padding: "3px 8px",
+                borderRadius: 10, fontSize: 11, fontWeight: 700,
+              }}>+{notificacoes.length - 1}</span>
+            )}
+            <button
+              onClick={() => fecharNotificacao(n.id)}
+              style={{
+                background: "rgba(0,0,0,0.25)", color: "#ffffff",
+                border: "none", borderRadius: 4,
+                padding: "4px 10px", cursor: "pointer",
+                fontSize: 12, fontWeight: 700,
+              }}
+              title="Marcar como lida"
+            >✓ OK</button>
+          </div>
+        );
+      })()}
 
       {/* Sidebar */}
       <aside

@@ -285,6 +285,10 @@ function AbaEmpresas({ onMudou }) {
   const [modalSuspender, setModalSuspender] = useState(null); // empresa
   const [modalPlano, setModalPlano] = useState(null); // empresa
   const [resetando, setResetando] = useState(null); // id
+  const [busca, setBusca] = useState("");
+  const [filtroPlano, setFiltroPlano] = useState("TODOS");
+  const [filtroStatus, setFiltroStatus] = useState("TODOS");
+  const [ordem, setOrdem] = useState({ campo: "criadaEm", dir: "desc" });
 
   async function carregar() {
     setCarregando(true); setErro("");
@@ -343,6 +347,63 @@ function AbaEmpresas({ onMudou }) {
     }
   }
 
+  // Filtro + ordenacao client-side (escala bem ate ~1000 empresas; acima disso
+  // mover pra query do backend com paginacao).
+  const empresasFiltradas = (() => {
+    const buscaNorm = busca.trim().toLowerCase();
+    let lista = empresas.filter(e => {
+      if (filtroPlano !== "TODOS" && e.plano !== filtroPlano) return false;
+      if (filtroStatus === "ATIVA" && !e.ativo) return false;
+      if (filtroStatus === "SUSPENSA" && e.ativo) return false;
+      if (buscaNorm) {
+        const nomeOk = e.nome?.toLowerCase().includes(buscaNorm);
+        const cnpjOk = (e.cnpj || "").toLowerCase().includes(buscaNorm.replace(/\D/g, ""));
+        if (!nomeOk && !cnpjOk) return false;
+      }
+      return true;
+    });
+    const dir = ordem.dir === "asc" ? 1 : -1;
+    lista = [...lista].sort((a, b) => {
+      let va, vb;
+      switch (ordem.campo) {
+        case "nome": va = a.nome || ""; vb = b.nome || ""; break;
+        case "users": va = a.estatisticas.usuarios; vb = b.estatisticas.usuarios; break;
+        case "vendas": va = a.estatisticas.vendas; vb = b.estatisticas.vendas; break;
+        case "faturamento": va = a.estatisticas.faturamentoTotal; vb = b.estatisticas.faturamentoTotal; break;
+        case "plano": va = a.plano || ""; vb = b.plano || ""; break;
+        case "criadaEm":
+        default: va = new Date(a.criadaEm).getTime(); vb = new Date(b.criadaEm).getTime();
+      }
+      if (typeof va === "string") return va.localeCompare(vb) * dir;
+      return (va - vb) * dir;
+    });
+    return lista;
+  })();
+
+  function alternarOrdem(campo) {
+    setOrdem(o => o.campo === campo
+      ? { campo, dir: o.dir === "asc" ? "desc" : "asc" }
+      : { campo, dir: campo === "nome" || campo === "plano" ? "asc" : "desc" });
+  }
+
+  function setaOrdem(campo) {
+    if (ordem.campo !== campo) return null;
+    return ordem.dir === "asc" ? " ▲" : " ▼";
+  }
+
+  const colunas = [
+    { id: "nome", label: "Empresa", align: "left", sort: true },
+    { id: "plano", label: "Plano", align: "left", sort: true },
+    { id: "status", label: "Status", align: "left", sort: false },
+    { id: "users", label: "Users", align: "right", sort: true },
+    { id: "vendas", label: "Vendas", align: "right", sort: true },
+    { id: "faturamento", label: "Faturamento", align: "right", sort: true },
+    { id: "criadaEm", label: "Criada", align: "left", sort: true },
+    { id: "acoes", label: "Ações", align: "left", sort: false },
+  ];
+
+  const filtrosAtivos = busca || filtroPlano !== "TODOS" || filtroStatus !== "TODOS";
+
   return (
     <>
       {erro && (
@@ -359,9 +420,11 @@ function AbaEmpresas({ onMudou }) {
         <div style={{
           display: "flex", justifyContent: "space-between", alignItems: "center",
           padding: "12px 16px", borderBottom: `1px solid ${C.border}`,
+          gap: 8, flexWrap: "wrap",
         }}>
           <div style={{ color: C.white, fontSize: 14, fontWeight: 700 }}>
-            Empresas cadastradas ({empresas.length})
+            Empresas cadastradas ({empresasFiltradas.length}
+            {filtrosAtivos && empresasFiltradas.length !== empresas.length && ` de ${empresas.length}`})
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={carregar} disabled={carregando} style={btnSecundario}>
@@ -375,27 +438,72 @@ function AbaEmpresas({ onMudou }) {
           </div>
         </div>
 
-        {empresas.length === 0 && !carregando ? (
+        <div style={{
+          display: "flex", gap: 8, padding: "10px 16px",
+          borderBottom: `1px solid ${C.border}`, background: C.surface + "55",
+          flexWrap: "wrap", alignItems: "center",
+        }}>
+          <input
+            type="text"
+            placeholder="🔍 Buscar por nome ou CNPJ..."
+            value={busca}
+            onChange={e => setBusca(e.target.value)}
+            style={{ ...inputStyle, flex: "1 1 220px", minWidth: 180, padding: "7px 12px", fontSize: 12 }}
+          />
+          <select value={filtroPlano} onChange={e => setFiltroPlano(e.target.value)}
+            style={{ ...inputStyle, width: "auto", padding: "7px 28px 7px 12px", fontSize: 12, cursor: "pointer" }}>
+            <option value="TODOS">Todos os planos</option>
+            {Object.entries(PLANOS_INFO).map(([k, info]) => (
+              <option key={k} value={k}>{info.icone} {info.label}</option>
+            ))}
+          </select>
+          <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)}
+            style={{ ...inputStyle, width: "auto", padding: "7px 28px 7px 12px", fontSize: 12, cursor: "pointer" }}>
+            <option value="TODOS">Todos status</option>
+            <option value="ATIVA">● Ativa</option>
+            <option value="SUSPENSA">● Suspensa</option>
+          </select>
+          {filtrosAtivos && (
+            <button
+              type="button"
+              onClick={() => { setBusca(""); setFiltroPlano("TODOS"); setFiltroStatus("TODOS"); }}
+              style={{
+                background: "transparent", border: `1px solid ${C.border}`,
+                color: C.muted, borderRadius: 8, padding: "6px 10px",
+                fontSize: 11, cursor: "pointer",
+              }}
+            >✕ Limpar</button>
+          )}
+        </div>
+
+        {empresasFiltradas.length === 0 && !carregando ? (
           <div style={{ padding: 30, textAlign: "center", color: C.muted, fontSize: 13 }}>
-            Nenhuma empresa cadastrada.
+            {filtrosAtivos
+              ? "Nenhuma empresa corresponde aos filtros."
+              : "Nenhuma empresa cadastrada."}
           </div>
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
                 <tr style={{ background: C.surface }}>
-                  {["Empresa", "Plano", "Status", "Users", "Vendas", "Faturamento", "Criada", "Ações"].map((h, i) => (
-                    <th key={i} style={{
-                      padding: "9px 10px", textAlign: i >= 3 && i <= 5 ? "right" : "left",
-                      color: C.muted, fontSize: 10, fontWeight: 700,
-                      textTransform: "uppercase", letterSpacing: 0.5,
-                      borderBottom: `1px solid ${C.border}`,
-                    }}>{h}</th>
+                  {colunas.map(col => (
+                    <th key={col.id}
+                      onClick={col.sort ? () => alternarOrdem(col.id) : undefined}
+                      style={{
+                        padding: "9px 10px", textAlign: col.align,
+                        color: ordem.campo === col.id ? C.text : C.muted,
+                        fontSize: 10, fontWeight: 700,
+                        textTransform: "uppercase", letterSpacing: 0.5,
+                        borderBottom: `1px solid ${C.border}`,
+                        cursor: col.sort ? "pointer" : "default",
+                        userSelect: "none",
+                      }}>{col.label}{setaOrdem(col.id)}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {empresas.map(e => {
+                {empresasFiltradas.map(e => {
                   const planoInfo = PLANOS_INFO[e.plano] || PLANOS_INFO.TRIAL;
                   const diasParaExpirar = e.expiraEm
                     ? Math.ceil((new Date(e.expiraEm).getTime() - Date.now()) / 86400000)

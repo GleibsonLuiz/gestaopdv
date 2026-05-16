@@ -226,6 +226,20 @@ export default function App() {
 
   if (!user) return <Login onSuccess={setUser} />;
 
+  // ETAPA 11: banner global quando sessao foi gerada via impersonate.
+  // O JWT do super-admin "fingindo ser" outro user carrega claim `imp`
+  // com o id do super-admin original. Tudo que ele fizer fica auditado
+  // como esse user (com claim imp registrado).
+  const impersonado = (() => {
+    const token = getToken();
+    if (!token) return null;
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      if (payload?.imp) return { porId: payload.imp, porNome: payload.impNome };
+      return null;
+    } catch { return null; }
+  })();
+
   // Modo focado do PDV: ocupa 100% da tela, sem sidebar/topbar/header de
   // pagina. PDV gerencia seu proprio header com logo, tabs, status do
   // caixa e botao "Menu" para sair do modo focado.
@@ -241,6 +255,21 @@ export default function App() {
   return (
     <div style={{ background: C.bg, minHeight: "100vh", fontFamily: "'Segoe UI', sans-serif", color: C.text }}>
       <style>{ESTILO_RESPONSIVO}</style>
+      {impersonado && (
+        <div style={{
+          background: "#f59e0b", color: "#0a0c14",
+          padding: "8px 16px", textAlign: "center",
+          fontSize: 12, fontWeight: 700,
+          display: "flex", justifyContent: "center", alignItems: "center", gap: 12,
+        }}>
+          <span>👤 Você está impersonando como <strong>{user.nome}</strong> ({user.email}) — supervisão: {impersonado.porNome || "super-admin"}</span>
+          <a href="/admin-master" style={{
+            background: "#0a0c14", color: "#f59e0b",
+            padding: "3px 10px", borderRadius: 4, textDecoration: "none",
+            fontSize: 11, fontWeight: 800,
+          }}>← Voltar ao Admin Master</a>
+        </div>
+      )}
 
       {/* Sidebar */}
       <aside

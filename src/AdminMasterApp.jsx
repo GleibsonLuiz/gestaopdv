@@ -164,69 +164,46 @@ function Login({ onSuccess }) {
 }
 
 // ============ PAINEL PRINCIPAL ============
+const TABS = [
+  { id: "empresas", label: "🏢 Empresas", cor: C.accent },
+  { id: "users", label: "👥 Usuários", cor: C.purple },
+  { id: "metricas", label: "📈 Métricas", cor: C.green },
+  { id: "logs", label: "📜 Logs", cor: C.yellow },
+];
+
 function Painel({ user, onSair }) {
+  const [tab, setTab] = useState("empresas");
   const [estatisticas, setEstatisticas] = useState(null);
-  const [empresas, setEmpresas] = useState([]);
-  const [carregando, setCarregando] = useState(true);
-  const [erro, setErro] = useState("");
-  const [modalCriar, setModalCriar] = useState(false);
 
-  async function carregar() {
-    setCarregando(true); setErro("");
+  async function carregarKpis() {
     try {
-      const [est, lista] = await Promise.all([
-        api.adminMasterEstatisticas(),
-        api.adminMasterListarEmpresas(),
-      ]);
+      const est = await api.adminMasterEstatisticas();
       setEstatisticas(est);
-      setEmpresas(lista.empresas || []);
-    } catch (err) {
-      setErro(err.message);
-    } finally {
-      setCarregando(false);
-    }
+    } catch { /* silencioso */ }
   }
-
-  useEffect(() => { carregar(); }, []);
-
-  async function toggleAtivo(empresa) {
-    if (!confirm(`${empresa.ativo ? "Desativar" : "Ativar"} a empresa "${empresa.nome}"?\n${empresa.ativo ? "Users dela ficam sem login." : ""}`)) return;
-    try {
-      await api.adminMasterAlterarStatus(empresa.id, !empresa.ativo);
-      await carregar();
-    } catch (err) {
-      alert(`Erro: ${err.message}`);
-    }
-  }
+  useEffect(() => { carregarKpis(); }, []);
 
   return (
     <Tela>
       {/* Header */}
       <div style={{
         background: C.card, border: `1px solid ${C.border}`,
-        borderRadius: 12, padding: 16, marginBottom: 18,
+        borderRadius: 12, padding: 16, marginBottom: 14,
         display: "flex", alignItems: "center", justifyContent: "space-between",
         flexWrap: "wrap", gap: 10,
       }}>
-        <div>
-          <div style={{
-            display: "flex", alignItems: "center", gap: 10,
-          }}>
-            <span style={{ fontSize: 22 }}>🛡️</span>
-            <div>
-              <div style={{ color: C.white, fontWeight: 800, fontSize: 18, lineHeight: 1.1 }}>
-                Admin Master — GestãoPRO
-              </div>
-              <div style={{ color: C.muted, fontSize: 11 }}>
-                Logado como <strong>{user.nome}</strong> ({user.email})
-              </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 22 }}>🛡️</span>
+          <div>
+            <div style={{ color: C.white, fontWeight: 800, fontSize: 18, lineHeight: 1.1 }}>
+              Admin Master — GestãoPRO
+            </div>
+            <div style={{ color: C.muted, fontSize: 11 }}>
+              Logado como <strong>{user.nome}</strong> ({user.email})
             </div>
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={carregar} disabled={carregando} style={btnSecundario}>
-            🔄 {carregando ? "Atualizando..." : "Atualizar"}
-          </button>
           <a href="/" style={{ ...btnSecundario, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
             Sistema normal →
           </a>
@@ -234,18 +211,11 @@ function Painel({ user, onSair }) {
         </div>
       </div>
 
-      {erro && (
-        <div style={{
-          background: C.red + "22", border: `1px solid ${C.red}55`,
-          color: C.red, borderRadius: 10, padding: "10px 14px", marginBottom: 16,
-        }}>{erro}</div>
-      )}
-
-      {/* KPIs */}
+      {/* KPIs globais */}
       {estatisticas && (
         <div style={{
-          display: "grid", gap: 10, marginBottom: 18,
-          gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+          display: "grid", gap: 8, marginBottom: 14,
+          gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
         }}>
           {[
             { rotulo: "Empresas", valor: fmtNum(estatisticas.totalEmpresas), cor: C.accent, hint: `${estatisticas.empresasAtivas} ativas` },
@@ -257,24 +227,118 @@ function Painel({ user, onSair }) {
           ].map((k, i) => (
             <div key={i} style={{
               background: C.card, border: `1px solid ${C.border}`,
-              borderRadius: 10, padding: "12px 14px", position: "relative", overflow: "hidden",
+              borderRadius: 10, padding: "10px 12px", position: "relative", overflow: "hidden",
             }}>
-              <div style={{ position: "absolute", top: 0, left: 0, width: 4, height: "100%", background: k.cor }} />
-              <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+              <div style={{ position: "absolute", top: 0, left: 0, width: 3, height: "100%", background: k.cor }} />
+              <div style={{ color: C.muted, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
                 {k.rotulo}
               </div>
-              <div style={{ color: k.cor, fontSize: 20, fontWeight: 800, marginTop: 4 }}>
-                {k.valor}
-              </div>
-              {k.hint && (
-                <div style={{ color: C.muted, fontSize: 10, marginTop: 2 }}>{k.hint}</div>
-              )}
+              <div style={{ color: k.cor, fontSize: 18, fontWeight: 800, marginTop: 2 }}>{k.valor}</div>
+              {k.hint && <div style={{ color: C.muted, fontSize: 9, marginTop: 1 }}>{k.hint}</div>}
             </div>
           ))}
         </div>
       )}
 
-      {/* Lista de empresas */}
+      {/* Tabs */}
+      <div style={{
+        display: "flex", gap: 4, padding: 4, marginBottom: 14,
+        background: C.surface, border: `1px solid ${C.border}`,
+        borderRadius: 10, width: "fit-content", flexWrap: "wrap",
+      }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            padding: "8px 14px", borderRadius: 8, border: "none",
+            background: tab === t.id ? t.cor + "22" : "transparent",
+            color: tab === t.id ? t.cor : C.muted,
+            fontWeight: tab === t.id ? 700 : 600, fontSize: 12, cursor: "pointer",
+          }}>{t.label}</button>
+        ))}
+      </div>
+
+      {tab === "empresas" && <AbaEmpresas onMudou={carregarKpis} />}
+      {tab === "users" && <AbaUsers />}
+      {tab === "metricas" && <AbaMetricas />}
+      {tab === "logs" && <AbaLogs />}
+    </Tela>
+  );
+}
+
+// ============ ABA: EMPRESAS ============
+function AbaEmpresas({ onMudou }) {
+  const [empresas, setEmpresas] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState("");
+  const [modalCriar, setModalCriar] = useState(false);
+  const [modalSuspender, setModalSuspender] = useState(null); // empresa
+  const [resetando, setResetando] = useState(null); // id
+
+  async function carregar() {
+    setCarregando(true); setErro("");
+    try {
+      const lista = await api.adminMasterListarEmpresas();
+      setEmpresas(lista.empresas || []);
+    } catch (err) {
+      setErro(err.message);
+    } finally {
+      setCarregando(false);
+    }
+  }
+  useEffect(() => { carregar(); }, []);
+
+  async function ativar(empresa) {
+    if (!confirm(`Reativar "${empresa.nome}"?`)) return;
+    try {
+      await api.adminMasterAlterarStatus(empresa.id, true);
+      await carregar();
+      onMudou?.();
+    } catch (err) {
+      alert(`Erro: ${err.message}`);
+    }
+  }
+
+  async function resetar(empresa) {
+    if (!confirm(`⚠️  RESET TOTAL DE "${empresa.nome}"?\nIsso apaga TODOS os dados operacionais e de CRM da empresa.\nFuncionários e configurações são preservados.\n\nIRREVERSÍVEL.`)) return;
+    setResetando(empresa.id);
+    try {
+      await api.adminMasterResetarEmpresa(empresa.id);
+      await carregar();
+      onMudou?.();
+      alert(`Dados de "${empresa.nome}" zerados.`);
+    } catch (err) {
+      alert(`Erro: ${err.message}`);
+    } finally {
+      setResetando(null);
+    }
+  }
+
+  async function impersonar(empresa) {
+    if (!confirm(`Entrar como admin de "${empresa.nome}"?\nVocê vai ser redirecionado para o sistema dela. Toda ação é auditada.`)) return;
+    try {
+      // Pega o primeiro admin (role=ADMIN) dessa empresa
+      const lista = await api.adminMasterListarUsers(empresa.id);
+      const admin = (lista.users || []).find(u => u.role === "ADMIN" && u.ativo);
+      if (!admin) {
+        return alert("Empresa não tem admin ativo.");
+      }
+      const resp = await api.adminMasterImpersonate(admin.id);
+      // Sobrescreve sessao com token impersonado e leva pro sistema principal
+      setSession(resp.token, resp.user, resp.empresa);
+      window.location.href = "/";
+    } catch (err) {
+      alert(`Erro: ${err.message}`);
+    }
+  }
+
+  return (
+    <>
+      {erro && (
+        <div style={{
+          background: C.red + "22", border: `1px solid ${C.red}55`,
+          color: C.red, borderRadius: 10, padding: "10px 14px", marginBottom: 14,
+        }}>{erro}</div>
+      )}
+
       <div style={{
         background: C.card, border: `1px solid ${C.border}`,
         borderRadius: 12, overflow: "hidden",
@@ -286,25 +350,30 @@ function Painel({ user, onSair }) {
           <div style={{ color: C.white, fontSize: 14, fontWeight: 700 }}>
             Empresas cadastradas ({empresas.length})
           </div>
-          <button onClick={() => setModalCriar(true)} style={{
-            background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-            color: C.white, border: "none", borderRadius: 8,
-            padding: "8px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer",
-          }}>+ Nova empresa</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={carregar} disabled={carregando} style={btnSecundario}>
+              🔄 {carregando ? "..." : "Atualizar"}
+            </button>
+            <button onClick={() => setModalCriar(true)} style={{
+              background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+              color: C.white, border: "none", borderRadius: 8,
+              padding: "8px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer",
+            }}>+ Nova empresa</button>
+          </div>
         </div>
 
         {empresas.length === 0 && !carregando ? (
           <div style={{ padding: 30, textAlign: "center", color: C.muted, fontSize: 13 }}>
-            Nenhuma empresa cadastrada ainda.
+            Nenhuma empresa cadastrada.
           </div>
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
                 <tr style={{ background: C.surface }}>
-                  {["Empresa", "CNPJ", "Status", "Users", "Clientes", "Produtos", "Vendas", "Faturamento", "Criada em", "Ações"].map((h, i) => (
+                  {["Empresa", "CNPJ", "Status", "Users", "Vendas", "Faturamento", "Criada", "Ações"].map((h, i) => (
                     <th key={i} style={{
-                      padding: "9px 12px", textAlign: i >= 3 && i <= 7 ? "right" : "left",
+                      padding: "9px 10px", textAlign: i >= 3 && i <= 5 ? "right" : "left",
                       color: C.muted, fontSize: 10, fontWeight: 700,
                       textTransform: "uppercase", letterSpacing: 0.5,
                       borderBottom: `1px solid ${C.border}`,
@@ -315,34 +384,36 @@ function Painel({ user, onSair }) {
               <tbody>
                 {empresas.map(e => (
                   <tr key={e.id} style={{ borderBottom: `1px solid ${C.border}55` }}>
-                    <td style={{ padding: "9px 12px", color: C.text, fontWeight: 600 }}>{e.nome}</td>
-                    <td style={{ padding: "9px 12px", color: C.muted, fontFamily: "monospace", fontSize: 11 }}>
+                    <td style={{ padding: "9px 10px", color: C.text, fontWeight: 600 }}>{e.nome}</td>
+                    <td style={{ padding: "9px 10px", color: C.muted, fontFamily: "monospace", fontSize: 11 }}>
                       {e.cnpj ? mascararCnpj(e.cnpj) : "—"}
                     </td>
-                    <td style={{ padding: "9px 12px" }}>
+                    <td style={{ padding: "9px 10px" }}>
                       <span style={{
                         display: "inline-block", padding: "2px 8px", borderRadius: 10,
                         fontSize: 10, fontWeight: 700,
                         background: e.ativo ? C.green + "33" : C.red + "33",
                         color: e.ativo ? C.green : C.red,
-                      }}>{e.ativo ? "● ATIVA" : "● INATIVA"}</span>
+                      }}>{e.ativo ? "● ATIVA" : "● SUSPENSA"}</span>
                     </td>
-                    <td style={{ padding: "9px 12px", textAlign: "right", color: C.text }}>{fmtNum(e.estatisticas.usuarios)}</td>
-                    <td style={{ padding: "9px 12px", textAlign: "right", color: C.text }}>{fmtNum(e.estatisticas.clientes)}</td>
-                    <td style={{ padding: "9px 12px", textAlign: "right", color: C.text }}>{fmtNum(e.estatisticas.produtos)}</td>
-                    <td style={{ padding: "9px 12px", textAlign: "right", color: C.text }}>{fmtNum(e.estatisticas.vendas)}</td>
-                    <td style={{ padding: "9px 12px", textAlign: "right", color: C.green, fontWeight: 600 }}>
+                    <td style={{ padding: "9px 10px", textAlign: "right", color: C.text }}>{fmtNum(e.estatisticas.usuarios)}</td>
+                    <td style={{ padding: "9px 10px", textAlign: "right", color: C.text }}>{fmtNum(e.estatisticas.vendas)}</td>
+                    <td style={{ padding: "9px 10px", textAlign: "right", color: C.green, fontWeight: 600 }}>
                       {fmtBRL(e.estatisticas.faturamentoTotal)}
                     </td>
-                    <td style={{ padding: "9px 12px", color: C.muted }}>{fmtData(e.criadaEm)}</td>
-                    <td style={{ padding: "9px 12px" }}>
-                      <button onClick={() => toggleAtivo(e)} style={{
-                        background: e.ativo ? C.red + "22" : C.green + "22",
-                        color: e.ativo ? C.red : C.green,
-                        border: `1px solid ${e.ativo ? C.red : C.green}55`,
-                        borderRadius: 6, padding: "4px 10px", fontWeight: 700, fontSize: 11,
-                        cursor: "pointer", whiteSpace: "nowrap",
-                      }}>{e.ativo ? "Desativar" : "Ativar"}</button>
+                    <td style={{ padding: "9px 10px", color: C.muted }}>{fmtData(e.criadaEm)}</td>
+                    <td style={{ padding: "9px 10px" }}>
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                        <button onClick={() => impersonar(e)} title="Entrar como admin" style={btnAcao(C.accent)}>👤</button>
+                        <button onClick={() => resetar(e)} disabled={resetando === e.id} title="Reset total" style={btnAcao(C.yellow)}>
+                          {resetando === e.id ? "..." : "🗑"}
+                        </button>
+                        {e.ativo ? (
+                          <button onClick={() => setModalSuspender(e)} title="Suspender" style={btnAcao(C.red)}>⏸</button>
+                        ) : (
+                          <button onClick={() => ativar(e)} title="Reativar" style={btnAcao(C.green)}>▶</button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -355,12 +426,410 @@ function Painel({ user, onSair }) {
       {modalCriar && (
         <ModalCriarEmpresa
           onCancelar={() => setModalCriar(false)}
-          onCriada={() => { setModalCriar(false); carregar(); }}
+          onCriada={() => { setModalCriar(false); carregar(); onMudou?.(); }}
         />
       )}
-    </Tela>
+      {modalSuspender && (
+        <ModalSuspender
+          empresa={modalSuspender}
+          onCancelar={() => setModalSuspender(null)}
+          onSuspensa={() => { setModalSuspender(null); carregar(); onMudou?.(); }}
+        />
+      )}
+    </>
   );
 }
+
+// ============ ABA: USERS ============
+function AbaUsers() {
+  const [users, setUsers] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState("");
+
+  async function carregar() {
+    setCarregando(true); setErro("");
+    try {
+      const r = await api.adminMasterListarUsers();
+      setUsers(r.users || []);
+    } catch (err) {
+      setErro(err.message);
+    } finally {
+      setCarregando(false);
+    }
+  }
+  useEffect(() => { carregar(); }, []);
+
+  async function toggleSuper(u) {
+    const novo = !u.superAdmin;
+    if (!confirm(`${novo ? "PROMOVER" : "REBAIXAR"} ${u.email} ${novo ? "a" : "de"} super-admin?`)) return;
+    try {
+      await api.adminMasterAlterarSuperAdmin(u.id, novo);
+      await carregar();
+    } catch (err) {
+      alert(`Erro: ${err.message}`);
+    }
+  }
+
+  async function impersonarUser(u) {
+    if (!u.ativo) return alert("User inativo");
+    if (!confirm(`Entrar como ${u.email}?\nToda ação será auditada como impersonate.`)) return;
+    try {
+      const resp = await api.adminMasterImpersonate(u.id);
+      setSession(resp.token, resp.user, resp.empresa);
+      window.location.href = "/";
+    } catch (err) {
+      alert(`Erro: ${err.message}`);
+    }
+  }
+
+  return (
+    <>
+      {erro && (
+        <div style={{ background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red, borderRadius: 10, padding: "10px 14px", marginBottom: 14 }}>{erro}</div>
+      )}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 16px", borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ color: C.white, fontSize: 14, fontWeight: 700 }}>
+            Usuários do sistema ({users.length})
+          </div>
+          <button onClick={carregar} disabled={carregando} style={btnSecundario}>🔄 {carregando ? "..." : "Atualizar"}</button>
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <thead>
+              <tr style={{ background: C.surface }}>
+                {["Nome", "Email", "Role", "Empresa", "Status", "Super", "Criado", "Ações"].map((h, i) => (
+                  <th key={i} style={{
+                    padding: "9px 10px", textAlign: "left",
+                    color: C.muted, fontSize: 10, fontWeight: 700,
+                    textTransform: "uppercase", letterSpacing: 0.5,
+                    borderBottom: `1px solid ${C.border}`,
+                  }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {users.map(u => (
+                <tr key={u.id} style={{ borderBottom: `1px solid ${C.border}55` }}>
+                  <td style={{ padding: "9px 10px", color: C.text, fontWeight: 600 }}>{u.nome}</td>
+                  <td style={{ padding: "9px 10px", color: C.muted, fontFamily: "monospace", fontSize: 11 }}>{u.email}</td>
+                  <td style={{ padding: "9px 10px", color: C.text }}>
+                    <span style={{
+                      display: "inline-block", padding: "2px 6px", borderRadius: 6, fontSize: 10, fontWeight: 700,
+                      background: C.surface, color: C.muted,
+                    }}>{u.role}</span>
+                  </td>
+                  <td style={{ padding: "9px 10px", color: C.text }}>{u.empresaNome || "—"}</td>
+                  <td style={{ padding: "9px 10px" }}>
+                    <span style={{
+                      fontSize: 10, fontWeight: 700,
+                      color: u.ativo ? C.green : C.red,
+                    }}>{u.ativo ? "● ATIVO" : "● INATIVO"}</span>
+                  </td>
+                  <td style={{ padding: "9px 10px" }}>
+                    {u.superAdmin && (
+                      <span style={{
+                        background: "#f59e0b33", color: "#f59e0b",
+                        padding: "2px 8px", borderRadius: 10, fontSize: 10, fontWeight: 700,
+                      }}>👑 SUPER</span>
+                    )}
+                  </td>
+                  <td style={{ padding: "9px 10px", color: C.muted }}>{fmtData(u.criadoEm)}</td>
+                  <td style={{ padding: "9px 10px" }}>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <button onClick={() => impersonarUser(u)} title="Entrar como" style={btnAcao(C.accent)}>👤</button>
+                      <button onClick={() => toggleSuper(u)} title={u.superAdmin ? "Rebaixar" : "Promover a super-admin"} style={btnAcao(u.superAdmin ? C.red : "#f59e0b")}>
+                        {u.superAdmin ? "↓" : "👑"}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ============ ABA: MÉTRICAS ============
+function AbaMetricas() {
+  const [dados, setDados] = useState(null);
+  const [dias, setDias] = useState(30);
+  const [carregando, setCarregando] = useState(false);
+
+  async function carregar() {
+    setCarregando(true);
+    try {
+      const r = await api.adminMasterMetricas(dias);
+      setDados(r);
+    } catch (err) {
+      alert(`Erro: ${err.message}`);
+    } finally {
+      setCarregando(false);
+    }
+  }
+  useEffect(() => { carregar(); }, [dias]);
+
+  if (!dados) return <div style={{ color: C.muted, textAlign: "center", padding: 40 }}>Carregando...</div>;
+
+  const maxFat = Math.max(1, ...dados.ranking.map(r => r.faturamento));
+
+  return (
+    <>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14, alignItems: "center" }}>
+        <span style={{ color: C.muted, fontSize: 12 }}>Janela:</span>
+        {[7, 30, 90, 180].map(d => (
+          <button key={d} onClick={() => setDias(d)} style={{
+            background: dias === d ? C.accent + "22" : C.surface,
+            color: dias === d ? C.accent : C.muted,
+            border: `1px solid ${dias === d ? C.accent : C.border}`,
+            borderRadius: 6, padding: "5px 10px", fontWeight: 700, fontSize: 11, cursor: "pointer",
+          }}>{d}d</button>
+        ))}
+        <button onClick={carregar} disabled={carregando} style={{ ...btnSecundario, marginLeft: "auto" }}>
+          🔄 {carregando ? "..." : "Atualizar"}
+        </button>
+      </div>
+
+      {/* Ranking */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
+        <div style={{ color: C.white, fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
+          🏆 Ranking de faturamento ({dias}d)
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {dados.ranking.map((r, i) => {
+            const pct = maxFat > 0 ? (r.faturamento / maxFat) * 100 : 0;
+            return (
+              <div key={r.id}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 3 }}>
+                  <div style={{ color: C.text, fontSize: 12, fontWeight: 700 }}>
+                    {i + 1}. {r.nome} {!r.ativo && <span style={{ color: C.red, fontSize: 10 }}>(suspensa)</span>}
+                  </div>
+                  <div style={{ color: C.muted, fontSize: 11 }}>
+                    {fmtNum(r.vendasQtd)} vendas · <strong style={{ color: C.green }}>{fmtBRL(r.faturamento)}</strong>
+                  </div>
+                </div>
+                <div style={{ position: "relative", height: 12, background: C.surface, borderRadius: 4, overflow: "hidden" }}>
+                  <div style={{ width: `${pct}%`, height: "100%", background: C.green, opacity: 0.6 }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Empresas inativas */}
+      {dados.empresasInativasCount > 0 && (
+        <div style={{
+          background: C.yellow + "11", border: `1px solid ${C.yellow}55`,
+          borderRadius: 12, padding: 16, marginBottom: 14,
+        }}>
+          <div style={{ color: C.yellow, fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
+            ⚠️ {dados.empresasInativasCount} empresa{dados.empresasInativasCount === 1 ? "" : "s"} sem login há 30+ dias
+          </div>
+          <div style={{ color: C.muted, fontSize: 11, marginBottom: 10 }}>
+            Risco de churn — vale entrar em contato.
+          </div>
+          {dados.empresasInativas.map(e => (
+            <div key={e.id} style={{
+              display: "flex", justifyContent: "space-between",
+              padding: "6px 10px", background: C.card, borderRadius: 6, marginBottom: 4, fontSize: 12,
+            }}>
+              <span style={{ color: C.text }}>{e.nome}</span>
+              <span style={{ color: C.muted }}>{e.ultimoLogin ? `Último login: ${fmtData(e.ultimoLogin)}` : "Nunca logou"}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+// ============ ABA: LOGS ============
+function AbaLogs() {
+  const [logs, setLogs] = useState([]);
+  const [filtros, setFiltros] = useState({ tenantId: "", acao: "", modulo: "" });
+  const [empresas, setEmpresas] = useState([]);
+  const [carregando, setCarregando] = useState(false);
+
+  async function carregar() {
+    setCarregando(true);
+    try {
+      const [r, emp] = await Promise.all([
+        api.adminMasterLogs({
+          tenantId: filtros.tenantId || undefined,
+          acao: filtros.acao || undefined,
+          modulo: filtros.modulo || undefined,
+          limit: 200,
+        }),
+        empresas.length === 0 ? api.adminMasterListarEmpresas() : Promise.resolve({ empresas }),
+      ]);
+      setLogs(r.logs || []);
+      if (empresas.length === 0) setEmpresas(emp.empresas || []);
+    } catch (err) {
+      alert(`Erro: ${err.message}`);
+    } finally {
+      setCarregando(false);
+    }
+  }
+  useEffect(() => { carregar(); }, []);
+
+  function corDaAcao(a) {
+    if (a?.startsWith("LOGIN_FALHO")) return C.red;
+    if (a?.includes("DELETE") || a?.includes("RESET") || a?.includes("DESATIVADA")) return C.red;
+    if (a === "LOGIN" || a?.includes("CREATE") || a?.includes("PROMOVIDO")) return C.green;
+    if (a?.includes("IMPERSONOU")) return "#f59e0b";
+    return C.accent;
+  }
+
+  return (
+    <>
+      <div style={{
+        background: C.card, border: `1px solid ${C.border}`,
+        borderRadius: 12, padding: 12, marginBottom: 14,
+        display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap",
+      }}>
+        <div style={{ display: "flex", flexDirection: "column", minWidth: 200 }}>
+          <label style={labelStyle}>Empresa</label>
+          <select value={filtros.tenantId} onChange={e => setFiltros(f => ({ ...f, tenantId: e.target.value }))} style={inputStyle}>
+            <option value="">Todas</option>
+            {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
+          </select>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", minWidth: 140 }}>
+          <label style={labelStyle}>Ação</label>
+          <input value={filtros.acao} onChange={e => setFiltros(f => ({ ...f, acao: e.target.value }))} placeholder="ex: LOGIN" style={inputStyle} />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", minWidth: 140 }}>
+          <label style={labelStyle}>Módulo</label>
+          <input value={filtros.modulo} onChange={e => setFiltros(f => ({ ...f, modulo: e.target.value }))} placeholder="ex: AUTH" style={inputStyle} />
+        </div>
+        <button onClick={carregar} disabled={carregando} style={{
+          background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+          color: C.white, border: "none", borderRadius: 8,
+          padding: "8px 16px", fontWeight: 700, fontSize: 12, cursor: "pointer",
+        }}>🔍 {carregando ? "..." : "Filtrar"}</button>
+      </div>
+
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
+        <div style={{ padding: "10px 16px", borderBottom: `1px solid ${C.border}`, color: C.white, fontSize: 13, fontWeight: 700 }}>
+          {logs.length} eventos (mais recentes primeiro)
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+            <thead>
+              <tr style={{ background: C.surface }}>
+                {["Quando", "Ação", "Módulo", "Empresa", "Usuário", "Mensagem"].map((h, i) => (
+                  <th key={i} style={{
+                    padding: "8px 10px", textAlign: "left",
+                    color: C.muted, fontSize: 10, fontWeight: 700,
+                    textTransform: "uppercase", letterSpacing: 0.5,
+                    borderBottom: `1px solid ${C.border}`,
+                  }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map(l => (
+                <tr key={l.id} style={{ borderBottom: `1px solid ${C.border}55` }}>
+                  <td style={{ padding: "7px 10px", color: C.muted, whiteSpace: "nowrap" }}>
+                    {l.createdAt ? new Date(l.createdAt).toLocaleString("pt-BR") : "—"}
+                  </td>
+                  <td style={{ padding: "7px 10px" }}>
+                    <span style={{
+                      color: corDaAcao(l.acao), fontWeight: 700, fontSize: 10,
+                      background: corDaAcao(l.acao) + "22",
+                      padding: "2px 6px", borderRadius: 4,
+                    }}>{l.acao}</span>
+                  </td>
+                  <td style={{ padding: "7px 10px", color: C.muted }}>{l.modulo}</td>
+                  <td style={{ padding: "7px 10px", color: C.text }}>{l.empresaNome || "—"}</td>
+                  <td style={{ padding: "7px 10px", color: C.muted, fontSize: 10 }}>
+                    {l.usuarioEmail || l.usuarioNome || "—"}
+                  </td>
+                  <td style={{ padding: "7px 10px", color: C.text, fontSize: 11 }}>{l.mensagem || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ============ MODAL: SUSPENDER COM MOTIVO ============
+function ModalSuspender({ empresa, onCancelar, onSuspensa }) {
+  const [motivo, setMotivo] = useState("");
+  const [erro, setErro] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    setSalvando(true); setErro("");
+    try {
+      await api.adminMasterAlterarStatus(empresa.id, false, motivo.trim());
+      onSuspensa();
+    } catch (err) {
+      setErro(err.message);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div onClick={() => !salvando && onCancelar()} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: 20, zIndex: 200,
+    }}>
+      <form onClick={e => e.stopPropagation()} onSubmit={submit} style={{
+        background: C.card, border: `2px solid ${C.red}55`, borderRadius: 14,
+        width: "100%", maxWidth: 460, padding: 24,
+      }}>
+        <div style={{ color: C.red, fontSize: 18, fontWeight: 800, marginBottom: 6 }}>
+          ⏸ Suspender empresa
+        </div>
+        <div style={{ color: C.muted, fontSize: 12, marginBottom: 16 }}>
+          "{empresa.nome}" será suspensa. Todos os users perdem acesso até reativação.
+        </div>
+        <label style={labelStyle}>Motivo (opcional, mostrado pro user no login)</label>
+        <textarea value={motivo} onChange={e => setMotivo(e.target.value)}
+          rows={3} maxLength={500}
+          placeholder="Ex: Pagamento em atraso desde 10/05. Quitar para reativar."
+          style={{ ...inputStyle, resize: "vertical", minHeight: 70 }} />
+        {erro && (
+          <div style={{
+            marginTop: 10, padding: "8px 12px", borderRadius: 8,
+            background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red, fontSize: 12,
+          }}>{erro}</div>
+        )}
+        <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
+          <button type="button" onClick={onCancelar} disabled={salvando} style={{ ...btnSecundario, flex: 1 }}>
+            Cancelar
+          </button>
+          <button type="submit" disabled={salvando} style={{
+            flex: 1, background: C.red, color: C.white,
+            border: "none", borderRadius: 8, padding: "9px 18px",
+            fontWeight: 800, fontSize: 12, cursor: salvando ? "default" : "pointer",
+            opacity: salvando ? 0.6 : 1,
+          }}>{salvando ? "Suspendendo..." : "⏸ Suspender"}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// Botao de acao compacto (icone)
+const btnAcao = (cor) => ({
+  background: cor + "22", color: cor,
+  border: `1px solid ${cor}55`,
+  borderRadius: 6, padding: "4px 8px",
+  fontWeight: 700, fontSize: 12, cursor: "pointer",
+  minWidth: 28,
+});
 
 // ============ MODAL: CRIAR EMPRESA ============
 function ModalCriarEmpresa({ onCancelar, onCriada }) {

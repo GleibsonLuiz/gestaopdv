@@ -16,7 +16,12 @@ export async function login(req, res, next) {
     const user = await prisma.user.findFirst({
       where: { email },
       include: {
-        tenant: { select: { id: true, nome: true, cnpj: true, ativo: true } },
+        tenant: {
+          select: {
+            id: true, nome: true, cnpj: true, ativo: true,
+            motivoSuspensao: true, suspensaEm: true,
+          },
+        },
       },
     });
     if (!user || !user.ativo) {
@@ -46,7 +51,15 @@ export async function login(req, res, next) {
         req,
         tenantId: user.tenantId || null,
       });
-      return res.status(403).json({ erro: "Conta indisponivel. Contate o suporte." });
+      // ETAPA 11: se houve motivo de suspensao, retorna pro front exibir.
+      const motivo = user.tenant?.motivoSuspensao || null;
+      return res.status(403).json({
+        erro: motivo
+          ? `Conta suspensa: ${motivo}`
+          : "Conta indisponivel. Contate o suporte.",
+        motivoSuspensao: motivo,
+        suspensaEm: user.tenant?.suspensaEm || null,
+      });
     }
 
     const ok = await bcrypt.compare(senha, user.senha);

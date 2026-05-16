@@ -145,8 +145,37 @@ export const api = {
   adminMasterEstatisticas: () => request("/admin-master/estatisticas"),
   adminMasterCriarEmpresa: (dados) =>
     request("/admin-master/empresas", { method: "POST", body: dados }),
-  adminMasterAlterarStatus: (id, ativo) =>
-    request(`/admin-master/empresas/${id}/status`, { method: "PATCH", body: { ativo } }),
+  adminMasterAlterarStatus: (id, ativo, motivo) =>
+    request(`/admin-master/empresas/${id}/status`, {
+      method: "PATCH", body: { ativo, motivo },
+    }),
+  // ETAPA 11
+  adminMasterResetarEmpresa: (id) =>
+    request(`/admin-master/empresas/${id}/reset`, {
+      method: "POST", body: { confirmacao: "CONFIRMAR_RESET" },
+    }),
+  adminMasterListarUsers: (tenantId) => {
+    const qs = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : "";
+    return request(`/admin-master/users${qs}`);
+  },
+  adminMasterAlterarSuperAdmin: (id, superAdmin) =>
+    request(`/admin-master/users/${id}/super-admin`, {
+      method: "PATCH", body: { superAdmin },
+    }),
+  adminMasterImpersonate: (userId) =>
+    request(`/admin-master/impersonate/${userId}`, { method: "POST" }),
+  adminMasterLogs: (filtros = {}) => {
+    const qs = new URLSearchParams();
+    if (filtros.tenantId) qs.set("tenantId", filtros.tenantId);
+    if (filtros.usuarioId) qs.set("usuarioId", filtros.usuarioId);
+    if (filtros.acao) qs.set("acao", filtros.acao);
+    if (filtros.modulo) qs.set("modulo", filtros.modulo);
+    if (filtros.limit) qs.set("limit", filtros.limit);
+    const q = qs.toString();
+    return request(`/admin-master/logs${q ? `?${q}` : ""}`);
+  },
+  adminMasterMetricas: (diasAtras = 30) =>
+    request(`/admin-master/metricas?diasAtras=${diasAtras}`),
   trocarSenha: (senhaAtual, senhaNova) =>
     request("/auth/senha", { method: "PUT", body: { senhaAtual, senhaNova } }),
 

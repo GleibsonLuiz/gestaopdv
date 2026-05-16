@@ -55,8 +55,11 @@ function precisaFiltrar(modelo) {
 const base = new PrismaClient();
 
 // Cliente raw (sem extension) usado para validacoes internas que nao
-// devem disparar o filtro de novo (evita recursao).
+// devem disparar o filtro de novo (evita recursao). TAMBEM exportado
+// para uso pelo adminMasterController, que precisa operar cross-tenant
+// (criar/atualizar/deletar em empresas que nao sao o tenant logado).
 const baseSemFiltro = base;
+export const prismaRaw = base;
 
 const prisma = base.$extends({
   name: "tenancy",

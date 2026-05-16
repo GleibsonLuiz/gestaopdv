@@ -114,7 +114,14 @@ export default function Login({ onSuccess }) {
       onSuccess?.(user);
     } catch (e2) {
       setStatus('error');
-      setErr(e2?.message || 'Nao conseguimos validar essas credenciais.');
+      // ETAPA 11: se o backend retornou motivoSuspensao (empresa desativada
+      // pelo super-admin), mostramos o motivo destacado.
+      const motivo = e2?.data?.motivoSuspensao;
+      if (motivo) {
+        setErr(`⏸ Conta suspensa: ${motivo}`);
+      } else {
+        setErr(e2?.message || 'Nao conseguimos validar essas credenciais.');
+      }
     }
   };
 

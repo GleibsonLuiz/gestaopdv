@@ -189,6 +189,11 @@ model Empresa {
   nome      String
   cnpj      String?  @unique
   ativo     Boolean  @default(true)
+  // ETAPA 11: motivo + data de suspensao. Quando ativo=false, motivoSuspensao
+  // explica pro user (mostrado na tela de login bloqueado). suspensaEm e
+  // setado pelo super-admin no momento do PATCH /admin-master/empresas/:id/status.
+  motivoSuspensao String?
+  suspensaEm      DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

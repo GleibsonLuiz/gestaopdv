@@ -38,6 +38,7 @@ function aviso(cond, msg) {
   else { console.log(`  ⚠️  ${msg}`); warn++; findings.push({ tipo: "AVISO", msg }); }
 }
 function secao(t) { console.log(`\n=== ${t} ===`); }
+function info(m) { console.log(`  ℹ️  ${m}`); }
 
 function git(cmd) {
   try {
@@ -146,22 +147,31 @@ async function main() {
   });
   check(produtosTeste.length === 0, `Produtos de teste (codigo TESTE-*) removidos do banco (encontrados: ${produtosTeste.length})`);
 
-  // ---------- 8. Empresa DEFAULT existe e tem registros ----------
-  secao("8. Empresa DEFAULT e os dados originais");
-  const empDefault = await prisma.empresa.findUnique({ where: { cnpj: "00000000000000" } });
-  check(empDefault !== null, `Empresa DEFAULT existe`);
-  if (empDefault) {
+  // ---------- 8. Tenant principal existe e tem dados ----------
+  // Originalmente esperavamos "DEFAULT" com CNPJ 00000000000000 (criado pelo
+  // backfill da ETAPA 1). Mas a partir da ETAPA 9 o admin pode renomear sua
+  // empresa e mudar o CNPJ. Agora detectamos o tenant principal como o que
+  // tem mais users (o user real continua logando nele).
+  secao("8. Tenant principal e dados originais");
+  const tenants = await prisma.empresa.findMany({
+    include: { _count: { select: { users: true } } },
+  });
+  check(tenants.length >= 1, `Pelo menos 1 empresa existe (achou ${tenants.length})`);
+  const empPrincipal = tenants.sort((a, b) => b._count.users - a._count.users)[0];
+  if (empPrincipal) {
+    info(`Tenant principal: "${empPrincipal.nome}" (${empPrincipal._count.users} users)`);
     const counts = {
-      users: await prisma.user.count({ where: { tenantId: empDefault.id } }),
-      produtos: await prisma.produto.count({ where: { tenantId: empDefault.id } }),
-      vendas: await prisma.venda.count({ where: { tenantId: empDefault.id } }),
+      users: empPrincipal._count.users,
+      produtos: await prisma.produto.count({ where: { tenantId: empPrincipal.id } }),
+      vendas: await prisma.venda.count({ where: { tenantId: empPrincipal.id } }),
     };
-    console.log(`     users em DEFAULT: ${counts.users}`);
-    console.log(`     produtos em DEFAULT: ${counts.produtos}`);
-    console.log(`     vendas em DEFAULT: ${counts.vendas}`);
-    check(counts.users >= 5, `>= 5 users no tenant DEFAULT`);
-    check(counts.produtos >= 53, `>= 53 produtos no tenant DEFAULT`);
-    check(counts.vendas >= 340, `>= 340 vendas no tenant DEFAULT`);
+    console.log(`     users no principal: ${counts.users}`);
+    console.log(`     produtos no principal: ${counts.produtos}`);
+    console.log(`     vendas no principal: ${counts.vendas}`);
+    check(counts.users >= 1, `>= 1 user no tenant principal`);
+    // Removemos os thresholds rigidos (>= 53 produtos / 340 vendas) porque o
+    // admin pode ter resetado seus dados via tela Sistema ou esses numeros
+    // mudam com o uso normal do sistema.
   }
 
   // ---------- 9. Schema: tenantId presente em todos os modelos esperados ----------

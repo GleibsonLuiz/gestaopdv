@@ -13,9 +13,21 @@ const PASTAS_PARA_LIMPAR = [
   path.join(PASTA_UPLOADS, "produtos"),           // fotos de produto
 ];
 
-// Limpeza total dos dados operacionais. Mantem usuarios + permissoes e a
-// configuracao da empresa (incluindo logotipo). Ordem das deletes segue a
-// dependencia reversa de FKs para evitar P2003.
+// Limpeza total dos dados operacionais do tenant atual.
+//
+// IMPORTANTE (multi-tenant): graças ao Prisma Extension (ETAPA 3), todos os
+// deleteMany() abaixo sao automaticamente filtrados por req.tenantId — ou
+// seja, este endpoint apaga APENAS os dados da empresa do user logado.
+// Outros tenants nao sao afetados.
+//
+// O que e preservado no tenant:
+//   - Funcionarios (User) e suas permissoes
+//   - ConfiguracaoComissao (atrelada a cada funcionario)
+//   - ConfiguracaoEmpresa (razao social, CNPJ, logotipo, etc)
+//   - A Empresa em si (o tenant continua existindo)
+//   - LogAuditoria (preservado para historico forense)
+//
+// Ordem das deletes segue a dependencia reversa de FKs para evitar P2003.
 export async function resetarSistema(req, res, next) {
   try {
     if (req.body?.confirmacao !== PALAVRA_CHAVE) {
@@ -25,48 +37,93 @@ export async function resetarSistema(req, res, next) {
     }
 
     const removidos = await prisma.$transaction(async (tx) => {
-      // 1. Filhos diretos de Venda e Orcamento que referenciam Produto —
-      //    precisam sair antes de Venda, Orcamento e Produto.
+      // ===== CRM — automacoes e templates =====
+      // LogAutomacao e filho de RegraAutomacao (Cascade), entao basta deletar
+      // a regra; explicitamos por contagem.
+      const logsAutomacao = await tx.logAutomacao.deleteMany();
+      const regrasAutomacao = await tx.regraAutomacao.deleteMany();
+      const templates = await tx.templateMensagem.deleteMany();
+
+      // ===== CRM — Funil de Oportunidades =====
+      // HistoricoOportunidade e filho de Oportunidade (Cascade).
+      const historicoOportunidades = await tx.historicoOportunidade.deleteMany();
+      const oportunidades = await tx.oportunidade.deleteMany();
+
+      // ===== CRM — Tarefas =====
+      const tarefas = await tx.tarefa.deleteMany();
+
+      // ===== CRM — Tags =====
+      // ClienteTag e cascata via Cliente E via Tag. Deletamos explicitamente
+      // antes pra evitar erros caso a ordem mude.
+      const clienteTags = await tx.clienteTag.deleteMany();
+      const tags = await tx.tag.deleteMany();
+
+      // ===== CRM — Interacoes e Contatos de Cliente =====
+      // Ambos sao cascata de Cliente, mas explicitar evita problemas de
+      // ordem caso a relacao mude no schema.
+      const interacoes = await tx.interacao.deleteMany();
+      const contatos = await tx.contato.deleteMany();
+
+      // ===== Fidelidade =====
+      // MovimentacaoPontos e cascata de Cliente. PontosCliente tambem.
+      // ConfiguracaoFidelidade e singleton por tenant — deletamos pra
+      // resetar parametros.
+      const movimentacoesPontos = await tx.movimentacaoPontos.deleteMany();
+      const pontosCliente = await tx.pontosCliente.deleteMany();
+      const configFidelidade = await tx.configuracaoFidelidade.deleteMany();
+
+      // ===== Pesquisas NPS =====
+      // Cascade de Venda, mas deletar antes garante ordem segura.
+      const pesquisasNps = await tx.pesquisaNps.deleteMany();
+
+      // ===== Vendas / Orcamentos / Caixas =====
       const itensVenda = await tx.itemVenda.deleteMany();
       const itensOrcamento = await tx.itemOrcamento.deleteMany();
-
-      // 2. MovimentacoesCaixa referenciam Venda, Caixa, ContaPagar e
-      //    ContaReceber — deletar antes de todos eles.
       const movimentacoesCaixa = await tx.movimentacaoCaixa.deleteMany();
-
-      // 3. Vendas referenciam Caixa via caixaId — deletar antes do Caixa.
       const vendas = await tx.venda.deleteMany();
-
-      // 4. Orcamentos referenciam Cliente — deletar antes de Cliente.
       const orcamentos = await tx.orcamento.deleteMany();
-
-      // 5. Caixas (depois das vendas + movimentacoes).
       const caixas = await tx.caixa.deleteMany();
 
-      // 6. Compras
+      // ===== Compras =====
       const itensCompra = await tx.itemCompra.deleteMany();
       const compras = await tx.compra.deleteMany();
 
-      // 7. Estoque (movimentacoes sao filhas de produto + user)
+      // ===== Estoque (movimentacoes — filhas de produto + user) =====
       const movimentacoesEstoque = await tx.movimentacaoEstoque.deleteMany();
 
-      // 8. Financeiro (anexos sao filhos de conta)
+      // ===== Financeiro (anexos sao filhos de conta) =====
       const anexos = await tx.anexo.deleteMany();
       const contasPagar = await tx.contaPagar.deleteMany();
       const contasReceber = await tx.contaReceber.deleteMany();
 
-      // 9. Cadastros (produtos antes de categorias e fornecedores por causa
-      //    das FKs categoriaId e fornecedorId)
+      // ===== Cadastros (produtos antes de categorias/fornecedores; clientes
+      //       depois das oportunidades/tarefas que os referenciam) =====
       const produtos = await tx.produto.deleteMany();
       const categorias = await tx.categoria.deleteMany();
       const fornecedores = await tx.fornecedor.deleteMany();
       const clientes = await tx.cliente.deleteMany();
 
-      // 10. Formas de pagamento personalizadas (sem FKs — vendas/contas guardam
-      //     apenas o enum base FormaPagamento, nao referenciam o custom).
+      // ===== Formas de pagamento personalizadas =====
       const formasPagamentoCustom = await tx.formaPagamentoCustom.deleteMany();
 
       return {
+        // CRM
+        logsAutomacao: logsAutomacao.count,
+        regrasAutomacao: regrasAutomacao.count,
+        templates: templates.count,
+        historicoOportunidades: historicoOportunidades.count,
+        oportunidades: oportunidades.count,
+        tarefas: tarefas.count,
+        clienteTags: clienteTags.count,
+        tags: tags.count,
+        interacoes: interacoes.count,
+        contatos: contatos.count,
+        // Fidelidade
+        movimentacoesPontos: movimentacoesPontos.count,
+        pontosCliente: pontosCliente.count,
+        configFidelidade: configFidelidade.count,
+        pesquisasNps: pesquisasNps.count,
+        // Operacional
         itensVenda: itensVenda.count, itensOrcamento: itensOrcamento.count,
         vendas: vendas.count, orcamentos: orcamentos.count,
         movimentacoesCaixa: movimentacoesCaixa.count, caixas: caixas.count,

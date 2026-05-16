@@ -1,35 +1,71 @@
 import { useMemo, useState } from "react";
 import { C } from "./lib/theme.js";
-import { api } from "./lib/api.js";
+import { api, getEmpresa } from "./lib/api.js";
 
 
 const PALAVRA_CHAVE = "CONFIRMAR_RESET";
 
-const TABELAS_LIMPAS = [
-  ["🛒", "Vendas e itens de venda"],
-  ["📋", "Orçamentos e ordens de serviço"],
-  ["💵", "Caixas (abertura/fechamento + extrato)"],
-  ["🔄", "Movimentações de caixa (sangria, suprimento, estorno)"],
-  ["🛍", "Compras e itens de compra"],
-  ["📊", "Movimentações de estoque"],
-  ["📎", "Anexos (PDF/imagens) do financeiro"],
-  ["💸", "Contas a pagar e a receber"],
-  ["📦", "Produtos (incluindo serviços e fotos)"],
-  ["🏷", "Categorias"],
-  ["🏭", "Fornecedores"],
-  ["👥", "Clientes"],
-  ["💳", "Formas de pagamento personalizadas"],
+// Lista organizada em grupos. Cada item reflete uma ou mais tabelas que
+// o adminController.resetarSistema apaga via deleteMany() (todas filtradas
+// automaticamente por tenant pelo Prisma Extension).
+const GRUPOS_LIMPOS = [
+  {
+    titulo: "Operacional",
+    itens: [
+      ["🛒", "Vendas e itens de venda"],
+      ["📋", "Orçamentos e ordens de serviço"],
+      ["💵", "Caixas (abertura/fechamento + extrato)"],
+      ["🔄", "Movimentações de caixa (sangria, suprimento, estorno)"],
+      ["🛍", "Compras e itens de compra"],
+      ["📊", "Movimentações de estoque"],
+      ["📎", "Anexos (PDF/imagens) do financeiro"],
+      ["💸", "Contas a pagar e a receber"],
+    ],
+  },
+  {
+    titulo: "Cadastros",
+    itens: [
+      ["📦", "Produtos (incluindo serviços e fotos)"],
+      ["🏷", "Categorias"],
+      ["🏭", "Fornecedores"],
+      ["👥", "Clientes (e seus contatos B2B)"],
+      ["💳", "Formas de pagamento personalizadas"],
+    ],
+  },
+  {
+    titulo: "CRM",
+    itens: [
+      ["🎯", "Oportunidades + histórico (funil de vendas)"],
+      ["✅", "Tarefas e follow-ups"],
+      ["💬", "Interações com clientes (ligações, WhatsApp, etc.)"],
+      ["🏷️", "Tags de clientes"],
+      ["📨", "Templates de mensagem (WhatsApp/Email/SMS)"],
+      ["⚡", "Regras de automação + logs de execução"],
+      ["⭐", "Pesquisas NPS e respostas"],
+    ],
+  },
+  {
+    titulo: "Fidelidade",
+    itens: [
+      ["💎", "Pontos de cliente e movimentações"],
+      ["⚙️", "Configuração do programa de fidelidade"],
+    ],
+  },
 ];
 
 const PRESERVADOS = [
-  ["🧑‍💼", "Funcionários (incluindo você)"],
+  ["🧑‍💼", "Funcionários da empresa (incluindo você)"],
+  ["🏆", "Configurações de comissão dos vendedores"],
   ["🔐", "Permissões e perfis (ADMIN/GERENTE/VENDEDOR)"],
-  ["🏢", "Dados da empresa (razão social, CNPJ, endereço)"],
+  ["🏢", "Identidade da empresa (nome, CNPJ, status)"],
+  ["📄", "Dados fiscais e de exibição (razão social, endereço, etc.)"],
   ["🖼", "Logotipo da empresa"],
+  ["📜", "Logs de auditoria (histórico de ações)"],
 ];
 
 export default function Sistema({ user, onResetar }) {
   const [modalAberto, setModalAberto] = useState(false);
+  const empresa = getEmpresa();
 
   if (user.role !== "ADMIN") {
     return (
@@ -52,51 +88,78 @@ export default function Sistema({ user, onResetar }) {
           display: "flex", alignItems: "center", gap: 12, marginBottom: 14,
         }}>
           <div style={{ fontSize: 28 }}>🚨</div>
-          <div>
+          <div style={{ flex: 1 }}>
             <div style={{ color: C.red, fontWeight: 800, fontSize: 18, lineHeight: 1.1 }}>
-              Zona de Perigo
+              Zona de Perigo — Reset dos dados da empresa
             </div>
             <div style={{ color: C.muted, fontSize: 12, marginTop: 4 }}>
-              Operações irreversíveis. Tenha certeza absoluta antes de prosseguir.
+              Apaga TODOS os dados operacionais e de CRM apenas da sua empresa
+              {empresa?.nome ? ` (${empresa.nome})` : ""}. Outras empresas no sistema não são afetadas.
             </div>
           </div>
+        </div>
+
+        {/* Esclarecimento multi-tenant */}
+        <div style={{
+          background: C.accent + "11", border: `1px solid ${C.accent}55`,
+          borderRadius: 10, padding: "10px 14px", marginBottom: 16,
+          color: C.text, fontSize: 12, lineHeight: 1.5,
+        }}>
+          🏢 <strong>Escopo:</strong> esta operação afeta APENAS o tenant logado
+          {empresa?.nome ? ` — "${empresa.nome}"` : ""}. O isolamento multi-tenant garante que
+          dados de outras empresas no mesmo sistema permanecem intocados.
         </div>
 
         <div style={{
           background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10,
           padding: 18, display: "grid", gap: 18,
-          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
         }}>
+          {/* Coluna 1: Será apagado, com sub-grupos */}
           <div>
             <div style={{
-              color: C.red, fontSize: 11, fontWeight: 700, marginBottom: 8,
+              color: C.red, fontSize: 11, fontWeight: 700, marginBottom: 10,
               textTransform: "uppercase", letterSpacing: 0.5,
             }}>
-              ⚠ Será apagado
+              ⚠ Será apagado (apenas da sua empresa)
             </div>
-            {TABELAS_LIMPAS.map(([icone, nome]) => (
-              <div key={nome} style={{
-                color: C.text, fontSize: 13, padding: "4px 0",
-                display: "flex", alignItems: "center", gap: 8,
-              }}>
-                <span style={{ width: 20 }}>{icone}</span>
-                <span>{nome}</span>
+            {GRUPOS_LIMPOS.map(grupo => (
+              <div key={grupo.titulo} style={{ marginBottom: 12 }}>
+                <div style={{
+                  color: C.muted, fontSize: 10, fontWeight: 700,
+                  textTransform: "uppercase", letterSpacing: 0.5,
+                  marginBottom: 4, marginTop: 4,
+                  borderBottom: `1px solid ${C.border}55`, paddingBottom: 2,
+                }}>
+                  {grupo.titulo}
+                </div>
+                {grupo.itens.map(([icone, nome]) => (
+                  <div key={nome} style={{
+                    color: C.text, fontSize: 12.5, padding: "3px 0",
+                    display: "flex", alignItems: "center", gap: 8,
+                  }}>
+                    <span style={{ width: 20, flexShrink: 0 }}>{icone}</span>
+                    <span>{nome}</span>
+                  </div>
+                ))}
               </div>
             ))}
           </div>
+
+          {/* Coluna 2: Preservado */}
           <div>
             <div style={{
-              color: C.green, fontSize: 11, fontWeight: 700, marginBottom: 8,
+              color: C.green, fontSize: 11, fontWeight: 700, marginBottom: 10,
               textTransform: "uppercase", letterSpacing: 0.5,
             }}>
               ✓ Preservado
             </div>
             {PRESERVADOS.map(([icone, nome]) => (
               <div key={nome} style={{
-                color: C.text, fontSize: 13, padding: "4px 0",
+                color: C.text, fontSize: 12.5, padding: "5px 0",
                 display: "flex", alignItems: "center", gap: 8,
               }}>
-                <span style={{ width: 20 }}>{icone}</span>
+                <span style={{ width: 20, flexShrink: 0 }}>{icone}</span>
                 <span>{nome}</span>
               </div>
             ))}
@@ -113,12 +176,13 @@ export default function Sistema({ user, onResetar }) {
             boxShadow: `0 4px 14px ${C.red}55`,
           }}
         >
-          🗑 RESET TOTAL DO SISTEMA
+          🗑 RESET TOTAL DOS DADOS DESTA EMPRESA
         </button>
       </div>
 
       {modalAberto && (
         <ModalReset
+          empresa={empresa}
           onCancelar={() => setModalAberto(false)}
           onConcluir={(resumo) => {
             setModalAberto(false);
@@ -130,7 +194,7 @@ export default function Sistema({ user, onResetar }) {
   );
 }
 
-function ModalReset({ onCancelar, onConcluir }) {
+function ModalReset({ empresa, onCancelar, onConcluir }) {
   const [texto, setTexto] = useState("");
   const [executando, setExecutando] = useState(false);
   const [erro, setErro] = useState("");
@@ -171,7 +235,8 @@ function ModalReset({ onCancelar, onConcluir }) {
             CONFIRMAÇÃO CRÍTICA
           </div>
           <div style={{ color: C.muted, fontSize: 13, marginTop: 6 }}>
-            Você está prestes a apagar TODOS os dados operacionais do sistema.
+            Você está prestes a apagar TODOS os dados operacionais e de CRM
+            {empresa?.nome ? ` da empresa "${empresa.nome}"` : " da sua empresa"}.
           </div>
         </div>
 
@@ -182,9 +247,11 @@ function ModalReset({ onCancelar, onConcluir }) {
         }}>
           Esta ação é <strong style={{ color: C.red }}>IRREVERSÍVEL</strong>.
           Vendas, caixas, compras, estoque, financeiro, cadastros (clientes,
-          fornecedores, produtos e categorias) e formas de pagamento
-          personalizadas serão apagados permanentemente. Os funcionários,
-          permissões e dados da empresa (incluindo logotipo) serão preservados.
+          fornecedores, produtos, categorias), formas de pagamento personalizadas
+          e todos os dados de CRM (funil, tarefas, interações, NPS, automações,
+          tags, templates) serão apagados permanentemente. Os funcionários, comissões,
+          permissões, identidade da empresa, logotipo e logs de auditoria serão preservados.
+          {empresa?.nome ? ` Outras empresas no sistema NÃO são afetadas.` : ""}
         </div>
 
         <div style={{

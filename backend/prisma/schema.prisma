@@ -290,6 +290,7 @@ model Empresa {
   logsAutomacao          LogAutomacao[]
   historicoOportunidades HistoricoOportunidade[]
   logsAuditoria          LogAuditoria[]
+  notificacoesRecebidas  Notificacao[]
 
   @@map("empresas")
 }
@@ -1441,9 +1442,16 @@ model Notificacao {
   criadoPorId String
   criadoPor   User   @relation("NotificacaoCriador", fields: [criadoPorId], references: [id])
 
+  // destinoTenantId=null -> broadcast (todos os tenants). Setado -> mensagem
+  // direcionada so pros users daquele tenant. Cascade pra remover mensagens
+  // se a empresa for deletada.
+  destinoTenantId String?
+  destinoTenant   Empresa? @relation(fields: [destinoTenantId], references: [id], onDelete: Cascade)
+
   lidas NotificacaoLida[]
 
   @@index([ativa, createdAt(sort: Desc)])
+  @@index([destinoTenantId])
   @@map("notificacoes")
 }
 

@@ -12,20 +12,26 @@ const TIPOS = new Set(["INFO", "AVISO", "MANUTENCAO", "NOVIDADE"]);
 // ============ ROTAS DE USER NORMAL ============
 
 // GET /notificacoes — retorna notificacoes ativas que o user atual ainda
-// nao marcou como lida e que nao expiraram.
+// nao marcou como lida e que nao expiraram. Inclui:
+//   - broadcasts (destinoTenantId IS NULL)
+//   - mensagens direcionadas ao tenant do user (destinoTenantId = req.tenantId)
 export async function minhas(req, res, next) {
   try {
     const userId = req.user.sub;
+    const tenantId = req.tenantId;
     const agora = new Date();
     const linhas = await prismaRaw.notificacao.findMany({
       where: {
         ativa: true,
         OR: [{ expiraEm: null }, { expiraEm: { gt: agora } }],
-        NOT: { lidas: { some: { userId } } },
+        AND: [
+          { OR: [{ destinoTenantId: null }, { destinoTenantId: tenantId }] },
+          { NOT: { lidas: { some: { userId } } } },
+        ],
       },
       select: {
         id: true, titulo: true, mensagem: true, tipo: true,
-        createdAt: true, expiraEm: true,
+        createdAt: true, expiraEm: true, destinoTenantId: true,
       },
       orderBy: { createdAt: "desc" },
     });
@@ -57,10 +63,11 @@ export async function marcarLida(req, res, next) {
 
 // ============ ROTAS DE SUPER-ADMIN ============
 
-// POST /admin-master/notificacoes — cria nova notificacao broadcast.
+// POST /admin-master/notificacoes — cria notificacao broadcast OU direcionada
+// a um tenant especifico (campo destinoTenantId no body).
 export async function criar(req, res, next) {
   try {
-    const { titulo, mensagem, tipo, expiraEm } = req.body || {};
+    const { titulo, mensagem, tipo, expiraEm, destinoTenantId } = req.body || {};
     if (!titulo || String(titulo).trim().length < 3) {
       return res.status(400).json({ erro: "Titulo obrigatorio (min 3 caracteres)" });
     }
@@ -75,6 +82,22 @@ export async function criar(req, res, next) {
       if (!isNaN(d.getTime())) expira = d;
     }
 
+    // Valida tenant de destino se setado. Sem isso o usuario poderia mandar
+    // notificacao pra qualquer string UUID e ela ficaria orfa.
+    let destinoFinal = null;
+    let destinoNome = null;
+    if (destinoTenantId) {
+      const empresa = await prismaRaw.empresa.findUnique({
+        where: { id: String(destinoTenantId) },
+        select: { id: true, nome: true },
+      });
+      if (!empresa) {
+        return res.status(404).json({ erro: "Empresa de destino nao encontrada" });
+      }
+      destinoFinal = empresa.id;
+      destinoNome = empresa.nome;
+    }
+
     const n = await prismaRaw.notificacao.create({
       data: {
         titulo: String(titulo).trim().slice(0, 200),
@@ -83,13 +106,18 @@ export async function criar(req, res, next) {
         expiraEm: expira,
         ativa: true,
         criadoPorId: req.user.sub,
+        destinoTenantId: destinoFinal,
       },
     });
 
     registrarEvento({
-      acao: "NOTIFICACAO_CRIADA", modulo: "ADMIN_MASTER", sucesso: true,
+      acao: destinoFinal ? "NOTIFICACAO_DIRECIONADA" : "NOTIFICACAO_CRIADA",
+      modulo: "ADMIN_MASTER", sucesso: true,
       usuarioId: req.user.sub, usuarioNome: req.user.nome,
-      mensagem: `Notificacao "${n.titulo}" enviada para todos os tenants`,
+      tenantId: destinoFinal,
+      mensagem: destinoFinal
+        ? `Mensagem "${n.titulo}" enviada para ${destinoNome}`
+        : `Notificacao "${n.titulo}" enviada para todos os tenants`,
       req,
     });
 
@@ -100,25 +128,42 @@ export async function criar(req, res, next) {
 }
 
 // GET /admin-master/notificacoes — lista todas (super-admin), com contagem
-// de leituras.
+// de leituras e info de destino (broadcast ou empresa especifica).
 export async function listarTodas(req, res, next) {
   try {
     const linhas = await prismaRaw.notificacao.findMany({
       orderBy: { createdAt: "desc" },
       include: {
-        criadoPor: { select: { id: true, nome: true } },
-        _count: { select: { lidas: true } },
+        criadoPor:     { select: { id: true, nome: true } },
+        destinoTenant: { select: { id: true, nome: true } },
+        _count:        { select: { lidas: true } },
       },
     });
-    const total = await prismaRaw.user.count();
+    // totalUsers e o universo possivel de leituras pra notificacao broadcast.
+    // Pra notificacao direcionada, o universo e o numero de users do tenant.
+    const totalUsersGlobal = await prismaRaw.user.count();
+    const usersPorTenant = new Map();
     res.json({
       total: linhas.length,
-      totalUsers: total,
-      notificacoes: linhas.map(n => ({
-        id: n.id, titulo: n.titulo, mensagem: n.mensagem, tipo: n.tipo,
-        ativa: n.ativa, expiraEm: n.expiraEm, createdAt: n.createdAt,
-        criadoPor: n.criadoPor?.nome || "—",
-        leituras: n._count?.lidas || 0,
+      totalUsers: totalUsersGlobal,
+      notificacoes: await Promise.all(linhas.map(async n => {
+        let universo = totalUsersGlobal;
+        if (n.destinoTenantId) {
+          if (!usersPorTenant.has(n.destinoTenantId)) {
+            const c = await prismaRaw.user.count({ where: { tenantId: n.destinoTenantId } });
+            usersPorTenant.set(n.destinoTenantId, c);
+          }
+          universo = usersPorTenant.get(n.destinoTenantId);
+        }
+        return {
+          id: n.id, titulo: n.titulo, mensagem: n.mensagem, tipo: n.tipo,
+          ativa: n.ativa, expiraEm: n.expiraEm, createdAt: n.createdAt,
+          criadoPor: n.criadoPor?.nome || "—",
+          destinoTenantId: n.destinoTenantId,
+          destinoNome: n.destinoTenant?.nome || null,
+          universo,
+          leituras: n._count?.lidas || 0,
+        };
       })),
     });
   } catch (err) {

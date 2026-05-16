@@ -318,6 +318,7 @@ function AbaEmpresas({ onMudou }) {
   const [modalSuspender, setModalSuspender] = useState(null); // empresa
   const [modalPlano, setModalPlano] = useState(null); // empresa
   const [modalDetalhes, setModalDetalhes] = useState(null); // empresa (com _saude)
+  const [modalMensagem, setModalMensagem] = useState(null); // empresa
   const [resetando, setResetando] = useState(null); // id
   const [busca, setBusca] = useState("");
   const [filtroPlano, setFiltroPlano] = useState("TODOS");
@@ -722,6 +723,14 @@ function AbaEmpresas({ onMudou }) {
           onSuspender={() => { const e = modalDetalhes; setModalDetalhes(null); setModalSuspender(e); }}
           onReativar={async () => { const e = modalDetalhes; setModalDetalhes(null); await ativar(e); }}
           onImpersonar={() => { const e = modalDetalhes; setModalDetalhes(null); impersonar(e); }}
+          onMensagem={() => { const e = modalDetalhes; setModalDetalhes(null); setModalMensagem(e); }}
+        />
+      )}
+      {modalMensagem && (
+        <ModalMensagemDireta
+          empresa={modalMensagem}
+          onCancelar={() => setModalMensagem(null)}
+          onEnviada={() => { setModalMensagem(null); }}
         />
       )}
     </>
@@ -1395,7 +1404,7 @@ function AbaNotificacoes() {
           padding: "12px 16px", borderBottom: `1px solid ${C.border}`,
         }}>
           <div style={{ color: C.white, fontSize: 14, fontWeight: 700 }}>
-            Notificações broadcast ({ns.length})
+            Notificações ({ns.length})
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={carregar} disabled={carregando} style={btnSecundario}>
@@ -1418,7 +1427,7 @@ function AbaNotificacoes() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
                 <tr style={{ background: C.surface }}>
-                  {["Tipo", "Título", "Mensagem", "Status", "Leituras", "Expira", "Criada", "Ações"].map((h, i) => (
+                  {["Tipo", "Título", "Mensagem", "Destino", "Status", "Leituras", "Expira", "Criada", "Ações"].map((h, i) => (
                     <th key={i} style={{
                       padding: "9px 10px", textAlign: "left",
                       color: C.muted, fontSize: 10, fontWeight: 700,
@@ -1452,16 +1461,35 @@ function AbaNotificacoes() {
                         {n.mensagem}
                       </td>
                       <td style={{ padding: "9px 10px" }}>
+                        {n.destinoNome ? (
+                          <span style={{
+                            padding: "2px 8px", borderRadius: 10,
+                            fontSize: 10, fontWeight: 700,
+                            background: C.green + "22", color: C.green,
+                          }} title={`So users de ${n.destinoNome} veem`}>
+                            🎯 {n.destinoNome}
+                          </span>
+                        ) : (
+                          <span style={{
+                            padding: "2px 8px", borderRadius: 10,
+                            fontSize: 10, fontWeight: 700,
+                            background: C.muted + "22", color: C.muted,
+                          }} title="Todos os tenants do sistema">
+                            📡 Broadcast
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: "9px 10px" }}>
                         <span style={{
                           fontSize: 10, fontWeight: 700,
                           color: n.ativa ? C.green : C.muted,
                         }}>{n.ativa ? "● ATIVA" : "● INATIVA"}</span>
                       </td>
                       <td style={{ padding: "9px 10px", color: C.text, fontSize: 11 }}>
-                        {n.leituras}/{totalUsers}
+                        {n.leituras}/{n.universo ?? totalUsers}
                         <div style={{ height: 3, background: C.surface, borderRadius: 2, marginTop: 2, overflow: "hidden" }}>
                           <div style={{
-                            width: `${totalUsers > 0 ? (n.leituras / totalUsers) * 100 : 0}%`,
+                            width: `${(n.universo ?? totalUsers) > 0 ? (n.leituras / (n.universo ?? totalUsers)) * 100 : 0}%`,
                             height: "100%", background: C.green,
                           }} />
                         </div>
@@ -1688,7 +1716,7 @@ function ModalPlano({ empresa, onCancelar, onSalva }) {
 // ============ MODAL: DETALHES DA EMPRESA (DRILL-DOWN) ============
 // Painel unificado pra investigar uma empresa especifica sem ter que pular
 // entre as abas Empresas/Users/Logs. Busca users e logs ao montar.
-function ModalDetalhesEmpresa({ empresa, onCancelar, onAlterarPlano, onSuspender, onReativar, onImpersonar }) {
+function ModalDetalhesEmpresa({ empresa, onCancelar, onAlterarPlano, onSuspender, onReativar, onImpersonar, onMensagem }) {
   const [users, setUsers] = useState(null);
   const [logs, setLogs] = useState(null);
   const [erro, setErro] = useState("");
@@ -1925,6 +1953,11 @@ function ModalDetalhesEmpresa({ empresa, onCancelar, onAlterarPlano, onSuspender
 
         {/* Acoes */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", borderTop: `1px solid ${C.border}`, paddingTop: 14 }}>
+          <button onClick={onMensagem} style={{
+            background: "#22c55e" + "22", color: "#22c55e",
+            border: `1px solid #22c55e55`, borderRadius: 8,
+            padding: "8px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer",
+          }}>💬 Enviar mensagem</button>
           <button onClick={onAlterarPlano} style={{
             background: planoInfo.cor + "22", color: planoInfo.cor,
             border: `1px solid ${planoInfo.cor}55`, borderRadius: 8,
@@ -1960,6 +1993,117 @@ function ModalDetalhesEmpresa({ empresa, onCancelar, onAlterarPlano, onSuspender
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ============ MODAL: MENSAGEM DIRETA (P/ 1 EMPRESA) ============
+// Usa o mesmo endpoint POST /admin-master/notificacoes que faz broadcast —
+// se destinoTenantId vem no body, vira mensagem direcionada (so users daquele
+// tenant veem o banner global).
+function ModalMensagemDireta({ empresa, onCancelar, onEnviada }) {
+  const [titulo, setTitulo] = useState("");
+  const [mensagem, setMensagem] = useState("");
+  const [tipo, setTipo] = useState("INFO");
+  const [expiraEm, setExpiraEm] = useState("");
+  const [erro, setErro] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const [enviada, setEnviada] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    setSalvando(true); setErro("");
+    try {
+      await api.adminMasterCriarNotificacao({
+        titulo: titulo.trim(),
+        mensagem: mensagem.trim(),
+        tipo,
+        expiraEm: expiraEm || undefined,
+        destinoTenantId: empresa.id,
+      });
+      setEnviada(true);
+      // Pequeno delay pra usuario ver a confirmacao antes de fechar.
+      setTimeout(onEnviada, 800);
+    } catch (err) {
+      setErro(err.message);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div onClick={() => !salvando && onCancelar()} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: 20, zIndex: 300, // acima do ModalDetalhes (200)
+    }}>
+      <form onClick={e => e.stopPropagation()} onSubmit={submit} style={{
+        background: C.card, border: `1px solid ${C.border}`, borderRadius: 14,
+        width: "100%", maxWidth: 520, padding: 26, maxHeight: "90vh", overflowY: "auto",
+      }}>
+        <div style={{ color: C.white, fontSize: 18, fontWeight: 800, marginBottom: 6 }}>
+          💬 Mensagem direta
+        </div>
+        <div style={{ color: C.muted, fontSize: 12, marginBottom: 18 }}>
+          Para <strong style={{ color: C.text }}>{empresa.nome}</strong>. Só os usuários
+          dessa empresa verão o banner — não vai pra mais ninguém.
+        </div>
+
+        <label style={labelStyle}>Tipo</label>
+        <select value={tipo} onChange={e => setTipo(e.target.value)} style={inputStyle} disabled={salvando || enviada}>
+          <option value="INFO">📢 Informativo</option>
+          <option value="AVISO">⚠️ Aviso</option>
+          <option value="MANUTENCAO">🛠️ Manutenção</option>
+          <option value="NOVIDADE">✨ Novidade</option>
+        </select>
+
+        <label style={{ ...labelStyle, marginTop: 12 }}>Título *</label>
+        <input value={titulo} onChange={e => setTitulo(e.target.value)}
+          required maxLength={200} style={inputStyle} disabled={salvando || enviada}
+          placeholder="Ex: Sobre seu pagamento de Maio" />
+
+        <label style={{ ...labelStyle, marginTop: 12 }}>Mensagem *</label>
+        <textarea value={mensagem} onChange={e => setMensagem(e.target.value)}
+          required rows={5} style={{ ...inputStyle, resize: "vertical", minHeight: 100 }}
+          disabled={salvando || enviada}
+          placeholder="Texto que os usuários desta empresa vão ler no banner. Pode incluir contato, link, etc." />
+
+        <label style={{ ...labelStyle, marginTop: 12 }}>Expira em (opcional)</label>
+        <input type="datetime-local" value={expiraEm}
+          onChange={e => setExpiraEm(e.target.value)} style={inputStyle}
+          disabled={salvando || enviada} />
+
+        {erro && (
+          <div style={{
+            marginTop: 12, padding: "8px 12px", borderRadius: 8,
+            background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red, fontSize: 12,
+          }}>{erro}</div>
+        )}
+
+        {enviada && (
+          <div style={{
+            marginTop: 12, padding: "8px 12px", borderRadius: 8,
+            background: C.green + "22", border: `1px solid ${C.green}55`,
+            color: C.green, fontSize: 12, fontWeight: 700,
+          }}>✓ Mensagem enviada</div>
+        )}
+
+        <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
+          <button type="button" onClick={onCancelar} disabled={salvando} style={{ ...btnSecundario, flex: 1 }}>
+            {enviada ? "Fechar" : "Cancelar"}
+          </button>
+          {!enviada && (
+            <button type="submit" disabled={salvando} style={{
+              flex: 1,
+              background: C.green,
+              color: C.white, border: "none", borderRadius: 8,
+              padding: "9px 18px", fontWeight: 800, fontSize: 12,
+              cursor: salvando ? "default" : "pointer",
+              opacity: salvando ? 0.6 : 1,
+            }}>{salvando ? "Enviando..." : "💬 Enviar"}</button>
+          )}
+        </div>
+      </form>
     </div>
   );
 }

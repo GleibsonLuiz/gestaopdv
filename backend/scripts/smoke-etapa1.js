@@ -22,8 +22,12 @@ const SENHA_TEMP = "smoke1-teste-5b8d";
 async function setupUserTemp() {
   const existing = await prisma.user.findFirst({ where: { email: EMAIL_TEMP } });
   if (existing) return existing;
-  const tenant = await prisma.empresa.findUnique({ where: { cnpj: "00000000000000" } });
-  if (!tenant) throw new Error("Empresa DEFAULT nao encontrada");
+  // ETAPA 10: pega tenant com mais users (admin pode ter renomeado)
+  const tenants = await prisma.empresa.findMany({
+    include: { _count: { select: { users: true } } },
+  });
+  if (tenants.length === 0) throw new Error("Nenhum tenant no banco");
+  const tenant = tenants.sort((a, b) => b._count.users - a._count.users)[0];
   const hash = await bcrypt.hash(SENHA_TEMP, 10);
   return prisma.user.create({
     data: {

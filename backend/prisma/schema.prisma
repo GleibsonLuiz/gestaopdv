@@ -262,6 +262,11 @@ model User {
   role       Role     @default(VENDEDOR)
   ativo      Boolean  @default(true)
   permissoes String[] @default([])
+  // superAdmin = desenvolvedor/dono do sistema (cross-tenant). Diferente do
+  // role ADMIN que e por tenant. Apenas super-admin pode acessar /admin-master,
+  // ver lista de TODAS as empresas e criar novos tenants. Default false: a
+  // grande maioria dos users sao admins/gerentes/vendedores de uma empresa.
+  superAdmin Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

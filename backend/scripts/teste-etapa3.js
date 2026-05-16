@@ -138,8 +138,12 @@ async function main() {
   info(`User B criado: ${userB.id} (${userB.email})`);
 
   // Buscar Empresa A (DEFAULT) para comparacao
-  const empresaA = await prisma.empresa.findUnique({ where: { cnpj: "00000000000000" } });
-  if (!empresaA) throw new Error("Empresa DEFAULT nao encontrada — rode backfill antes");
+  // ETAPA 10: pega tenant com mais users (admin pode ter renomeado)
+  const tenants = await prisma.empresa.findMany({
+    include: { _count: { select: { users: true } } },
+  });
+  if (tenants.length === 0) throw new Error("Nenhum tenant no banco");
+  const empresaA = tenants.sort((a, b) => b._count.users - a._count.users)[0];
 
   // Cria admin temp no tenant A (em vez de usar admin@gestaopro.local — nao
   // depender da senha real do user)

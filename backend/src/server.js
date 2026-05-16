@@ -34,6 +34,7 @@ import fidelidadeRoutes from "./routes/fidelidade.js";
 import logsRoutes from "./routes/logs.js";
 import tenantsRoutes from "./routes/tenants.js";
 import empresaRoutes from "./routes/empresa.js";
+import adminMasterRoutes from "./routes/admin-master.js";
 import { auditoria } from "./middlewares/auditoria.js";
 
 dotenv.config();
@@ -79,6 +80,7 @@ app.use(auditoria);
 app.use("/auth", authRoutes);
 app.use("/tenants", tenantsRoutes);
 app.use("/empresa", empresaRoutes);
+app.use("/admin-master", adminMasterRoutes);
 app.use("/clientes", clientesRoutes);
 app.use("/fornecedores", fornecedoresRoutes);
 app.use("/categorias", categoriasRoutes);

@@ -61,9 +61,15 @@ export async function login(req, res, next) {
     }
 
     // JWT inclui `tid` (tenant id) que sera usado pelo middleware da
-    // ETAPA 3 para injetar req.tenantId em toda request.
+    // ETAPA 3 para injetar req.tenantId em toda request. `sa` (super
+    // admin) e adicionado na ETAPA 10 para destravar o acesso a
+    // /admin-master.
     const token = jwt.sign(
-      { sub: user.id, role: user.role, nome: user.nome, tid: user.tenantId },
+      {
+        sub: user.id, role: user.role, nome: user.nome,
+        tid: user.tenantId,
+        sa: user.superAdmin === true,
+      },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
     );
@@ -80,6 +86,7 @@ export async function login(req, res, next) {
         id: user.id, nome: user.nome, email: user.email,
         role: user.role, permissoes: user.permissoes,
         tenantId: user.tenantId,
+        superAdmin: user.superAdmin === true,
       },
       empresa: {
         id: user.tenant.id,
@@ -98,6 +105,7 @@ export async function me(req, res, next) {
       where: { id: req.user.sub },
       select: {
         id: true, nome: true, email: true, role: true, ativo: true, permissoes: true,
+        superAdmin: true,
         tenantId: true,
         tenant: { select: { id: true, nome: true, cnpj: true, ativo: true } },
       },

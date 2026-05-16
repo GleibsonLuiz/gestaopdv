@@ -33,6 +33,17 @@ export function requireRole(...roles) {
   };
 }
 
+// Multi-tenant ETAPA 10: bloqueia endpoints restritos ao desenvolvedor do
+// sistema (super-admin). O claim `sa` e injetado no JWT pelo login quando
+// User.superAdmin === true. Mantemos uma verificacao redundante no banco
+// (toRevoke if flag foi removida apos emissao do token).
+export function requireSuperAdmin(req, res, next) {
+  if (!req.user || req.user.sa !== true) {
+    return res.status(403).json({ erro: "Acesso restrito ao desenvolvedor do sistema" });
+  }
+  next();
+}
+
 // Busca permissoes frescas do banco (mudancas refletem sem relogin) e bloqueia
 // se o usuario nao possui o modulo. ADMIN passa sempre. FUNCIONARIOS so ADMIN.
 export function requirePermissao(modulo) {

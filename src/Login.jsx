@@ -3,7 +3,6 @@
 
 import { useState, useEffect } from 'react';
 import { api, setSession } from './lib/api.js';
-import Signup from './Signup.jsx';
 
 const QUOTES = [
   { text: 'Vender é a arte de transferir entusiasmo de uma pessoa para outra.', author: 'Walter H. Cottingham' },
@@ -87,7 +86,6 @@ export default function Login({ onSuccess }) {
   const [status, setStatus]     = useState('idle'); // idle | loading | error | success
   const [err, setErr]           = useState('');
   const [quoteIdx, setQuoteIdx] = useState(0);
-  const [modo, setModo] = useState('login'); // 'login' | 'signup'
 
   const emailValid    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const passwordValid = password.length >= 6;
@@ -120,11 +118,10 @@ export default function Login({ onSuccess }) {
     }
   };
 
-  // Multi-tenant ETAPA 7: signup publico via Signup.jsx, controlado por state
-  // local. Mantemos o routing global do App.jsx simples (so login/app).
-  if (modo === 'signup') {
-    return <Signup onSuccess={onSuccess} onVoltarLogin={() => setModo('login')} />;
-  }
+  // ETAPA 10: signup publico foi REMOVIDO. Apenas o super-admin do sistema
+  // pode criar novas empresas (via /admin-master). O componente Signup.jsx
+  // continua existindo para reuso eventual, mas nao e mais acessivel pela
+  // tela de Login normal.
 
   return (
     <div className="min-h-screen w-full bg-ink-950 text-white grid grid-cols-1 lg:grid-cols-[1.1fr_minmax(440px,520px)] overflow-hidden font-sans">
@@ -260,17 +257,6 @@ export default function Login({ onSuccess }) {
               {status === 'success' && (<><Check size={20} /><span>Acesso liberado</span></>)}
               {status !== 'loading' && status !== 'success' && (<><span>Entrar</span><Arrow size={16} /></>)}
             </button>
-
-            <div className="mt-5 text-center text-[13px] text-mist-300">
-              Não tem conta?{' '}
-              <button
-                type="button"
-                onClick={() => setModo('signup')}
-                className="text-brand-violet hover:underline font-medium"
-              >
-                Cadastre sua empresa
-              </button>
-            </div>
 
             <div className="mt-6 flex items-center justify-between text-[11px] font-mono text-mist-500">
               <span>SOC 2 · LGPD</span>

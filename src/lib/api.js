@@ -129,14 +129,24 @@ async function uploadForm(path, formData) {
 export const api = {
   login: (email, senha) => request("/auth/login", { method: "POST", body: { email, senha }, auth: false }),
   me: () => request("/auth/me"),
-  // Multi-tenant signup publico — cria Empresa + admin User em transacao
-  // e ja retorna { token, user, empresa } pronto para auto-login.
-  signup: (dados) => request("/tenants/signup", { method: "POST", body: dados, auth: false }),
+  // ETAPA 10: signup agora exige super-admin (auditado pelo backend).
+  // Usado pela tela /admin-master.
+  signup: (dados) => request("/tenants/signup", { method: "POST", body: dados }),
 
   // Empresa (tenant) do usuario logado — GET retorna nome + cnpj +
   // estatisticas; PUT permite editar nome/cnpj (so ADMIN).
   obterEmpresa: () => request("/empresa"),
   atualizarEmpresa: (dados) => request("/empresa", { method: "PUT", body: dados }),
+
+  // ============ ADMIN MASTER (super-admin only) ============
+  // Endpoints exclusivos do desenvolvedor do sistema. Todos retornam 403
+  // se o JWT nao tem `sa: true`.
+  adminMasterListarEmpresas: () => request("/admin-master/empresas"),
+  adminMasterEstatisticas: () => request("/admin-master/estatisticas"),
+  adminMasterCriarEmpresa: (dados) =>
+    request("/admin-master/empresas", { method: "POST", body: dados }),
+  adminMasterAlterarStatus: (id, ativo) =>
+    request(`/admin-master/empresas/${id}/status`, { method: "PATCH", body: { ativo } }),
   trocarSenha: (senhaAtual, senhaNova) =>
     request("/auth/senha", { method: "PUT", body: { senhaAtual, senhaNova } }),
 

@@ -22,11 +22,22 @@ const prisma = new PrismaClient();
 const EMAIL_TEMP = "admin-etapa2-temp@teste.local";
 const SENHA_TEMP = "etapa2-teste-7a2c";
 
+// ETAPA 10: tenant principal nao tem mais CNPJ fixo "00000000000000"
+// porque o super-admin pode renomear. Pegamos a empresa com mais users
+// (mesma logica da auditoria-seguranca).
+async function tenantPrincipal() {
+  const tenants = await prisma.empresa.findMany({
+    include: { _count: { select: { users: true } } },
+  });
+  if (tenants.length === 0) throw new Error("Nenhuma empresa no banco");
+  return tenants.sort((a, b) => b._count.users - a._count.users)[0];
+}
+
 async function setupUserTemp() {
   const existing = await prisma.user.findFirst({ where: { email: EMAIL_TEMP } });
   if (existing) return existing;
-  const tenant = await prisma.empresa.findUnique({ where: { cnpj: "00000000000000" } });
-  if (!tenant) throw new Error("Empresa DEFAULT nao encontrada");
+  const tenant = await tenantPrincipal();
+  if (!tenant) throw new Error("Nenhum tenant disponivel");
   const hash = await bcrypt.hash(SENHA_TEMP, 10);
   return prisma.user.create({
     data: {
@@ -78,12 +89,10 @@ function check(cond, msg) {
 async function main() {
   console.log("🔐 Teste ETAPA 2 — JWT com tenantId\n");
 
-  // ---------- 0. Buscar Empresa DEFAULT + criar user temp ----------
-  console.log("=== 0. Empresa DEFAULT no banco ===");
-  const empresaDefault = await prisma.empresa.findUnique({
-    where: { cnpj: "00000000000000" },
-  });
-  check(empresaDefault !== null, `Empresa DEFAULT existe`);
+  // ---------- 0. Buscar tenant principal + criar user temp ----------
+  console.log("=== 0. Tenant principal no banco ===");
+  const empresaDefault = await tenantPrincipal();
+  check(empresaDefault !== null, `Tenant principal existe`);
   if (empresaDefault) {
     console.log(`  ℹ️  id: ${empresaDefault.id}`);
     console.log(`  ℹ️  nome: ${empresaDefault.nome}`);

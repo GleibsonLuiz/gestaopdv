@@ -271,6 +271,16 @@ export default function Login({ onSuccess }) {
               <span>SOC 2 · LGPD</span>
               <span>© GestãoPRO 2026</span>
             </div>
+
+            <div className="mt-3 text-center">
+              <a
+                href="/admin-master"
+                className="text-[10px] font-mono text-mist-500 hover:text-violet-400 transition-colors"
+                style={{ textDecoration: "none", letterSpacing: "0.05em" }}
+              >
+                · acesso administrativo ·
+              </a>
+            </div>
           </form>
         </div>
 

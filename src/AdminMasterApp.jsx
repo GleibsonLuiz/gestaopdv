@@ -182,6 +182,37 @@ const PLANOS_INFO = {
   ENTERPRISE: { cor: "#22c55e", icone: "🏆", label: "Enterprise" },
 };
 
+// Espelho da matriz em backend/src/lib/planoLimites.js — usado pelos chips de
+// alerta de saude (≥90% do limite). Se mudar backend, atualizar aqui tambem.
+// `vendasMes` omitido porque depende de query do mes corrente que nao vem
+// na listagem (a listagem traz so o total absoluto).
+const LIMITES_PLANO_UI = {
+  TRIAL:      { clientes: 50,   produtos: 100,   usuarios: 3 },
+  FREE:       { clientes: 30,   produtos: 50,    usuarios: 1 },
+  STARTER:    { clientes: 500,  produtos: 1000,  usuarios: 5 },
+  PRO:        { clientes: 5000, produtos: 10000, usuarios: 20 },
+  ENTERPRISE: { clientes: null, produtos: null,  usuarios: null },
+};
+
+// Avalia se uma empresa esta a >=90% de algum recurso. Retorna { recurso, pct }
+// do recurso mais critico, ou null se nenhum.
+function recursoMaisCritico(empresa) {
+  const limites = LIMITES_PLANO_UI[empresa.plano] || LIMITES_PLANO_UI.TRIAL;
+  const uso = {
+    clientes: empresa.estatisticas?.clientes ?? 0,
+    produtos: empresa.estatisticas?.produtos ?? 0,
+    usuarios: empresa.estatisticas?.usuarios ?? 0,
+  };
+  let pior = null;
+  for (const r of ["clientes", "produtos", "usuarios"]) {
+    const lim = limites[r];
+    if (!lim) continue;
+    const pct = uso[r] / lim;
+    if (pct >= 0.9 && (!pior || pct > pior.pct)) pior = { recurso: r, pct, atual: uso[r], limite: lim };
+  }
+  return pior;
+}
+
 function Painel({ user, onSair }) {
   const [tab, setTab] = useState("empresas");
   const [estatisticas, setEstatisticas] = useState(null);
@@ -288,6 +319,7 @@ function AbaEmpresas({ onMudou }) {
   const [busca, setBusca] = useState("");
   const [filtroPlano, setFiltroPlano] = useState("TODOS");
   const [filtroStatus, setFiltroStatus] = useState("TODOS");
+  const [filtroAlerta, setFiltroAlerta] = useState(null); // expiradas|expirando|suspensas|limite
   const [ordem, setOrdem] = useState({ campo: "criadaEm", dir: "desc" });
 
   async function carregar() {
@@ -347,14 +379,43 @@ function AbaEmpresas({ onMudou }) {
     }
   }
 
+  // Pre-calcula sinais de saude por empresa (1 pass) — reusado nos chips de
+  // alerta e no filtroAlerta. diasParaExpirar=null = plano sem expiracao.
+  const empresasComSaude = empresas.map(e => {
+    const dias = e.expiraEm
+      ? Math.ceil((new Date(e.expiraEm).getTime() - Date.now()) / 86400000)
+      : null;
+    const critico = recursoMaisCritico(e);
+    return {
+      ...e,
+      _saude: {
+        diasParaExpirar: dias,
+        expirou: dias !== null && dias < 0,
+        expirando: dias !== null && dias >= 0 && dias <= 7,
+        critico,
+      },
+    };
+  });
+
+  const alertas = {
+    expiradas: empresasComSaude.filter(e => e.ativo && e._saude.expirou),
+    expirando: empresasComSaude.filter(e => e.ativo && e._saude.expirando),
+    suspensas: empresasComSaude.filter(e => !e.ativo),
+    limite:    empresasComSaude.filter(e => e.ativo && e._saude.critico),
+  };
+
   // Filtro + ordenacao client-side (escala bem ate ~1000 empresas; acima disso
   // mover pra query do backend com paginacao).
   const empresasFiltradas = (() => {
     const buscaNorm = busca.trim().toLowerCase();
-    let lista = empresas.filter(e => {
+    let lista = empresasComSaude.filter(e => {
       if (filtroPlano !== "TODOS" && e.plano !== filtroPlano) return false;
       if (filtroStatus === "ATIVA" && !e.ativo) return false;
       if (filtroStatus === "SUSPENSA" && e.ativo) return false;
+      if (filtroAlerta === "expiradas" && !(e.ativo && e._saude.expirou)) return false;
+      if (filtroAlerta === "expirando" && !(e.ativo && e._saude.expirando)) return false;
+      if (filtroAlerta === "suspensas" && e.ativo) return false;
+      if (filtroAlerta === "limite" && !(e.ativo && e._saude.critico)) return false;
       if (buscaNorm) {
         const nomeOk = e.nome?.toLowerCase().includes(buscaNorm);
         const cnpjOk = (e.cnpj || "").toLowerCase().includes(buscaNorm.replace(/\D/g, ""));
@@ -402,7 +463,22 @@ function AbaEmpresas({ onMudou }) {
     { id: "acoes", label: "Ações", align: "left", sort: false },
   ];
 
-  const filtrosAtivos = busca || filtroPlano !== "TODOS" || filtroStatus !== "TODOS";
+  const filtrosAtivos = busca || filtroPlano !== "TODOS" || filtroStatus !== "TODOS" || filtroAlerta;
+
+  function limparFiltros() {
+    setBusca(""); setFiltroPlano("TODOS"); setFiltroStatus("TODOS"); setFiltroAlerta(null);
+  }
+
+  function clicarChip(tipo) {
+    setFiltroAlerta(prev => prev === tipo ? null : tipo);
+  }
+
+  const CHIPS_ALERTA = [
+    { tipo: "expiradas", cor: C.red,    icone: "🔴", label: "expiradas",          lista: alertas.expiradas },
+    { tipo: "expirando", cor: C.yellow, icone: "🟡", label: "expirando em 7d",    lista: alertas.expirando },
+    { tipo: "suspensas", cor: C.red,    icone: "⏸",  label: "suspensas",          lista: alertas.suspensas },
+    { tipo: "limite",    cor: "#fb923c",icone: "🟠", label: "≥90% de algum limite", lista: alertas.limite },
+  ].filter(c => c.lista.length > 0);
 
   return (
     <>
@@ -411,6 +487,40 @@ function AbaEmpresas({ onMudou }) {
           background: C.red + "22", border: `1px solid ${C.red}55`,
           color: C.red, borderRadius: 10, padding: "10px 14px", marginBottom: 14,
         }}>{erro}</div>
+      )}
+
+      {CHIPS_ALERTA.length > 0 && (
+        <div style={{
+          display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap",
+          alignItems: "center",
+        }}>
+          <span style={{ color: C.muted, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+            ⚠ Atenção:
+          </span>
+          {CHIPS_ALERTA.map(c => {
+            const ativo = filtroAlerta === c.tipo;
+            return (
+              <button
+                key={c.tipo}
+                type="button"
+                onClick={() => clicarChip(c.tipo)}
+                title={ativo ? "Clique pra remover filtro" : `Mostrar só ${c.label}`}
+                style={{
+                  background: ativo ? c.cor + "44" : c.cor + "1f",
+                  border: `1px solid ${c.cor}${ativo ? "" : "55"}`,
+                  color: c.cor,
+                  borderRadius: 999, padding: "5px 12px",
+                  fontSize: 11, fontWeight: 700, cursor: "pointer",
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                }}
+              >
+                <span>{c.icone}</span>
+                <span style={{ fontSize: 13, fontWeight: 800 }}>{c.lista.length}</span>
+                <span>{c.label}</span>
+              </button>
+            );
+          })}
+        </div>
       )}
 
       <div style={{
@@ -466,7 +576,7 @@ function AbaEmpresas({ onMudou }) {
           {filtrosAtivos && (
             <button
               type="button"
-              onClick={() => { setBusca(""); setFiltroPlano("TODOS"); setFiltroStatus("TODOS"); }}
+              onClick={limparFiltros}
               style={{
                 background: "transparent", border: `1px solid ${C.border}`,
                 color: C.muted, borderRadius: 8, padding: "6px 10px",
@@ -505,11 +615,7 @@ function AbaEmpresas({ onMudou }) {
               <tbody>
                 {empresasFiltradas.map(e => {
                   const planoInfo = PLANOS_INFO[e.plano] || PLANOS_INFO.TRIAL;
-                  const diasParaExpirar = e.expiraEm
-                    ? Math.ceil((new Date(e.expiraEm).getTime() - Date.now()) / 86400000)
-                    : null;
-                  const expirou = diasParaExpirar !== null && diasParaExpirar < 0;
-                  const expirando = diasParaExpirar !== null && diasParaExpirar >= 0 && diasParaExpirar <= 7;
+                  const { diasParaExpirar, expirou, expirando } = e._saude;
                   return (
                     <tr key={e.id} style={{ borderBottom: `1px solid ${C.border}55` }}>
                       <td style={{ padding: "9px 10px", color: C.text, fontWeight: 600 }}>

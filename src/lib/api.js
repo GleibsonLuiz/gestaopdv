@@ -176,6 +176,8 @@ export const api = {
   },
   adminMasterMetricas: (diasAtras = 30) =>
     request(`/admin-master/metricas?diasAtras=${diasAtras}`),
+  adminMasterFinanceiro: () =>
+    request("/admin-master/financeiro"),
 
   // ETAPA 12
   adminMasterAlterarPlano: (id, dados) =>

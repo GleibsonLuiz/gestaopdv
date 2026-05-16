@@ -4,6 +4,7 @@ import {
   listarEmpresas, estatisticasGlobais, criarEmpresa, alterarStatus,
   resetarEmpresa, listarUsers, alterarSuperAdmin, impersonate,
   logsGlobal, metricas, alterarPlano, exportarEmpresa,
+  financeiroDashboard,
 } from "../controllers/adminMasterController.js";
 import {
   criar as criarNotificacao, listarTodas as listarTodasNotificacoes,
@@ -36,5 +37,8 @@ router.get("/notificacoes", listarTodasNotificacoes);
 router.post("/notificacoes", criarNotificacao);
 router.patch("/notificacoes/:id", alterarAtivaNotificacao);
 router.delete("/notificacoes/:id", deletarNotificacao);
+
+// Dashboard financeiro do SaaS
+router.get("/financeiro", financeiroDashboard);
 
 export default router;

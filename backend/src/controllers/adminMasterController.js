@@ -115,6 +115,88 @@ export async function estatisticasGlobais(req, res, next) {
   }
 }
 
+// GET /admin-master/financeiro — agregacoes pro dashboard financeiro do SaaS.
+// Preco por plano fica no frontend (constante visivel/ajustavel); aqui
+// retornamos so contagens/series temporais que dao trabalho calcular no front.
+export async function financeiroDashboard(req, res, next) {
+  try {
+    const [porPlano, cadastrosMes, [agg]] = await Promise.all([
+      // Distribuicao de planos (so empresas ativas — suspensas nao geram receita)
+      prisma.$queryRaw`
+        SELECT plano, COUNT(*)::int AS qtd
+        FROM empresas
+        WHERE ativo = true
+        GROUP BY plano
+      `,
+      // Cadastros nos ultimos 12 meses agrupados por mes
+      prisma.$queryRaw`
+        SELECT TO_CHAR(DATE_TRUNC('month', "createdAt"), 'YYYY-MM') AS mes,
+               COUNT(*)::int AS qtd
+        FROM empresas
+        WHERE "createdAt" >= NOW() - INTERVAL '11 months'
+        GROUP BY mes
+        ORDER BY mes ASC
+      `,
+      // Counters auxiliares
+      prisma.$queryRaw`
+        SELECT
+          (SELECT COUNT(*)::int FROM empresas) AS total_empresas,
+          (SELECT COUNT(*)::int FROM empresas WHERE ativo = true) AS total_ativas,
+          (SELECT COUNT(*)::int FROM empresas WHERE ativo = false) AS total_suspensas,
+          (SELECT COUNT(*)::int FROM empresas
+            WHERE ativo = false AND "suspensaEm" >= NOW() - INTERVAL '30 days') AS suspensas_30d,
+          (SELECT COUNT(*)::int FROM empresas
+            WHERE plano = 'TRIAL' AND ativo = true
+              AND "expiraEm" IS NOT NULL
+              AND "expiraEm" >= NOW()
+              AND "expiraEm" <= NOW() + INTERVAL '7 days') AS trial_expirando_7d,
+          (SELECT COUNT(*)::int FROM empresas
+            WHERE ativo = true AND plano NOT IN ('TRIAL', 'FREE')) AS pagantes,
+          (SELECT COUNT(*)::int FROM empresas
+            WHERE ativo = true AND plano = 'TRIAL') AS em_trial
+      `,
+    ]);
+
+    // Normaliza porPlano em objeto { TRIAL: N, FREE: N, ... } — facilita no front
+    const porPlanoMap = {};
+    for (const row of porPlano) porPlanoMap[row.plano] = row.qtd;
+
+    // Preenche meses faltantes (sem cadastros) — frontend pode renderizar
+    // serie continua sem precisar interpolar.
+    const cadastrosCompleto = preencherUltimos12Meses(cadastrosMes);
+
+    res.json({
+      porPlano: porPlanoMap,
+      cadastrosPorMes: cadastrosCompleto,
+      totais: {
+        empresas: agg.total_empresas,
+        ativas: agg.total_ativas,
+        suspensas: agg.total_suspensas,
+        suspensas30d: agg.suspensas_30d,
+        trialExpirando7d: agg.trial_expirando_7d,
+        pagantes: agg.pagantes,
+        emTrial: agg.em_trial,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Garante 12 entradas (mes corrente + 11 anteriores). Mesmo que o mes nao
+// tenha cadastros, ele aparece com qtd=0 — facilita renderizar grafico.
+function preencherUltimos12Meses(linhas) {
+  const mapa = new Map(linhas.map(l => [l.mes, l.qtd]));
+  const hoje = new Date();
+  const out = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+    const mes = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    out.push({ mes, qtd: mapa.get(mes) ?? 0 });
+  }
+  return out;
+}
+
 // POST /admin-master/empresas — cria nova empresa + admin inicial.
 // Mesma logica do antigo signup publico, agora exclusivo do super-admin.
 export async function criarEmpresa(req, res, next) {

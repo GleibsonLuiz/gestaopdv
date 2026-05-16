@@ -166,6 +166,7 @@ function Login({ onSuccess }) {
 // ============ PAINEL PRINCIPAL ============
 const TABS = [
   { id: "empresas", label: "🏢 Empresas", cor: C.accent },
+  { id: "financeiro", label: "💰 Financeiro", cor: C.green },
   { id: "users", label: "👥 Usuários", cor: C.purple },
   { id: "notificacoes", label: "📢 Notificações", cor: C.red },
   { id: "metricas", label: "📈 Métricas", cor: C.green },
@@ -299,6 +300,7 @@ function Painel({ user, onSair }) {
       </div>
 
       {tab === "empresas" && <AbaEmpresas onMudou={carregarKpis} />}
+      {tab === "financeiro" && <AbaFinanceiro />}
       {tab === "users" && <AbaUsers />}
       {tab === "notificacoes" && <AbaNotificacoes />}
       {tab === "metricas" && <AbaMetricas />}
@@ -723,6 +725,239 @@ function AbaEmpresas({ onMudou }) {
         />
       )}
     </>
+  );
+}
+
+// ============ ABA: FINANCEIRO (DASHBOARD DO SAAS) ============
+//
+// MRR/ARR sao calculados client-side com PRECO_PLANO_MES — preco vive aqui
+// (visivel, ajustavel sem migration). Backend retorna so contagens/series.
+// Quando integrar Stripe/Asaas, mover preco pra cobranca real e este map
+// vira so display.
+const PRECO_PLANO_MES = {
+  TRIAL: 0,
+  FREE: 0,
+  STARTER: 49.90,
+  PRO: 149.90,
+  ENTERPRISE: 499.90,
+};
+
+function AbaFinanceiro() {
+  const [dados, setDados] = useState(null);
+  const [erro, setErro] = useState("");
+  const [carregando, setCarregando] = useState(true);
+
+  async function carregar() {
+    setCarregando(true); setErro("");
+    try {
+      const r = await api.adminMasterFinanceiro();
+      setDados(r);
+    } catch (err) {
+      setErro(err.message);
+    } finally {
+      setCarregando(false);
+    }
+  }
+  useEffect(() => { carregar(); }, []);
+
+  if (carregando && !dados) {
+    return <div style={{ color: C.muted, textAlign: "center", padding: 40 }}>Carregando...</div>;
+  }
+  if (erro && !dados) {
+    return (
+      <div style={{
+        background: C.red + "22", border: `1px solid ${C.red}55`,
+        color: C.red, borderRadius: 10, padding: "10px 14px",
+      }}>{erro}</div>
+    );
+  }
+
+  const { porPlano = {}, cadastrosPorMes = [], totais = {} } = dados || {};
+
+  // MRR = soma dos precos dos planos ativos. ARR = MRR * 12.
+  const mrr = Object.entries(porPlano).reduce((acc, [plano, qtd]) => {
+    const preco = PRECO_PLANO_MES[plano] ?? 0;
+    return acc + preco * qtd;
+  }, 0);
+  const arr = mrr * 12;
+
+  // ARPU = receita media por cliente pagante (exclui TRIAL e FREE).
+  const arpu = totais.pagantes > 0 ? mrr / totais.pagantes : 0;
+
+  // Churn aproximado: suspensas nos ultimos 30d sobre base ativa + suspensas.
+  // Nao e churn contabil de SaaS (precisa de historico) mas serve de proxy.
+  const denomChurn = totais.ativas + totais.suspensas30d;
+  const churnPct = denomChurn > 0 ? (totais.suspensas30d / denomChurn) * 100 : 0;
+
+  // Maior valor no grafico (escala do eixo Y)
+  const maxCadastros = Math.max(1, ...cadastrosPorMes.map(c => c.qtd));
+
+  const KPIS = [
+    { label: "MRR",                  valor: fmtBRL(mrr),               cor: C.green,   sub: "Receita recorrente mensal" },
+    { label: "ARR",                  valor: fmtBRL(arr),               cor: C.green,   sub: "Anualizado (MRR × 12)" },
+    { label: "Pagantes",             valor: fmtNum(totais.pagantes),   cor: C.accent,  sub: "Planos pagos ativos" },
+    { label: "Em trial",             valor: fmtNum(totais.emTrial),    cor: "#f59e0b", sub: "Trials ativos" },
+    { label: "ARPU",                 valor: fmtBRL(arpu),              cor: C.purple,  sub: "Receita média por pagante" },
+    { label: "Churn 30d (aprox.)",   valor: churnPct.toFixed(1) + "%", cor: churnPct > 5 ? C.red : C.muted, sub: `${totais.suspensas30d} suspensas / ${denomChurn} base` },
+  ];
+
+  return (
+    <>
+      {erro && (
+        <div style={{
+          background: C.red + "22", border: `1px solid ${C.red}55`,
+          color: C.red, borderRadius: 10, padding: "10px 14px", marginBottom: 14,
+        }}>{erro}</div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
+        <button onClick={carregar} disabled={carregando} style={btnSecundario}>
+          🔄 {carregando ? "..." : "Atualizar"}
+        </button>
+      </div>
+
+      {/* KPIs */}
+      <div style={{
+        display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+        gap: 10, marginBottom: 18,
+      }}>
+        {KPIS.map((k, i) => (
+          <div key={i} style={{
+            background: C.card, border: `1px solid ${C.border}`,
+            borderRadius: 12, padding: "12px 14px",
+          }}>
+            <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+              {k.label}
+            </div>
+            <div style={{ color: k.cor, fontSize: 22, fontWeight: 800, marginTop: 4 }}>{k.valor}</div>
+            <div style={{ color: C.muted, fontSize: 10, marginTop: 2 }}>{k.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{
+        display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+        gap: 14, marginBottom: 18,
+      }}>
+        {/* Distribuicao de planos */}
+        <div style={{
+          background: C.card, border: `1px solid ${C.border}`,
+          borderRadius: 12, padding: 16,
+        }}>
+          <div style={{ color: C.white, fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
+            Distribuição de planos (ativas)
+          </div>
+          {Object.keys(porPlano).length === 0 ? (
+            <div style={{ color: C.muted, fontSize: 12 }}>Sem empresas ativas.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {Object.keys(PLANOS_INFO).map(k => {
+                const qtd = porPlano[k] || 0;
+                const info = PLANOS_INFO[k];
+                const pct = totais.ativas > 0 ? (qtd / totais.ativas) * 100 : 0;
+                const preco = PRECO_PLANO_MES[k] || 0;
+                const receita = qtd * preco;
+                return (
+                  <div key={k}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 3 }}>
+                      <span style={{ color: info.cor, fontWeight: 700 }}>{info.icone} {info.label}</span>
+                      <span style={{ color: C.muted, fontFamily: "monospace" }}>
+                        {qtd} ({pct.toFixed(0)}%) · {fmtBRL(receita)}/mês
+                      </span>
+                    </div>
+                    <div style={{ height: 8, background: C.surface, borderRadius: 4, overflow: "hidden" }}>
+                      <div style={{
+                        width: `${pct}%`, height: "100%", background: info.cor,
+                        transition: "width 0.3s",
+                      }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div style={{
+            marginTop: 14, paddingTop: 10, borderTop: `1px solid ${C.border}`,
+            fontSize: 10, color: C.muted, lineHeight: 1.5,
+          }}>
+            Preços de referência: TRIAL R$0 · FREE R$0 · STARTER R$49,90 · PRO R$149,90 · ENTERPRISE R$499,90.
+            Ajuste em <code style={{ color: C.text }}>PRECO_PLANO_MES</code> no AdminMasterApp.jsx.
+          </div>
+        </div>
+
+        {/* Cadastros por mes (grafico de barras) */}
+        <div style={{
+          background: C.card, border: `1px solid ${C.border}`,
+          borderRadius: 12, padding: 16,
+        }}>
+          <div style={{ color: C.white, fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
+            Novos cadastros — últimos 12 meses
+          </div>
+          <GraficoCadastros dados={cadastrosPorMes} max={maxCadastros} />
+        </div>
+      </div>
+
+      {/* Sinais de atencao */}
+      <div style={{
+        display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+        gap: 10,
+      }}>
+        {[
+          { icone: "🟡", label: "Trial expirando em ≤7d", valor: totais.trialExpirando7d, cor: C.yellow, hint: "Hora de cobrar upgrade" },
+          { icone: "🔴", label: "Suspensas nos últimos 30d", valor: totais.suspensas30d, cor: C.red, hint: "Investigar motivos" },
+          { icone: "🆓", label: "Em FREE (não geram receita)", valor: porPlano.FREE || 0, cor: C.muted, hint: "Potencial de upgrade" },
+        ].map((s, i) => (
+          <div key={i} style={{
+            background: C.card, border: `1px solid ${s.cor}55`,
+            borderRadius: 12, padding: "12px 14px",
+          }}>
+            <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+              {s.icone} {s.label}
+            </div>
+            <div style={{ color: s.cor, fontSize: 22, fontWeight: 800, marginTop: 4 }}>{fmtNum(s.valor)}</div>
+            <div style={{ color: C.muted, fontSize: 10, marginTop: 2 }}>{s.hint}</div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+// Grafico de barras simples em SVG — sem dependencia. Cada barra mostra a
+// qtd no topo; eixo X com label do mes (MM/AA).
+function GraficoCadastros({ dados, max }) {
+  if (!dados || dados.length === 0) {
+    return <div style={{ color: C.muted, fontSize: 12 }}>Sem dados.</div>;
+  }
+  const W = 100; // viewport em %
+  const H = 180;
+  const barW = W / dados.length;
+  const padTop = 18;
+  const padBottom = 22;
+  const chartH = H - padTop - padBottom;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: "100%", height: H, display: "block" }}>
+      {dados.map((d, i) => {
+        const h = max > 0 ? (d.qtd / max) * chartH : 0;
+        const x = i * barW + barW * 0.15;
+        const w = barW * 0.7;
+        const y = padTop + (chartH - h);
+        const [ano, mes] = d.mes.split("-");
+        const labelMes = `${mes}/${ano.slice(2)}`;
+        return (
+          <g key={d.mes}>
+            {d.qtd > 0 && (
+              <text x={x + w / 2} y={y - 3} fontSize="3.5" fill={C.text}
+                textAnchor="middle" fontWeight="700">{d.qtd}</text>
+            )}
+            <rect x={x} y={y} width={w} height={h} fill={C.accent} rx="0.5" />
+            <text x={x + w / 2} y={H - 8} fontSize="3" fill={C.muted}
+              textAnchor="middle">{labelMes}</text>
+          </g>
+        );
+      })}
+    </svg>
   );
 }
 

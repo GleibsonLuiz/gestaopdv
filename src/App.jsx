@@ -528,6 +528,19 @@ export default function App() {
               <button onClick={() => { setMenuUsuario(false); setTrocarSenhaAberto(true); }} style={menuItem}>
                 🔐 Trocar senha
               </button>
+              {user.superAdmin && (
+                <a
+                  href="/admin-master"
+                  style={{
+                    ...menuItem,
+                    display: "block", textDecoration: "none",
+                    borderTop: `1px solid ${C.border}`,
+                    color: C.yellow, fontWeight: 700,
+                  }}
+                >
+                  👑 Admin Master
+                </a>
+              )}
               <button onClick={() => { setMenuUsuario(false); sair(); }} style={{ ...menuItem, color: C.text }}>
                 <span style={{ color: C.red }}>↩ Sair</span>
               </button>

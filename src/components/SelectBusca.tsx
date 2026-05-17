@@ -1,14 +1,43 @@
-import { useState, useMemo } from "react";
-import { C } from "../lib/theme.js";
+import { useState, useMemo, type CSSProperties, type ChangeEvent } from "react";
+import { C } from "../lib/theme";
 
-const dropStyle = {
-  position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,
-  background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8,
-  zIndex: 300, maxHeight: 200, overflowY: "auto",
+const dropStyle: CSSProperties = {
+  position: "absolute",
+  top: "calc(100% + 4px)",
+  left: 0,
+  right: 0,
+  background: "var(--card)",
+  border: "1px solid var(--border)",
+  borderRadius: 8,
+  zIndex: 300,
+  maxHeight: 200,
+  overflowY: "auto",
   boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
 };
 
-export default function SelectBusca({
+// Item minimo aceito: precisa ter id.
+interface ItemBase {
+  id: string;
+  nome?: string;
+  [extra: string]: unknown;
+}
+
+interface SelectBuscaProps<T extends ItemBase> {
+  opcoes: T[];
+  value: string | null | undefined;
+  onChange: (id: string) => void;
+  labelFn?: (item: T) => string;
+  subLabelFn?: ((item: T) => string | undefined | null) | null;
+  placeholder?: string;
+  style?: CSSProperties;
+  containerStyle?: CSSProperties;
+  className?: string;
+  disabled?: boolean;
+  required?: boolean;
+  filtroOpcoes?: (item: T) => boolean;
+}
+
+export default function SelectBusca<T extends ItemBase>({
   opcoes = [],
   value,
   onChange,
@@ -19,27 +48,27 @@ export default function SelectBusca({
   containerStyle,
   className,
   disabled,
-  required,
   filtroOpcoes,
-}) {
+}: SelectBuscaProps<T>) {
   const [busca, setBusca] = useState("");
   const [aberto, setAberto] = useState(false);
 
-  const getLabel = labelFn || (item => item.nome);
+  const getLabel = labelFn || ((item: T) => item.nome || "");
   const getSub = subLabelFn || null;
 
   const lista = useMemo(() => {
     const base = filtroOpcoes ? opcoes.filter(filtroOpcoes) : opcoes;
     const q = busca.toLowerCase().trim();
     if (!q) return base;
-    return base.filter(item => {
+    return base.filter((item) => {
       const label = getLabel(item) || "";
       const sub = getSub ? (getSub(item) || "") : "";
       return label.toLowerCase().includes(q) || sub.toLowerCase().includes(q);
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opcoes, busca, filtroOpcoes]);
 
-  const selecionado = value ? opcoes.find(o => o.id === value) : null;
+  const selecionado = value ? opcoes.find((o) => o.id === value) || null : null;
   const inputValue = aberto ? busca : (selecionado ? getLabel(selecionado) : "");
 
   function handleFocus() {
@@ -51,13 +80,13 @@ export default function SelectBusca({
     setTimeout(() => { setAberto(false); setBusca(""); }, 150);
   }
 
-  function handleChange(e) {
+  function handleChange(e: ChangeEvent<HTMLInputElement>) {
     setBusca(e.target.value);
     onChange("");
     setAberto(true);
   }
 
-  function selecionar(item) {
+  function selecionar(item: T) {
     onChange(item.id);
     setBusca("");
     setAberto(false);
@@ -81,24 +110,27 @@ export default function SelectBusca({
         }}
       />
       {value && !aberto && (
-        <span style={{
-          position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)",
-          color: C.green, fontSize: 13, pointerEvents: "none", lineHeight: 1,
-        }}>✓</span>
+        <span
+          className="absolute right-[9px] top-1/2 text-[13px] pointer-events-none leading-none"
+          style={{ transform: "translateY(-50%)", color: C.green }}
+        >
+          ✓
+        </span>
       )}
       {aberto && lista.length > 0 && (
         <div style={dropStyle}>
-          {lista.map(item => (
+          {lista.map((item) => (
             <div
               key={item.id}
               onMouseDown={() => selecionar(item)}
-              style={{ padding: "9px 12px", cursor: "pointer", borderBottom: "1px solid var(--border)" }}
-              onMouseEnter={e => e.currentTarget.style.background = "var(--surface)"}
-              onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+              className="px-3 py-[9px] cursor-pointer"
+              style={{ borderBottom: "1px solid var(--border)" }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
             >
-              <div style={{ color: "var(--white)", fontWeight: 600, fontSize: 13 }}>{getLabel(item)}</div>
+              <div className="text-gp-white font-semibold text-[13px]">{getLabel(item)}</div>
               {getSub && getSub(item) && (
-                <div style={{ color: "var(--muted)", fontSize: 11 }}>{getSub(item)}</div>
+                <div className="text-gp-muted text-[11px]">{getSub(item)}</div>
               )}
             </div>
           ))}

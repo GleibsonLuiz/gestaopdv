@@ -5,20 +5,42 @@ import { C } from "../lib/theme";
 // etc). Recebe um array de itens; cada item: { label, onClick, color?, icon?,
 // disabled?, hidden? }. Itens com hidden=true sao filtrados; se sobrar nenhum,
 // o componente nao renderiza.
-export default function ActionsMenu({ items = [], align = "right", title = "Ações" }) {
+
+export interface ActionItem {
+  label: string;
+  onClick?: () => void;
+  color?: string;
+  icon?: string;
+  disabled?: boolean;
+  hidden?: boolean;
+}
+
+interface ActionsMenuProps {
+  items?: ActionItem[];
+  align?: "left" | "right";
+  title?: string;
+}
+
+interface Coords {
+  top: number;
+  left: number;
+  ready: boolean;
+}
+
+export default function ActionsMenu({ items = [], align = "right", title = "Ações" }: ActionsMenuProps) {
   const [aberto, setAberto] = useState(false);
   const [hoverIdx, setHoverIdx] = useState(-1);
-  const [coords, setCoords] = useState({ top: 0, left: 0, ready: false });
-  const wrapRef = useRef(null);
-  const btnRef = useRef(null);
-  const menuRef = useRef(null);
+  const [coords, setCoords] = useState<Coords>({ top: 0, left: 0, ready: false });
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!aberto) return;
-    function onClickFora(e) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) setAberto(false);
+    function onClickFora(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setAberto(false);
     }
-    function onKey(e) {
+    function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setAberto(false);
     }
     function onScroll() {
@@ -55,11 +77,11 @@ export default function ActionsMenu({ items = [], align = "right", title = "Aç�
     setCoords({ top, left, ready: true });
   }, [aberto, align]);
 
-  const validos = items.filter(it => it && !it.hidden);
+  const validos = items.filter((it): it is ActionItem => !!it && !it.hidden);
   if (validos.length === 0) return null;
 
   return (
-    <div ref={wrapRef} style={{ position: "relative", display: "inline-block" }}>
+    <div ref={wrapRef} className="relative inline-block">
       <button
         ref={btnRef}
         type="button"
@@ -68,21 +90,16 @@ export default function ActionsMenu({ items = [], align = "right", title = "Aç�
         aria-expanded={aberto}
         onClick={(e) => {
           e.stopPropagation();
-          setAberto(v => {
+          setAberto((v) => {
             const novo = !v;
-            if (novo) setCoords(c => ({ ...c, ready: false }));
+            if (novo) setCoords((c) => ({ ...c, ready: false }));
             return novo;
           });
         }}
+        className="w-[30px] h-7 inline-flex items-center justify-center rounded-[7px] text-gp-text cursor-pointer transition-colors"
         style={{
-          width: 30, height: 28,
-          display: "inline-flex", alignItems: "center", justifyContent: "center",
-          borderRadius: 7,
           background: aberto ? "rgba(255,255,255,.08)" : "rgba(255,255,255,.02)",
-          color: C.text,
           border: `1px solid ${C.border}`,
-          cursor: "pointer",
-          transition: "background .15s, color .15s",
         }}
         onMouseEnter={(e) => {
           if (!aberto) e.currentTarget.style.background = "rgba(255,255,255,.06)";
@@ -102,19 +119,14 @@ export default function ActionsMenu({ items = [], align = "right", title = "Aç�
         <div
           ref={menuRef}
           role="menu"
+          className="fixed flex flex-col bg-gp-card rounded-[10px] p-1"
           style={{
-            position: "fixed",
             top: coords.top,
             left: coords.left,
             minWidth: 180,
-            background: C.card,
             border: `1px solid ${C.border}`,
-            borderRadius: 10,
-            padding: 4,
             boxShadow: "0 14px 36px rgba(0,0,0,.5)",
             zIndex: 1000,
-            display: "flex",
-            flexDirection: "column",
             visibility: coords.ready ? "visible" : "hidden",
           }}
         >
@@ -133,24 +145,15 @@ export default function ActionsMenu({ items = [], align = "right", title = "Aç�
                 }}
                 onMouseEnter={() => setHoverIdx(i)}
                 onMouseLeave={() => setHoverIdx(-1)}
+                className="text-left px-[10px] py-2 border-none text-[12.5px] font-medium rounded-md flex items-center gap-2 whitespace-nowrap"
                 style={{
-                  textAlign: "left",
-                  padding: "8px 10px",
                   background: hoverIdx === i && !desabilitado ? "rgba(255,255,255,.06)" : "transparent",
-                  border: "none",
                   color: it.color || C.text,
-                  fontSize: 12.5,
-                  fontWeight: 500,
-                  borderRadius: 6,
                   cursor: desabilitado ? "not-allowed" : "pointer",
                   opacity: desabilitado ? 0.5 : 1,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  whiteSpace: "nowrap",
                 }}
               >
-                {it.icon && <span style={{ fontSize: 14, lineHeight: 1 }}>{it.icon}</span>}
+                {it.icon && <span className="text-sm leading-none">{it.icon}</span>}
                 <span>{it.label}</span>
               </button>
             );

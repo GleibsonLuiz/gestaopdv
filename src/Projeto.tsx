@@ -1,7 +1,32 @@
 import { useState, useEffect } from "react";
-import { C } from "./lib/theme.js";
+import { C } from "./lib/theme";
 
-const ETAPAS = [
+interface Etapa {
+  id: number;
+  titulo: string;
+  descricao: string;
+  icone: string;
+}
+
+interface Extra {
+  id: string;
+  icone: string;
+  categoria: string;
+  titulo: string;
+  descricao: string;
+  detalhes: string[];
+}
+
+type StatusEtapa = "pendente" | "em_andamento" | "testando" | "concluido";
+
+interface EtapaSalva {
+  id: number;
+  status: StatusEtapa;
+}
+
+type Tab = "progresso" | "extras" | "notas" | "prompt";
+
+const ETAPAS: Etapa[] = [
   { id: 1, titulo: "Estrutura Base + Banco de Dados", descricao: "Criar estrutura de pastas, configurar PostgreSQL com Prisma", icone: "🏗️" },
   { id: 2, titulo: "Autenticação + Controle de Acesso", descricao: "Tela de login, JWT, perfis: Admin, Gerente, Vendedor", icone: "🔐" },
   { id: 3, titulo: "Dashboard", descricao: "Tela inicial com gráficos, alertas e resumo do negócio", icone: "📊" },
@@ -20,7 +45,7 @@ const ETAPAS = [
 // Melhorias entregues APOS o MVP (etapas 1-13). Sao recursos novos ou
 // aprofundamentos das etapas originais. Editavel aqui sem precisar mexer
 // em STATUS_PROJETO ou no progresso geral.
-const EXTRAS = [
+const EXTRAS: Extra[] = [
   {
     id: "permissoes",
     icone: "🔐",
@@ -29,7 +54,7 @@ const EXTRAS = [
     descricao: "10 módulos toggláveis por funcionário (PDV, DASHBOARD, CLIENTES, etc). Middleware requirePermissao no backend para defesa em profundidade — não basta ter token de ADMIN.",
     detalhes: [
       "Coluna User.permissoes (text[]) com migração",
-      "Source-of-truth em src/lib/permissoes.js (front e back)",
+      "Source-of-truth em src/lib/permissoes.ts (front e back)",
       "Modal de funcionário com 10 cards-switch",
       "NavItem condicional via podeAcessar(user, MODULO)",
     ],
@@ -54,10 +79,10 @@ const EXTRAS = [
     titulo: "Sistema de Temas",
     descricao: "4 paletas (Azul Padrão, Esmeralda, Roxo, Alto Contraste) via CSS Variables. Mudança aplicada em runtime sem re-render React.",
     detalhes: [
-      "src/lib/theme.js com TEMAS, aplicarTema, lerTemaSalvo, salvarTema",
+      "src/lib/theme.ts com TEMAS, aplicarTema, lerTemaSalvo, salvarTema",
       "C canônico apontando para var(--*) — substitui 17 cópias locais",
       "Modal Aparência com preview ao vivo de cada paleta",
-      "Inicialização no main.jsx evita flash do tema padrão",
+      "Inicialização no main.tsx evita flash do tema padrão",
     ],
   },
   {
@@ -142,44 +167,44 @@ const EXTRAS = [
 
 // Status real do projeto (sincronizado com PROGRESSO.md). Usado como fallback
 // quando uma etapa nao tem registro no localStorage do usuario.
-const STATUS_PROJETO = {
+const STATUS_PROJETO: Record<number, StatusEtapa> = {
   1: "concluido", 2: "concluido", 3: "concluido", 4: "concluido",
   5: "concluido", 6: "concluido", 7: "concluido", 8: "concluido",
   9: "concluido", 10: "concluido", 11: "concluido", 12: "concluido",
   13: "concluido",
 };
 
-function defaultEtapas() {
-  return ETAPAS.map(e => ({ id: e.id, status: STATUS_PROJETO[e.id] || "pendente" }));
+function defaultEtapas(): EtapaSalva[] {
+  return ETAPAS.map((e) => ({ id: e.id, status: STATUS_PROJETO[e.id] || "pendente" }));
 }
 
-function mergeEtapas(salvas) {
-  return ETAPAS.map(e => {
-    const existente = salvas.find(s => s.id === e.id);
+function mergeEtapas(salvas: EtapaSalva[]): EtapaSalva[] {
+  return ETAPAS.map((e) => {
+    const existente = salvas.find((s) => s.id === e.id);
     if (existente && existente.status) return { id: e.id, status: existente.status };
     return { id: e.id, status: STATUS_PROJETO[e.id] || "pendente" };
   });
 }
 
-const STATUS = {
-  pendente: { label: "Pendente", color: "#475569", bg: "#47556922" },
+const STATUS: Record<StatusEtapa, { label: string; color: string; bg: string }> = {
+  pendente:     { label: "Pendente",     color: "#475569", bg: "#47556922" },
   em_andamento: { label: "Em andamento", color: "#f59e0b", bg: "#f59e0b22" },
-  testando: { label: "Testando", color: "#4f8ef7", bg: "#4f8ef722" },
-  concluido: { label: "Concluído", color: "#22c55e", bg: "#22c55e22" },
+  testando:     { label: "Testando",     color: "#4f8ef7", bg: "#4f8ef722" },
+  concluido:    { label: "Concluído",    color: "#22c55e", bg: "#22c55e22" },
 };
 
 
-function gerarPrompt(etapas, notas) {
-  const atual = etapas.find(e => e.status === "em_andamento") || etapas.find(e => e.status === "testando");
-  const concluidas = etapas.filter(e => e.status === "concluido").map(e => `✅ Etapa ${e.id} — ${ETAPAS[e.id-1].titulo}`).join("\n");
+function gerarPrompt(etapas: EtapaSalva[], notas: string): string {
+  const atual = etapas.find((e) => e.status === "em_andamento") || etapas.find((e) => e.status === "testando");
+  const concluidas = etapas.filter((e) => e.status === "concluido").map((e) => `✅ Etapa ${e.id} — ${ETAPAS[e.id - 1].titulo}`).join("\n");
   const etapaAtual = atual ? ETAPAS[atual.id - 1] : null;
-  const extrasLista = EXTRAS.map(x => `✨ ${x.titulo} — ${x.descricao}`).join("\n");
+  const extrasLista = EXTRAS.map((x) => `✨ ${x.titulo} — ${x.descricao}`).join("\n");
 
   return `Você é um desenvolvedor Fullstack experiente.
 Estamos desenvolvendo juntos o GestãoPRO — sistema web completo de Gestão + PDV.
 
 ## 🛠️ Stack Tecnológica (real)
-- Frontend: React 19 + Vite (estilos inline com paleta C via CSS Variables — sem Tailwind)
+- Frontend: React 19 + Vite + TypeScript + Tailwind (migração em andamento)
 - Backend: Node.js + Express
 - Banco de Dados: PostgreSQL (Neon)
 - ORM: Prisma
@@ -194,7 +219,7 @@ ${concluidas || "Nenhuma etapa concluída ainda."}
 ${extrasLista}
 
 ## 📍 Etapa Atual
-${etapaAtual ? `Etapa ${etapaAtual.id} — ${etapaAtual.titulo}\n${ETAPAS[etapaAtual.id-1].descricao}` : "Todas as 13 etapas concluídas. Próximas opções: cancelamento de compra com estorno, sync de preferências (sidebar/tema) com Postgres, ou novos recursos."}
+${etapaAtual ? `Etapa ${etapaAtual.id} — ${etapaAtual.titulo}\n${ETAPAS[etapaAtual.id - 1].descricao}` : "Todas as 13 etapas concluídas. Próximas opções: cancelamento de compra com estorno, sync de preferências (sidebar/tema) com Postgres, ou novos recursos."}
 
 ${notas ? `## 📝 Observações do Projeto\n${notas}` : ""}
 
@@ -204,7 +229,7 @@ ${notas ? `## 📝 Observações do Projeto\n${notas}` : ""}
 - Mensagens de erro em português sem acentos (ex: "Codigo e obrigatorio")
 - P2002 → 409, P2003 → 400/409 (FK), P2025 → 404
 - Operações que mexem em estoque usam prisma.\$transaction
-- Frontend: import { C } from "./lib/theme.js" para cores (CSS vars dinâmicas por tema)
+- Frontend: import { C } from "./lib/theme" para cores (CSS vars dinâmicas por tema)
 - Continuar sempre em pt-BR com idioma consistente
 
 ## 🎯 Tarefa
@@ -212,10 +237,10 @@ Continue o desenvolvimento. Explique os passos de forma detalhada pois tenho pou
 }
 
 export default function Projeto() {
-  const [etapas, setEtapas] = useState(defaultEtapas);
+  const [etapas, setEtapas] = useState<EtapaSalva[]>(defaultEtapas);
   const [notas, setNotas] = useState("");
   const [copiado, setCopiado] = useState(false);
-  const [tab, setTab] = useState("progresso");
+  const [tab, setTab] = useState<Tab>("progresso");
 
   useEffect(() => {
     try {
@@ -231,7 +256,9 @@ export default function Projeto() {
       }
       const n = localStorage.getItem("gestao_notas");
       if (n) setNotas(n);
-    } catch {}
+    } catch {
+      /* localStorage indisponivel */
+    }
   }, []);
 
   function ressincronizar() {
@@ -239,18 +266,18 @@ export default function Projeto() {
     salvarEtapas(defaultEtapas());
   }
 
-  function salvarEtapas(novas) {
+  function salvarEtapas(novas: EtapaSalva[]) {
     setEtapas(novas);
-    try { localStorage.setItem("gestao_etapas", JSON.stringify(novas)); } catch {}
+    try { localStorage.setItem("gestao_etapas", JSON.stringify(novas)); } catch { /* ignore */ }
   }
 
-  function salvarNotas(v) {
+  function salvarNotas(v: string) {
     setNotas(v);
-    try { localStorage.setItem("gestao_notas", v); } catch {}
+    try { localStorage.setItem("gestao_notas", v); } catch { /* ignore */ }
   }
 
-  function mudarStatus(id, status) {
-    salvarEtapas(etapas.map(e => e.id === id ? { ...e, status } : e));
+  function mudarStatus(id: number, status: StatusEtapa) {
+    salvarEtapas(etapas.map((e) => e.id === id ? { ...e, status } : e));
   }
 
   function copiarPrompt() {
@@ -261,80 +288,96 @@ export default function Projeto() {
     });
   }
 
-  const concluidas = etapas.filter(e => e.status === "concluido").length;
+  const concluidas = etapas.filter((e) => e.status === "concluido").length;
   const progresso = Math.round((concluidas / ETAPAS.length) * 100);
+
+  const TABS: [Tab, string][] = [
+    ["progresso", "📋 Etapas"],
+    ["extras", `✨ Extras (${EXTRAS.length})`],
+    ["notas", "📝 Notas"],
+    ["prompt", "🤖 Prompt"],
+  ];
 
   return (
     <div>
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, marginBottom: 16 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10, alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <div style={{ color: C.white, fontWeight: 700 }}>Progresso Geral</div>
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <button onClick={ressincronizar} title="Substituir status pelos dados do PROGRESSO.md" style={{
-              background: C.surface, border: `1px solid ${C.border}`, color: C.muted,
-              borderRadius: 8, padding: "6px 12px", fontSize: 11, fontWeight: 600, cursor: "pointer",
-            }}>
+      <div className="bg-gp-card border border-gp-border rounded-xl p-5 mb-4">
+        <div className="flex justify-between mb-[10px] items-center gap-[10px] flex-wrap">
+          <div className="text-gp-white font-bold">Progresso Geral</div>
+          <div className="flex gap-[10px] items-center">
+            <button
+              onClick={ressincronizar}
+              title="Substituir status pelos dados do PROGRESSO.md"
+              className="bg-gp-surface border border-gp-border text-gp-muted rounded-lg px-3 py-[6px] text-[11px] font-semibold cursor-pointer"
+            >
               🔄 Ressincronizar
             </button>
-            <div style={{ color: C.accent, fontWeight: 800 }}>{progresso}%</div>
+            <div className="text-gp-accent font-extrabold">{progresso}%</div>
           </div>
         </div>
-        <div style={{ background: C.border, borderRadius: 999, height: 10 }}>
-          <div style={{ width: `${progresso}%`, background: `linear-gradient(90deg, ${C.accent}, ${C.purple})`, height: 10, borderRadius: 999, transition: "width 0.5s" }} />
+        <div className="bg-gp-border rounded-full h-[10px]">
+          <div
+            className="h-[10px] rounded-full transition-all duration-500"
+            style={{ width: `${progresso}%`, background: `linear-gradient(90deg, ${C.accent}, ${C.purple})` }}
+          />
         </div>
-        <div style={{
-          color: C.muted, fontSize: 12, marginTop: 8,
-          display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8,
-        }}>
+        <div className="text-gp-muted text-xs mt-2 flex justify-between items-center flex-wrap gap-2">
           <span>{concluidas} de {ETAPAS.length} etapas concluídas</span>
-          <span style={{
-            background: C.purple + "22", color: C.purple,
-            border: `1px solid ${C.purple}55`, borderRadius: 6,
-            padding: "3px 10px", fontSize: 11, fontWeight: 700,
-          }}>
+          <span
+            className="text-gp-purple rounded-md px-[10px] py-[3px] text-[11px] font-bold"
+            style={{ background: C.purple + "22", border: `1px solid ${C.purple}55` }}
+          >
             ✨ +{EXTRAS.length} melhorias entregues
           </span>
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-        {[
-          ["progresso", "📋 Etapas"],
-          ["extras", `✨ Extras (${EXTRAS.length})`],
-          ["notas", "📝 Notas"],
-          ["prompt", "🤖 Prompt"],
-        ].map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)} style={{
-            padding: "8px 18px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 600, fontSize: 13,
-            background: tab === id ? C.accent : C.card,
-            color: tab === id ? C.white : C.muted,
-          }}>{label}</button>
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {TABS.map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`px-[18px] py-2 rounded-lg border-none cursor-pointer font-semibold text-[13px] ${
+              tab === id ? "bg-gp-accent text-gp-white" : "bg-gp-card text-gp-muted"
+            }`}
+          >
+            {label}
+          </button>
         ))}
       </div>
 
       {tab === "progresso" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div className="flex flex-col gap-[10px]">
           {ETAPAS.map((etapa) => {
-            const estado = etapas.find(e => e.id === etapa.id) || { status: "pendente" };
+            const estado = etapas.find((e) => e.id === etapa.id) || { status: "pendente" as StatusEtapa };
             const st = STATUS[estado.status];
+            const borderColor =
+              estado.status === "em_andamento" ? C.yellow + "88" :
+              estado.status === "concluido" ? C.green + "44" : C.border;
             return (
-              <div key={etapa.id} style={{
-                background: C.card, border: `1px solid ${estado.status === "em_andamento" ? C.yellow + "88" : estado.status === "concluido" ? C.green + "44" : C.border}`,
-                borderRadius: 12, padding: 16, display: "flex", alignItems: "center", gap: 14,
-              }}>
-                <div style={{ fontSize: 28, minWidth: 36, textAlign: "center" }}>{etapa.icone}</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                    <span style={{ color: C.muted, fontSize: 12 }}>Etapa {etapa.id}</span>
-                    <span style={{ background: st.bg, color: st.color, border: `1px solid ${st.color}44`, borderRadius: 6, padding: "2px 10px", fontSize: 11, fontWeight: 600 }}>{st.label}</span>
+              <div
+                key={etapa.id}
+                className="bg-gp-card rounded-xl p-4 flex items-center gap-[14px]"
+                style={{ border: `1px solid ${borderColor}` }}
+              >
+                <div className="text-[28px] min-w-9 text-center">{etapa.icone}</div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-[10px] flex-wrap">
+                    <span className="text-gp-muted text-xs">Etapa {etapa.id}</span>
+                    <span
+                      className="rounded-md px-[10px] py-[2px] text-[11px] font-semibold"
+                      style={{ background: st.bg, color: st.color, border: `1px solid ${st.color}44` }}
+                    >
+                      {st.label}
+                    </span>
                   </div>
-                  <div style={{ color: C.white, fontWeight: 700, fontSize: 14, marginTop: 2 }}>{etapa.titulo}</div>
-                  <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>{etapa.descricao}</div>
+                  <div className="text-gp-white font-bold text-sm mt-[2px]">{etapa.titulo}</div>
+                  <div className="text-gp-muted text-xs mt-[2px]">{etapa.descricao}</div>
                 </div>
-                <select value={estado.status} onChange={e => mudarStatus(etapa.id, e.target.value)} style={{
-                  background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8,
-                  padding: "7px 10px", color: C.text, fontSize: 12, cursor: "pointer", minWidth: 130,
-                }}>
+                <select
+                  value={estado.status}
+                  onChange={(e) => mudarStatus(etapa.id, e.target.value as StatusEtapa)}
+                  className="bg-gp-surface border border-gp-border rounded-lg px-[10px] py-[7px] text-gp-text text-xs cursor-pointer min-w-[130px]"
+                >
                   <option value="pendente">⏳ Pendente</option>
                   <option value="em_andamento">🔧 Em andamento</option>
                   <option value="testando">🧪 Testando</option>
@@ -347,58 +390,50 @@ export default function Projeto() {
       )}
 
       {tab === "extras" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{
-            background: C.purple + "11", border: `1px solid ${C.purple}55`,
-            borderRadius: 12, padding: "14px 18px", marginBottom: 4,
-          }}>
-            <div style={{ color: C.purple, fontWeight: 800, fontSize: 14, marginBottom: 4 }}>
+        <div className="flex flex-col gap-[10px]">
+          <div
+            className="rounded-xl px-[18px] py-[14px] mb-1"
+            style={{ background: C.purple + "11", border: `1px solid ${C.purple}55` }}
+          >
+            <div className="text-gp-purple font-extrabold text-sm mb-1">
               ✨ Melhorias entregues após o MVP
             </div>
-            <div style={{ color: C.muted, fontSize: 12 }}>
+            <div className="text-gp-muted text-xs">
               Recursos novos e aprofundamentos das 13 etapas originais. Cada item já está em produção.
             </div>
           </div>
-          {EXTRAS.map(extra => (
-            <div key={extra.id} style={{
-              background: C.card, border: `1px solid ${C.green}44`,
-              borderRadius: 12, padding: 16,
-            }}>
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-                <div style={{ fontSize: 28, minWidth: 36, textAlign: "center", lineHeight: 1 }}>
-                  {extra.icone}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
-                    <span style={{
-                      color: C.muted, fontSize: 11, fontWeight: 600,
-                      textTransform: "uppercase", letterSpacing: 0.5,
-                    }}>
+          {EXTRAS.map((extra) => (
+            <div
+              key={extra.id}
+              className="bg-gp-card rounded-xl p-4"
+              style={{ border: `1px solid ${C.green}44` }}
+            >
+              <div className="flex items-start gap-[14px]">
+                <div className="text-[28px] min-w-9 text-center leading-none">{extra.icone}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className="text-gp-muted text-[11px] font-semibold uppercase tracking-[0.5px]">
                       {extra.categoria}
                     </span>
-                    <span style={{
-                      background: C.green + "22", color: C.green,
-                      border: `1px solid ${C.green}55`, borderRadius: 6,
-                      padding: "2px 10px", fontSize: 11, fontWeight: 700,
-                    }}>✅ Concluído</span>
+                    <span
+                      className="text-gp-green rounded-md px-[10px] py-[2px] text-[11px] font-bold"
+                      style={{ background: C.green + "22", border: `1px solid ${C.green}55` }}
+                    >
+                      ✅ Concluído
+                    </span>
                   </div>
-                  <div style={{ color: C.white, fontWeight: 700, fontSize: 15, marginBottom: 4 }}>
-                    {extra.titulo}
-                  </div>
-                  <div style={{ color: C.text, fontSize: 13, lineHeight: 1.5, marginBottom: 10 }}>
-                    {extra.descricao}
-                  </div>
-                  <ul style={{
-                    listStyle: "none", padding: 0, margin: 0,
-                    display: "grid", gap: 4,
-                    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                  }}>
+                  <div className="text-gp-white font-bold text-[15px] mb-1">{extra.titulo}</div>
+                  <div className="text-gp-text text-[13px] leading-[1.5] mb-[10px]">{extra.descricao}</div>
+                  <ul
+                    className="list-none p-0 m-0 grid gap-1"
+                    style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}
+                  >
                     {extra.detalhes.map((d, i) => (
-                      <li key={i} style={{
-                        color: C.muted, fontSize: 12,
-                        paddingLeft: 14, position: "relative", lineHeight: 1.4,
-                      }}>
-                        <span style={{ color: C.accent, position: "absolute", left: 0 }}>›</span>
+                      <li
+                        key={i}
+                        className="text-gp-muted text-xs pl-[14px] relative leading-[1.4]"
+                      >
+                        <span className="text-gp-accent absolute left-0">›</span>
                         {d}
                       </li>
                     ))}
@@ -411,37 +446,33 @@ export default function Projeto() {
       )}
 
       {tab === "notas" && (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20 }}>
-          <div style={{ color: C.white, fontWeight: 700, marginBottom: 12 }}>📝 Observações do Projeto</div>
-          <textarea value={notas} onChange={e => salvarNotas(e.target.value)}
+        <div className="bg-gp-card border border-gp-border rounded-xl p-5">
+          <div className="text-gp-white font-bold mb-3">📝 Observações do Projeto</div>
+          <textarea
+            value={notas}
+            onChange={(e) => salvarNotas(e.target.value)}
             placeholder="Anote decisões, problemas, mudanças..."
-            style={{
-              width: "100%", minHeight: 260, background: C.surface, border: `1px solid ${C.border}`,
-              borderRadius: 10, padding: 14, color: C.text, fontSize: 13, resize: "vertical",
-              fontFamily: "inherit", boxSizing: "border-box", outline: "none", lineHeight: 1.6,
-            }}
+            className="w-full min-h-[260px] bg-gp-surface border border-gp-border rounded-[10px] p-[14px] text-gp-text text-[13px] resize-y box-border outline-none leading-[1.6]"
+            style={{ fontFamily: "inherit" }}
           />
-          <div style={{ color: C.muted, fontSize: 11, marginTop: 8 }}>💾 Salvo automaticamente</div>
+          <div className="text-gp-muted text-[11px] mt-2">💾 Salvo automaticamente</div>
         </div>
       )}
 
       {tab === "prompt" && (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-            <div style={{ color: C.white, fontWeight: 700 }}>🤖 Prompt Gerado</div>
-            <button onClick={copiarPrompt} style={{
-              background: copiado ? C.green : C.accent, color: C.white, border: "none",
-              borderRadius: 8, padding: "8px 16px", fontWeight: 700, fontSize: 13, cursor: "pointer",
-            }}>
+        <div className="bg-gp-card border border-gp-border rounded-xl p-5">
+          <div className="flex justify-between items-center mb-4">
+            <div className="text-gp-white font-bold">🤖 Prompt Gerado</div>
+            <button
+              onClick={copiarPrompt}
+              className={`text-gp-white border-none rounded-lg px-4 py-2 font-bold text-[13px] cursor-pointer ${
+                copiado ? "bg-gp-green" : "bg-gp-accent"
+              }`}
+            >
               {copiado ? "✅ Copiado!" : "📋 Copiar"}
             </button>
           </div>
-          <pre style={{
-            background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10,
-            padding: 16, color: C.text, fontSize: 12, whiteSpace: "pre-wrap",
-            wordBreak: "break-word", lineHeight: 1.7, maxHeight: 400, overflowY: "auto",
-            fontFamily: "monospace",
-          }}>
+          <pre className="bg-gp-surface border border-gp-border rounded-[10px] p-4 text-gp-text text-xs whitespace-pre-wrap break-words leading-[1.7] max-h-[400px] overflow-y-auto font-mono">
             {gerarPrompt(etapas, notas)}
           </pre>
         </div>

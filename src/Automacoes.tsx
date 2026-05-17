@@ -1,10 +1,46 @@
-import { useEffect, useState, useCallback } from "react";
-import { C } from "./lib/theme.js";
-import { api } from "./lib/api.js";
+import { useEffect, useState, useCallback, type CSSProperties, type ReactNode } from "react";
+import { C } from "./lib/theme";
+import { api, type SessionUser } from "./lib/api";
 
-// ============ CONFIGURACAO DOS TIPOS ============
+// ============ TIPOS ============
 
-const TIPOS = [
+type TipoId = "CLIENTE_INATIVO" | "ORCAMENTO_PARADO" | "POS_VENDA_FOLLOWUP";
+type PrioridadeId = "BAIXA" | "MEDIA" | "ALTA" | "URGENTE";
+
+interface ParametroDef {
+  label: string;
+  default: number;
+}
+
+interface TipoExemplo {
+  nome: string;
+  diasGatilho?: number;
+  valorMinimo?: number;
+  tituloTarefa: string;
+  descricaoTarefa: string;
+}
+
+interface TipoCfg {
+  id: TipoId;
+  label: string;
+  icone: string;
+  cor: string;
+  descricao: string;
+  parametros: {
+    diasGatilho?: ParametroDef;
+    valorMinimo?: ParametroDef;
+  };
+  variaveis: string[];
+  exemplo: TipoExemplo;
+}
+
+interface PrioridadeCfg {
+  id: PrioridadeId;
+  label: string;
+  cor: string;
+}
+
+const TIPOS: TipoCfg[] = [
   {
     id: "CLIENTE_INATIVO",
     label: "Cliente inativo",
@@ -56,31 +92,93 @@ const TIPOS = [
   },
 ];
 
-const TIPO_MAP = Object.fromEntries(TIPOS.map((t) => [t.id, t]));
+const TIPO_MAP: Record<string, TipoCfg> = Object.fromEntries(TIPOS.map((t) => [t.id, t]));
 
-const PRIORIDADES = [
+const PRIORIDADES: PrioridadeCfg[] = [
   { id: "BAIXA",   label: "Baixa",   cor: C.muted },
   { id: "MEDIA",   label: "Média",   cor: C.yellow },
   { id: "ALTA",    label: "Alta",    cor: "#f97316" },
   { id: "URGENTE", label: "Urgente", cor: C.red },
 ];
 
-const fmtData = (iso) => {
+const fmtData = (iso: string | null | undefined): string => {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 };
 
+interface VendedorRef {
+  id: string;
+  nome: string;
+}
+
+interface RegraResumo {
+  regraId: string;
+  nome: string;
+  erro?: string;
+  criadas: number;
+  skips?: number;
+  candidatos: number;
+}
+
+interface ResultadoExec {
+  totalCriadas: number;
+  resultados?: RegraResumo[];
+}
+
+interface Regra {
+  id: string;
+  nome: string;
+  tipo: TipoId;
+  ativo: boolean;
+  diasGatilho?: number | null;
+  valorMinimo?: number | null;
+  tituloTarefa: string;
+  descricaoTarefa?: string | null;
+  prioridadeTarefa: PrioridadeId;
+  prazoEmDias: number;
+  responsavelId?: string | null;
+  totalDisparos?: number;
+  ultimaExecucao?: string | null;
+}
+
+interface LogExecucao {
+  id: string;
+  createdAt: string;
+  resultado: string;
+  regra?: { tipo: TipoId; nome: string };
+}
+
+interface FormRegra {
+  id?: string;
+  nome: string;
+  tipo: TipoId;
+  ativo: boolean;
+  diasGatilho: number | string;
+  valorMinimo: number | string;
+  tituloTarefa: string;
+  descricaoTarefa: string;
+  prioridadeTarefa: PrioridadeId;
+  prazoEmDias: number | string;
+  responsavelId: string;
+  ultimaExecucao?: string | null;
+  totalDisparos?: number;
+}
+
 // ============ COMPONENTE PRINCIPAL ============
 
-export default function Automacoes({ user }) {
-  const [regras, setRegras] = useState([]);
-  const [logs, setLogs] = useState([]);
+interface AutomacoesProps {
+  user: SessionUser;
+}
+
+export default function Automacoes({ user }: AutomacoesProps) {
+  const [regras, setRegras] = useState<Regra[]>([]);
+  const [logs, setLogs] = useState<LogExecucao[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
-  const [editando, setEditando] = useState(null);
-  const [vendedores, setVendedores] = useState([]);
+  const [editando, setEditando] = useState<FormRegra | null>(null);
+  const [vendedores, setVendedores] = useState<VendedorRef[]>([]);
   const [executando, setExecutando] = useState(false);
-  const [resultadoExec, setResultadoExec] = useState(null);
+  const [resultadoExec, setResultadoExec] = useState<ResultadoExec | null>(null);
 
   const podeEditar = user.role === "ADMIN" || user.role === "GERENTE";
   const podeExcluir = user.role === "ADMIN";
@@ -91,14 +189,14 @@ export default function Automacoes({ user }) {
     try {
       const [rs, ls, funcs] = await Promise.all([
         api.listarAutomacoes(),
-        api.listarLogsAutomacao({ limite: 50 }),
+        api.listarLogsAutomacao({ limite: "50" }),
         api.listarFuncionarios({ ativo: "true" }).catch(() => []),
       ]);
-      setRegras(rs);
-      setLogs(ls);
-      setVendedores(funcs);
+      setRegras((rs as Regra[]) || []);
+      setLogs((ls as LogExecucao[]) || []);
+      setVendedores((funcs as VendedorRef[]) || []);
     } catch (e) {
-      setErro(e.message || "Erro ao carregar");
+      setErro((e as Error).message || "Erro ao carregar");
     } finally {
       setCarregando(false);
     }
@@ -111,46 +209,46 @@ export default function Automacoes({ user }) {
     setExecutando(true);
     setResultadoExec(null);
     try {
-      const r = await api.executarTodasAutomacoes();
+      const r = await api.executarTodasAutomacoes() as ResultadoExec;
       setResultadoExec(r);
       await carregar();
     } catch (e) {
-      alert(e.message || "Erro ao executar");
+      alert((e as Error).message || "Erro ao executar");
     } finally {
       setExecutando(false);
     }
   }
 
-  async function executarUma(regra) {
+  async function executarUma(regra: Regra) {
     setExecutando(true);
     setResultadoExec(null);
     try {
-      const r = await api.executarAutomacao(regra.id);
+      const r = await api.executarAutomacao(regra.id) as RegraResumo;
       setResultadoExec({ totalCriadas: r.criadas, resultados: [r] });
       await carregar();
     } catch (e) {
-      alert(e.message || "Erro ao executar");
+      alert((e as Error).message || "Erro ao executar");
     } finally {
       setExecutando(false);
     }
   }
 
-  async function alternarAtivo(regra) {
+  async function alternarAtivo(regra: Regra) {
     try {
       await api.atualizarAutomacao(regra.id, { ativo: !regra.ativo });
       await carregar();
     } catch (e) {
-      alert(e.message || "Erro");
+      alert((e as Error).message || "Erro");
     }
   }
 
-  async function excluir(regra) {
+  async function excluir(regra: Regra) {
     if (!confirm(`Excluir regra "${regra.nome}"?`)) return;
     try {
       await api.excluirAutomacao(regra.id);
       await carregar();
     } catch (e) {
-      alert(e.message || "Erro ao excluir");
+      alert((e as Error).message || "Erro ao excluir");
     }
   }
 
@@ -163,7 +261,7 @@ export default function Automacoes({ user }) {
     });
   }
 
-  function abrirEdicao(r) {
+  function abrirEdicao(r: Regra) {
     setEditando({
       id: r.id,
       nome: r.nome,
@@ -182,25 +280,27 @@ export default function Automacoes({ user }) {
   }
 
   return (
-    <div style={{ padding: 16, color: C.text }}>
+    <div className="p-4 text-gp-text">
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
         <div>
-          <h2 style={{ margin: 0, color: C.white, fontSize: 22, fontWeight: 700 }}>
+          <h2 className="m-0 text-gp-white text-[22px] font-bold">
             ⚡ Automações
           </h2>
-          <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>
+          <div className="text-gp-muted text-[13px] mt-0.5">
             Regras que geram tarefas automaticamente — clientes inativos, orçamentos parados, pós-venda
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div className="flex gap-2">
           <button
+            type="button"
             onClick={executarTodas}
             disabled={executando || regras.filter((r) => r.ativo).length === 0}
+            className="bg-gp-card text-gp-text rounded-md text-[13px]"
             style={{
-              background: C.card, color: C.text, border: `1px solid ${C.border}`,
-              padding: "8px 14px", borderRadius: 6,
-              cursor: executando ? "not-allowed" : "pointer", fontSize: 13,
+              border: `1px solid ${C.border}`,
+              padding: "8px 14px",
+              cursor: executando ? "not-allowed" : "pointer",
               opacity: executando ? 0.6 : 1,
             }}
           >
@@ -208,36 +308,45 @@ export default function Automacoes({ user }) {
           </button>
           {podeEditar && (
             <button
+              type="button"
               onClick={abrirNova}
+              className="text-gp-white border-none rounded-md cursor-pointer text-[13px] font-bold"
               style={{
                 background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-                color: C.white, border: "none", padding: "8px 18px",
-                borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 700,
+                padding: "8px 18px",
               }}
-            >+ Nova regra</button>
+            >
+              + Nova regra
+            </button>
           )}
         </div>
       </div>
 
       {erro && (
-        <div style={{ background: C.red + "22", color: C.red, padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
+        <div
+          className="px-[14px] py-[10px] rounded-lg mb-3 text-[13px] text-gp-red"
+          style={{ background: C.red + "22" }}
+        >
           {erro}
         </div>
       )}
 
       {resultadoExec && (
-        <div style={{
-          background: C.green + "11", color: C.green, padding: "10px 14px",
-          border: `1px solid ${C.green}55`, borderRadius: 8, marginBottom: 12, fontSize: 13,
-        }}>
+        <div
+          className="px-[14px] py-[10px] rounded-lg mb-3 text-[13px] text-gp-green"
+          style={{
+            background: C.green + "11",
+            border: `1px solid ${C.green}55`,
+          }}
+        >
           ✓ Execução concluída — <strong>{resultadoExec.totalCriadas}</strong> tarefa(s) criada(s).
           {resultadoExec.resultados && resultadoExec.resultados.length > 0 && (
-            <ul style={{ margin: "6px 0 0 0", paddingLeft: 20, fontSize: 12 }}>
+            <ul className="mt-1.5 pl-5 text-xs" style={{ margin: "6px 0 0 0" }}>
               {resultadoExec.resultados.map((r) => (
-                <li key={r.regraId} style={{ color: C.text }}>
+                <li key={r.regraId} className="text-gp-text">
                   <strong>{r.nome}</strong>:{" "}
                   {r.erro
-                    ? <span style={{ color: C.red }}>erro — {r.erro}</span>
+                    ? <span className="text-gp-red">erro — {r.erro}</span>
                     : `${r.criadas} criada(s), ${r.skips || 0} pulada(s) de ${r.candidatos} candidato(s)`}
                 </li>
               ))}
@@ -247,42 +356,55 @@ export default function Automacoes({ user }) {
       )}
 
       {/* Regras */}
-      <div style={{ marginBottom: 20 }}>
-        <h3 style={{ color: C.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700, marginBottom: 8 }}>
+      <div className="mb-5">
+        <h3
+          className="text-gp-muted text-[11px] uppercase font-bold mb-2"
+          style={{ letterSpacing: 0.5 }}
+        >
           Regras configuradas
         </h3>
         {carregando ? (
-          <div style={{ color: C.muted, padding: 30, textAlign: "center" }}>Carregando...</div>
+          <div className="text-gp-muted py-[30px] text-center">Carregando...</div>
         ) : regras.length === 0 ? (
-          <div style={{ color: C.muted, padding: 40, textAlign: "center", background: C.surface, borderRadius: 8, border: `1px dashed ${C.border}` }}>
+          <div
+            className="text-gp-muted py-10 text-center bg-gp-surface rounded-lg"
+            style={{ border: `1px dashed ${C.border}` }}
+          >
             Nenhuma regra cadastrada ainda.
             {podeEditar && <>{" "}Crie a primeira para começar a automatizar follow-ups.</>}
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div className="flex flex-col gap-2">
             {regras.map((r) => {
               const tipo = TIPO_MAP[r.tipo];
+              if (!tipo) return null;
               return (
-                <div key={r.id} style={{
-                  background: C.surface,
-                  border: `1px solid ${C.border}`,
-                  borderLeft: `3px solid ${tipo.cor}`,
-                  borderRadius: 8,
-                  padding: "12px 16px",
-                  opacity: r.ativo ? 1 : 0.55,
-                  display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
-                }}>
-                  <span style={{
-                    background: tipo.cor + "22", color: tipo.cor,
-                    padding: "3px 8px", borderRadius: 4, fontSize: 11, fontWeight: 700,
-                    display: "inline-flex", alignItems: "center", gap: 4,
-                  }}>{tipo.icone} {tipo.label}</span>
+                <div
+                  key={r.id}
+                  className="bg-gp-surface rounded-lg flex items-center gap-3 flex-wrap"
+                  style={{
+                    border: `1px solid ${C.border}`,
+                    borderLeft: `3px solid ${tipo.cor}`,
+                    padding: "12px 16px",
+                    opacity: r.ativo ? 1 : 0.55,
+                  }}
+                >
+                  <span
+                    className="inline-flex items-center gap-1 text-[11px] font-bold rounded"
+                    style={{
+                      background: tipo.cor + "22",
+                      color: tipo.cor,
+                      padding: "3px 8px",
+                    }}
+                  >
+                    {tipo.icone} {tipo.label}
+                  </span>
 
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ color: C.white, fontWeight: 600, fontSize: 14 }}>
-                      {r.nome} {!r.ativo && <span style={{ color: C.muted, fontSize: 11, fontWeight: 400 }}>(inativa)</span>}
+                  <div className="min-w-0 flex-1">
+                    <div className="text-gp-white font-semibold text-sm">
+                      {r.nome} {!r.ativo && <span className="text-gp-muted text-[11px] font-normal">(inativa)</span>}
                     </div>
-                    <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>
+                    <div className="text-gp-muted text-[11px] mt-0.5">
                       {r.diasGatilho && `${r.diasGatilho} dias · `}
                       {r.valorMinimo && `≥ R$ ${Number(r.valorMinimo).toFixed(2)} · `}
                       Prazo da tarefa: {r.prazoEmDias}d ·{" "}
@@ -291,51 +413,67 @@ export default function Automacoes({ user }) {
                     </div>
                   </div>
 
-                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <div className="flex gap-1.5 items-center">
                     {podeEditar && (
                       <button
+                        type="button"
                         onClick={() => alternarAtivo(r)}
                         title={r.ativo ? "Desativar" : "Ativar"}
+                        className="rounded cursor-pointer text-[11px] font-bold"
                         style={{
                           background: r.ativo ? C.green + "22" : C.muted + "22",
                           color: r.ativo ? C.green : C.muted,
                           border: `1px solid ${r.ativo ? C.green : C.muted}44`,
-                          padding: "5px 10px", borderRadius: 4, cursor: "pointer", fontSize: 11, fontWeight: 700,
+                          padding: "5px 10px",
                         }}
-                      >{r.ativo ? "ATIVA" : "INATIVA"}</button>
+                      >
+                        {r.ativo ? "ATIVA" : "INATIVA"}
+                      </button>
                     )}
                     <button
+                      type="button"
                       onClick={() => executarUma(r)}
                       disabled={!r.ativo || executando}
                       title="Executar essa regra agora"
+                      className="rounded text-[11px] font-bold"
                       style={{
-                        background: C.accent + "22", color: C.accent,
+                        background: C.accent + "22",
+                        color: C.accent,
                         border: `1px solid ${C.accent}44`,
-                        padding: "5px 10px", borderRadius: 4,
+                        padding: "5px 10px",
                         cursor: (!r.ativo || executando) ? "not-allowed" : "pointer",
-                        fontSize: 11, fontWeight: 700,
                         opacity: (!r.ativo || executando) ? 0.4 : 1,
                       }}
-                    >▶ Executar</button>
+                    >
+                      ▶ Executar
+                    </button>
                     {podeEditar && (
                       <button
+                        type="button"
                         onClick={() => abrirEdicao(r)}
+                        className="bg-transparent text-gp-muted rounded cursor-pointer text-[11px]"
                         style={{
-                          background: "transparent", color: C.muted,
                           border: `1px solid ${C.border}`,
-                          padding: "5px 12px", borderRadius: 4, cursor: "pointer", fontSize: 11,
+                          padding: "5px 12px",
                         }}
-                      >Editar</button>
+                      >
+                        Editar
+                      </button>
                     )}
                     {podeExcluir && (
                       <button
+                        type="button"
                         onClick={() => excluir(r)}
+                        aria-label={`Excluir ${r.nome}`}
+                        className="bg-transparent rounded cursor-pointer text-[11px]"
                         style={{
-                          background: "transparent", color: C.red,
+                          color: C.red,
                           border: `1px solid ${C.red}44`,
-                          padding: "5px 10px", borderRadius: 4, cursor: "pointer", fontSize: 11,
+                          padding: "5px 10px",
                         }}
-                      >🗑</button>
+                      >
+                        🗑
+                      </button>
                     )}
                   </div>
                 </div>
@@ -347,33 +485,51 @@ export default function Automacoes({ user }) {
 
       {/* Logs */}
       <div>
-        <h3 style={{ color: C.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700, marginBottom: 8 }}>
+        <h3
+          className="text-gp-muted text-[11px] uppercase font-bold mb-2"
+          style={{ letterSpacing: 0.5 }}
+        >
           Histórico de execuções (últimas 50)
         </h3>
         {logs.length === 0 ? (
-          <div style={{ color: C.muted, padding: 20, textAlign: "center", background: C.surface, borderRadius: 8, fontSize: 13 }}>
+          <div className="text-gp-muted py-5 text-center bg-gp-surface rounded-lg text-[13px]">
             Nenhuma execução registrada.
           </div>
         ) : (
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
+          <div
+            className="bg-gp-surface rounded-lg overflow-hidden"
+            style={{ border: `1px solid ${C.border}` }}
+          >
             {logs.map((l) => {
               const tipo = l.regra ? TIPO_MAP[l.regra.tipo] : null;
               return (
-                <div key={l.id} style={{
-                  padding: "8px 14px",
-                  borderTop: `1px solid ${C.border}`,
-                  display: "flex", alignItems: "center", gap: 10, fontSize: 12,
-                }}>
-                  <span style={{ color: C.muted, fontSize: 11, minWidth: 130 }}>
+                <div
+                  key={l.id}
+                  className="flex items-center gap-2.5 text-xs"
+                  style={{
+                    padding: "8px 14px",
+                    borderTop: `1px solid ${C.border}`,
+                  }}
+                >
+                  <span className="text-gp-muted text-[11px]" style={{ minWidth: 130 }}>
                     {fmtData(l.createdAt)}
                   </span>
-                  {tipo && (
-                    <span style={{
-                      background: tipo.cor + "22", color: tipo.cor,
-                      padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700,
-                    }}>{tipo.icone} {l.regra.nome}</span>
+                  {tipo && l.regra && (
+                    <span
+                      className="text-[10px] font-bold rounded"
+                      style={{
+                        background: tipo.cor + "22",
+                        color: tipo.cor,
+                        padding: "1px 6px",
+                      }}
+                    >
+                      {tipo.icone} {l.regra.nome}
+                    </span>
                   )}
-                  <span style={{ color: l.resultado === "CRIADA" ? C.green : C.muted, fontSize: 11 }}>
+                  <span
+                    className="text-[11px]"
+                    style={{ color: l.resultado === "CRIADA" ? C.green : C.muted }}
+                  >
                     {l.resultado === "CRIADA" ? "✓ Tarefa criada" : l.resultado}
                   </span>
                 </div>
@@ -397,21 +553,30 @@ export default function Automacoes({ user }) {
 
 // ============ MODAL REGRA ============
 
-function ModalRegra({ regra, vendedores, onFechar, onSalvo }) {
+interface ModalRegraProps {
+  regra: FormRegra;
+  vendedores: VendedorRef[];
+  onFechar: () => void;
+  onSalvo: () => void;
+}
+
+function ModalRegra({ regra, vendedores, onFechar, onSalvo }: ModalRegraProps) {
   const ehNova = !regra.id;
-  const [form, setForm] = useState(regra);
+  const [form, setForm] = useState<FormRegra>(regra);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    function onKey(e) { if (e.key === "Escape" && !salvando) onFechar(); }
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape" && !salvando) onFechar(); }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onFechar, salvando]);
 
-  const tipoCfg = TIPO_MAP[form.tipo];
+  const tipoCfg: TipoCfg | undefined = TIPO_MAP[form.tipo];
 
-  function set(k, v) { setForm((f) => ({ ...f, [k]: v })); }
+  function set<K extends keyof FormRegra>(k: K, v: FormRegra[K]) {
+    setForm((f) => ({ ...f, [k]: v }));
+  }
 
   function aplicarExemplo() {
     if (!tipoCfg?.exemplo) return;
@@ -426,7 +591,7 @@ function ModalRegra({ regra, vendedores, onFechar, onSalvo }) {
     }));
   }
 
-  function inserirVariavel(chave, alvo) {
+  function inserirVariavel(chave: string, alvo: "tituloTarefa" | "descricaoTarefa") {
     const placeholder = `{{${chave}}}`;
     setForm((f) => ({ ...f, [alvo]: (f[alvo] || "") + placeholder }));
   }
@@ -451,10 +616,10 @@ function ModalRegra({ regra, vendedores, onFechar, onSalvo }) {
         responsavelId: form.responsavelId || null,
       };
       if (ehNova) await api.criarAutomacao(payload);
-      else await api.atualizarAutomacao(form.id, payload);
+      else await api.atualizarAutomacao(form.id!, payload);
       onSalvo();
     } catch (e) {
-      setErro(e.message || "Erro ao salvar");
+      setErro((e as Error).message || "Erro ao salvar");
     } finally {
       setSalvando(false);
     }
@@ -463,56 +628,76 @@ function ModalRegra({ regra, vendedores, onFechar, onSalvo }) {
   return (
     <div
       onClick={(e) => { if (e.target === e.currentTarget && !salvando) onFechar(); }}
-      style={{
-        position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)",
-        display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16,
-      }}
+      className="fixed inset-0 flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.6)", zIndex: 1000 }}
     >
-      <div style={{
-        background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`,
-        width: "100%", maxWidth: 680, maxHeight: "92vh", overflowY: "auto",
-      }}>
-        <div style={{ padding: "16px 20px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div
+        className="bg-gp-surface w-full overflow-y-auto"
+        style={{
+          borderRadius: 12,
+          border: `1px solid ${C.border}`,
+          maxWidth: 680,
+          maxHeight: "92vh",
+        }}
+      >
+        <div
+          className="flex justify-between items-center"
+          style={{ padding: "16px 20px", borderBottom: `1px solid ${C.border}` }}
+        >
           <div>
-            <div style={{ color: C.white, fontSize: 18, fontWeight: 700 }}>
+            <div className="text-gp-white text-lg font-bold">
               {ehNova ? "Nova regra de automação" : "Editar regra"}
             </div>
             {!ehNova && (
-              <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>
+              <div className="text-gp-muted text-[11px] mt-0.5">
                 {form.totalDisparos || 0} disparo(s) · última execução: {fmtData(form.ultimaExecucao)}
               </div>
             )}
           </div>
-          <button onClick={onFechar} disabled={salvando} style={{
-            background: "transparent", color: C.muted, border: "none",
-            fontSize: 22, cursor: "pointer", padding: 4,
-          }}>×</button>
+          <button
+            type="button"
+            onClick={onFechar}
+            disabled={salvando}
+            aria-label="Fechar"
+            className="bg-transparent text-gp-muted border-none cursor-pointer"
+            style={{ fontSize: 22, padding: 4 }}
+          >
+            ×
+          </button>
         </div>
 
-        <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
+        <div className="p-5 flex flex-col gap-[14px]">
           {/* Tipo */}
           <div>
             <Label>Tipo de gatilho *</Label>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8, marginTop: 4 }}>
+            <div
+              className="grid gap-2 mt-1"
+              style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}
+            >
               {TIPOS.map((t) => {
                 const sel = form.tipo === t.id;
                 return (
                   <button
                     key={t.id}
+                    type="button"
                     onClick={() => set("tipo", t.id)}
                     disabled={!ehNova}
+                    className="rounded-lg text-left"
                     style={{
                       background: sel ? t.cor + "22" : C.bg,
                       border: `2px solid ${sel ? t.cor : C.border}`,
-                      borderRadius: 8, padding: "10px 12px",
+                      padding: "10px 12px",
                       cursor: ehNova ? "pointer" : "not-allowed",
-                      textAlign: "left", opacity: ehNova ? 1 : 0.7,
+                      opacity: ehNova ? 1 : 0.7,
                     }}
                   >
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, color: t.cor, fontSize: 12, fontWeight: 700 }}>
-                      <span style={{ fontSize: 16 }}>{t.icone}</span> {t.label}
+                    <div
+                      className="flex items-center gap-1.5 text-xs font-bold"
+                      style={{ color: t.cor }}
+                    >
+                      <span className="text-base">{t.icone}</span> {t.label}
                     </div>
-                    <div style={{ color: C.muted, fontSize: 11, marginTop: 4 }}>
+                    <div className="text-gp-muted text-[11px] mt-1">
                       {t.descricao}
                     </div>
                   </button>
@@ -523,17 +708,21 @@ function ModalRegra({ regra, vendedores, onFechar, onSalvo }) {
 
           {/* Nome */}
           <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div className="flex justify-between items-center">
               <Label>Nome da regra *</Label>
               {ehNova && (
                 <button
                   type="button"
                   onClick={aplicarExemplo}
+                  className="bg-transparent rounded cursor-pointer text-[10px]"
                   style={{
-                    background: "transparent", color: C.accent, border: `1px solid ${C.accent}55`,
-                    padding: "2px 10px", borderRadius: 4, cursor: "pointer", fontSize: 10,
+                    color: C.accent,
+                    border: `1px solid ${C.accent}55`,
+                    padding: "2px 10px",
                   }}
-                >✨ Usar exemplo</button>
+                >
+                  ✨ Usar exemplo
+                </button>
               )}
             </div>
             <input
@@ -541,12 +730,12 @@ function ModalRegra({ regra, vendedores, onFechar, onSalvo }) {
               value={form.nome}
               onChange={(e) => set("nome", e.target.value.toUpperCase())}
               placeholder="Ex: REATIVAR CLIENTES 90 DIAS"
-              style={inputModal()}
+              style={inputModalStyle}
             />
           </div>
 
           {/* Parametros do tipo */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div className="grid grid-cols-2 gap-3">
             {tipoCfg?.parametros?.diasGatilho && (
               <div>
                 <Label>{tipoCfg.parametros.diasGatilho.label}</Label>
@@ -555,7 +744,7 @@ function ModalRegra({ regra, vendedores, onFechar, onSalvo }) {
                   value={form.diasGatilho}
                   onChange={(e) => set("diasGatilho", e.target.value)}
                   placeholder={String(tipoCfg.parametros.diasGatilho.default)}
-                  style={inputModal()}
+                  style={inputModalStyle}
                 />
               </div>
             )}
@@ -567,15 +756,21 @@ function ModalRegra({ regra, vendedores, onFechar, onSalvo }) {
                   value={form.valorMinimo}
                   onChange={(e) => set("valorMinimo", e.target.value)}
                   placeholder="0,00"
-                  style={inputModal()}
+                  style={inputModalStyle}
                 />
               </div>
             )}
           </div>
 
           {/* Acao: tarefa */}
-          <div style={{ marginTop: 4, paddingTop: 12, borderTop: `1px dashed ${C.border}` }}>
-            <div style={{ color: C.accent, fontSize: 12, fontWeight: 700, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>
+          <div
+            className="mt-1 pt-3"
+            style={{ borderTop: `1px dashed ${C.border}` }}
+          >
+            <div
+              className="text-xs font-bold mb-2 uppercase"
+              style={{ color: C.accent, letterSpacing: 0.5 }}
+            >
               Tarefa a criar
             </div>
 
@@ -584,49 +779,60 @@ function ModalRegra({ regra, vendedores, onFechar, onSalvo }) {
               value={form.tituloTarefa}
               onChange={(e) => set("tituloTarefa", e.target.value)}
               placeholder="Use {{nomeCliente}} para o nome..."
-              style={inputModal()}
+              style={inputModalStyle}
             />
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
+            <div className="flex flex-wrap gap-1 mt-1">
               {tipoCfg?.variaveis.map((v) => (
                 <button
                   key={v}
                   type="button"
                   onClick={() => inserirVariavel(v, "tituloTarefa")}
                   title="Inserir variável no título"
-                  style={chipVar()}
-                >{`{{${v}}}`}</button>
+                  style={chipVarStyle}
+                >
+                  {`{{${v}}}`}
+                </button>
               ))}
             </div>
 
-            <div style={{ marginTop: 10 }}>
+            <div className="mt-2.5">
               <Label>Descrição</Label>
               <textarea
                 value={form.descricaoTarefa}
                 onChange={(e) => set("descricaoTarefa", e.target.value)}
                 rows={3}
                 placeholder="Detalhes da tarefa..."
-                style={{ ...inputModal(), resize: "vertical", minHeight: 70, fontFamily: "monospace", fontSize: 12 }}
+                style={{
+                  ...inputModalStyle,
+                  resize: "vertical",
+                  minHeight: 70,
+                  fontFamily: "monospace",
+                  fontSize: 12,
+                }}
               />
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
+              <div className="flex flex-wrap gap-1 mt-1">
                 {tipoCfg?.variaveis.map((v) => (
                   <button
                     key={v}
                     type="button"
                     onClick={() => inserirVariavel(v, "descricaoTarefa")}
-                    style={chipVar()}
-                  >{`{{${v}}}`}</button>
+                    style={chipVarStyle}
+                  >
+                    {`{{${v}}}`}
+                  </button>
                 ))}
               </div>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 10 }}>
+            <div className="grid grid-cols-3 gap-3 mt-2.5">
               <div>
                 <Label>Prioridade</Label>
                 <select
                   value={form.prioridadeTarefa}
-                  onChange={(e) => set("prioridadeTarefa", e.target.value)}
-                  style={inputModal()}
+                  onChange={(e) => set("prioridadeTarefa", e.target.value as PrioridadeId)}
+                  aria-label="Prioridade"
+                  style={inputModalStyle}
                 >
                   {PRIORIDADES.map((p) => (
                     <option key={p.id} value={p.id}>{p.label}</option>
@@ -639,7 +845,8 @@ function ModalRegra({ regra, vendedores, onFechar, onSalvo }) {
                   type="number" min="1"
                   value={form.prazoEmDias}
                   onChange={(e) => set("prazoEmDias", e.target.value)}
-                  style={inputModal()}
+                  aria-label="Prazo em dias"
+                  style={inputModalStyle}
                 />
               </div>
               <div>
@@ -647,7 +854,8 @@ function ModalRegra({ regra, vendedores, onFechar, onSalvo }) {
                 <select
                   value={form.responsavelId}
                   onChange={(e) => set("responsavelId", e.target.value)}
-                  style={inputModal()}
+                  aria-label="Responsável"
+                  style={inputModalStyle}
                 >
                   <option value="">— Vendedor envolvido —</option>
                   {vendedores.map((v) => (
@@ -658,7 +866,7 @@ function ModalRegra({ regra, vendedores, onFechar, onSalvo }) {
             </div>
           </div>
 
-          <label style={{ display: "flex", alignItems: "center", gap: 8, color: C.text, fontSize: 13, cursor: "pointer" }}>
+          <label className="flex items-center gap-2 text-gp-text text-[13px] cursor-pointer">
             <input
               type="checkbox"
               checked={form.ativo}
@@ -669,57 +877,80 @@ function ModalRegra({ regra, vendedores, onFechar, onSalvo }) {
           </label>
 
           {erro && (
-            <div style={{ background: C.red + "22", color: C.red, padding: "8px 12px", borderRadius: 6, fontSize: 12 }}>
+            <div
+              className="px-3 py-2 rounded text-xs text-gp-red"
+              style={{ background: C.red + "22" }}
+            >
               {erro}
             </div>
           )}
         </div>
 
-        <div style={{ padding: "12px 20px", borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <div
+          className="flex justify-end gap-2"
+          style={{ padding: "12px 20px", borderTop: `1px solid ${C.border}` }}
+        >
           <button
+            type="button"
             onClick={onFechar}
             disabled={salvando}
+            className="bg-transparent text-gp-muted rounded-md cursor-pointer text-[13px]"
             style={{
-              background: "transparent", color: C.muted, border: `1px solid ${C.border}`,
-              padding: "8px 16px", borderRadius: 6, cursor: "pointer", fontSize: 13,
+              border: `1px solid ${C.border}`,
+              padding: "8px 16px",
             }}
-          >Cancelar</button>
+          >
+            Cancelar
+          </button>
           <button
+            type="button"
             onClick={salvar}
             disabled={salvando}
+            className="text-gp-white border-none rounded-md cursor-pointer text-[13px] font-bold"
             style={{
               background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-              color: C.white, border: "none", padding: "8px 22px",
-              borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 700,
+              padding: "8px 22px",
             }}
-          >{salvando ? "Salvando..." : (ehNova ? "Criar regra" : "Salvar")}</button>
+          >
+            {salvando ? "Salvando..." : (ehNova ? "Criar regra" : "Salvar")}
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
-function Label({ children }) {
+function Label({ children }: { children: ReactNode }) {
   return (
-    <div style={{ color: C.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4, fontWeight: 600 }}>
+    <div
+      className="text-gp-muted text-[11px] uppercase mb-1 font-semibold"
+      style={{ letterSpacing: 0.5 }}
+    >
       {children}
     </div>
   );
 }
 
-function inputModal() {
-  return {
-    width: "100%", boxSizing: "border-box",
-    background: C.bg, color: C.text, border: `1px solid ${C.border}`,
-    borderRadius: 6, padding: "8px 10px", fontSize: 13, fontFamily: "inherit",
-    outline: "none",
-  };
-}
+const inputModalStyle: CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  background: C.bg,
+  color: C.text,
+  border: `1px solid ${C.border}`,
+  borderRadius: 6,
+  padding: "8px 10px",
+  fontSize: 13,
+  fontFamily: "inherit",
+  outline: "none",
+};
 
-function chipVar() {
-  return {
-    background: C.bg, color: C.accent, border: `1px solid ${C.border}`,
-    padding: "3px 8px", borderRadius: 4, cursor: "pointer", fontSize: 10,
-    fontFamily: "monospace",
-  };
-}
+const chipVarStyle: CSSProperties = {
+  background: C.bg,
+  color: C.accent,
+  border: `1px solid ${C.border}`,
+  padding: "3px 8px",
+  borderRadius: 4,
+  cursor: "pointer",
+  fontSize: 10,
+  fontFamily: "monospace",
+};

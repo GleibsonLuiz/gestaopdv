@@ -1,5 +1,12 @@
 import { useEffect } from "react";
 
+export interface UseModalKeysOptions {
+  onClose?: () => void;
+  onConfirm?: () => void;
+  permitirEnter?: boolean;
+  permitirCtrlEnter?: boolean;
+}
+
 // Hook universal de atalhos para modais.
 //   Esc                fecha o modal (chama onClose)
 //   Enter              confirma quando permitirEnter=true e o foco NAO esta
@@ -9,17 +16,20 @@ import { useEffect } from "react";
 //
 // Use capture=true no listener para preceder atalhos globais (ex: F10 do
 // PDV) e evitar conflitos quando o modal estiver aberto.
-export function useModalKeys(aberto, { onClose, onConfirm, permitirEnter = false, permitirCtrlEnter = false } = {}) {
+export function useModalKeys(
+  aberto: boolean,
+  { onClose, onConfirm, permitirEnter = false, permitirCtrlEnter = false }: UseModalKeysOptions = {},
+): void {
   useEffect(() => {
     if (!aberto) return;
-    function onKey(e) {
+    function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault(); e.stopPropagation();
         onClose?.();
         return;
       }
       if (e.key === "Enter") {
-        const alvo = e.target;
+        const alvo = e.target as HTMLElement | null;
         const tag = alvo?.tagName;
         if (tag === "BUTTON") return;
         if (tag === "TEXTAREA") {

@@ -7,6 +7,22 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Tokens do sistema de temas GestaoPRO. Mapeiam as CSS vars
+        // definidas em src/lib/theme.ts (aplicadas em :root pelo aplicarTema).
+        // Use estes tokens em telas migradas para Tailwind — eles reagem
+        // automaticamente ao tema escolhido pelo usuario.
+        'gp-bg':      'var(--bg)',
+        'gp-surface': 'var(--surface)',
+        'gp-card':    'var(--card)',
+        'gp-border':  'var(--border)',
+        'gp-accent':  'var(--accent)',
+        'gp-purple':  'var(--purple)',
+        'gp-green':   'var(--green)',
+        'gp-red':     'var(--red)',
+        'gp-yellow':  'var(--yellow)',
+        'gp-text':    'var(--text)',
+        'gp-muted':   'var(--muted)',
+        'gp-white':   'var(--white)',
         ink: {
           950: '#0a0c14',
           900: '#0f1220',

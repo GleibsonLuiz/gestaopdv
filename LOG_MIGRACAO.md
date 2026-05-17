@@ -1,7 +1,7 @@
 # LOG_MIGRACAO.md — Migração GestãoPRO para TypeScript + Tailwind
 
 > **Continuidade entre sessões.** Atualizar a cada pausa.
-> Última atualização: **2026-05-17** (sessão 6 — 50 migrações totais 🎉)
+> Última atualização: **2026-05-17** (sessão 7 — 54 migrações totais)
 
 ---
 
@@ -40,7 +40,7 @@ Migração gradual do GestãoPRO de:
 
 ---
 
-## 📦 Módulos migrados (50 migrações, 44 commits)
+## 📦 Módulos migrados (54 migrações, 48 commits)
 
 | # | Commit | Módulo | Tipo | Observação |
 |---|---|---|---|---|
@@ -79,12 +79,17 @@ Migração gradual do GestãoPRO de:
 | 48 | `77c038d` | `DashboardCrm.tsx` | tela CRM | Dashboard consolidado: funil + segmentos + top LTV + risco + performance |
 | 49 | `da0f4ee` | `MovimentarEstoqueModal.tsx` | modal | Movimentacao de estoque (ENTRADA/SAIDA/AJUSTE) + previa |
 | 50 | `e226e0a` | `Comissoes.tsx` | tela | Config de comissoes + simulador em tempo real (2 abas) |
+| 51 | `0a19f70` | `Fornecedores.tsx` | CRUD | Fornecedores + FormularioLuxuoso + fiscal indIEDest/CRT |
+| 52 | `e7a81ae` | `Clientes.tsx` | CRUD | Clientes + 3 filtros + status funil + tags + PerfilClienteModal |
+| 53 | `154b1fd` | `Estoque.tsx` | CRUD | Auditoria de movimentacoes + nova movimentacao |
+| 54 | `2643eed` | `Produtos.tsx` | CRUD | Maior CRUD: 3 abas + fiscal NF-e completo + dropzone imagem + markup |
 
 **Pasta `src/lib/` agora 100% TypeScript** (exceto `impressora.js` que é WIP do usuário).
 **Bootstrap e telas publicas** (main, Login, Signup, PesquisaPublicaNps) tambem em TS.
 **Telas administrativas pequenas/medias** (Sistema, Logs, Projeto, Configuracoes, Empresa, Aparencia, Etiquetas, Nps) em TS.
 **Ciclo CRM 100% TS** (Reativacao, Tarefas, Fidelidade, Segmentos, Funil, Automacoes, DashboardCrm) — sessões 5+6.
 **Comissoes** + **MovimentarEstoqueModal** em TS (sessão 6).
+**4 CRUDs principais em TS**: Fornecedores, Clientes, Estoque, Produtos (sessão 7).
 **Todos os 10 components reutilizaveis em `src/components/`** em TS (exceto `PerfilClienteModal` denso).
 **Pasta `src/pages/financeiro/components/` 100% TS** (12 arquivos).
 
@@ -92,15 +97,14 @@ Migração gradual do GestãoPRO de:
 
 ## 📋 Arquivos ainda como `.jsx` (próximos candidatos)
 
-Total: **16 arquivos** (.js/.jsx) em `src/`. Lista organizada por dificuldade crescente:
+Total: **12 arquivos** (.js/.jsx) em `src/`. Lista organizada por dificuldade crescente:
 
 ### 🟡 Components grandes restantes
 - `src/components/PerfilClienteModal.jsx` (996 linhas) — DENSO, várias abas
 
-### 🟡 Telas operacionais (CRUDs + listas)
-- `src/Clientes.jsx`, `src/Fornecedores.jsx`, `src/Produtos.jsx` — CRUDs clássicos
-- `src/Compras.jsx`, `src/Estoque.jsx`, `src/Orcamentos.jsx`
-- `src/Dashboard.jsx`, `src/Relatorios.jsx`
+### 🟡 CRUDs operacionais restantes
+- `src/Compras.jsx`, `src/Orcamentos.jsx` — fluxo de compra/orcamento
+- `src/Dashboard.jsx`, `src/Relatorios.jsx` — visualizacoes agregadas
 
 ### 🟡 Tela grande do financeiro novo
 - `src/pages/financeiro/FinanceiroPage.jsx` (tela principal, components já em TS)
@@ -165,15 +169,15 @@ Para mudanças em UI, idealmente também `npm run dev` + teste visual (eu não c
 
 ---
 
-## 📂 Onde paramos (estado em 2026-05-17, sessão 6)
+## 📂 Onde paramos (estado em 2026-05-17, sessão 7)
 
-- **Último commit:** `e226e0a refactor(comissoes): migra Comissoes.jsx para TSX + Tailwind`
+- **Último commit:** `2643eed refactor(produtos): migra Produtos.jsx para TSX + Tailwind`
 - **Branch:** `main` (sincronizada com `origin/main`)
 - **Working tree não-vazio:** O usuário tem feature **Impressora** em andamento (arquivos untracked + hunks em App.jsx/Caixa.jsx/Financeiro.jsx/PDV.jsx). **Não tocar enquanto não finalizar.**
-- **Progresso:** 52 arquivos `.ts`/`.tsx` vs 16 arquivos `.jsx`/`.js` restantes. **~76% migrado**.
-- **Sessão 6 entregou (4 migrações):** Automacoes → DashboardCrm → MovimentarEstoqueModal → Comissoes. **Ciclo CRM 100% migrado** (7 telas).
+- **Progresso:** 56 arquivos `.ts`/`.tsx` vs 12 arquivos `.jsx`/`.js` restantes. **~82% migrado**.
+- **Sessão 7 entregou (4 migrações):** Fornecedores → Clientes → Estoque → Produtos. **4 CRUDs principais 100% migrados**.
 - **Próximo módulo sugerido:**
-  1. CRUDs operacionais: `Clientes`, `Fornecedores`, `Produtos`, `Compras`, `Estoque`, `Orcamentos`, `Dashboard`, `Relatorios`
+  1. CRUDs restantes: `Compras`, `Orcamentos`, `Dashboard`, `Relatorios`
   2. `src/pages/financeiro/FinanceiroPage.jsx` (tela principal do financeiro novo)
   3. `src/components/PerfilClienteModal.jsx` (996 linhas — modal com várias abas)
   4. `src/AdminMasterApp.jsx` — área super-admin (multi-aba)

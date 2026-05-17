@@ -33,7 +33,7 @@ import PesquisaPublicaNps from "./PesquisaPublicaNps.jsx";
 import Alertas from "./Alertas.jsx";
 import Logs from "./Logs.jsx";
 import { getUser, getToken, clearSession, api } from "./lib/api.js";
-import { podeAcessar } from "./lib/permissoes.js";
+import { podeAcessar } from "./lib/permissoes";
 
 
 const SIDEBAR_W_EXPANDIDA = 240;

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { C } from "./lib/theme.js";
 import { api } from "./lib/api.js";
-import { MODULOS, permissoesPadrao, IDS_MODULOS } from "./lib/permissoes.js";
+import { MODULOS, permissoesPadrao, IDS_MODULOS } from "./lib/permissoes";
 import ActionsMenu from "./components/ActionsMenu.jsx";
 
 

@@ -1,15 +1,29 @@
-import { useState, useRef, useEffect } from "react";
-import { C } from "../lib/theme.js";
-import { aplicarVariaveis, gerarLink } from "../lib/templates.js";
+import { useState, useRef, useEffect, type CSSProperties } from "react";
+import { C } from "../lib/theme";
+import { aplicarVariaveis, gerarLink, type ClienteParaTemplate, type ClienteKpis, type TipoMensagem } from "../lib/templates";
 
 // Componente reutilizavel de botoes de contato (WhatsApp / Telefone / Email).
 // Cada botao mostra dropdown com templates do tipo + opcao "Mensagem em branco".
-//
-// Props:
-//   cliente: objeto com nome, telefone, email, cidade, etc. Pode ter `rfm` ou `kpis`.
-//   templates: array de TemplateMensagem (todos os tipos, do backend).
-//   tamanho: "sm" (icones compactos) | "md" (padrao, com label).
-//   variant: "icones" (so emoji) | "completo" (label + icone).
+
+type Tamanho = "sm" | "md";
+type Variant = "icones" | "completo";
+
+interface Template {
+  id: string;
+  nome: string;
+  corpo: string;
+  assunto?: string;
+  tipo: TipoMensagem;
+  ativo: boolean;
+}
+
+interface BotoesContatoClienteProps {
+  cliente: ClienteParaTemplate;
+  templates?: Template[];
+  tamanho?: Tamanho;
+  variant?: Variant;
+  kpis?: ClienteKpis | null;
+}
 
 export default function BotoesContatoCliente({
   cliente,
@@ -17,13 +31,13 @@ export default function BotoesContatoCliente({
   tamanho = "sm",
   variant = "icones",
   kpis = null,
-}) {
-  const wa = cliente.telefone ? true : false;
-  const tel = cliente.telefone ? true : false;
-  const mail = cliente.email ? true : false;
+}: BotoesContatoClienteProps) {
+  const wa = !!cliente.telefone;
+  const tel = !!cliente.telefone;
+  const mail = !!cliente.email;
 
   return (
-    <div style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+    <div className="inline-flex gap-1 items-center">
       {wa && (
         <BotaoComTemplates
           tipo="WHATSAPP"
@@ -64,30 +78,47 @@ export default function BotoesContatoCliente({
   );
 }
 
+interface BotaoSimplesProps {
+  href: string;
+  icone: string;
+  label: string;
+  cor: string;
+  tamanho: Tamanho;
+  variant: Variant;
+}
+
 // Botao simples (sem templates) — usado para ligar.
-function BotaoSimples({ href, icone, label, cor, tamanho, variant }) {
+function BotaoSimples({ href, icone, label, cor, tamanho, variant }: BotaoSimplesProps) {
   return (
-    <a
-      href={href}
-      title={label}
-      style={estiloBotao(cor, tamanho, variant)}
-    >
+    <a href={href} title={label} style={estiloBotao(cor, tamanho, variant)}>
       <span>{icone}</span>
-      {variant === "completo" && <span style={{ marginLeft: 4 }}>{label}</span>}
+      {variant === "completo" && <span className="ml-1">{label}</span>}
     </a>
   );
 }
 
+interface BotaoComTemplatesProps {
+  tipo: TipoMensagem;
+  cliente: ClienteParaTemplate;
+  kpis: ClienteKpis | null;
+  templates: Template[];
+  icone: string;
+  label: string;
+  cor: string;
+  tamanho: Tamanho;
+  variant: Variant;
+}
+
 // Botao com dropdown de templates — usado para WA e Email.
-function BotaoComTemplates({ tipo, cliente, kpis, templates, icone, label, cor, tamanho, variant }) {
+function BotaoComTemplates({ tipo, cliente, kpis, templates, icone, label, cor, tamanho, variant }: BotaoComTemplatesProps) {
   const [aberto, setAberto] = useState(false);
-  const ref = useRef(null);
+  const ref = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    function onClickFora(e) {
-      if (ref.current && !ref.current.contains(e.target)) setAberto(false);
+    function onClickFora(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setAberto(false);
     }
-    function onKey(e) { if (e.key === "Escape") setAberto(false); }
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") setAberto(false); }
     if (aberto) {
       document.addEventListener("mousedown", onClickFora);
       document.addEventListener("keydown", onKey);
@@ -98,7 +129,7 @@ function BotaoComTemplates({ tipo, cliente, kpis, templates, icone, label, cor, 
     };
   }, [aberto]);
 
-  function abrirComTemplate(template) {
+  function abrirComTemplate(template: Template | null) {
     const corpo = template ? aplicarVariaveis(template.corpo, cliente, kpis) : "";
     const assunto = template?.assunto ? aplicarVariaveis(template.assunto, cliente, kpis) : "";
     const link = gerarLink({
@@ -127,47 +158,42 @@ function BotaoComTemplates({ tipo, cliente, kpis, templates, icone, label, cor, 
   }
 
   return (
-    <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
+    <div ref={ref} className="relative inline-block">
       <button
         onClick={(e) => { e.stopPropagation(); setAberto((v) => !v); }}
         title={`${label} (${templates.length} template${templates.length === 1 ? "" : "s"})`}
         style={{ ...estiloBotao(cor, tamanho, variant), cursor: "pointer" }}
       >
         <span>{icone}</span>
-        {variant === "completo" && <span style={{ marginLeft: 4 }}>{label}</span>}
-        <span style={{ marginLeft: 4, fontSize: 9, opacity: 0.7 }}>▾</span>
+        {variant === "completo" && <span className="ml-1">{label}</span>}
+        <span className="ml-1 text-[9px] opacity-70">▾</span>
       </button>
       {aberto && (
         <div
           onClick={(e) => e.stopPropagation()}
+          className="absolute right-0 bg-gp-surface rounded-lg p-1"
           style={{
-            position: "absolute", top: "calc(100% + 4px)", right: 0,
-            background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8,
-            minWidth: 240, zIndex: 500, padding: 4,
+            top: "calc(100% + 4px)",
+            border: `1px solid ${C.border}`,
+            minWidth: 240,
+            zIndex: 500,
             boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
           }}
         >
-          <button
-            onClick={() => abrirComTemplate(null)}
-            style={itemDropdown(C.muted)}
-          >
-            <span style={{ fontSize: 14 }}>✨</span>
+          <button onClick={() => abrirComTemplate(null)} style={itemDropdown()}>
+            <span className="text-sm">✨</span>
             <div>
-              <div style={{ color: C.text, fontWeight: 600, fontSize: 12 }}>Mensagem em branco</div>
-              <div style={{ color: C.muted, fontSize: 10 }}>Abrir sem template</div>
+              <div className="text-gp-text font-semibold text-xs">Mensagem em branco</div>
+              <div className="text-gp-muted text-[10px]">Abrir sem template</div>
             </div>
           </button>
           <div style={{ borderTop: `1px solid ${C.border}`, margin: "4px 0" }} />
           {templates.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => abrirComTemplate(t)}
-              style={itemDropdown(cor)}
-            >
-              <span style={{ fontSize: 14 }}>{icone}</span>
-              <div style={{ minWidth: 0, flex: 1, textAlign: "left" }}>
-                <div style={{ color: C.text, fontWeight: 600, fontSize: 12 }}>{t.nome}</div>
-                <div style={{ color: C.muted, fontSize: 10, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <button key={t.id} onClick={() => abrirComTemplate(t)} style={itemDropdown()}>
+              <span className="text-sm">{icone}</span>
+              <div className="min-w-0 flex-1 text-left">
+                <div className="text-gp-text font-semibold text-xs">{t.nome}</div>
+                <div className="text-gp-muted text-[10px] overflow-hidden text-ellipsis whitespace-nowrap">
                   {t.corpo.slice(0, 60)}{t.corpo.length > 60 ? "…" : ""}
                 </div>
               </div>
@@ -179,7 +205,7 @@ function BotaoComTemplates({ tipo, cliente, kpis, templates, icone, label, cor, 
   );
 }
 
-function estiloBotao(cor, tamanho, variant) {
+function estiloBotao(cor: string, tamanho: Tamanho, variant: Variant): CSSProperties {
   const compact = tamanho === "sm";
   return {
     background: cor + "22",
@@ -198,7 +224,7 @@ function estiloBotao(cor, tamanho, variant) {
   };
 }
 
-function itemDropdown() {
+function itemDropdown(): CSSProperties {
   return {
     display: "flex",
     alignItems: "center",

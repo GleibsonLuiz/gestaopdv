@@ -1,13 +1,26 @@
 import { useState } from "react";
-import { C } from "../lib/theme.js";
-import EtiquetaPreco from "./EtiquetaPreco.jsx";
+import { C } from "../lib/theme";
+import EtiquetaPreco from "./EtiquetaPreco";
+
+interface ProdutoParaEtiqueta {
+  nome: string;
+  precoVenda?: number | string | null;
+  codigoBarras?: string | null;
+  referencia?: string | null;
+  codigo?: string | null;
+}
+
+interface EtiquetaPrecoModalProps {
+  produto: ProdutoParaEtiqueta | null;
+  onFechar: () => void;
+}
 
 // Modal que mostra previa da etiqueta + botoes de copias e Imprimir.
 // O CSS `@media print` (injetado abaixo) garante que apenas as etiquetas
 // vao para a impressora, sem cabecalho/rodape do navegador e no tamanho
 // fisico 60x40mm.
-export default function EtiquetaPrecoModal({ produto, onFechar }) {
-  const [copias, setCopias] = useState(1);
+export default function EtiquetaPrecoModal({ produto, onFechar }: EtiquetaPrecoModalProps) {
+  const [copias, setCopias] = useState<number | string>(1);
 
   if (!produto) return null;
 
@@ -19,65 +32,45 @@ export default function EtiquetaPrecoModal({ produto, onFechar }) {
       <style>{cssEtiqueta}</style>
 
       <div
-        className="etiqueta-overlay"
+        className="etiqueta-overlay fixed inset-0 flex items-center justify-center p-5"
         onClick={onFechar}
-        style={{
-          position: "fixed", inset: 0,
-          background: "rgba(0,0,0,0.65)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          padding: 20, zIndex: 200,
-        }}
+        style={{ background: "rgba(0,0,0,0.65)", zIndex: 200 }}
       >
         <div
           onClick={(e) => e.stopPropagation()}
-          className="etiqueta-modal"
-          style={{
-            background: C.card, border: `1px solid ${C.border}`, borderRadius: 14,
-            width: "100%", maxWidth: 560, maxHeight: "92vh", overflowY: "auto",
-            padding: 24, display: "flex", flexDirection: "column", gap: 16,
-          }}
+          className="etiqueta-modal bg-gp-card rounded-[14px] w-full max-w-[560px] max-h-[92vh] overflow-y-auto p-6 flex flex-col gap-4"
+          style={{ border: `1px solid ${C.border}` }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ color: C.white, fontWeight: 700, fontSize: 18 }}>
-              Imprimir Etiqueta
-            </div>
+          <div className="flex justify-between items-center">
+            <div className="text-gp-white font-bold text-lg">Imprimir Etiqueta</div>
             <button
               type="button"
               onClick={onFechar}
-              style={{
-                background: "transparent", border: "none",
-                color: C.muted, fontSize: 20, cursor: "pointer",
-              }}
-            >×</button>
+              className="bg-transparent border-none text-gp-muted text-xl cursor-pointer"
+            >
+              ×
+            </button>
           </div>
 
-          <div style={{ fontSize: 12, color: C.muted }}>
-            Produto: <span style={{ color: C.text, fontWeight: 600 }}>{produto.nome}</span>
+          <div className="text-xs text-gp-muted">
+            Produto: <span className="text-gp-text font-semibold">{produto.nome}</span>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <label style={{ fontSize: 13, color: C.text }}>Cópias:</label>
+          <div className="flex items-center gap-[10px]">
+            <label className="text-[13px] text-gp-text">Cópias:</label>
             <input
               type="number"
               min={1}
               max={100}
               value={copias}
               onChange={(e) => setCopias(e.target.value)}
-              style={{
-                width: 80,
-                background: C.surface, color: C.text,
-                border: `1px solid ${C.border}`, borderRadius: 8,
-                padding: "6px 10px", fontSize: 14,
-              }}
+              className="w-20 bg-gp-surface text-gp-text rounded-lg px-[10px] py-[6px] text-sm"
+              style={{ border: `1px solid ${C.border}` }}
             />
-            <span style={{ fontSize: 11, color: C.muted }}>(máx. 100)</span>
+            <span className="text-[11px] text-gp-muted">(máx. 100)</span>
           </div>
 
-          <div style={{
-            background: C.surface, border: `1px solid ${C.border}`,
-            borderRadius: 10, padding: 16,
-            display: "flex", justifyContent: "center", alignItems: "center",
-          }}>
+          <div className="bg-gp-surface rounded-[10px] p-4 flex justify-center items-center" style={{ border: `1px solid ${C.border}` }}>
             <EtiquetaPreco
               nomeProduto={produto.nome}
               precoVenda={produto.precoVenda}
@@ -87,29 +80,20 @@ export default function EtiquetaPrecoModal({ produto, onFechar }) {
             />
           </div>
 
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+          <div className="flex justify-end gap-[10px]">
             <button
               type="button"
               onClick={onFechar}
-              style={{
-                background: C.surface, color: C.text,
-                border: `1px solid ${C.border}`, borderRadius: 8,
-                padding: "10px 16px", fontSize: 13, fontWeight: 600,
-                cursor: "pointer",
-              }}
+              className="bg-gp-surface text-gp-text rounded-lg px-4 py-[10px] text-[13px] font-semibold cursor-pointer"
+              style={{ border: `1px solid ${C.border}` }}
             >
               Cancelar
             </button>
             <button
               type="button"
               onClick={() => window.print()}
-              style={{
-                background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-                color: C.white,
-                border: "none", borderRadius: 8,
-                padding: "10px 18px", fontSize: 13, fontWeight: 700,
-                cursor: "pointer",
-              }}
+              className="text-gp-white border-none rounded-lg px-[18px] py-[10px] text-[13px] font-bold cursor-pointer"
+              style={{ background: `linear-gradient(135deg, ${C.accent}, ${C.purple})` }}
             >
               🖨️ Imprimir
             </button>

@@ -12,10 +12,41 @@
 //   {{valorEmAberto}} contas a receber em aberto formatado em R$
 //   {{recenciaDias}} dias desde a ultima compra ou "—"
 
-const fmtBRL = (v) =>
+export interface ClienteKpis {
+  totalGasto?: number;
+  monetario?: number;
+  ultimaCompra?: string | null;
+  valorInadimplente?: number;
+  valorEmAberto?: number;
+  recenciaDias?: number | null;
+  [extra: string]: unknown;
+}
+
+export interface ClienteParaTemplate {
+  nome?: string;
+  telefone?: string;
+  email?: string;
+  cidade?: string;
+  estado?: string;
+  kpis?: ClienteKpis;
+  rfm?: ClienteKpis;
+  [extra: string]: unknown;
+}
+
+export type TipoMensagem = "WHATSAPP" | "EMAIL" | "SMS";
+
+export interface GerarLinkParams {
+  tipo: TipoMensagem;
+  telefone?: string | null;
+  email?: string | null;
+  assunto?: string | null;
+  corpo?: string | null;
+}
+
+const fmtBRL = (v: unknown): string =>
   Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-const fmtData = (iso) => {
+const fmtData = (iso: string | null | undefined): string => {
   if (!iso) return "—";
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "—";
@@ -24,10 +55,14 @@ const fmtData = (iso) => {
 
 // Recebe um cliente com `tags` e (opcional) `rfm`/`kpis`. Aceita tambem a
 // forma rasa retornada por /clientes/segmentos (cliente + rfm).
-export function aplicarVariaveis(texto, cliente, kpis = null) {
+export function aplicarVariaveis(
+  texto: string | null | undefined,
+  cliente: ClienteParaTemplate | null | undefined,
+  kpis: ClienteKpis | null = null,
+): string {
   if (!texto) return "";
   const c = cliente || {};
-  const k = kpis || c.kpis || c.rfm || {};
+  const k: ClienteKpis = kpis || c.kpis || c.rfm || {};
 
   const nome = c.nome || "";
   const primeiroNome = nome.trim().split(/\s+/)[0] || "";
@@ -36,7 +71,7 @@ export function aplicarVariaveis(texto, cliente, kpis = null) {
   const valorEmAberto = k.valorInadimplente ?? k.valorEmAberto ?? 0;
   const recenciaDias = k.recenciaDias ?? null;
 
-  const valores = {
+  const valores: Record<string, string> = {
     nome,
     primeiroNome,
     telefone: c.telefone || "",
@@ -49,13 +84,13 @@ export function aplicarVariaveis(texto, cliente, kpis = null) {
     recenciaDias: recenciaDias != null ? String(recenciaDias) : "—",
   };
 
-  return String(texto).replace(/\{\{(\w+)\}\}/g, (_, chave) => {
+  return String(texto).replace(/\{\{(\w+)\}\}/g, (_, chave: string) => {
     return chave in valores ? valores[chave] : `{{${chave}}}`;
   });
 }
 
 // Lista de variaveis disponiveis (para mostrar no editor de template).
-export const VARIAVEIS_DISPONIVEIS = [
+export const VARIAVEIS_DISPONIVEIS: { chave: string; desc: string }[] = [
   { chave: "nome", desc: "Nome completo do cliente" },
   { chave: "primeiroNome", desc: "Primeiro nome" },
   { chave: "telefone", desc: "Telefone" },
@@ -69,7 +104,7 @@ export const VARIAVEIS_DISPONIVEIS = [
 ];
 
 // Gera o link final para abrir a mensagem.
-export function gerarLink({ tipo, telefone, email, assunto, corpo }) {
+export function gerarLink({ tipo, telefone, email, assunto, corpo }: GerarLinkParams): string | null {
   const corpoEnc = encodeURIComponent(corpo || "");
   if (tipo === "WHATSAPP") {
     if (!telefone) return null;
@@ -80,7 +115,7 @@ export function gerarLink({ tipo, telefone, email, assunto, corpo }) {
   }
   if (tipo === "EMAIL") {
     if (!email) return null;
-    const params = [];
+    const params: string[] = [];
     if (assunto) params.push(`subject=${encodeURIComponent(assunto)}`);
     if (corpo) params.push(`body=${corpoEnc}`);
     return `mailto:${email}${params.length ? `?${params.join("&")}` : ""}`;

@@ -1,8 +1,14 @@
+interface SparklineProps {
+  d: string;
+  color: string;
+  gradientId: string;
+}
+
 /**
  * Sparkline — gera o path como linha + área preenchida com gradiente.
  * Recebe um path SVG (string) já formatado para um viewBox 200×36.
  */
-export default function Sparkline({ d, color, gradientId }) {
+export default function Sparkline({ d, color, gradientId }: SparklineProps) {
   const areaPath = `${d} L200 36 L0 36 Z`;
 
   return (

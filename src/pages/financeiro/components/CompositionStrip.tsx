@@ -1,6 +1,23 @@
-function fmtBRL(v) {
+function fmtBRL(v: unknown): string {
   const n = Number(v) || 0;
-  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+interface CompositionStripProps {
+  pendente?: number;
+  atrasado?: number;
+  pago?: number;
+  vencendo?: number;
+  vencendoQtd?: number;
+  ehPagar?: boolean;
+}
+
+interface Segmento {
+  id: "atrasado" | "pendente" | "pago";
+  label: string;
+  color: string;
+  value: number;
+  p: number;
 }
 
 export default function CompositionStrip({
@@ -10,15 +27,15 @@ export default function CompositionStrip({
   vencendo = 0,
   vencendoQtd = 0,
   ehPagar = true,
-}) {
+}: CompositionStripProps) {
   const total = pendente + atrasado + pago;
-  const pct = (n) => total > 0 ? (n / total) * 100 : 0;
+  const pct = (n: number): number => (total > 0 ? (n / total) * 100 : 0);
 
-  const segs = [
-    { id: 'atrasado', label: 'Atrasado',                 color: 'var(--coral)',   value: atrasado, p: pct(atrasado) },
-    { id: 'pendente', label: 'Pendente',                 color: 'var(--amber)',   value: pendente, p: pct(pendente) },
-    { id: 'pago',     label: ehPagar ? 'Pago' : 'Recebido', color: 'var(--emerald)', value: pago,     p: pct(pago) },
-  ].filter(s => s.value > 0);
+  const segs: Segmento[] = ([
+    { id: "atrasado", label: "Atrasado",                  color: "var(--coral)",   value: atrasado, p: pct(atrasado) },
+    { id: "pendente", label: "Pendente",                  color: "var(--amber)",   value: pendente, p: pct(pendente) },
+    { id: "pago",     label: ehPagar ? "Pago" : "Recebido", color: "var(--emerald)", value: pago,     p: pct(pago) },
+  ] as Segmento[]).filter((s) => s.value > 0);
 
   return (
     <div className="bg-surface border border-hairline-soft rounded-card shadow-card p-[14px_18px] mb-6">
@@ -33,22 +50,22 @@ export default function CompositionStrip({
           <div className="flex items-center gap-1.5 text-[11.5px] text-iris font-mono">
             <span
               className="w-1.5 h-1.5 rounded-full bg-iris"
-              style={{ boxShadow: '0 0 0 3px oklch(0.74 0.13 286 / .22)' }}
+              style={{ boxShadow: "0 0 0 3px oklch(0.74 0.13 286 / .22)" }}
             />
-            {vencendoQtd} {vencendoQtd === 1 ? 'vence' : 'vencem'} em 7 d · {fmtBRL(vencendo)}
+            {vencendoQtd} {vencendoQtd === 1 ? "vence" : "vencem"} em 7 d · {fmtBRL(vencendo)}
           </div>
         )}
       </div>
 
       <div
         className="h-2 rounded-full overflow-hidden flex gap-px"
-        style={{ background: 'oklch(1 0 0 / .04)' }}
+        style={{ background: "oklch(1 0 0 / .04)" }}
         role="img"
         aria-label="Composição do total"
       >
         {total === 0 ? (
           <div className="w-full" />
-        ) : segs.map(s => (
+        ) : segs.map((s) => (
           <span
             key={s.id}
             className="h-full transition-all"
@@ -64,7 +81,7 @@ export default function CompositionStrip({
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 mt-2.5 text-[11.5px]">
         {segs.length === 0 ? (
           <span className="text-fg-faint">Nenhum lançamento ativo no período.</span>
-        ) : segs.map(s => (
+        ) : segs.map((s) => (
           <div key={s.id} className="inline-flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-sm" style={{ background: s.color }} />
             <span className="text-fg-soft">{s.label}</span>

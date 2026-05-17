@@ -1,20 +1,50 @@
-import Icon from './icons';
-import Sparkline from './Sparkline';
+import Icon, { type IconName } from "./icons";
+import Sparkline from "./Sparkline";
 
-const TONES = {
-  amber:   { color: 'oklch(0.82 0.13 78)',  intClass: 'text-amber2',   bg: 'oklch(0.82 0.13 78 / .14)',  border: 'oklch(0.82 0.13 78 / .25)',  bar: 'linear-gradient(90deg, var(--amber), oklch(0.84 0.12 100))' },
-  coral:   { color: 'oklch(0.74 0.14 22)',  intClass: 'text-coral',    bg: 'oklch(0.74 0.14 22 / .16)',  border: 'oklch(0.74 0.14 22 / .25)',  bar: 'linear-gradient(90deg, var(--coral), oklch(0.80 0.12 50))' },
-  iris:    { color: 'oklch(0.74 0.13 286)', intClass: 'text-fg',       bg: 'oklch(0.74 0.13 286 / .16)', border: 'oklch(0.74 0.13 286 / .25)', bar: 'linear-gradient(90deg, var(--iris), oklch(0.78 0.12 235))' },
-  emerald: { color: 'oklch(0.80 0.13 158)', intClass: 'text-emerald2', bg: 'oklch(0.80 0.13 158 / .14)', border: 'oklch(0.80 0.13 158 / .25)', bar: 'linear-gradient(90deg, var(--emerald), oklch(0.84 0.12 180))' },
+export type KpiTone = "amber" | "coral" | "iris" | "emerald";
+export type DeltaDir = "up" | "down" | "flat";
+
+export interface KpiData {
+  id: string;
+  label: string;
+  icon: IconName | string;
+  tone: KpiTone | string;
+  value: string;
+  cents: string;
+  delta?: string;
+  deltaDir?: DeltaDir;
+  sparkPath?: string;
+  footLeft?: string;
+  footPill?: string;
+  progress?: number | null;
+}
+
+interface ToneMeta {
+  color: string;
+  intClass: string;
+  bg: string;
+  border: string;
+  bar: string;
+}
+
+const TONES: Record<KpiTone, ToneMeta> = {
+  amber:   { color: "oklch(0.82 0.13 78)",  intClass: "text-amber2",   bg: "oklch(0.82 0.13 78 / .14)",  border: "oklch(0.82 0.13 78 / .25)",  bar: "linear-gradient(90deg, var(--amber), oklch(0.84 0.12 100))" },
+  coral:   { color: "oklch(0.74 0.14 22)",  intClass: "text-coral",    bg: "oklch(0.74 0.14 22 / .16)",  border: "oklch(0.74 0.14 22 / .25)",  bar: "linear-gradient(90deg, var(--coral), oklch(0.80 0.12 50))" },
+  iris:    { color: "oklch(0.74 0.13 286)", intClass: "text-fg",       bg: "oklch(0.74 0.13 286 / .16)", border: "oklch(0.74 0.13 286 / .25)", bar: "linear-gradient(90deg, var(--iris), oklch(0.78 0.12 235))" },
+  emerald: { color: "oklch(0.80 0.13 158)", intClass: "text-emerald2", bg: "oklch(0.80 0.13 158 / .14)", border: "oklch(0.80 0.13 158 / .25)", bar: "linear-gradient(90deg, var(--emerald), oklch(0.84 0.12 180))" },
 };
 
-export default function KpiCard({ kpi }) {
-  const tone = TONES[kpi.tone] || TONES.iris;
+interface KpiCardProps {
+  kpi: KpiData;
+}
+
+export default function KpiCard({ kpi }: KpiCardProps) {
+  const tone = TONES[kpi.tone as KpiTone] || TONES.iris;
 
   const cardBg =
-    kpi.tone === 'coral'
-      ? 'radial-gradient(120% 100% at 0% 0%, oklch(0.32 0.10 22 / .22), transparent 55%), linear-gradient(180deg, oklch(1 0 0 / .035), oklch(1 0 0 / 0)), var(--surface)'
-      : 'linear-gradient(180deg, oklch(1 0 0 / .025), oklch(1 0 0 / 0)), var(--surface)';
+    kpi.tone === "coral"
+      ? "radial-gradient(120% 100% at 0% 0%, oklch(0.32 0.10 22 / .22), transparent 55%), linear-gradient(180deg, oklch(1 0 0 / .035), oklch(1 0 0 / 0)), var(--surface)"
+      : "linear-gradient(180deg, oklch(1 0 0 / .025), oklch(1 0 0 / 0)), var(--surface)";
 
   return (
     <div
@@ -70,20 +100,20 @@ export default function KpiCard({ kpi }) {
   );
 }
 
-function DeltaPill({ delta, dir }) {
+function DeltaPill({ delta, dir }: { delta: string; dir?: DeltaDir }) {
   const cls =
-    dir === 'up'
-      ? 'text-emerald2'
-      : dir === 'down'
-      ? 'text-coral'
-      : 'text-fg-muted';
+    dir === "up"
+      ? "text-emerald2"
+      : dir === "down"
+      ? "text-coral"
+      : "text-fg-muted";
   const bg =
-    dir === 'up'
-      ? 'oklch(0.80 0.13 158 / .14)'
-      : dir === 'down'
-      ? 'oklch(0.74 0.14 22 / .16)'
-      : 'oklch(1 0 0 / .03)';
-  const border = dir === 'flat' ? '1px solid var(--hairline-soft)' : 'none';
+    dir === "up"
+      ? "oklch(0.80 0.13 158 / .14)"
+      : dir === "down"
+      ? "oklch(0.74 0.14 22 / .16)"
+      : "oklch(1 0 0 / .03)";
+  const border = dir === "flat" ? "1px solid var(--hairline-soft)" : "none";
   return (
     <span
       className={`inline-flex items-center gap-1 font-mono text-[11px] px-[7px] py-[3px] rounded-full ${cls}`}

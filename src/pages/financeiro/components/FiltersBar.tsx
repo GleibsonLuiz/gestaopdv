@@ -1,11 +1,36 @@
-import Icon from './icons';
+import Icon from "./icons";
 
-const STATUS = [
-  { id: '',          label: 'Todos',      color: 'var(--fg)' },
-  { id: 'PENDENTE',  label: 'Pendentes',  color: 'var(--amber)' },
-  { id: 'ATRASADA',  label: 'Atrasadas',  color: 'var(--coral)' },
-  { id: 'PAGA',      label: 'Pagas',      color: 'var(--emerald)' },
+interface StatusOption {
+  id: string;
+  label: string;
+  color: string;
+}
+
+const STATUS: StatusOption[] = [
+  { id: "",         label: "Todos",     color: "var(--fg)" },
+  { id: "PENDENTE", label: "Pendentes", color: "var(--amber)" },
+  { id: "ATRASADA", label: "Atrasadas", color: "var(--coral)" },
+  { id: "PAGA",     label: "Pagas",     color: "var(--emerald)" },
 ];
+
+interface EntidadeOption {
+  id: string;
+  nome: string;
+}
+
+interface FiltersBarProps {
+  search: string;
+  onSearch?: (v: string) => void;
+  status?: string;
+  onStatus?: (id: string) => void;
+  entidadeId?: string;
+  onEntidade?: (id: string) => void;
+  vencidas?: boolean;
+  onVencidas?: (v: boolean) => void;
+  entidades?: EntidadeOption[];
+  entidadeLabel?: string;
+  onLimpar?: () => void;
+}
 
 export default function FiltersBar({
   search, onSearch,
@@ -13,9 +38,9 @@ export default function FiltersBar({
   entidadeId, onEntidade,
   vencidas, onVencidas,
   entidades = [],
-  entidadeLabel = 'fornecedores',
+  entidadeLabel = "fornecedores",
   onLimpar,
-}) {
+}: FiltersBarProps) {
   const temFiltro = !!(search || status || entidadeId || vencidas);
 
   return (
@@ -32,21 +57,21 @@ export default function FiltersBar({
       </label>
 
       <div className="inline-flex items-stretch border border-hairline-soft rounded-[10px] bg-white/[.02] h-10 p-1 gap-0.5">
-        {STATUS.map(s => {
-          const on = s.id === (status || '');
+        {STATUS.map((s) => {
+          const on = s.id === (status || "");
           return (
             <button
-              key={s.id || 'todos'}
+              key={s.id || "todos"}
               onClick={() => onStatus?.(s.id)}
               className={[
-                'px-3 rounded-[7px] text-[12.5px] font-medium inline-flex items-center gap-1.5 transition',
-                on ? 'bg-surface-3 text-fg' : 'text-fg-muted hover:text-fg-soft',
-              ].join(' ')}
+                "px-3 rounded-[7px] text-[12.5px] font-medium inline-flex items-center gap-1.5 transition",
+                on ? "bg-surface-3 text-fg" : "text-fg-muted hover:text-fg-soft",
+              ].join(" ")}
               style={!on ? { color: s.color } : undefined}
             >
               <span
                 className="w-1.5 h-1.5 rounded-full"
-                style={{ background: on ? 'var(--fg-faint)' : s.color }}
+                style={{ background: on ? "var(--fg-faint)" : s.color }}
               />
               {s.label}
             </button>
@@ -57,13 +82,13 @@ export default function FiltersBar({
       <label className="flex items-center gap-2.5 h-10 px-3 border border-hairline-soft rounded-[10px] bg-white/[.02] text-fg-soft text-[13px] cursor-pointer">
         <span className="text-fg-faint inline-flex"><Icon name="bag" /></span>
         <select
-          value={entidadeId || ''}
+          value={entidadeId || ""}
           onChange={(e) => onEntidade?.(e.target.value)}
           className="flex-1 bg-transparent border-0 outline-none text-fg-soft text-[13px] cursor-pointer"
-          style={{ appearance: 'none' }}
+          style={{ appearance: "none" }}
         >
           <option value="">Todos os {entidadeLabel}</option>
-          {entidades.map(e => (
+          {entidades.map((e) => (
             <option key={e.id} value={e.id}>{e.nome}</option>
           ))}
         </select>
@@ -77,18 +102,18 @@ export default function FiltersBar({
       >
         <span
           className={[
-            'relative w-[30px] h-[18px] rounded-full transition border',
-            vencidas ? 'border-iris' : 'border-hairline',
-          ].join(' ')}
+            "relative w-[30px] h-[18px] rounded-full transition border",
+            vencidas ? "border-iris" : "border-hairline",
+          ].join(" ")}
           style={{
-            background: vencidas ? 'oklch(0.74 0.13 286 / .35)' : 'oklch(1 0 0 / .08)',
+            background: vencidas ? "oklch(0.74 0.13 286 / .35)" : "oklch(1 0 0 / .08)",
           }}
         >
           <span
             className="absolute top-0.5 w-3 h-3 rounded-full transition-all"
             style={{
-              left: vencidas ? '14px' : '2px',
-              background: vencidas ? 'var(--iris)' : 'var(--fg-faint)',
+              left: vencidas ? "14px" : "2px",
+              background: vencidas ? "var(--iris)" : "var(--fg-faint)",
             }}
           />
         </span>

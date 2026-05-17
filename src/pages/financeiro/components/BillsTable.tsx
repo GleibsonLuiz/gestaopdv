@@ -1,31 +1,67 @@
-import StatusPill from './StatusPill';
-import DueCell from './DueCell';
-import AmountCell from './AmountCell';
-import ActionsMenu from '../../../components/ActionsMenu';
+import type { ReactNode } from "react";
+import StatusPill from "./StatusPill";
+import DueCell from "./DueCell";
+import AmountCell from "./AmountCell";
+import ActionsMenu from "../../../components/ActionsMenu";
 
-const SUPPLIER_TONES = {
-  c1: 'linear-gradient(135deg, oklch(0.45 0.10 200), oklch(0.30 0.06 240))',
-  c2: 'linear-gradient(135deg, oklch(0.42 0.10 286), oklch(0.30 0.06 286))',
-  c3: 'linear-gradient(135deg, oklch(0.42 0.10 78),  oklch(0.30 0.06 60))',
-  c4: 'linear-gradient(135deg, oklch(0.42 0.10 158), oklch(0.30 0.06 158))',
-  c5: 'linear-gradient(135deg, oklch(0.42 0.10 22),  oklch(0.30 0.06 22))',
+type SupplierTone = "c1" | "c2" | "c3" | "c4" | "c5";
+
+const SUPPLIER_TONES: Record<SupplierTone, string> = {
+  c1: "linear-gradient(135deg, oklch(0.45 0.10 200), oklch(0.30 0.06 240))",
+  c2: "linear-gradient(135deg, oklch(0.42 0.10 286), oklch(0.30 0.06 286))",
+  c3: "linear-gradient(135deg, oklch(0.42 0.10 78),  oklch(0.30 0.06 60))",
+  c4: "linear-gradient(135deg, oklch(0.42 0.10 158), oklch(0.30 0.06 158))",
+  c5: "linear-gradient(135deg, oklch(0.42 0.10 22),  oklch(0.30 0.06 22))",
 };
+
+type DueState = "late" | "today" | "soon" | "paid";
+
+export interface Bill {
+  id: string;
+  ref: string;
+  sub?: string;
+  parcela?: string;
+  supplier?: string;
+  supplierShort?: string;
+  supplierTone?: SupplierTone | string;
+  dueDate: string;
+  dueRel: string;
+  dueState: DueState;
+  amount: string;
+  cents: string;
+  status: string;
+  attachments?: number;
+}
+
+interface BillsTableProps {
+  bills: Bill[];
+  ehPagar?: boolean;
+  podeEditar?: boolean;
+  carregando?: boolean;
+  erro?: string;
+  totalFiltrado?: string | number | null;
+  onPay?: (b: Bill) => void;
+  onEdit?: (b: Bill) => void;
+  onAttach?: (b: Bill) => void;
+  onReabrir?: (b: Bill) => void;
+  onCancelar?: (b: Bill) => void;
+}
 
 export default function BillsTable({
   bills,
   ehPagar = true,
   podeEditar = true,
   carregando = false,
-  erro = '',
+  erro = "",
   totalFiltrado,
   onPay,
   onEdit,
   onAttach,
   onReabrir,
   onCancelar,
-}) {
-  const labelEntidade = ehPagar ? 'Fornecedor' : 'Cliente';
-  const tituloLista = ehPagar ? 'Contas a pagar' : 'Contas a receber';
+}: BillsTableProps) {
+  const labelEntidade = ehPagar ? "Fornecedor" : "Cliente";
+  const tituloLista = ehPagar ? "Contas a pagar" : "Contas a receber";
 
   return (
     <div className="bg-surface border border-hairline-soft rounded-card shadow-card overflow-hidden">
@@ -69,7 +105,7 @@ export default function BillsTable({
                 Nenhuma conta encontrada.
               </td>
             </tr>
-          ) : bills.map(bill => (
+          ) : bills.map((bill) => (
             <BillRow
               key={bill.id}
               bill={bill}
@@ -96,7 +132,17 @@ export default function BillsTable({
   );
 }
 
-function Th({ children, align = 'left', first, last }) {
+function Th({
+  children,
+  align = "left",
+  first,
+  last,
+}: {
+  children: ReactNode;
+  align?: "left" | "right" | "center";
+  first?: boolean;
+  last?: boolean;
+}) {
   return (
     <th
       className="text-left p-[10px_18px] font-medium text-[10.5px] uppercase tracking-[.14em] text-fg-faint border-y border-hairline-soft whitespace-nowrap"
@@ -111,18 +157,29 @@ function Th({ children, align = 'left', first, last }) {
   );
 }
 
-function BillRow({ bill, ehPagar, podeEditar, onPay, onEdit, onAttach, onReabrir, onCancelar }) {
-  const isPaid = bill.status === 'paid';
-  const isCanceled = bill.status === 'canceled';
+interface BillRowProps {
+  bill: Bill;
+  ehPagar: boolean;
+  podeEditar: boolean;
+  onPay?: (b: Bill) => void;
+  onEdit?: (b: Bill) => void;
+  onAttach?: (b: Bill) => void;
+  onReabrir?: (b: Bill) => void;
+  onCancelar?: (b: Bill) => void;
+}
+
+function BillRow({ bill, ehPagar, podeEditar, onPay, onEdit, onAttach, onReabrir, onCancelar }: BillRowProps) {
+  const isPaid = bill.status === "paid";
+  const isCanceled = bill.status === "canceled";
   const isFinal = isPaid || isCanceled;
 
   return (
     <tr
       className={[
-        'group border-b border-hairline-soft last:border-b-0 transition',
-        isFinal ? 'opacity-70' : '',
-        'hover:bg-white/[.025]',
-      ].join(' ')}
+        "group border-b border-hairline-soft last:border-b-0 transition",
+        isFinal ? "opacity-70" : "",
+        "hover:bg-white/[.025]",
+      ].join(" ")}
     >
       <td className="p-[16px_18px] align-middle text-fg font-medium min-w-[280px]">
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -142,7 +199,10 @@ function BillRow({ bill, ehPagar, podeEditar, onPay, onEdit, onAttach, onReabrir
         <div className="flex items-center gap-2.5">
           <span
             className="w-[26px] h-[26px] rounded-[7px] inline-flex items-center justify-center font-semibold text-[10.5px] border border-hairline-soft flex-none"
-            style={{ background: SUPPLIER_TONES[bill.supplierTone] || SUPPLIER_TONES.c1, color: 'oklch(0.95 0.04 240)' }}
+            style={{
+              background: SUPPLIER_TONES[bill.supplierTone as SupplierTone] || SUPPLIER_TONES.c1,
+              color: "oklch(0.95 0.04 240)",
+            }}
           >
             {bill.supplierShort}
           </span>
@@ -166,35 +226,35 @@ function BillRow({ bill, ehPagar, podeEditar, onPay, onEdit, onAttach, onReabrir
         <ActionsMenu
           items={[
             {
-              label: ehPagar ? 'Pagar' : 'Receber',
-              icon: '✓',
-              color: 'oklch(0.78 0.15 158)',
+              label: ehPagar ? "Pagar" : "Receber",
+              icon: "✓",
+              color: "oklch(0.78 0.15 158)",
               onClick: () => onPay?.(bill),
               hidden: isFinal || !podeEditar,
             },
             {
-              label: bill.attachments > 0 ? `Anexos (${bill.attachments})` : 'Anexos',
-              icon: '📎',
+              label: (bill.attachments ?? 0) > 0 ? `Anexos (${bill.attachments})` : "Anexos",
+              icon: "📎",
               onClick: () => onAttach?.(bill),
-              hidden: !(bill.attachments > 0 || (podeEditar && !isCanceled)),
+              hidden: !((bill.attachments ?? 0) > 0 || (podeEditar && !isCanceled)),
             },
             {
-              label: 'Editar',
-              icon: '✎',
+              label: "Editar",
+              icon: "✎",
               onClick: () => onEdit?.(bill),
               hidden: isFinal || !podeEditar,
             },
             {
-              label: 'Reabrir',
-              icon: '↺',
-              color: 'oklch(0.82 0.14 78)',
+              label: "Reabrir",
+              icon: "↺",
+              color: "oklch(0.82 0.14 78)",
               onClick: () => onReabrir?.(bill),
               hidden: !(isPaid && podeEditar),
             },
             {
-              label: 'Cancelar',
-              icon: '✕',
-              color: 'oklch(0.72 0.18 22)',
+              label: "Cancelar",
+              icon: "✕",
+              color: "oklch(0.72 0.18 22)",
               onClick: () => onCancelar?.(bill),
               hidden: isFinal || !podeEditar,
             },
@@ -204,4 +264,3 @@ function BillRow({ bill, ehPagar, podeEditar, onPay, onEdit, onAttach, onReabrir
     </tr>
   );
 }
-

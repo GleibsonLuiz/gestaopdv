@@ -1,5 +1,5 @@
-import { useEffect, useMemo } from "react";
-import { C } from "../lib/theme.js";
+import { useEffect, useMemo, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import { C } from "../lib/theme";
 
 // Modal de cadastro com layout "luxuoso": eyebrow, titulo serif com destaque
 // em italico, barra de progresso, fieldsets com legenda em monospace,
@@ -36,8 +36,28 @@ function injetarEstilos() {
 // (var(--accent)), nao da pra calcular alpha em JS — entao usamos
 // color-mix(in srgb, var(--accent) X%, transparent) que e suportado em
 // browsers modernos (Chrome 111+, Safari 16.2+, Firefox 113+).
-function mix(cor, pct) {
+function mix(cor: string, pct: number): string {
   return `color-mix(in srgb, ${cor} ${pct}%, transparent)`;
+}
+
+export interface FormularioLuxuosoProps {
+  aberto: boolean;
+  onFechar?: () => void;
+  onSubmit?: (e: FormEvent<HTMLFormElement>) => void;
+  titulo: string;
+  tituloDestaque?: string;
+  subtitulo?: string;
+  eyebrow?: string;
+  numeroLote?: string;           // ex.: "nº 0428"
+  data?: string;                  // ex.: "11.05.2026"
+  progresso?: number;             // 0..100 — opcional; se undefined, barra fica oculta
+  salvando?: boolean;
+  textoSalvar?: string;
+  textoSalvando?: string;
+  editando?: boolean;
+  larguraMax?: number;
+  erro?: string;
+  children?: ReactNode;
 }
 
 export function FormularioLuxuoso({
@@ -48,9 +68,9 @@ export function FormularioLuxuoso({
   tituloDestaque,
   subtitulo,
   eyebrow,
-  numeroLote,           // ex.: "nº 0428"
-  data,                  // ex.: "11.05.2026"
-  progresso,             // 0..100 — opcional; se undefined, barra fica oculta
+  numeroLote,
+  data,
+  progresso,
   salvando,
   textoSalvar = "Salvar",
   textoSalvando = "Salvando...",
@@ -58,7 +78,7 @@ export function FormularioLuxuoso({
   larguraMax = 720,
   erro,
   children,
-}) {
+}: FormularioLuxuosoProps) {
   useEffect(() => {
     injetarEstilos();
   }, []);
@@ -66,14 +86,14 @@ export function FormularioLuxuoso({
   // Fecha com ESC quando o modal esta aberto
   useEffect(() => {
     if (!aberto) return;
-    function aoTecla(e) {
+    function aoTecla(e: KeyboardEvent) {
       if (e.key === "Escape" && !salvando) onFechar?.();
     }
     document.addEventListener("keydown", aoTecla);
     return () => document.removeEventListener("keydown", aoTecla);
   }, [aberto, salvando, onFechar]);
 
-  const estiloCard = useMemo(() => ({
+  const estiloCard = useMemo<CSSProperties>(() => ({
     background: `linear-gradient(180deg, ${C.card} 0%, ${C.surface} 100%)`,
     border: `1px solid ${C.border}`,
   }), []);
@@ -355,7 +375,7 @@ export function FormularioLuxuoso({
       `}</style>
 
       <div className="lux-overlay" onClick={() => !salvando && onFechar?.()}>
-        <div className="lux-stage" onClick={e => e.stopPropagation()}>
+        <div className="lux-stage" onClick={(e) => e.stopPropagation()}>
           {(eyebrow || numeroLote || data) && (
             <div className="lux-eyebrow" aria-hidden="true">
               <span className="dot" />
@@ -375,8 +395,12 @@ export function FormularioLuxuoso({
                 </h1>
                 {subtitulo && <p className="lux-sub">{subtitulo}</p>}
               </div>
-              <button type="button" className="lux-close" aria-label="Fechar"
-                onClick={() => !salvando && onFechar?.()}>
+              <button
+                type="button"
+                className="lux-close"
+                aria-label="Fechar"
+                onClick={() => !salvando && onFechar?.()}
+              >
                 <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
                   <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                 </svg>
@@ -402,8 +426,12 @@ export function FormularioLuxuoso({
                   <span className="key">Esc</span> cancelar
                 </span>
                 <div className="lux-actions">
-                  <button type="button" className="lux-btn lux-btn--ghost"
-                    onClick={() => onFechar?.()} disabled={salvando}>
+                  <button
+                    type="button"
+                    className="lux-btn lux-btn--ghost"
+                    onClick={() => onFechar?.()}
+                    disabled={salvando}
+                  >
                     Cancelar
                   </button>
                   <button type="submit" className="lux-btn lux-btn--primary" disabled={salvando}>
@@ -424,7 +452,7 @@ export function FormularioLuxuoso({
   );
 }
 
-export function Secao({ legenda, children }) {
+export function Secao({ legenda, children }: { legenda?: string; children: ReactNode }) {
   return (
     <fieldset className="lux-fieldset">
       {legenda && <legend className="lux-legend">{legenda}</legend>}
@@ -433,7 +461,15 @@ export function Secao({ legenda, children }) {
   );
 }
 
-export function Linha({ cols = 2, tilt = false, variant, style, children }) {
+interface LinhaProps {
+  cols?: 1 | 2 | 3;
+  tilt?: boolean;
+  variant?: string;
+  style?: CSSProperties;
+  children: ReactNode;
+}
+
+export function Linha({ cols = 2, tilt = false, variant, style, children }: LinhaProps) {
   const cls = variant
     ? `lux-row ${variant}`
     : tilt
@@ -442,8 +478,17 @@ export function Linha({ cols = 2, tilt = false, variant, style, children }) {
   return <div className={cls} style={style}>{children}</div>;
 }
 
-export function Campo({ label, obrigatorio, hint, erro, span, children }) {
-  const style = span ? { gridColumn: `1 / span ${span}` } : undefined;
+interface CampoProps {
+  label?: string;
+  obrigatorio?: boolean;
+  hint?: string;
+  erro?: string;
+  span?: number;
+  children: ReactNode;
+}
+
+export function Campo({ label, obrigatorio, hint, erro, span, children }: CampoProps) {
+  const style: CSSProperties | undefined = span ? { gridColumn: `1 / span ${span}` } : undefined;
   return (
     <div className="lux-field" style={style}>
       {label && (

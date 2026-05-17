@@ -1,10 +1,11 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
-import { C } from "./lib/theme.js";
-import { api } from "./lib/api.js";
-import ActionsMenu from "./components/ActionsMenu.jsx";
-import { FormularioLuxuoso, Secao, Linha, Campo } from "./components/FormularioLuxuoso.jsx";
-import PerfilClienteModal from "./components/PerfilClienteModal.jsx";
+import { useEffect, useState, useCallback, useMemo, type FormEvent } from "react";
+import { C } from "./lib/theme";
+import { api, type SessionUser } from "./lib/api";
+import ActionsMenu from "./components/ActionsMenu";
+import { FormularioLuxuoso, Secao, Linha, Campo } from "./components/FormularioLuxuoso";
+import PerfilClienteModal from "./components/PerfilClienteModal";
 
+// ============ CONSTANTES ============
 
 const ESTADOS_BR = [
   "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO",
@@ -12,7 +13,92 @@ const ESTADOS_BR = [
   "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO",
 ];
 
-function mascararCpfCnpj(valor) {
+type StatusFunil = "LEAD" | "CLIENTE_ATIVO" | "CLIENTE_INATIVO" | "PERDIDO";
+
+interface StatusFunilMeta {
+  id: StatusFunil;
+  label: string;
+  cor: string;
+  icone: string;
+}
+
+const STATUS_FUNIL: StatusFunilMeta[] = [
+  { id: "LEAD",            label: "Lead",            cor: "#7c3aed", icone: "🌱" },
+  { id: "CLIENTE_ATIVO",   label: "Cliente ativo",   cor: "#22c55e", icone: "✅" },
+  { id: "CLIENTE_INATIVO", label: "Cliente inativo", cor: "#64748b", icone: "💤" },
+  { id: "PERDIDO",         label: "Perdido",         cor: "#ef4444", icone: "💔" },
+];
+const STATUS_MAP: Record<string, StatusFunilMeta> =
+  Object.fromEntries(STATUS_FUNIL.map((s) => [s.id, s]));
+
+const ORIGENS = [
+  "INDICACAO", "INSTAGRAM", "FACEBOOK", "GOOGLE",
+  "WHATSAPP", "WALK_IN", "SITE", "TELEFONE", "OUTROS",
+];
+
+const CAMPOS_PROGRESSO: (keyof FormCliente)[] = [
+  "nome", "cpfCnpj", "email", "telefone",
+  "cep", "endereco", "numero", "cidade", "estado", "observacoes",
+];
+
+// ============ TIPOS ============
+
+interface TagCliente {
+  id: string;
+  nome: string;
+  cor: string;
+}
+
+interface Cliente {
+  id: string;
+  nome: string;
+  cpfCnpj?: string | null;
+  email?: string | null;
+  telefone?: string | null;
+  endereco?: string | null;
+  cidade?: string | null;
+  estado?: string | null;
+  cep?: string | null;
+  observacoes?: string | null;
+  origem?: string | null;
+  statusFunil?: StatusFunil | null;
+  dataNascimento?: string | null;
+  tags?: TagCliente[];
+  ativo: boolean;
+}
+
+interface FormCliente {
+  nome: string;
+  cpfCnpj: string;
+  email: string;
+  telefone: string;
+  endereco: string;
+  numero: string;
+  complemento: string;
+  cidade: string;
+  estado: string;
+  cep: string;
+  observacoes: string;
+  origem: string;
+  statusFunil: StatusFunil;
+  dataNascimento: string;
+}
+
+interface ViaCepDados {
+  endereco: string;
+  cidade: string;
+  estado: string;
+}
+
+const VAZIO: FormCliente = {
+  nome: "", cpfCnpj: "", email: "", telefone: "",
+  endereco: "", numero: "", complemento: "", cidade: "", estado: "", cep: "", observacoes: "",
+  origem: "", statusFunil: "LEAD", dataNascimento: "",
+};
+
+// ============ HELPERS ============
+
+function mascararCpfCnpj(valor: string): string {
   const d = (valor || "").replace(/\D/g, "").slice(0, 14);
   if (d.length <= 11) {
     if (d.length <= 3) return d;
@@ -26,13 +112,13 @@ function mascararCpfCnpj(valor) {
   return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
 }
 
-function mascararCep(valor) {
+function mascararCep(valor: string): string {
   const d = (valor || "").replace(/\D/g, "").slice(0, 8);
   if (d.length <= 5) return d;
   return `${d.slice(0, 5)}-${d.slice(5)}`;
 }
 
-async function buscarCepViaCEP(cepMascarado) {
+async function buscarCepViaCEP(cepMascarado: string): Promise<ViaCepDados | null> {
   const d = cepMascarado.replace(/\D/g, "");
   if (d.length !== 8) return null;
   try {
@@ -50,32 +136,13 @@ async function buscarCepViaCEP(cepMascarado) {
   }
 }
 
-const VAZIO = {
-  nome: "", cpfCnpj: "", email: "", telefone: "",
-  endereco: "", numero: "", complemento: "", cidade: "", estado: "", cep: "", observacoes: "",
-  origem: "", statusFunil: "LEAD", dataNascimento: "",
-};
-
-const STATUS_FUNIL = [
-  { id: "LEAD",            label: "Lead",            cor: "#7c3aed", icone: "🌱" },
-  { id: "CLIENTE_ATIVO",   label: "Cliente ativo",   cor: "#22c55e", icone: "✅" },
-  { id: "CLIENTE_INATIVO", label: "Cliente inativo", cor: "#64748b", icone: "💤" },
-  { id: "PERDIDO",         label: "Perdido",         cor: "#ef4444", icone: "💔" },
-];
-const STATUS_MAP = Object.fromEntries(STATUS_FUNIL.map((s) => [s.id, s]));
-
-const ORIGENS = [
-  "INDICACAO", "INSTAGRAM", "FACEBOOK", "GOOGLE",
-  "WHATSAPP", "WALK_IN", "SITE", "TELEFONE", "OUTROS",
-];
-
-const CAMPOS_PROGRESSO = ["nome", "cpfCnpj", "email", "telefone", "cep", "endereco", "numero", "cidade", "estado", "observacoes"];
-
-function dividirEnderecoCompleto(enderecoCompleto) {
+function dividirEnderecoCompleto(enderecoCompleto: string | null | undefined): {
+  endereco: string;
+  numero: string;
+  complemento: string;
+} {
   const valor = (enderecoCompleto || "").trim();
   if (!valor) return { endereco: "", numero: "", complemento: "" };
-  // Formato esperado: "Logradouro, numero - complemento" (todos opcionais).
-  // O complemento e separado por " - " para coexistir com virgulas no logradouro.
   let endereco = valor;
   let complemento = "";
   const idxTraco = endereco.indexOf(" - ");
@@ -92,7 +159,7 @@ function dividirEnderecoCompleto(enderecoCompleto) {
   return { endereco, numero, complemento };
 }
 
-function juntarEnderecoCompleto(endereco, numero, complemento) {
+function juntarEnderecoCompleto(endereco: string, numero: string, complemento: string): string {
   const e = (endereco || "").trim();
   const n = (numero || "").trim();
   const c = (complemento || "").trim();
@@ -103,8 +170,14 @@ function juntarEnderecoCompleto(endereco, numero, complemento) {
   return base;
 }
 
-export default function Clientes({ user }) {
-  const [clientes, setClientes] = useState([]);
+// ============ COMPONENTE PRINCIPAL ============
+
+interface ClientesProps {
+  user: SessionUser;
+}
+
+export default function Clientes({ user }: ClientesProps) {
+  const [clientes, setClientes] = useState<Cliente[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
   const [search, setSearch] = useState("");
@@ -112,15 +185,15 @@ export default function Clientes({ user }) {
   const [filtroStatusFunil, setFiltroStatusFunil] = useState("");
   const [filtroOrigem, setFiltroOrigem] = useState("");
   const [modalAberto, setModalAberto] = useState(false);
-  const [editando, setEditando] = useState(null);
-  const [form, setForm] = useState(VAZIO);
+  const [editando, setEditando] = useState<Cliente | null>(null);
+  const [form, setForm] = useState<FormCliente>(VAZIO);
   const [salvando, setSalvando] = useState(false);
   const [erroForm, setErroForm] = useState("");
   const [mensagem, setMensagem] = useState("");
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [cepNaoEncontrado, setCepNaoEncontrado] = useState(false);
   const [nomeInvalido, setNomeInvalido] = useState(false);
-  const [perfilClienteId, setPerfilClienteId] = useState(null);
+  const [perfilClienteId, setPerfilClienteId] = useState<string | null>(null);
 
   const podeEditar = user.role === "ADMIN" || user.role === "GERENTE";
   const podeExcluir = user.role === "ADMIN";
@@ -141,10 +214,10 @@ export default function Clientes({ user }) {
         search, ativo: filtroAtivo,
         statusFunil: filtroStatusFunil,
         origem: filtroOrigem,
-      });
-      setClientes(data);
+      }) as Cliente[];
+      setClientes(data || []);
     } catch (err) {
-      setErro(err.message);
+      setErro((err as Error).message);
     } finally {
       setCarregando(false);
     }
@@ -155,7 +228,7 @@ export default function Clientes({ user }) {
     return () => clearTimeout(t);
   }, [carregar]);
 
-  function flash(texto) {
+  function flash(texto: string) {
     setMensagem(texto);
     setTimeout(() => setMensagem(""), 2500);
   }
@@ -169,7 +242,7 @@ export default function Clientes({ user }) {
     setModalAberto(true);
   }
 
-  function abrirEdicao(cliente) {
+  function abrirEdicao(cliente: Cliente) {
     setEditando(cliente);
     const { endereco, numero, complemento } = dividirEnderecoCompleto(cliente.endereco);
     setForm({
@@ -186,7 +259,9 @@ export default function Clientes({ user }) {
       observacoes: cliente.observacoes || "",
       origem: cliente.origem || "",
       statusFunil: cliente.statusFunil || "LEAD",
-      dataNascimento: cliente.dataNascimento ? new Date(cliente.dataNascimento).toISOString().slice(0, 10) : "",
+      dataNascimento: cliente.dataNascimento
+        ? new Date(cliente.dataNascimento).toISOString().slice(0, 10)
+        : "",
     });
     setErroForm("");
     setNomeInvalido(false);
@@ -194,9 +269,9 @@ export default function Clientes({ user }) {
     setModalAberto(true);
   }
 
-  async function aplicarCep(valor) {
+  async function aplicarCep(valor: string) {
     const masked = mascararCep(valor);
-    setForm(prev => ({ ...prev, cep: masked }));
+    setForm((prev) => ({ ...prev, cep: masked }));
     setCepNaoEncontrado(false);
     const digitos = masked.replace(/\D/g, "");
     if (digitos.length !== 8) return;
@@ -207,7 +282,7 @@ export default function Clientes({ user }) {
       setCepNaoEncontrado(true);
       return;
     }
-    setForm(prev => ({
+    setForm((prev) => ({
       ...prev,
       endereco: dados.endereco || prev.endereco,
       cidade: dados.cidade || prev.cidade,
@@ -215,7 +290,7 @@ export default function Clientes({ user }) {
     }));
   }
 
-  async function salvar(e) {
+  async function salvar(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErroForm("");
     if (!form.nome.trim()) {
@@ -227,7 +302,10 @@ export default function Clientes({ user }) {
     setSalvando(true);
     try {
       const { numero, complemento, ...resto } = form;
-      const payload = { ...resto, endereco: juntarEnderecoCompleto(form.endereco, numero, complemento) };
+      const payload = {
+        ...resto,
+        endereco: juntarEnderecoCompleto(form.endereco, numero, complemento),
+      };
       if (editando) {
         await api.atualizarCliente(editando.id, payload);
         flash("Cliente atualizado");
@@ -238,13 +316,13 @@ export default function Clientes({ user }) {
       setModalAberto(false);
       carregar();
     } catch (err) {
-      setErroForm(err.message);
+      setErroForm((err as Error).message);
     } finally {
       setSalvando(false);
     }
   }
 
-  async function alternarAtivo(cliente) {
+  async function alternarAtivo(cliente: Cliente) {
     try {
       if (cliente.ativo) {
         if (!confirm(`Inativar "${cliente.nome}"?`)) return;
@@ -256,155 +334,194 @@ export default function Clientes({ user }) {
       }
       carregar();
     } catch (err) {
-      alert(err.message);
+      alert((err as Error).message);
     }
   }
 
   return (
     <div>
       {/* Toolbar */}
-      <div style={{
-        display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center",
-      }}>
+      <div className="flex gap-2.5 mb-4 flex-wrap items-center">
         <input
           placeholder="Buscar por nome, email ou CPF/CNPJ..."
           value={search}
-          onChange={e => setSearch(e.target.value)}
+          onChange={(e) => setSearch(e.target.value)}
+          aria-label="Buscar clientes"
+          className="bg-gp-surface text-gp-text rounded-lg text-sm"
           style={{
-            flex: "1 1 280px", background: C.surface, border: `1px solid ${C.border}`,
-            borderRadius: 8, padding: "10px 12px", color: C.text, fontSize: 14, outline: "none",
+            flex: "1 1 280px",
+            border: `1px solid ${C.border}`,
+            padding: "10px 12px",
+            outline: "none",
           }}
         />
-        <select value={filtroAtivo} onChange={e => setFiltroAtivo(e.target.value)} style={{
-          background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8,
-          padding: "10px 12px", color: C.text, fontSize: 13, cursor: "pointer",
-        }}>
+        <select
+          value={filtroAtivo}
+          onChange={(e) => setFiltroAtivo(e.target.value)}
+          aria-label="Filtrar por status"
+          className="bg-gp-surface text-gp-text rounded-lg text-[13px] cursor-pointer"
+          style={{ border: `1px solid ${C.border}`, padding: "10px 12px" }}
+        >
           <option value="">Todos</option>
           <option value="true">Apenas ativos</option>
           <option value="false">Apenas inativos</option>
         </select>
-        <select value={filtroStatusFunil} onChange={e => setFiltroStatusFunil(e.target.value)} style={{
-          background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8,
-          padding: "10px 12px", color: C.text, fontSize: 13, cursor: "pointer",
-        }}>
+        <select
+          value={filtroStatusFunil}
+          onChange={(e) => setFiltroStatusFunil(e.target.value)}
+          aria-label="Filtrar por funil"
+          className="bg-gp-surface text-gp-text rounded-lg text-[13px] cursor-pointer"
+          style={{ border: `1px solid ${C.border}`, padding: "10px 12px" }}
+        >
           <option value="">Todos os status</option>
-          {STATUS_FUNIL.map(s => (
+          {STATUS_FUNIL.map((s) => (
             <option key={s.id} value={s.id}>{s.icone} {s.label}</option>
           ))}
         </select>
-        <select value={filtroOrigem} onChange={e => setFiltroOrigem(e.target.value)} style={{
-          background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8,
-          padding: "10px 12px", color: C.text, fontSize: 13, cursor: "pointer",
-        }}>
+        <select
+          value={filtroOrigem}
+          onChange={(e) => setFiltroOrigem(e.target.value)}
+          aria-label="Filtrar por origem"
+          className="bg-gp-surface text-gp-text rounded-lg text-[13px] cursor-pointer"
+          style={{ border: `1px solid ${C.border}`, padding: "10px 12px" }}
+        >
           <option value="">Todas as origens</option>
-          {ORIGENS.map(o => (
+          {ORIGENS.map((o) => (
             <option key={o} value={o}>{o}</option>
           ))}
         </select>
-        <button onClick={abrirNovo} style={{
-          background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-          color: C.white, border: "none", borderRadius: 8,
-          padding: "10px 18px", fontWeight: 700, fontSize: 14, cursor: "pointer",
-        }}>
+        <button
+          type="button"
+          onClick={abrirNovo}
+          className="text-gp-white border-none rounded-lg text-sm font-bold cursor-pointer"
+          style={{
+            background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+            padding: "10px 18px",
+          }}
+        >
           + Novo Cliente
         </button>
       </div>
 
       {mensagem && (
-        <div style={{
-          marginBottom: 12, padding: "10px 14px", borderRadius: 8,
-          background: C.green + "22", border: `1px solid ${C.green}55`, color: C.green, fontSize: 13,
-        }}>
+        <div
+          className="mb-3 px-[14px] py-[10px] rounded-lg text-[13px] text-gp-green"
+          style={{ background: C.green + "22", border: `1px solid ${C.green}55` }}
+        >
           {mensagem}
         </div>
       )}
 
       {erro && (
-        <div style={{
-          marginBottom: 12, padding: "10px 14px", borderRadius: 8,
-          background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red, fontSize: 13,
-        }}>
+        <div
+          className="mb-3 px-[14px] py-[10px] rounded-lg text-[13px] text-gp-red"
+          style={{ background: C.red + "22", border: `1px solid ${C.red}55` }}
+        >
           {erro}
         </div>
       )}
 
       {/* Tabela */}
-      <div style={{
-        background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden",
-      }}>
-        <div style={{
-          display: "grid", gridTemplateColumns: "2fr 1.2fr 1.5fr 1fr 100px 80px",
-          padding: "12px 16px", background: C.surface,
-          borderBottom: `1px solid ${C.border}`, fontSize: 12, fontWeight: 700,
-          color: C.muted, textTransform: "uppercase", letterSpacing: 0.5,
-        }}>
+      <div
+        className="bg-gp-card rounded-xl overflow-hidden"
+        style={{ border: `1px solid ${C.border}` }}
+      >
+        <div
+          className="grid bg-gp-surface text-gp-muted text-xs font-bold uppercase"
+          style={{
+            gridTemplateColumns: "2fr 1.2fr 1.5fr 1fr 100px 80px",
+            padding: "12px 16px",
+            borderBottom: `1px solid ${C.border}`,
+            letterSpacing: 0.5,
+          }}
+        >
           <div>Nome</div>
           <div>CPF/CNPJ</div>
           <div>Email</div>
           <div>Telefone</div>
           <div>Status</div>
-          <div style={{ textAlign: "right" }}>Ações</div>
+          <div className="text-right">Ações</div>
         </div>
 
         {carregando ? (
-          <div style={{ padding: 30, textAlign: "center", color: C.muted, fontSize: 13 }}>
-            Carregando...
-          </div>
+          <div className="py-[30px] text-center text-gp-muted text-[13px]">Carregando...</div>
         ) : clientes.length === 0 ? (
-          <div style={{ padding: 30, textAlign: "center", color: C.muted, fontSize: 13 }}>
-            Nenhum cliente encontrado.
-          </div>
-        ) : clientes.map(c => (
-          <div key={c.id} style={{
-            display: "grid", gridTemplateColumns: "2fr 1.2fr 1.5fr 1fr 100px 80px",
-            padding: "12px 16px", borderBottom: `1px solid ${C.border}`,
-            alignItems: "center", fontSize: 13,
-            opacity: c.ativo ? 1 : 0.55,
-          }}>
+          <div className="py-[30px] text-center text-gp-muted text-[13px]">Nenhum cliente encontrado.</div>
+        ) : clientes.map((c) => (
+          <div
+            key={c.id}
+            className="grid items-center text-[13px]"
+            style={{
+              gridTemplateColumns: "2fr 1.2fr 1.5fr 1fr 100px 80px",
+              padding: "12px 16px",
+              borderBottom: `1px solid ${C.border}`,
+              opacity: c.ativo ? 1 : 0.55,
+            }}
+          >
             <div>
-              <div style={{ color: C.white, fontWeight: 600 }}>{c.nome}</div>
-              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>
+              <div className="text-gp-white font-semibold">{c.nome}</div>
+              <div className="flex gap-1 flex-wrap mt-1">
                 {c.statusFunil && STATUS_MAP[c.statusFunil] && (() => {
-                  const s = STATUS_MAP[c.statusFunil];
+                  const s = STATUS_MAP[c.statusFunil!];
                   return (
-                    <span style={{
-                      background: s.cor + "22", color: s.cor,
-                      padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700,
-                      border: `1px solid ${s.cor}55`,
-                      display: "inline-flex", alignItems: "center", gap: 3,
-                    }}>{s.icone} {s.label}</span>
+                    <span
+                      className="text-[10px] font-bold rounded inline-flex items-center gap-[3px]"
+                      style={{
+                        background: s.cor + "22",
+                        color: s.cor,
+                        padding: "1px 6px",
+                        border: `1px solid ${s.cor}55`,
+                      }}
+                    >
+                      {s.icone} {s.label}
+                    </span>
                   );
                 })()}
                 {c.origem && (
-                  <span style={{
-                    background: C.bg, color: C.muted,
-                    padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 600,
-                    border: `1px solid ${C.border}`,
-                  }}>📍 {c.origem}</span>
+                  <span
+                    className="text-[10px] font-semibold rounded text-gp-muted"
+                    style={{
+                      background: C.bg,
+                      padding: "1px 6px",
+                      border: `1px solid ${C.border}`,
+                    }}
+                  >
+                    📍 {c.origem}
+                  </span>
                 )}
                 {c.tags && c.tags.map((t) => (
-                  <span key={t.id} style={{
-                    background: t.cor + "22", color: t.cor,
-                    padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700,
-                    border: `1px solid ${t.cor}55`,
-                  }}>{t.nome}</span>
+                  <span
+                    key={t.id}
+                    className="text-[10px] font-bold rounded"
+                    style={{
+                      background: t.cor + "22",
+                      color: t.cor,
+                      padding: "1px 6px",
+                      border: `1px solid ${t.cor}55`,
+                    }}
+                  >
+                    {t.nome}
+                  </span>
                 ))}
               </div>
             </div>
-            <div style={{ color: C.text }}>{c.cpfCnpj || "—"}</div>
-            <div style={{ color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.email || "—"}</div>
-            <div style={{ color: C.text }}>{c.telefone || "—"}</div>
+            <div className="text-gp-text">{c.cpfCnpj || "—"}</div>
+            <div className="text-gp-text overflow-hidden text-ellipsis whitespace-nowrap">{c.email || "—"}</div>
+            <div className="text-gp-text">{c.telefone || "—"}</div>
             <div>
-              <span style={{
-                fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 6,
-                background: c.ativo ? C.green + "22" : C.muted + "33",
-                color: c.ativo ? C.green : C.muted,
-                border: `1px solid ${c.ativo ? C.green + "55" : C.muted + "55"}`,
-              }}>
+              <span
+                className="text-[11px] font-bold rounded-md"
+                style={{
+                  padding: "3px 10px",
+                  background: c.ativo ? C.green + "22" : C.muted + "33",
+                  color: c.ativo ? C.green : C.muted,
+                  border: `1px solid ${c.ativo ? C.green + "55" : C.muted + "55"}`,
+                }}
+              >
                 {c.ativo ? "ATIVO" : "INATIVO"}
               </span>
             </div>
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <div className="flex justify-end">
               <ActionsMenu
                 items={[
                   {
@@ -446,7 +563,7 @@ export default function Clientes({ user }) {
             ? "Atualize as informacoes deste cliente. Campos marcados com • sao obrigatorios."
             : "Cadastre um cliente na sua carteira. Campos marcados com • sao obrigatorios."
         }
-        numeroLote={editando ? `#${String(editando.id || "").slice(0, 4).toUpperCase()}` : null}
+        numeroLote={editando ? `#${String(editando.id || "").slice(0, 4).toUpperCase()}` : undefined}
         data={new Date().toLocaleDateString("pt-BR")}
         progresso={progressoForm}
         salvando={salvando}
@@ -460,12 +577,12 @@ export default function Clientes({ user }) {
             <Campo
               label="Nome completo"
               obrigatorio
-              erro={nomeInvalido ? "Informe o nome do cliente." : null}
+              erro={nomeInvalido ? "Informe o nome do cliente." : undefined}
             >
               <input
                 className="lux-input"
                 value={form.nome}
-                onChange={e => {
+                onChange={(e) => {
                   setForm({ ...form, nome: e.target.value });
                   if (nomeInvalido && e.target.value.trim()) setNomeInvalido(false);
                 }}
@@ -481,7 +598,7 @@ export default function Clientes({ user }) {
               <input
                 className="lux-input"
                 value={form.cpfCnpj}
-                onChange={e => setForm({ ...form, cpfCnpj: mascararCpfCnpj(e.target.value) })}
+                onChange={(e) => setForm({ ...form, cpfCnpj: mascararCpfCnpj(e.target.value) })}
                 placeholder="000.000.000-00"
                 inputMode="numeric"
                 maxLength={18}
@@ -491,7 +608,7 @@ export default function Clientes({ user }) {
               <input
                 className="lux-input"
                 value={form.telefone}
-                onChange={e => setForm({ ...form, telefone: e.target.value })}
+                onChange={(e) => setForm({ ...form, telefone: e.target.value })}
                 placeholder="(00) 00000-0000"
                 inputMode="numeric"
                 autoComplete="tel"
@@ -502,7 +619,7 @@ export default function Clientes({ user }) {
                 className="lux-input"
                 type="email"
                 value={form.email}
-                onChange={e => setForm({ ...form, email: e.target.value })}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
                 placeholder="cliente@empresa.com.br"
                 autoComplete="email"
               />
@@ -519,14 +636,14 @@ export default function Clientes({ user }) {
                   ? "Buscando…"
                   : cepNaoEncontrado
                     ? "Não encontrado"
-                    : null
+                    : undefined
               }
             >
               <input
                 className="lux-input"
                 value={form.cep}
-                onChange={e => aplicarCep(e.target.value)}
-                onBlur={e => aplicarCep(e.target.value)}
+                onChange={(e) => aplicarCep(e.target.value)}
+                onBlur={(e) => aplicarCep(e.target.value)}
                 placeholder="00000-000"
                 inputMode="numeric"
                 maxLength={9}
@@ -537,7 +654,7 @@ export default function Clientes({ user }) {
               <input
                 className="lux-input"
                 value={form.cidade}
-                onChange={e => setForm({ ...form, cidade: e.target.value })}
+                onChange={(e) => setForm({ ...form, cidade: e.target.value })}
                 placeholder="São Paulo"
                 autoComplete="address-level2"
               />
@@ -546,11 +663,11 @@ export default function Clientes({ user }) {
               <select
                 className="lux-select"
                 value={form.estado}
-                onChange={e => setForm({ ...form, estado: e.target.value })}
+                onChange={(e) => setForm({ ...form, estado: e.target.value })}
                 autoComplete="address-level1"
               >
                 <option value="">UF</option>
-                {ESTADOS_BR.map(uf => (
+                {ESTADOS_BR.map((uf) => (
                   <option key={uf} value={uf}>{uf}</option>
                 ))}
               </select>
@@ -561,7 +678,7 @@ export default function Clientes({ user }) {
               <input
                 className="lux-input"
                 value={form.endereco}
-                onChange={e => setForm({ ...form, endereco: e.target.value })}
+                onChange={(e) => setForm({ ...form, endereco: e.target.value })}
                 placeholder="Rua, avenida ou alameda"
                 autoComplete="street-address"
               />
@@ -570,7 +687,7 @@ export default function Clientes({ user }) {
               <input
                 className="lux-input"
                 value={form.numero}
-                onChange={e => setForm({ ...form, numero: e.target.value })}
+                onChange={(e) => setForm({ ...form, numero: e.target.value })}
                 placeholder="123"
                 inputMode="numeric"
               />
@@ -581,7 +698,7 @@ export default function Clientes({ user }) {
               <input
                 className="lux-input"
                 value={form.complemento || ""}
-                onChange={e => setForm({ ...form, complemento: e.target.value })}
+                onChange={(e) => setForm({ ...form, complemento: e.target.value })}
                 placeholder="Apto, sala, bloco"
               />
             </Campo>
@@ -594,9 +711,9 @@ export default function Clientes({ user }) {
               <select
                 className="lux-select"
                 value={form.statusFunil}
-                onChange={e => setForm({ ...form, statusFunil: e.target.value })}
+                onChange={(e) => setForm({ ...form, statusFunil: e.target.value as StatusFunil })}
               >
-                {STATUS_FUNIL.map(s => (
+                {STATUS_FUNIL.map((s) => (
                   <option key={s.id} value={s.id}>{s.icone} {s.label}</option>
                 ))}
               </select>
@@ -605,10 +722,10 @@ export default function Clientes({ user }) {
               <select
                 className="lux-select"
                 value={form.origem}
-                onChange={e => setForm({ ...form, origem: e.target.value })}
+                onChange={(e) => setForm({ ...form, origem: e.target.value })}
               >
                 <option value="">— Não informado —</option>
-                {ORIGENS.map(o => (
+                {ORIGENS.map((o) => (
                   <option key={o} value={o}>{o}</option>
                 ))}
               </select>
@@ -620,7 +737,8 @@ export default function Clientes({ user }) {
                 type="date"
                 className="lux-input"
                 value={form.dataNascimento}
-                onChange={e => setForm({ ...form, dataNascimento: e.target.value })}
+                onChange={(e) => setForm({ ...form, dataNascimento: e.target.value })}
+                aria-label="Data de nascimento"
               />
             </Campo>
           </Linha>
@@ -635,7 +753,7 @@ export default function Clientes({ user }) {
               <textarea
                 className="lux-textarea"
                 value={form.observacoes}
-                onChange={e => setForm({ ...form, observacoes: e.target.value.slice(0, 500) })}
+                onChange={(e) => setForm({ ...form, observacoes: e.target.value.slice(0, 500) })}
                 maxLength={500}
                 placeholder="Preferências de contato, segmento, histórico relevante…"
                 rows={3}

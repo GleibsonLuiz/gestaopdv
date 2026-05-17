@@ -1,23 +1,9 @@
 import { useEffect, useState } from "react";
 import { C } from "./lib/theme";
 import { api } from "./lib/api";
-import { urlLogotipo } from "./Configuracoes.jsx";
+import { urlLogotipo, type ConfiguracaoEmpresa } from "./Configuracoes";
 
-export interface ConfiguracaoEmpresa {
-  razaoSocial?: string;
-  nomeFantasia?: string;
-  cnpj?: string;
-  endereco?: string;
-  numero?: string;
-  bairro?: string;
-  cidade?: string;
-  estado?: string;
-  cep?: string;
-  telefone?: string;
-  email?: string;
-  logotipo?: string | null;
-  [extra: string]: unknown;
-}
+export type { ConfiguracaoEmpresa };
 
 // Cache em memoria — config da empresa muda raramente, mas mantemos um TTL
 // curto para refletir alteracoes dentro da mesma sessao.

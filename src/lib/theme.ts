@@ -21,13 +21,56 @@ const PREF_TEMA_KEY = "gestao_tema";
 const PREF_APARENCIA_KEY = "gestao_aparencia_v1";
 export const TEMA_PADRAO = "azul";
 
+export interface TemaCores {
+  bg: string;
+  surface: string;
+  card: string;
+  border: string;
+  accent: string;
+  purple: string;
+  green: string;
+  red: string;
+  yellow: string;
+  text: string;
+  muted: string;
+  white: string;
+}
+
+export interface Tema {
+  id: string;
+  nome: string;
+  descricao: string;
+  claro: boolean;
+  cores: TemaCores;
+}
+
+export interface Acento {
+  nome: string;
+  valor: string | null;
+}
+
+export type Densidade = "compacto" | "padrao" | "confortavel";
+export type ModoAutomatico = "off" | "sunset" | "custom";
+
+export interface AparenciaEstado {
+  tema: string;
+  acento: string | null;
+  densidade: Densidade;
+  fontSize: number;
+  radius: number;
+  reduzirMovimento: boolean;
+  sublinharLinks: boolean;
+  sincronizar: boolean;
+  modoAutomatico: ModoAutomatico;
+}
+
 // As 6 paletas. Mesmas chaves em todos os temas — qualquer componente que
 // ja usa C continua funcionando, so muda a aparencia.
 //
 // `white` representa "cor de texto de destaque" (titulos, labels) e nao
 // branco literal: em temas claros como pergaminho ele e escuro, para
 // preservar contraste contra os fundos claros.
-export const TEMAS = [
+export const TEMAS: Tema[] = [
   {
     id: "azul",
     nome: "Azul Padrão",
@@ -103,7 +146,7 @@ export const TEMAS = [
 ];
 
 // Cores rapidas para o picker de "cor de destaque" (override de --accent).
-export const ACENTOS = [
+export const ACENTOS: Acento[] = [
   { nome: "Padrão do tema", valor: null },
   { nome: "Azul",           valor: "#4f8ef7" },
   { nome: "Esmeralda",      valor: "#10b981" },
@@ -114,7 +157,7 @@ export const ACENTOS = [
 
 // Paleta canonica usada em toda a UI. Cada chave resolve para uma var CSS
 // definida no :root e sobrescrita pelo tema atual.
-export const C = {
+export const C: Record<keyof TemaCores, string> = {
   bg: "var(--bg)",
   surface: "var(--surface)",
   card: "var(--card)",
@@ -130,7 +173,7 @@ export const C = {
 };
 
 // Estado completo de aparencia (tema + ajustes finos).
-export const APARENCIA_PADRAO = {
+export const APARENCIA_PADRAO: AparenciaEstado = {
   tema: TEMA_PADRAO,
   acento: null,                 // override de cor (hex) ou null = usar do tema
   densidade: "padrao",          // compacto | padrao | confortavel
@@ -142,12 +185,12 @@ export const APARENCIA_PADRAO = {
   modoAutomatico: "off",        // off | sunset | custom
 };
 
-export function getTema(id) {
-  return TEMAS.find(t => t.id === id) || TEMAS[0];
+export function getTema(id: string | undefined | null): Tema {
+  return TEMAS.find((t) => t.id === id) || TEMAS[0];
 }
 
 // Converte hex em luminancia relativa para escolher cor de texto contrastante.
-function luma(hex) {
+function luma(hex: string | undefined | null): number {
   if (!hex || typeof hex !== "string") return 0;
   const c = hex.replace("#", "");
   if (c.length < 6) return 0;
@@ -159,13 +202,13 @@ function luma(hex) {
 
 // Cor de texto contrastante para uso sobre o accent (botao primario, badges).
 // Usada em pdv.css e em qualquer componente que pinte com var(--accent-ink).
-function corDeContraste(hex) {
+function corDeContraste(hex: string): string {
   return luma(hex) > 0.55 ? "#06291e" : "#ffffff";
 }
 
 // Aplica o tema escrevendo as variaveis CSS no :root. O browser repinta
 // automaticamente todos os componentes que usam var(--*).
-export function aplicarTema(id) {
+export function aplicarTema(id: string): void {
   const tema = getTema(id);
   const root = document.documentElement;
   for (const [chave, valor] of Object.entries(tema.cores)) {
@@ -178,7 +221,7 @@ export function aplicarTema(id) {
 
 // Sobrescreve --accent com uma cor escolhida pelo usuario, ou volta para a
 // cor do tema atual se acento for null.
-export function aplicarAcento(temaId, acento) {
+export function aplicarAcento(temaId: string, acento: string | null): void {
   const root = document.documentElement;
   if (acento) {
     root.style.setProperty("--accent", acento);
@@ -194,17 +237,17 @@ export function aplicarAcento(temaId, acento) {
   }
 }
 
-export function aplicarDensidade(densidade) {
+export function aplicarDensidade(densidade: string | null | undefined): void {
   document.body.dataset.densidade = densidade || "padrao";
 }
 
-export function aplicarFontSize(px) {
+export function aplicarFontSize(px: number | string): void {
   const valor = Math.min(18, Math.max(13, Number(px) || 14));
   document.documentElement.style.setProperty("--font-base", valor + "px");
   document.body.style.fontSize = valor + "px";
 }
 
-export function aplicarRadius(px) {
+export function aplicarRadius(px: number | string): void {
   const valor = [6, 10, 16].includes(Number(px)) ? Number(px) : 10;
   const root = document.documentElement;
   root.style.setProperty("--radius-md", valor + "px");
@@ -212,17 +255,17 @@ export function aplicarRadius(px) {
   root.style.setProperty("--radius-sm", Math.max(4, valor - 4) + "px");
 }
 
-export function aplicarMovimento(reduzido) {
+export function aplicarMovimento(reduzido: boolean): void {
   document.body.dataset.movimento = reduzido ? "reduzido" : "normal";
 }
 
-export function aplicarSublinhado(ativo) {
+export function aplicarSublinhado(ativo: boolean): void {
   document.body.dataset.sublinhar = ativo ? "true" : "false";
 }
 
 // Aplica o estado de aparencia completo (chama todas as funcoes acima).
-export function aplicarAparencia(estado) {
-  const e = { ...APARENCIA_PADRAO, ...(estado || {}) };
+export function aplicarAparencia(estado: Partial<AparenciaEstado> | null | undefined): void {
+  const e: AparenciaEstado = { ...APARENCIA_PADRAO, ...(estado || {}) };
   aplicarTema(e.tema);
   aplicarAcento(e.tema, e.acento);
   aplicarDensidade(e.densidade);
@@ -234,7 +277,7 @@ export function aplicarAparencia(estado) {
 
 // --- Persistencia ---------------------------------------------------------
 
-export function lerAparencia() {
+export function lerAparencia(): AparenciaEstado {
   // Compatibilidade: se ainda existir gestao_tema antigo, migra para v1.
   try {
     const raw = localStorage.getItem(PREF_APARENCIA_KEY);
@@ -246,29 +289,31 @@ export function lerAparencia() {
     if (temaLegado) {
       return { ...APARENCIA_PADRAO, tema: temaLegado };
     }
-  } catch {}
+  } catch {
+    /* localStorage indisponivel */
+  }
   return { ...APARENCIA_PADRAO };
 }
 
-export function salvarAparencia(estado) {
-  try { localStorage.setItem(PREF_APARENCIA_KEY, JSON.stringify(estado)); } catch {}
-  try { localStorage.setItem(PREF_TEMA_KEY, estado.tema); } catch {}
+export function salvarAparencia(estado: AparenciaEstado): void {
+  try { localStorage.setItem(PREF_APARENCIA_KEY, JSON.stringify(estado)); } catch { /* ignore */ }
+  try { localStorage.setItem(PREF_TEMA_KEY, estado.tema); } catch { /* ignore */ }
   // TODO(sync-db): se estado.sincronizar e backend tiver PUT /auth/preferencias,
   //   api.salvarPreferencia({ aparencia: estado }).catch(() => {});
 }
 
 // API legada — mantida porque AparenciaModal e outros locais ainda chamam.
-export function lerTemaSalvo() {
+export function lerTemaSalvo(): string {
   return lerAparencia().tema;
 }
 
-export function salvarTema(id) {
+export function salvarTema(id: string): void {
   const atual = lerAparencia();
   salvarAparencia({ ...atual, tema: id });
 }
 
 // Chamado no boot do app (main.jsx) para hidratar a aparencia antes do
 // primeiro render — evita flash de tema padrao quando o usuario salvou outro.
-export function inicializarTema() {
+export function inicializarTema(): void {
   aplicarAparencia(lerAparencia());
 }

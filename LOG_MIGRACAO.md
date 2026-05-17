@@ -1,7 +1,7 @@
 # LOG_MIGRACAO.md — Migração GestãoPRO para TypeScript + Tailwind
 
 > **Continuidade entre sessões.** Atualizar a cada pausa.
-> Última atualização: **2026-05-17** (sessão 3 — 25 commits totais)
+> Última atualização: **2026-05-17** (sessão 4 — 41 migrações totais)
 
 ---
 
@@ -40,7 +40,7 @@ Migração gradual do GestãoPRO de:
 
 ---
 
-## 📦 Módulos migrados (25 commits)
+## 📦 Módulos migrados (41 migrações, 35 commits)
 
 | # | Commit | Módulo | Tipo | Observação |
 |---|---|---|---|---|
@@ -65,26 +65,31 @@ Migração gradual do GestãoPRO de:
 | 21-23 | `ecb8ead` | `EtiquetaPreco`, `EtiquetaPrecoModal`, `BotoesContatoCliente` | components | Etiqueta 60x40mm + modal print + WA/Email/Tel |
 | 24 | `a695656` | `FormularioLuxuoso.tsx` | component | Form base com 600 linhas de CSS escopado .lux-* |
 | 25 | `04e9178` | `ModalGerirTemplates.tsx` | component | CRUD de templates + editor com preview |
+| 26 | `c1e455b` | `RelatorioComissoes.tsx` | component | 3 charts recharts + cards de meta por vendedor |
+| 27-38 | `7bb1ee6` | 12 components de `pages/financeiro/components/` | components | PageHeader/AmountCell/DueCell/StatusPill/Sparkline/Topbar/icons + TabsBar/CompositionStrip/KpiCard/FiltersBar/BillsTable |
+| 39 | `91bbccc` | `PesquisaPublicaNps.tsx` | tela | Tela publica de NPS (escala 0-10 + comentario) |
+| 40 | `a2b7c13` | `Etiquetas.tsx` | tela | Impressao em lote com window.print |
+| 41 | `7d3fd5f` | `Nps.tsx` | tela | Admin do CRM NPS (KPIs + lista) |
 
 **Pasta `src/lib/` agora 100% TypeScript** (exceto `impressora.js` que é WIP do usuário).
-**Bootstrap e telas publicas** (main, Login, Signup) tambem em TS.
-**Telas administrativas pequenas/medias** (Sistema, Logs, Projeto, Configuracoes, Empresa, Aparencia) em TS.
-**6 dos 10 components reutilizaveis** em TS (AbasFormulario, SelectBusca, ActionsMenu, EtiquetaPreco*, BotoesContatoCliente, FormularioLuxuoso, ModalGerirTemplates).
+**Bootstrap e telas publicas** (main, Login, Signup, PesquisaPublicaNps) tambem em TS.
+**Telas administrativas pequenas/medias** (Sistema, Logs, Projeto, Configuracoes, Empresa, Aparencia, Etiquetas, Nps) em TS.
+**Todos os 10 components reutilizaveis em `src/components/`** em TS (exceto `PerfilClienteModal` denso).
+**Pasta `src/pages/financeiro/components/` 100% TS** (12 arquivos).
 
 ---
 
 ## 📋 Arquivos ainda como `.jsx` (próximos candidatos)
 
-Total: **52 arquivos** (.js/.jsx) em `src/`. Lista organizada por dificuldade crescente:
+Total: **36 arquivos** (.js/.jsx) em `src/`. Lista organizada por dificuldade crescente:
 
 ### 🟢 Pequenos / utilitários
 - `src/components/cupons/fmt.js` — util de formatação (⚠️ ligado à feature Impressora WIP)
 
 ### 🟡 Components grandes restantes
-- `src/components/RelatorioComissoes.jsx` (468 linhas) — relatório com PDF export
 - `src/components/PerfilClienteModal.jsx` (996 linhas) — DENSO, várias abas
 
-### 🟡 Telas médias (CRUD + filtros)
+### 🟡 Telas médias restantes (CRUD + filtros)
 - `src/Projeto.jsx` (451 linhas) — tela de roadmap interno
 - `src/Aparencia.jsx` (619 linhas) — settings de tema, denso mas isolado
 - `src/Configuracoes.jsx` — config da empresa (exporta `urlLogotipo` já usado por `HeaderRelatorio.tsx`)
@@ -160,19 +165,19 @@ Para mudanças em UI, idealmente também `npm run dev` + teste visual (eu não c
 
 ---
 
-## 📂 Onde paramos (estado em 2026-05-17, sessão 3)
+## 📂 Onde paramos (estado em 2026-05-17, sessão 4)
 
-- **Último commit:** `04e9178 refactor(components): migra ModalGerirTemplates para TSX + Tailwind`
+- **Último commit:** `7d3fd5f refactor(nps): migra Nps.jsx para TSX + Tailwind`
 - **Branch:** `main` (sincronizada com `origin/main`)
 - **Working tree não-vazio:** O usuário tem feature **Impressora** em andamento (arquivos untracked + hunks em App.jsx/Caixa.jsx/Financeiro.jsx/PDV.jsx). **Não tocar enquanto não finalizar.**
-- **Progresso:** 27 arquivos `.ts`/`.tsx` vs 52 arquivos `.jsx`/`.js` restantes. **~34% migrado**.
-- **Próximo módulo sugerido:** depende do que o usuário quiser. Recomendações:
-  1. `src/components/RelatorioComissoes.jsx` (468 linhas) — componente de relatório
-  2. `src/components/PerfilClienteModal.jsx` (996 linhas) — modal denso com várias abas
-  3. `src/Etiquetas.jsx`, `src/Tarefas.jsx`, `src/Fidelidade.jsx` — telas médias isoladas
-  4. `src/Nps.jsx`, `src/PesquisaPublicaNps.jsx` — telas do CRM (NPS)
-  5. Dashboard, DashboardCrm — telas com gráficos (recharts)
-  6. Pastas inteiras: `src/pages/financeiro/components/` (12 arquivos) e CRUDs (`Clientes`, `Fornecedores`, `Produtos`, `Estoque`, `Compras`, `Orcamentos`, etc.)
+- **Progresso:** 43 arquivos `.ts`/`.tsx` vs 36 arquivos `.jsx`/`.js` restantes. **~54% migrado** (passou da metade!).
+- **Próximo módulo sugerido:**
+  1. `src/Reativacao.jsx` (375), `src/Tarefas.jsx` (626), `src/Fidelidade.jsx` (543) — telas do CRM
+  2. `src/Segmentos.jsx`, `src/Funil.jsx`, `src/Automacoes.jsx`, `src/DashboardCrm.jsx` — outras telas CRM
+  3. CRUDs: `Clientes`, `Fornecedores`, `Produtos`, `Estoque`, `Compras`, `Orcamentos`, `Comissoes`, `Relatorios`, `Dashboard`, `MovimentarEstoqueModal`
+  4. `src/pages/financeiro/FinanceiroPage.jsx` (tela principal do financeiro novo)
+  5. `src/components/PerfilClienteModal.jsx` (996 linhas — modal com várias abas)
+  6. `src/AdminMasterApp.jsx` — área super-admin (multi-aba)
   7. ⚠️ Por último (críticos): `App.jsx`, `PDV.jsx`, `Caixa.jsx`, `Financeiro.jsx`, `Funcionarios.jsx`
 
 ---

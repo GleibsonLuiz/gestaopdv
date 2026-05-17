@@ -1,30 +1,48 @@
-import { useEffect, useState } from "react";
-import { C } from "./lib/theme.js";
-import { api } from "./lib/api.js";
+import { useEffect, useState, type ReactNode } from "react";
+import { C } from "./lib/theme";
+import { api } from "./lib/api";
 
-const fmtData = (iso) => {
+const fmtData = (iso: string | null | undefined): string => {
   if (!iso) return "";
   return new Date(iso).toLocaleDateString("pt-BR");
 };
 
+interface VendaInfo {
+  numero: string | number;
+  data: string;
+}
+
+interface DadosPesquisa {
+  empresa: string;
+  cliente?: string;
+  venda?: VendaInfo;
+  respondida?: boolean;
+  nota?: number;
+}
+
+interface PesquisaPublicaNpsProps {
+  token: string;
+}
+
 // ============ COMPONENTE PRINCIPAL ============
 
-export default function PesquisaPublicaNps({ token }) {
-  const [dados, setDados] = useState(null);
+export default function PesquisaPublicaNps({ token }: PesquisaPublicaNpsProps) {
+  const [dados, setDados] = useState<DadosPesquisa | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
-  const [nota, setNota] = useState(null);
+  const [nota, setNota] = useState<number | null>(null);
   const [comentario, setComentario] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [enviado, setEnviado] = useState(false);
 
   useEffect(() => {
     api.obterPesquisaNpsPublica(token)
-      .then((d) => {
+      .then((raw) => {
+        const d = raw as DadosPesquisa;
         setDados(d);
         if (d.respondida) setEnviado(true);
       })
-      .catch((e) => setErro(e.message || "Pesquisa não encontrada"))
+      .catch((e: Error) => setErro(e.message || "Pesquisa não encontrada"))
       .finally(() => setCarregando(false));
   }, [token]);
 
@@ -36,7 +54,7 @@ export default function PesquisaPublicaNps({ token }) {
       await api.responderPesquisaNps(token, { nota, comentario: comentario.trim() || undefined });
       setEnviado(true);
     } catch (e) {
-      setErro(e.message || "Erro ao enviar");
+      setErro((e as Error).message || "Erro ao enviar");
     } finally {
       setEnviando(false);
     }
@@ -45,7 +63,7 @@ export default function PesquisaPublicaNps({ token }) {
   if (carregando) {
     return (
       <Container>
-        <div style={{ color: C.muted, padding: 40, textAlign: "center" }}>Carregando pesquisa...</div>
+        <div className="text-gp-muted p-10 text-center">Carregando pesquisa...</div>
       </Container>
     );
   }
@@ -53,14 +71,12 @@ export default function PesquisaPublicaNps({ token }) {
   if (erro && !dados) {
     return (
       <Container>
-        <div style={{ textAlign: "center", padding: 30 }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>🔗</div>
-          <div style={{ color: C.white, fontSize: 18, fontWeight: 700, marginBottom: 6 }}>
+        <div className="text-center p-[30px]">
+          <div className="text-[48px] mb-3">🔗</div>
+          <div className="text-gp-white text-lg font-bold mb-[6px]">
             Link inválido ou expirado
           </div>
-          <div style={{ color: C.muted, fontSize: 13 }}>
-            {erro}
-          </div>
+          <div className="text-gp-muted text-[13px]">{erro}</div>
         </div>
       </Container>
     );
@@ -69,16 +85,16 @@ export default function PesquisaPublicaNps({ token }) {
   if (enviado) {
     return (
       <Container>
-        <div style={{ textAlign: "center", padding: 30 }}>
-          <div style={{ fontSize: 56, marginBottom: 12 }}>🎉</div>
-          <div style={{ color: C.white, fontSize: 22, fontWeight: 800, marginBottom: 8 }}>
+        <div className="text-center p-[30px]">
+          <div className="text-[56px] mb-3">🎉</div>
+          <div className="text-gp-white text-[22px] font-extrabold mb-2">
             Obrigado pelo seu feedback!
           </div>
-          <div style={{ color: C.muted, fontSize: 14, maxWidth: 360, margin: "0 auto" }}>
+          <div className="text-gp-muted text-sm max-w-[360px] mx-auto">
             Sua opinião nos ajuda a melhorar a cada dia. Foi um prazer atender você!
           </div>
           {dados?.nota != null && (
-            <div style={{ marginTop: 24, color: C.accent, fontSize: 13 }}>
+            <div className="mt-6 text-gp-accent text-[13px]">
               Sua nota: <strong>{dados.nota}/10</strong>
             </div>
           )}
@@ -87,78 +103,81 @@ export default function PesquisaPublicaNps({ token }) {
     );
   }
 
+  if (!dados) return null;
+
   return (
     <Container>
       {/* Header */}
-      <div style={{ textAlign: "center", marginBottom: 24 }}>
-        <div style={{ color: C.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: 1, fontWeight: 700 }}>
+      <div className="text-center mb-6">
+        <div className="text-gp-muted text-[11px] uppercase tracking-[1px] font-bold">
           {dados.empresa}
         </div>
-        <h1 style={{ color: C.white, fontSize: 22, fontWeight: 800, margin: "8px 0 4px" }}>
+        <h1 className="text-gp-white text-[22px] font-extrabold mt-2 mb-1">
           Como foi sua experiência?
         </h1>
         {dados.cliente && (
-          <div style={{ color: C.text, fontSize: 13 }}>
+          <div className="text-gp-text text-[13px]">
             Olá <strong>{primeiroNome(dados.cliente)}</strong>!
           </div>
         )}
         {dados.venda && (
-          <div style={{ color: C.muted, fontSize: 12, marginTop: 4 }}>
+          <div className="text-gp-muted text-xs mt-1">
             Sobre a compra #{dados.venda.numero} de {fmtData(dados.venda.data)}
           </div>
         )}
       </div>
 
-      <div style={{ color: C.text, fontSize: 14, marginBottom: 12, textAlign: "center" }}>
+      <div className="text-gp-text text-sm mb-3 text-center">
         Em uma escala de <strong>0 a 10</strong>, qual a chance de você nos recomendar a um amigo?
       </div>
 
       {/* Escala 0-10 */}
-      <div style={{
-        display: "grid", gridTemplateColumns: "repeat(11, 1fr)",
-        gap: 4, marginBottom: 8,
-      }}>
+      <div
+        className="grid gap-1 mb-2"
+        style={{ gridTemplateColumns: "repeat(11, 1fr)" }}
+      >
         {Array.from({ length: 11 }, (_, i) => (
           <button
             key={i}
             onClick={() => setNota(i)}
+            className="rounded-lg text-sm font-extrabold cursor-pointer transition-all p-0"
             style={{
               aspectRatio: "1 / 1",
               background: nota === i ? corNota(i) : C.card,
               color: nota === i ? C.white : C.text,
               border: `2px solid ${nota === i ? corNota(i) : C.border}`,
-              borderRadius: 8,
-              fontSize: 14,
-              fontWeight: 800,
-              cursor: "pointer",
-              transition: "all 0.15s ease",
-              padding: 0,
             }}
-          >{i}</button>
+          >
+            {i}
+          </button>
         ))}
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", color: C.muted, fontSize: 10, marginBottom: 18 }}>
+      <div className="flex justify-between text-gp-muted text-[10px] mb-[18px]">
         <span>👎 Pouco provável</span>
         <span>👍 Muito provável</span>
       </div>
 
       {/* Categoria escolhida */}
       {nota != null && (
-        <div style={{
-          background: corNota(nota) + "22",
-          border: `1px solid ${corNota(nota)}55`,
-          borderRadius: 8, padding: "10px 14px", marginBottom: 14,
-          textAlign: "center",
-        }}>
-          <div style={{ color: corNota(nota), fontSize: 12, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.5 }}>
+        <div
+          className="rounded-lg px-[14px] py-[10px] mb-[14px] text-center"
+          style={{
+            background: corNota(nota) + "22",
+            border: `1px solid ${corNota(nota)}55`,
+          }}
+        >
+          <div
+            className="text-xs font-extrabold uppercase tracking-[0.5px]"
+            style={{ color: corNota(nota) }}
+          >
             {textoNota(nota)}
           </div>
         </div>
       )}
 
       {/* Comentário */}
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ color: C.muted, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6, fontWeight: 600 }}>
+      <div className="mb-[14px]">
+        <div className="text-gp-muted text-[11px] uppercase tracking-[0.5px] mb-[6px] font-semibold">
           Quer nos contar mais? (opcional)
         </div>
         <textarea
@@ -167,20 +186,19 @@ export default function PesquisaPublicaNps({ token }) {
           rows={4}
           maxLength={1000}
           placeholder="Conte como podemos melhorar ou o que mais gostou..."
-          style={{
-            width: "100%", boxSizing: "border-box",
-            background: C.bg, color: C.text, border: `1px solid ${C.border}`,
-            borderRadius: 8, padding: 12, fontSize: 13, fontFamily: "inherit",
-            resize: "vertical", outline: "none", minHeight: 80,
-          }}
+          className="w-full box-border bg-gp-bg text-gp-text rounded-lg p-3 text-[13px] resize-y outline-none min-h-[80px]"
+          style={{ border: `1px solid ${C.border}`, fontFamily: "inherit" }}
         />
-        <div style={{ color: C.muted, fontSize: 10, textAlign: "right", marginTop: 2 }}>
+        <div className="text-gp-muted text-[10px] text-right mt-[2px]">
           {comentario.length}/1000
         </div>
       </div>
 
       {erro && (
-        <div style={{ background: C.red + "22", color: C.red, padding: "8px 12px", borderRadius: 6, fontSize: 12, marginBottom: 12 }}>
+        <div
+          className="px-3 py-2 rounded text-xs mb-3 text-gp-red"
+          style={{ background: C.red + "22" }}
+        >
           {erro}
         </div>
       )}
@@ -188,11 +206,9 @@ export default function PesquisaPublicaNps({ token }) {
       <button
         onClick={enviar}
         disabled={nota == null || enviando}
+        className="w-full text-gp-white border-none px-5 py-3 rounded-lg text-sm font-extrabold"
         style={{
-          width: "100%",
           background: nota != null ? `linear-gradient(135deg, ${C.accent}, ${C.purple})` : C.muted + "55",
-          color: C.white, border: "none", padding: "12px 20px",
-          borderRadius: 8, fontSize: 14, fontWeight: 800,
           cursor: nota != null && !enviando ? "pointer" : "not-allowed",
           boxShadow: nota != null ? `0 6px 18px ${C.accent}33` : "none",
         }}
@@ -200,7 +216,7 @@ export default function PesquisaPublicaNps({ token }) {
         {enviando ? "Enviando..." : "Enviar resposta"}
       </button>
 
-      <div style={{ color: C.muted, fontSize: 10, textAlign: "center", marginTop: 14 }}>
+      <div className="text-gp-muted text-[10px] text-center mt-[14px]">
         Sua resposta é confidencial e usada apenas para melhorar nosso atendimento.
       </div>
     </Container>
@@ -209,35 +225,35 @@ export default function PesquisaPublicaNps({ token }) {
 
 // ============ HELPERS ============
 
-function primeiroNome(nomeCompleto) {
+function primeiroNome(nomeCompleto: string | null | undefined): string {
   return String(nomeCompleto || "").trim().split(/\s+/)[0] || "";
 }
 
-function corNota(n) {
+function corNota(n: number): string {
   if (n >= 9) return C.green;
   if (n >= 7) return C.yellow;
   return C.red;
 }
 
-function textoNota(n) {
+function textoNota(n: number): string {
   if (n >= 9) return "⭐ Promotor — Você é fã!";
   if (n >= 7) return "👍 Neutro — Vamos melhorar";
   return "💔 Detrator — Vamos ouvir você";
 }
 
-function Container({ children }) {
+function Container({ children }: { children: ReactNode }) {
   return (
-    <div style={{
-      background: C.bg, minHeight: "100vh",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      padding: 16, fontFamily: "'Segoe UI', sans-serif",
-    }}>
-      <div style={{
-        background: C.surface, border: `1px solid ${C.border}`,
-        borderRadius: 16, padding: 28,
-        width: "100%", maxWidth: 480,
-        boxShadow: "0 24px 60px rgba(0,0,0,0.5)",
-      }}>
+    <div
+      className="bg-gp-bg min-h-screen flex items-center justify-center p-4"
+      style={{ fontFamily: "'Segoe UI', sans-serif" }}
+    >
+      <div
+        className="bg-gp-surface rounded-2xl p-7 w-full max-w-[480px]"
+        style={{
+          border: `1px solid ${C.border}`,
+          boxShadow: "0 24px 60px rgba(0,0,0,0.5)",
+        }}
+      >
         {children}
       </div>
     </div>

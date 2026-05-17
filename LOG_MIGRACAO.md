@@ -1,7 +1,7 @@
 # LOG_MIGRACAO.md — Migração GestãoPRO para TypeScript + Tailwind
 
 > **Continuidade entre sessões.** Atualizar a cada pausa.
-> Última atualização: **2026-05-17**
+> Última atualização: **2026-05-17** (sessão 2)
 
 ---
 
@@ -40,7 +40,7 @@ Migração gradual do GestãoPRO de:
 
 ---
 
-## 📦 Módulos migrados (11 commits)
+## 📦 Módulos migrados (14 commits)
 
 | # | Commit | Módulo | Tipo | Observação |
 |---|---|---|---|---|
@@ -54,20 +54,21 @@ Migração gradual do GestãoPRO de:
 | 8 | `57683c9` | `HeaderRelatorio.tsx` + `TrocarSenhaModal.tsx` | telas | Tipo `ConfiguracaoEmpresa` exportado |
 | 9 | `280e9fd` | `Sistema.tsx` | tela | Tela admin de reset total |
 | 10 | `bf4c631` | `Logs.tsx` | tela | Auditoria admin-only |
+| 11 | `c16ace3` | `LOG_MIGRACAO.md` | docs | Documento de continuidade |
+| 12 | `9119b93` | `main.tsx` + `index.html` | bootstrap | Entry point do Vite tipado |
+| 13 | `25295fa` | `Login.tsx` + `Signup.tsx` | telas | Telas publicas de auth (ja usavam Tailwind) |
 
 **Pasta `src/lib/` agora 100% TypeScript** (exceto `impressora.js` que é WIP do usuário).
+**Bootstrap e telas publicas** (main, Login, Signup) tambem em TS.
 
 ---
 
 ## 📋 Arquivos ainda como `.jsx` (próximos candidatos)
 
-Total: **52 arquivos** (.js/.jsx) em `src/`. Lista organizada por dificuldade crescente:
+Total: **~49 arquivos** (.js/.jsx) em `src/`. Lista organizada por dificuldade crescente:
 
-### 🟢 Pequenos / utilitários (ordem sugerida)
-- `src/components/cupons/fmt.js` — util de formatação
-- `src/main.jsx` — bootstrap do Vite (mínimo)
-- `src/Signup.jsx` — tela de signup pública (~?? linhas, verificar)
-- `src/Login.jsx` — tela de login
+### 🟢 Pequenos / utilitários
+- `src/components/cupons/fmt.js` — util de formatação (⚠️ ligado à feature Impressora WIP)
 
 ### 🟡 Telas médias (CRUD + filtros)
 - `src/Projeto.jsx` (451 linhas) — tela de roadmap interno
@@ -145,15 +146,16 @@ Para mudanças em UI, idealmente também `npm run dev` + teste visual (eu não c
 
 ---
 
-## 📂 Onde paramos (estado em 2026-05-17)
+## 📂 Onde paramos (estado em 2026-05-17, sessão 2)
 
-- **Último commit:** `bf4c631 refactor(logs): migra Logs.jsx para TSX + Tailwind`
+- **Último commit:** `25295fa refactor(auth): migra Login.jsx e Signup.jsx para TSX`
 - **Branch:** `main` (sincronizada com `origin/main`)
 - **Working tree não-vazio:** O usuário tem feature **Impressora** em andamento (arquivos untracked + hunks em App.jsx/Caixa.jsx/Financeiro.jsx/PDV.jsx). **Não tocar enquanto não finalizar.**
 - **Próximo módulo sugerido:** depende do que o usuário quiser. Recomendações:
-  1. `src/components/cupons/fmt.js` — micro, util
-  2. `src/Projeto.jsx` ou `src/Aparencia.jsx` — telas isoladas
-  3. `src/Configuracoes.jsx` — destrava o tipo `ConfiguracaoEmpresa` (já existe em HeaderRelatorio.tsx — talvez mover para lib/)
+  1. `src/Projeto.jsx` (451 linhas) — tela de roadmap interno, sem CRUD
+  2. `src/Aparencia.jsx` (619 linhas) — settings de tema/aparência (importante mas isolada)
+  3. `src/Configuracoes.jsx` — destrava o tipo `ConfiguracaoEmpresa` (já existe em HeaderRelatorio.tsx — pode mover para lib/)
+  4. `src/Empresa.jsx` — perfil + estatísticas da empresa logada
 
 ---
 

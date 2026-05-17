@@ -1,19 +1,35 @@
 import { useEffect, useState } from "react";
-import { C } from "./lib/theme.js";
-import { api } from "./lib/api.js";
+import { C } from "./lib/theme";
+import { api } from "./lib/api";
 import { urlLogotipo } from "./Configuracoes.jsx";
+
+export interface ConfiguracaoEmpresa {
+  razaoSocial?: string;
+  nomeFantasia?: string;
+  cnpj?: string;
+  endereco?: string;
+  numero?: string;
+  bairro?: string;
+  cidade?: string;
+  estado?: string;
+  cep?: string;
+  telefone?: string;
+  email?: string;
+  logotipo?: string | null;
+  [extra: string]: unknown;
+}
 
 // Cache em memoria — config da empresa muda raramente, mas mantemos um TTL
 // curto para refletir alteracoes dentro da mesma sessao.
-let cacheConfig = null;
+let cacheConfig: ConfiguracaoEmpresa | null = null;
 let cacheTimestamp = 0;
 const TTL_MS = 30_000;
 
-export async function obterConfiguracaoCache() {
+export async function obterConfiguracaoCache(): Promise<ConfiguracaoEmpresa | null> {
   const agora = Date.now();
   if (cacheConfig && (agora - cacheTimestamp) < TTL_MS) return cacheConfig;
   try {
-    cacheConfig = await api.obterConfiguracao();
+    cacheConfig = (await api.obterConfiguracao()) as ConfiguracaoEmpresa;
     cacheTimestamp = agora;
   } catch {
     cacheConfig = null;
@@ -21,26 +37,26 @@ export async function obterConfiguracaoCache() {
   return cacheConfig;
 }
 
-export function invalidarCacheConfiguracao() {
+export function invalidarCacheConfiguracao(): void {
   cacheConfig = null;
   cacheTimestamp = 0;
 }
 
 // Hook para componentes — useEffect carrega da API/cache.
-export function useConfiguracaoEmpresa() {
-  const [cfg, setCfg] = useState(cacheConfig);
+export function useConfiguracaoEmpresa(): ConfiguracaoEmpresa | null {
+  const [cfg, setCfg] = useState<ConfiguracaoEmpresa | null>(cacheConfig);
   useEffect(() => {
     let ativo = true;
-    obterConfiguracaoCache().then(c => { if (ativo) setCfg(c); });
+    obterConfiguracaoCache().then((c) => { if (ativo) setCfg(c); });
     return () => { ativo = false; };
   }, []);
   return cfg;
 }
 
 // Monta endereco completo formatado: "Av. X, 100 - Bairro, Cidade/UF · CEP".
-export function formatarEndereco(cfg) {
+export function formatarEndereco(cfg: ConfiguracaoEmpresa | null | undefined): string {
   if (!cfg) return "";
-  const partes = [];
+  const partes: string[] = [];
   if (cfg.endereco) {
     let linha = cfg.endereco;
     if (cfg.numero) linha += `, ${cfg.numero}`;
@@ -59,11 +75,17 @@ export function formatarEndereco(cfg) {
 // finas. "modoCupom" muda para fundo branco + texto preto (para impressao
 // em cupom termico junto a window.print()).
 
+interface HeaderRelatorioProps {
+  cfg?: ConfiguracaoEmpresa | null;
+  compacto?: boolean;
+  modoCupom?: boolean;
+}
+
 export default function HeaderRelatorio({
   cfg: cfgProp = null,
   compacto = false,
   modoCupom = false,
-}) {
+}: HeaderRelatorioProps) {
   const cfgHook = useConfiguracaoEmpresa();
   const cfg = cfgProp || cfgHook;
 
@@ -80,19 +102,17 @@ export default function HeaderRelatorio({
 
   if (compacto) {
     return (
-      <div style={{
-        display: "flex", alignItems: "center", gap: 10,
-        padding: "8px 12px",
-        background: corFundo, border: `1px solid ${corBorda}`, borderRadius: 8,
-        fontSize: 11,
-      }}>
-        {logoUrl && <img src={logoUrl} alt="" style={{ height: 28, objectFit: "contain" }} />}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ color: corTitulo, fontWeight: 700, fontSize: 13 }}>
+      <div
+        className="flex items-center gap-[10px] px-3 py-2 rounded-lg text-[11px]"
+        style={{ background: corFundo, border: `1px solid ${corBorda}` }}
+      >
+        {logoUrl && <img src={logoUrl} alt="" className="h-7 object-contain" />}
+        <div className="flex-1 min-w-0">
+          <div className="font-bold text-[13px]" style={{ color: corTitulo }}>
             {cfg.nomeFantasia || cfg.razaoSocial}
           </div>
           {(cfg.cnpj || cfg.telefone) && (
-            <div style={{ color: corMuted, fontSize: 11 }}>
+            <div className="text-[11px]" style={{ color: corMuted }}>
               {cfg.cnpj && `CNPJ ${cfg.cnpj}`}
               {cfg.cnpj && cfg.telefone && " · "}
               {cfg.telefone}
@@ -104,34 +124,40 @@ export default function HeaderRelatorio({
   }
 
   return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 14,
-      padding: "12px 16px",
-      background: corFundo, border: `1px solid ${corBorda}`, borderRadius: 10,
-    }}>
+    <div
+      className="flex items-center gap-[14px] px-4 py-3 rounded-[10px]"
+      style={{ background: corFundo, border: `1px solid ${corBorda}` }}
+    >
       {logoUrl ? (
-        <img src={logoUrl} alt="logotipo"
-          style={{ height: 60, maxWidth: 140, objectFit: "contain", flexShrink: 0 }} />
+        <img
+          src={logoUrl}
+          alt="logotipo"
+          className="h-[60px] max-w-[140px] object-contain shrink-0"
+        />
       ) : (
-        <div style={{
-          width: 60, height: 60, borderRadius: 8, flexShrink: 0,
-          background: modoCupom ? "#f0f0f0" : C.bg, border: `1px dashed ${corBorda}`,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          color: corMuted, fontSize: 24,
-        }}>🏢</div>
+        <div
+          className="w-[60px] h-[60px] rounded-lg shrink-0 flex items-center justify-center text-2xl"
+          style={{
+            background: modoCupom ? "#f0f0f0" : C.bg,
+            border: `1px dashed ${corBorda}`,
+            color: corMuted,
+          }}
+        >
+          🏢
+        </div>
       )}
 
-      <div style={{ flex: 1, minWidth: 0, lineHeight: 1.4 }}>
-        <div style={{ color: corTitulo, fontWeight: 800, fontSize: 16 }}>
+      <div className="flex-1 min-w-0 leading-[1.4]">
+        <div className="font-extrabold text-[16px]" style={{ color: corTitulo }}>
           {cfg.nomeFantasia || cfg.razaoSocial}
         </div>
         {cfg.nomeFantasia && cfg.razaoSocial !== cfg.nomeFantasia && (
-          <div style={{ color: corMuted, fontSize: 11 }}>{cfg.razaoSocial}</div>
+          <div className="text-[11px]" style={{ color: corMuted }}>{cfg.razaoSocial}</div>
         )}
         {endereco && (
-          <div style={{ color: corTexto, fontSize: 12, marginTop: 2 }}>{endereco}</div>
+          <div className="text-xs mt-[2px]" style={{ color: corTexto }}>{endereco}</div>
         )}
-        <div style={{ color: corMuted, fontSize: 11, marginTop: 2 }}>
+        <div className="text-[11px] mt-[2px]" style={{ color: corMuted }}>
           {cfg.cnpj && `CNPJ ${cfg.cnpj}`}
           {cfg.cnpj && (cfg.telefone || cfg.email) && " · "}
           {cfg.telefone && `Tel ${cfg.telefone}`}

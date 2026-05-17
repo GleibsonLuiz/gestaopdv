@@ -1,9 +1,10 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
-import { C } from "./lib/theme.js";
-import { api } from "./lib/api.js";
-import ActionsMenu from "./components/ActionsMenu.jsx";
-import { FormularioLuxuoso, Secao, Linha, Campo } from "./components/FormularioLuxuoso.jsx";
+import { useEffect, useState, useCallback, useMemo, type FormEvent } from "react";
+import { C } from "./lib/theme";
+import { api, type SessionUser } from "./lib/api";
+import ActionsMenu from "./components/ActionsMenu";
+import { FormularioLuxuoso, Secao, Linha, Campo } from "./components/FormularioLuxuoso";
 
+// ============ CONSTANTES ============
 
 const ESTADOS_BR = [
   "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO",
@@ -11,9 +12,8 @@ const ESTADOS_BR = [
   "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO",
 ];
 
-// Codigos IBGE de UF (tabela oficial). Preenchidos automaticamente quando o
-// usuario seleciona o estado. Necessario para futura emissao de NF-e.
-const COD_UF_IBGE = {
+// Codigos IBGE de UF (tabela oficial).
+const COD_UF_IBGE: Record<string, string> = {
   AC: "12", AL: "27", AM: "13", AP: "16", BA: "29", CE: "23", DF: "53",
   ES: "32", GO: "52", MA: "21", MG: "31", MS: "50", MT: "51", PA: "15",
   PB: "25", PE: "26", PI: "22", PR: "41", RJ: "33", RN: "24", RO: "11",
@@ -21,42 +21,120 @@ const COD_UF_IBGE = {
 };
 
 // Indicador de IE do destinatario (SEFAZ).
-const OPCOES_IND_IE_DEST = [
+type IndIEDest = 1 | 2 | 9;
+type CRT = 1 | 2 | 3;
+
+interface OpcaoNum<T extends number> {
+  valor: T;
+  label: string;
+}
+
+const OPCOES_IND_IE_DEST: OpcaoNum<IndIEDest>[] = [
   { valor: 1, label: "1 — Contribuinte ICMS" },
   { valor: 2, label: "2 — Isento" },
   { valor: 9, label: "9 — Nao contribuinte" },
 ];
 
-// Codigo de Regime Tributario (CRT).
-const OPCOES_CRT = [
+const OPCOES_CRT: OpcaoNum<CRT>[] = [
   { valor: 1, label: "1 — Simples Nacional" },
   { valor: 2, label: "2 — Simples Nacional (excesso de sublimite)" },
   { valor: 3, label: "3 — Regime Normal (Lucro Real/Presumido)" },
 ];
 
-const VAZIO = {
-  // Identificacao
+// ============ TIPOS ============
+
+type TipoPessoa = "PF" | "PJ";
+
+interface Fornecedor {
+  id: string;
+  nome: string;
+  nomeFantasia?: string | null;
+  tipoPessoa?: TipoPessoa;
+  cnpj?: string | null;
+  email?: string | null;
+  telefone?: string | null;
+  ie?: string | null;
+  ieIsenta?: boolean;
+  im?: string | null;
+  indIEDest?: IndIEDest | null;
+  crt?: CRT | null;
+  emailNFe?: string | null;
+  cep?: string | null;
+  endereco?: string | null;
+  numero?: string | null;
+  complemento?: string | null;
+  bairro?: string | null;
+  cidade?: string | null;
+  estado?: string | null;
+  codMunicipioIBGE?: string | null;
+  codUFIBGE?: string | null;
+  codPais?: string | null;
+  nomePais?: string | null;
+  ativo: boolean;
+}
+
+interface FormFornecedor {
+  nome: string;
+  nomeFantasia: string;
+  tipoPessoa: TipoPessoa;
+  cnpj: string;
+  email: string;
+  telefone: string;
+  ie: string;
+  ieIsenta: boolean;
+  im: string;
+  indIEDest: IndIEDest | "";
+  crt: CRT | "";
+  emailNFe: string;
+  cep: string;
+  endereco: string;
+  numero: string;
+  complemento: string;
+  bairro: string;
+  cidade: string;
+  estado: string;
+  codMunicipioIBGE: string;
+  codUFIBGE: string;
+  codPais: string;
+  nomePais: string;
+}
+
+interface ViaCepDados {
+  logradouro: string;
+  bairro: string;
+  cidade: string;
+  estado: string;
+  codMunicipioIBGE: string;
+}
+
+interface CnpjCadastral {
+  razao_social?: string;
+  razaoSocial?: string;
+  nome_fantasia?: string;
+  nomeFantasia?: string;
+}
+
+const VAZIO: FormFornecedor = {
   nome: "", nomeFantasia: "", tipoPessoa: "PJ", cnpj: "",
   email: "", telefone: "",
-  // Fiscal
   ie: "", ieIsenta: false, im: "",
   indIEDest: "", crt: "",
   emailNFe: "",
-  // Endereco
   cep: "", endereco: "", numero: "", complemento: "", bairro: "",
   cidade: "", estado: "",
   codMunicipioIBGE: "", codUFIBGE: "",
   codPais: "1058", nomePais: "BRASIL",
 };
 
-// Campos contados para o medidor de preenchimento do FormularioLuxuoso.
-const CAMPOS_PROGRESSO = [
+const CAMPOS_PROGRESSO: (keyof FormFornecedor)[] = [
   "nome", "cnpj", "email", "telefone",
   "cep", "endereco", "numero", "bairro", "cidade", "estado",
   "ie", "indIEDest", "crt",
 ];
 
-function mascararCnpj(v) {
+// ============ HELPERS ============
+
+function mascararCnpj(v: string): string {
   const d = (v || "").replace(/\D/g, "").slice(0, 14);
   if (d.length <= 2) return d;
   if (d.length <= 5) return `${d.slice(0, 2)}.${d.slice(2)}`;
@@ -65,7 +143,7 @@ function mascararCnpj(v) {
   return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
 }
 
-function mascararCpf(v) {
+function mascararCpf(v: string): string {
   const d = (v || "").replace(/\D/g, "").slice(0, 11);
   if (d.length <= 3) return d;
   if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
@@ -73,17 +151,17 @@ function mascararCpf(v) {
   return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
 }
 
-function mascararDocumento(tipoPessoa, v) {
+function mascararDocumento(tipoPessoa: TipoPessoa, v: string): string {
   return tipoPessoa === "PF" ? mascararCpf(v) : mascararCnpj(v);
 }
 
-function mascararCep(v) {
+function mascararCep(v: string): string {
   const d = (v || "").replace(/\D/g, "").slice(0, 8);
   if (d.length <= 5) return d;
   return `${d.slice(0, 5)}-${d.slice(5)}`;
 }
 
-function mascararTelefone(v) {
+function mascararTelefone(v: string): string {
   const d = (v || "").replace(/\D/g, "").slice(0, 11);
   if (d.length <= 10) {
     return d.replace(/^(\d{2})(\d)/, "($1) $2").replace(/(\d{4})(\d)/, "$1-$2");
@@ -91,7 +169,7 @@ function mascararTelefone(v) {
   return d.replace(/^(\d{2})(\d)/, "($1) $2").replace(/(\d{5})(\d)/, "$1-$2");
 }
 
-async function buscarCepViaCEP(cepMascarado) {
+async function buscarCepViaCEP(cepMascarado: string): Promise<ViaCepDados | null> {
   const d = cepMascarado.replace(/\D/g, "");
   if (d.length !== 8) return null;
   try {
@@ -100,9 +178,6 @@ async function buscarCepViaCEP(cepMascarado) {
     const j = await r.json();
     if (j.erro) return null;
     return {
-      // ViaCEP devolve logradouro e bairro separados; tambem expoe o
-      // codigo IBGE do municipio em `ibge` — exatamente o que a SEFAZ
-      // exige no campo cMun da NF-e.
       logradouro: j.logradouro || "",
       bairro: j.bairro || "",
       cidade: j.localidade || "",
@@ -115,25 +190,25 @@ async function buscarCepViaCEP(cepMascarado) {
 }
 
 // Stub para futura integracao com a Receita Federal / BrasilAPI / SerproIO.
-// Ao sair do campo CNPJ com 14 digitos preenchidos, dispara uma consulta
-// cadastral que devera retornar razaoSocial, nomeFantasia, endereco, CRT etc.
-// TODO: substituir o retorno null por
-//   const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpjDigits}`);
-//   return r.ok ? await r.json() : null;
-// eslint-disable-next-line no-unused-vars
-async function consultarCnpjCadastral(cnpjDigits) {
+async function consultarCnpjCadastral(_cnpjDigits: string): Promise<CnpjCadastral | null> {
   return null;
 }
 
-export default function Fornecedores({ user }) {
-  const [fornecedores, setFornecedores] = useState([]);
+// ============ COMPONENTE PRINCIPAL ============
+
+interface FornecedoresProps {
+  user: SessionUser;
+}
+
+export default function Fornecedores({ user }: FornecedoresProps) {
+  const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
   const [search, setSearch] = useState("");
   const [filtroAtivo, setFiltroAtivo] = useState("");
   const [modalAberto, setModalAberto] = useState(false);
-  const [editando, setEditando] = useState(null);
-  const [form, setForm] = useState(VAZIO);
+  const [editando, setEditando] = useState<Fornecedor | null>(null);
+  const [form, setForm] = useState<FormFornecedor>(VAZIO);
   const [salvando, setSalvando] = useState(false);
   const [erroForm, setErroForm] = useState("");
   const [mensagem, setMensagem] = useState("");
@@ -152,18 +227,17 @@ export default function Fornecedores({ user }) {
     return Math.round((preenchidos / CAMPOS_PROGRESSO.length) * 100);
   }, [form]);
 
-  // Atualiza codigo IBGE da UF automaticamente quando o estado muda.
-  function setEstado(uf) {
-    setForm(prev => ({
+  function setEstado(uf: string) {
+    setForm((prev) => ({
       ...prev,
       estado: uf,
       codUFIBGE: COD_UF_IBGE[uf] || "",
     }));
   }
 
-  async function aplicarCep(valor) {
+  async function aplicarCep(valor: string) {
     const masked = mascararCep(valor);
-    setForm(prev => ({ ...prev, cep: masked }));
+    setForm((prev) => ({ ...prev, cep: masked }));
     setCepNaoEncontrado(false);
     const digitos = masked.replace(/\D/g, "");
     if (digitos.length !== 8) return;
@@ -174,7 +248,7 @@ export default function Fornecedores({ user }) {
       setCepNaoEncontrado(true);
       return;
     }
-    setForm(prev => ({
+    setForm((prev) => ({
       ...prev,
       endereco: dados.logradouro || prev.endereco,
       bairro: dados.bairro || prev.bairro,
@@ -185,15 +259,14 @@ export default function Fornecedores({ user }) {
     }));
   }
 
-  async function aplicarCnpj(valor) {
+  async function aplicarCnpj(valor: string) {
     const masked = mascararCnpj(valor);
-    setForm(prev => ({ ...prev, cnpj: masked }));
+    setForm((prev) => ({ ...prev, cnpj: masked }));
     const digitos = masked.replace(/\D/g, "");
     if (digitos.length === 14 && form.tipoPessoa === "PJ") {
-      // Disparo silencioso da consulta cadastral (stub).
       const cadastro = await consultarCnpjCadastral(digitos);
       if (cadastro) {
-        setForm(prev => ({
+        setForm((prev) => ({
           ...prev,
           nome: prev.nome || cadastro.razao_social || cadastro.razaoSocial || "",
           nomeFantasia: prev.nomeFantasia || cadastro.nome_fantasia || cadastro.nomeFantasia || "",
@@ -202,11 +275,8 @@ export default function Fornecedores({ user }) {
     }
   }
 
-  // Toggle Isento: ao ativar, limpa IE e ajusta indIEDest para 2 se ainda
-  // estava como 1 (contribuinte) — evita inconsistencia logica antes do
-  // POST chegar no backend.
-  function alternarIsento(checado) {
-    setForm(prev => ({
+  function alternarIsento(checado: boolean) {
+    setForm((prev) => ({
       ...prev,
       ieIsenta: checado,
       ie: checado ? "" : prev.ie,
@@ -218,10 +288,10 @@ export default function Fornecedores({ user }) {
     setCarregando(true);
     setErro("");
     try {
-      const data = await api.listarFornecedores({ search, ativo: filtroAtivo });
-      setFornecedores(data);
+      const data = await api.listarFornecedores({ search, ativo: filtroAtivo }) as Fornecedor[];
+      setFornecedores(data || []);
     } catch (err) {
-      setErro(err.message);
+      setErro((err as Error).message);
     } finally {
       setCarregando(false);
     }
@@ -232,7 +302,7 @@ export default function Fornecedores({ user }) {
     return () => clearTimeout(t);
   }, [carregar]);
 
-  function flash(texto) {
+  function flash(texto: string) {
     setMensagem(texto);
     setTimeout(() => setMensagem(""), 2500);
   }
@@ -246,9 +316,9 @@ export default function Fornecedores({ user }) {
     setModalAberto(true);
   }
 
-  function abrirEdicao(f) {
+  function abrirEdicao(f: Fornecedor) {
     setEditando(f);
-    const tipoPessoa = f.tipoPessoa || "PJ";
+    const tipoPessoa: TipoPessoa = f.tipoPessoa || "PJ";
     setForm({
       nome: f.nome || "",
       nomeFantasia: f.nomeFantasia || "",
@@ -282,7 +352,7 @@ export default function Fornecedores({ user }) {
     setModalAberto(true);
   }
 
-  async function salvar(e) {
+  async function salvar(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErroForm("");
     if (!form.nome.trim()) {
@@ -290,14 +360,12 @@ export default function Fornecedores({ user }) {
       setErroForm("Razao Social / Nome e obrigatorio");
       return;
     }
-    // Validacao espelhada do backend: contribuinte exige IE preenchida.
     if (form.indIEDest === 1 && !form.ie.trim() && !form.ieIsenta) {
       setErroForm("Inscricao Estadual e obrigatoria para Contribuinte ICMS (indIEDest=1)");
       return;
     }
     setNomeInvalido(false);
     setSalvando(true);
-    // Monta payload normalizando inteiros que estao como string no form.
     const payload = {
       ...form,
       indIEDest: form.indIEDest === "" ? null : Number(form.indIEDest),
@@ -314,13 +382,13 @@ export default function Fornecedores({ user }) {
       setModalAberto(false);
       carregar();
     } catch (err) {
-      setErroForm(err.message);
+      setErroForm((err as Error).message);
     } finally {
       setSalvando(false);
     }
   }
 
-  async function alternarAtivo(f) {
+  async function alternarAtivo(f: Fornecedor) {
     try {
       if (f.ativo) {
         if (!confirm(`Inativar "${f.nome}"?`)) return;
@@ -332,101 +400,130 @@ export default function Fornecedores({ user }) {
       }
       carregar();
     } catch (err) {
-      alert(err.message);
+      alert((err as Error).message);
     }
   }
 
   return (
     <div>
-      <div style={{
-        display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center",
-      }}>
+      <div className="flex gap-2.5 mb-4 flex-wrap items-center">
         <input
           placeholder="Buscar por nome, fantasia, email ou CNPJ..."
           value={search}
-          onChange={e => setSearch(e.target.value)}
+          onChange={(e) => setSearch(e.target.value)}
+          aria-label="Buscar fornecedores"
+          className="bg-gp-surface text-gp-text rounded-lg text-sm"
           style={{
-            flex: "1 1 280px", background: C.surface, border: `1px solid ${C.border}`,
-            borderRadius: 8, padding: "10px 12px", color: C.text, fontSize: 14, outline: "none",
+            flex: "1 1 280px",
+            border: `1px solid ${C.border}`,
+            padding: "10px 12px",
+            outline: "none",
           }}
         />
-        <select value={filtroAtivo} onChange={e => setFiltroAtivo(e.target.value)} style={{
-          background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8,
-          padding: "10px 12px", color: C.text, fontSize: 13, cursor: "pointer",
-        }}>
+        <select
+          value={filtroAtivo}
+          onChange={(e) => setFiltroAtivo(e.target.value)}
+          aria-label="Filtrar por status"
+          className="bg-gp-surface text-gp-text rounded-lg text-[13px] cursor-pointer"
+          style={{
+            border: `1px solid ${C.border}`,
+            padding: "10px 12px",
+          }}
+        >
           <option value="">Todos</option>
           <option value="true">Apenas ativos</option>
           <option value="false">Apenas inativos</option>
         </select>
-        <button onClick={abrirNovo} style={{
-          background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-          color: C.white, border: "none", borderRadius: 8,
-          padding: "10px 18px", fontWeight: 700, fontSize: 14, cursor: "pointer",
-        }}>
+        <button
+          type="button"
+          onClick={abrirNovo}
+          className="text-gp-white border-none rounded-lg text-sm font-bold cursor-pointer"
+          style={{
+            background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+            padding: "10px 18px",
+          }}
+        >
           + Novo Fornecedor
         </button>
       </div>
 
       {mensagem && (
-        <div style={{
-          marginBottom: 12, padding: "10px 14px", borderRadius: 8,
-          background: C.green + "22", border: `1px solid ${C.green}55`, color: C.green, fontSize: 13,
-        }}>{mensagem}</div>
+        <div
+          className="mb-3 px-[14px] py-[10px] rounded-lg text-[13px] text-gp-green"
+          style={{ background: C.green + "22", border: `1px solid ${C.green}55` }}
+        >
+          {mensagem}
+        </div>
       )}
 
       {erro && (
-        <div style={{
-          marginBottom: 12, padding: "10px 14px", borderRadius: 8,
-          background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red, fontSize: 13,
-        }}>{erro}</div>
+        <div
+          className="mb-3 px-[14px] py-[10px] rounded-lg text-[13px] text-gp-red"
+          style={{ background: C.red + "22", border: `1px solid ${C.red}55` }}
+        >
+          {erro}
+        </div>
       )}
 
-      <div style={{
-        background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden",
-      }}>
-        <div style={{
-          display: "grid", gridTemplateColumns: "2fr 1.2fr 1.5fr 1fr 100px 80px",
-          padding: "12px 16px", background: C.surface,
-          borderBottom: `1px solid ${C.border}`, fontSize: 12, fontWeight: 700,
-          color: C.muted, textTransform: "uppercase", letterSpacing: 0.5,
-        }}>
+      <div
+        className="bg-gp-card rounded-xl overflow-hidden"
+        style={{ border: `1px solid ${C.border}` }}
+      >
+        <div
+          className="grid bg-gp-surface text-gp-muted text-xs font-bold uppercase"
+          style={{
+            gridTemplateColumns: "2fr 1.2fr 1.5fr 1fr 100px 80px",
+            padding: "12px 16px",
+            borderBottom: `1px solid ${C.border}`,
+            letterSpacing: 0.5,
+          }}
+        >
           <div>Nome</div>
           <div>CNPJ / CPF</div>
           <div>Email</div>
           <div>Telefone</div>
           <div>Status</div>
-          <div style={{ textAlign: "right" }}>Ações</div>
+          <div className="text-right">Ações</div>
         </div>
 
         {carregando ? (
-          <div style={{ padding: 30, textAlign: "center", color: C.muted, fontSize: 13 }}>Carregando...</div>
+          <div className="py-[30px] text-center text-gp-muted text-[13px]">Carregando...</div>
         ) : fornecedores.length === 0 ? (
-          <div style={{ padding: 30, textAlign: "center", color: C.muted, fontSize: 13 }}>Nenhum fornecedor encontrado.</div>
-        ) : fornecedores.map(f => (
-          <div key={f.id} style={{
-            display: "grid", gridTemplateColumns: "2fr 1.2fr 1.5fr 1fr 100px 80px",
-            padding: "12px 16px", borderBottom: `1px solid ${C.border}`,
-            alignItems: "center", fontSize: 13,
-            opacity: f.ativo ? 1 : 0.55,
-          }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ color: C.white, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.nome}</div>
+          <div className="py-[30px] text-center text-gp-muted text-[13px]">Nenhum fornecedor encontrado.</div>
+        ) : fornecedores.map((f) => (
+          <div
+            key={f.id}
+            className="grid items-center text-[13px]"
+            style={{
+              gridTemplateColumns: "2fr 1.2fr 1.5fr 1fr 100px 80px",
+              padding: "12px 16px",
+              borderBottom: `1px solid ${C.border}`,
+              opacity: f.ativo ? 1 : 0.55,
+            }}
+          >
+            <div className="min-w-0">
+              <div className="text-gp-white font-semibold overflow-hidden text-ellipsis whitespace-nowrap">{f.nome}</div>
               {f.nomeFantasia && (
-                <div style={{ color: C.muted, fontSize: 11, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.nomeFantasia}</div>
+                <div className="text-gp-muted text-[11px] mt-0.5 overflow-hidden text-ellipsis whitespace-nowrap">{f.nomeFantasia}</div>
               )}
             </div>
-            <div style={{ color: C.text }}>{f.cnpj || "—"}</div>
-            <div style={{ color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.email || "—"}</div>
-            <div style={{ color: C.text }}>{f.telefone || "—"}</div>
+            <div className="text-gp-text">{f.cnpj || "—"}</div>
+            <div className="text-gp-text overflow-hidden text-ellipsis whitespace-nowrap">{f.email || "—"}</div>
+            <div className="text-gp-text">{f.telefone || "—"}</div>
             <div>
-              <span style={{
-                fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 6,
-                background: f.ativo ? C.green + "22" : C.muted + "33",
-                color: f.ativo ? C.green : C.muted,
-                border: `1px solid ${f.ativo ? C.green + "55" : C.muted + "55"}`,
-              }}>{f.ativo ? "ATIVO" : "INATIVO"}</span>
+              <span
+                className="text-[11px] font-bold rounded-md"
+                style={{
+                  padding: "3px 10px",
+                  background: f.ativo ? C.green + "22" : C.muted + "33",
+                  color: f.ativo ? C.green : C.muted,
+                  border: `1px solid ${f.ativo ? C.green + "55" : C.muted + "55"}`,
+                }}
+              >
+                {f.ativo ? "ATIVO" : "INATIVO"}
+              </span>
             </div>
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <div className="flex justify-end">
               <ActionsMenu
                 items={[
                   {
@@ -461,7 +558,7 @@ export default function Fornecedores({ user }) {
             ? "Atualize os dados deste fornecedor. Campos marcados com • sao obrigatorios."
             : "Cadastre um fornecedor no seu catalogo. Campos marcados com • sao obrigatorios."
         }
-        numeroLote={editando ? `#${String(editando.id || "").slice(0, 4).toUpperCase()}` : null}
+        numeroLote={editando ? `#${String(editando.id || "").slice(0, 4).toUpperCase()}` : undefined}
         data={new Date().toLocaleDateString("pt-BR")}
         progresso={progressoForm}
         salvando={salvando}
@@ -470,19 +567,19 @@ export default function Fornecedores({ user }) {
         erro={erroForm}
         larguraMax={860}
       >
-        {/* ============ SEÇÃO 1: Identificação ============ */}
+        {/* SEÇÃO 1: Identificação */}
         <Secao legenda="Dados básicos">
           <Linha cols={1}>
             <Campo
               label="Razão Social / Nome"
               obrigatorio
               hint="Nome juridico que aparece no contrato/CNPJ. E o que vai na NF-e."
-              erro={nomeInvalido ? "Informe o nome do fornecedor." : null}
+              erro={nomeInvalido ? "Informe o nome do fornecedor." : undefined}
             >
               <input
                 className="lux-input"
                 value={form.nome}
-                onChange={e => {
+                onChange={(e) => {
                   setForm({ ...form, nome: e.target.value });
                   if (nomeInvalido && e.target.value.trim()) setNomeInvalido(false);
                 }}
@@ -497,7 +594,7 @@ export default function Fornecedores({ user }) {
               <input
                 className="lux-input"
                 value={form.nomeFantasia}
-                onChange={e => setForm({ ...form, nomeFantasia: e.target.value })}
+                onChange={(e) => setForm({ ...form, nomeFantasia: e.target.value })}
                 placeholder="Ex.: Papel & Cia"
               />
             </Campo>
@@ -505,9 +602,9 @@ export default function Fornecedores({ user }) {
               <select
                 className="lux-select"
                 value={form.tipoPessoa}
-                onChange={e => {
-                  const novoTipo = e.target.value;
-                  setForm(prev => ({
+                onChange={(e) => {
+                  const novoTipo = e.target.value as TipoPessoa;
+                  setForm((prev) => ({
                     ...prev,
                     tipoPessoa: novoTipo,
                     cnpj: mascararDocumento(novoTipo, prev.cnpj),
@@ -524,7 +621,7 @@ export default function Fornecedores({ user }) {
               <input
                 className="lux-input"
                 value={form.cnpj}
-                onChange={e => aplicarCnpj(e.target.value)}
+                onChange={(e) => aplicarCnpj(e.target.value)}
                 placeholder={form.tipoPessoa === "PF" ? "000.000.000-00" : "00.000.000/0000-00"}
                 inputMode="numeric"
                 maxLength={form.tipoPessoa === "PF" ? 14 : 18}
@@ -534,7 +631,7 @@ export default function Fornecedores({ user }) {
               <input
                 className="lux-input"
                 value={form.telefone}
-                onChange={e => setForm({ ...form, telefone: mascararTelefone(e.target.value) })}
+                onChange={(e) => setForm({ ...form, telefone: mascararTelefone(e.target.value) })}
                 placeholder="(00) 0000-0000"
                 inputMode="numeric"
                 maxLength={15}
@@ -546,7 +643,7 @@ export default function Fornecedores({ user }) {
                 className="lux-input"
                 type="email"
                 value={form.email}
-                onChange={e => setForm({ ...form, email: e.target.value })}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
                 placeholder="contato@fornecedor.com.br"
                 autoComplete="email"
               />
@@ -554,7 +651,7 @@ export default function Fornecedores({ user }) {
           </Linha>
         </Secao>
 
-        {/* ============ SEÇÃO 2: Dados Fiscais ============ */}
+        {/* SEÇÃO 2: Dados Fiscais */}
         <Secao legenda="Dados fiscais / tributários">
           <Linha cols={2}>
             <Campo
@@ -564,19 +661,18 @@ export default function Fornecedores({ user }) {
               <select
                 className="lux-select"
                 value={form.indIEDest}
-                onChange={e => {
-                  const valor = e.target.value === "" ? "" : Number(e.target.value);
-                  setForm(prev => ({
+                onChange={(e) => {
+                  const valor = e.target.value === "" ? "" : Number(e.target.value) as IndIEDest;
+                  setForm((prev) => ({
                     ...prev,
                     indIEDest: valor,
-                    // Coerencia: indIEDest=2 (Isento) implica ieIsenta=true.
                     ieIsenta: valor === 2 ? true : (valor === 1 ? false : prev.ieIsenta),
                     ie: valor === 2 ? "" : prev.ie,
                   }));
                 }}
               >
                 <option value="">Selecione…</option>
-                {OPCOES_IND_IE_DEST.map(o => (
+                {OPCOES_IND_IE_DEST.map((o) => (
                   <option key={o.valor} value={o.valor}>{o.label}</option>
                 ))}
               </select>
@@ -585,10 +681,10 @@ export default function Fornecedores({ user }) {
               <select
                 className="lux-select"
                 value={form.crt}
-                onChange={e => setForm({ ...form, crt: e.target.value === "" ? "" : Number(e.target.value) })}
+                onChange={(e) => setForm({ ...form, crt: e.target.value === "" ? "" : Number(e.target.value) as CRT })}
               >
                 <option value="">Selecione…</option>
-                {OPCOES_CRT.map(o => (
+                {OPCOES_CRT.map((o) => (
                   <option key={o.valor} value={o.valor}>{o.label}</option>
                 ))}
               </select>
@@ -598,26 +694,25 @@ export default function Fornecedores({ user }) {
             <Campo
               label="Inscrição Estadual"
               obrigatorio={form.indIEDest === 1}
-              hint={form.ieIsenta ? "Isento — campo desabilitado." : null}
+              hint={form.ieIsenta ? "Isento — campo desabilitado." : undefined}
             >
               <input
                 className="lux-input"
                 value={form.ie}
-                onChange={e => setForm({ ...form, ie: e.target.value.replace(/\D/g, "") })}
+                onChange={(e) => setForm({ ...form, ie: e.target.value.replace(/\D/g, "") })}
                 placeholder="Apenas dígitos"
                 inputMode="numeric"
                 maxLength={14}
                 disabled={form.ieIsenta}
                 style={form.ieIsenta ? { opacity: 0.55 } : undefined}
               />
-              <label style={{
-                display: "flex", alignItems: "center", gap: 8,
-                marginTop: 8, fontSize: 12, color: C.muted, cursor: "pointer",
-              }}>
+              <label
+                className="flex items-center gap-2 mt-2 text-xs text-gp-muted cursor-pointer"
+              >
                 <input
                   type="checkbox"
                   checked={form.ieIsenta}
-                  onChange={e => alternarIsento(e.target.checked)}
+                  onChange={(e) => alternarIsento(e.target.checked)}
                   style={{ accentColor: C.accent }}
                 />
                 Isento de Inscrição Estadual
@@ -627,7 +722,7 @@ export default function Fornecedores({ user }) {
               <input
                 className="lux-input"
                 value={form.im}
-                onChange={e => setForm({ ...form, im: e.target.value.replace(/\D/g, "") })}
+                onChange={(e) => setForm({ ...form, im: e.target.value.replace(/\D/g, "") })}
                 placeholder="Apenas dígitos (NFS-e)"
                 inputMode="numeric"
                 maxLength={15}
@@ -643,14 +738,14 @@ export default function Fornecedores({ user }) {
                 className="lux-input"
                 type="email"
                 value={form.emailNFe}
-                onChange={e => setForm({ ...form, emailNFe: e.target.value })}
+                onChange={(e) => setForm({ ...form, emailNFe: e.target.value })}
                 placeholder="fiscal@fornecedor.com.br"
               />
             </Campo>
           </Linha>
         </Secao>
 
-        {/* ============ SEÇÃO 3: Endereço ============ */}
+        {/* SEÇÃO 3: Endereço */}
         <Secao legenda="Endereço">
           <Linha variant="addr-tilt">
             <Campo
@@ -666,8 +761,8 @@ export default function Fornecedores({ user }) {
               <input
                 className="lux-input"
                 value={form.cep}
-                onChange={e => aplicarCep(e.target.value)}
-                onBlur={e => aplicarCep(e.target.value)}
+                onChange={(e) => aplicarCep(e.target.value)}
+                onBlur={(e) => aplicarCep(e.target.value)}
                 placeholder="00000-000"
                 inputMode="numeric"
                 maxLength={9}
@@ -678,11 +773,11 @@ export default function Fornecedores({ user }) {
               <select
                 className="lux-select"
                 value={form.estado}
-                onChange={e => setEstado(e.target.value)}
+                onChange={(e) => setEstado(e.target.value)}
                 autoComplete="address-level1"
               >
                 <option value="">UF</option>
-                {ESTADOS_BR.map(uf => (
+                {ESTADOS_BR.map((uf) => (
                   <option key={uf} value={uf}>{uf}</option>
                 ))}
               </select>
@@ -691,7 +786,7 @@ export default function Fornecedores({ user }) {
               <input
                 className="lux-input"
                 value={form.cidade}
-                onChange={e => setForm({ ...form, cidade: e.target.value })}
+                onChange={(e) => setForm({ ...form, cidade: e.target.value })}
                 placeholder="São Paulo"
                 autoComplete="address-level2"
               />
@@ -702,7 +797,7 @@ export default function Fornecedores({ user }) {
               <input
                 className="lux-input"
                 value={form.endereco}
-                onChange={e => setForm({ ...form, endereco: e.target.value })}
+                onChange={(e) => setForm({ ...form, endereco: e.target.value })}
                 placeholder="Rua, avenida, travessa…"
                 autoComplete="street-address"
               />
@@ -711,7 +806,7 @@ export default function Fornecedores({ user }) {
               <input
                 className="lux-input"
                 value={form.numero}
-                onChange={e => setForm({ ...form, numero: e.target.value })}
+                onChange={(e) => setForm({ ...form, numero: e.target.value })}
                 placeholder="123"
                 inputMode="numeric"
                 maxLength={10}
@@ -723,7 +818,7 @@ export default function Fornecedores({ user }) {
               <input
                 className="lux-input"
                 value={form.bairro}
-                onChange={e => setForm({ ...form, bairro: e.target.value })}
+                onChange={(e) => setForm({ ...form, bairro: e.target.value })}
                 placeholder="Centro"
               />
             </Campo>
@@ -731,7 +826,7 @@ export default function Fornecedores({ user }) {
               <input
                 className="lux-input"
                 value={form.complemento}
-                onChange={e => setForm({ ...form, complemento: e.target.value })}
+                onChange={(e) => setForm({ ...form, complemento: e.target.value })}
                 placeholder="Sala 4, Bloco B…"
               />
             </Campo>
@@ -744,7 +839,7 @@ export default function Fornecedores({ user }) {
               <input
                 className="lux-input"
                 value={form.codMunicipioIBGE}
-                onChange={e => setForm({ ...form, codMunicipioIBGE: e.target.value.replace(/\D/g, "") })}
+                onChange={(e) => setForm({ ...form, codMunicipioIBGE: e.target.value.replace(/\D/g, "") })}
                 placeholder="0000000"
                 inputMode="numeric"
                 maxLength={7}
@@ -763,7 +858,7 @@ export default function Fornecedores({ user }) {
               <input
                 className="lux-input"
                 value={form.codPais}
-                onChange={e => setForm({ ...form, codPais: e.target.value })}
+                onChange={(e) => setForm({ ...form, codPais: e.target.value })}
                 maxLength={4}
               />
             </Campo>
@@ -771,7 +866,7 @@ export default function Fornecedores({ user }) {
               <input
                 className="lux-input"
                 value={form.nomePais}
-                onChange={e => setForm({ ...form, nomePais: e.target.value })}
+                onChange={(e) => setForm({ ...form, nomePais: e.target.value })}
                 maxLength={60}
               />
             </Campo>

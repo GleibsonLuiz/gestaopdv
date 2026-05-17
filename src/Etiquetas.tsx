@@ -1,9 +1,27 @@
-import { useEffect, useMemo, useState } from "react";
-import { C } from "./lib/theme.js";
-import { api } from "./lib/api.js";
-import EtiquetaPreco from "./components/EtiquetaPreco.jsx";
-import SelectBusca from "./components/SelectBusca.jsx";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { C } from "./lib/theme";
+import { api } from "./lib/api";
+import EtiquetaPreco from "./components/EtiquetaPreco";
+import SelectBusca from "./components/SelectBusca";
 import "./styles/etiquetas-print.css";
+
+interface Produto {
+  id: string;
+  nome: string;
+  codigo: string;
+  codigoBarras?: string | null;
+  referencia?: string | null;
+  precoVenda?: number | null;
+  ativo: boolean;
+  tipoItem?: "PRODUTO" | "SERVICO";
+  categoriaId?: string | null;
+}
+
+interface Categoria {
+  id: string;
+  nome: string;
+  [extra: string]: unknown;
+}
 
 // Pagina de impressao de etiquetas em lote.
 // Fluxo:
@@ -15,11 +33,11 @@ import "./styles/etiquetas-print.css";
 //
 // Servicos sao excluidos — etiqueta fisica nao faz sentido para servico.
 export default function Etiquetas() {
-  const [produtos, setProdutos] = useState([]);
-  const [categorias, setCategorias] = useState([]);
+  const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [filtroCategoria, setFiltroCategoria] = useState("");
   const [busca, setBusca] = useState("");
-  const [selecao, setSelecao] = useState({}); // { [id]: qtd }
+  const [selecao, setSelecao] = useState<Record<string, number>>({});
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -28,12 +46,13 @@ export default function Etiquetas() {
     setCarregando(true);
     setErro("");
     Promise.all([api.listarProdutos({}), api.listarCategorias()])
-      .then(([prods, cats]) => {
+      .then((resps) => {
         if (cancelado) return;
-        setProdutos((prods || []).filter(p => p.tipoItem !== "SERVICO" && p.ativo));
+        const [prods, cats] = resps as [Produto[] | null, Categoria[] | null];
+        setProdutos((prods || []).filter((p) => p.tipoItem !== "SERVICO" && p.ativo));
         setCategorias(cats || []);
       })
-      .catch((e) => !cancelado && setErro(e?.message || "Erro ao carregar dados"))
+      .catch((e: Error) => !cancelado && setErro(e?.message || "Erro ao carregar dados"))
       .finally(() => !cancelado && setCarregando(false));
     return () => { cancelado = true; };
   }, []);
@@ -51,15 +70,15 @@ export default function Etiquetas() {
 
   const totalEtiquetas = useMemo(
     () => Object.values(selecao).reduce((a, b) => a + (Number(b) || 0), 0),
-    [selecao]
+    [selecao],
   );
 
   const produtosSelecionados = useMemo(
-    () => produtos.filter(p => Number(selecao[p.id]) > 0),
-    [produtos, selecao]
+    () => produtos.filter((p) => Number(selecao[p.id]) > 0),
+    [produtos, selecao],
   );
 
-  function alternarSelecao(p) {
+  function alternarSelecao(p: Produto) {
     setSelecao((s) => {
       const next = { ...s };
       if (next[p.id]) delete next[p.id];
@@ -68,7 +87,7 @@ export default function Etiquetas() {
     });
   }
 
-  function atualizarQtd(id, valor) {
+  function atualizarQtd(id: string, valor: string | number) {
     const n = Math.max(0, Math.min(100, Number(valor) || 0));
     setSelecao((s) => {
       const next = { ...s };
@@ -95,26 +114,25 @@ export default function Etiquetas() {
     window.print();
   }
 
-  const labelStyle = { fontSize: 12, color: C.muted, fontWeight: 600, marginBottom: 6 };
-  const inputStyle = {
-    background: C.surface, color: C.text,
-    border: `1px solid ${C.border}`, borderRadius: 8,
-    padding: "8px 10px", fontSize: 14, width: "100%",
+  const labelStyle: CSSProperties = { fontSize: 12, color: C.muted, fontWeight: 600, marginBottom: 6 };
+  const inputStyle: CSSProperties = {
+    background: C.surface,
+    color: C.text,
+    border: `1px solid ${C.border}`,
+    borderRadius: 8,
+    padding: "8px 10px",
+    fontSize: 14,
+    width: "100%",
   };
 
   return (
     <>
       <div className="etiquetas-tela">
         {/* Filtros */}
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 12,
-          marginBottom: 16,
-        }}>
+        <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
             <div style={labelStyle}>Categoria</div>
-            <SelectBusca
+            <SelectBusca<Categoria>
               opcoes={categorias}
               value={filtroCategoria}
               onChange={setFiltroCategoria}
@@ -134,13 +152,7 @@ export default function Etiquetas() {
         </div>
 
         {/* Acoes */}
-        <div style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 10,
-          alignItems: "center",
-          marginBottom: 12,
-        }}>
+        <div className="flex flex-wrap gap-[10px] items-center mb-3">
           <button
             type="button"
             onClick={selecionarVisiveis}
@@ -157,13 +169,13 @@ export default function Etiquetas() {
           >
             Limpar seleção
           </button>
-          <div style={{ flex: 1 }} />
-          <div style={{ fontSize: 13, color: C.muted }}>
+          <div className="flex-1" />
+          <div className="text-[13px] text-gp-muted">
             {totalEtiquetas > 0 ? (
               <>
-                <span style={{ color: C.white, fontWeight: 700 }}>{totalEtiquetas}</span>
+                <span className="text-gp-white font-bold">{totalEtiquetas}</span>
                 {" etiquetas • "}
-                <span style={{ color: C.white, fontWeight: 700 }}>{produtosSelecionados.length}</span>
+                <span className="text-gp-white font-bold">{produtosSelecionados.length}</span>
                 {" produtos"}
               </>
             ) : "Nenhuma etiqueta selecionada"}
@@ -183,44 +195,39 @@ export default function Etiquetas() {
         </div>
 
         {erro && (
-          <div style={{
-            background: C.red + "22", color: C.red,
-            border: `1px solid ${C.red}55`, borderRadius: 8,
-            padding: "8px 12px", fontSize: 13, marginBottom: 12,
-          }}>{erro}</div>
+          <div
+            className="rounded-lg px-3 py-2 text-[13px] mb-3 text-gp-red"
+            style={{ background: C.red + "22", border: `1px solid ${C.red}55` }}
+          >
+            {erro}
+          </div>
         )}
 
         {/* Lista de produtos */}
-        <div style={{
-          background: C.card, border: `1px solid ${C.border}`,
-          borderRadius: 12, overflow: "hidden",
-        }}>
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "40px 90px 1fr 110px 130px 110px",
-            gap: 10,
-            padding: "10px 14px",
-            background: C.surface,
-            borderBottom: `1px solid ${C.border}`,
-            fontSize: 11, fontWeight: 700, color: C.muted,
-            textTransform: "uppercase", letterSpacing: 0.4,
-          }}>
+        <div className="bg-gp-card border border-gp-border rounded-xl overflow-hidden">
+          <div
+            className="grid gap-[10px] px-[14px] py-[10px] bg-gp-surface text-[11px] font-bold text-gp-muted uppercase tracking-[0.4px]"
+            style={{
+              gridTemplateColumns: "40px 90px 1fr 110px 130px 110px",
+              borderBottom: `1px solid ${C.border}`,
+            }}
+          >
             <div></div>
             <div>Código</div>
             <div>Nome</div>
             <div>Referência</div>
             <div>Cód. Barras</div>
-            <div style={{ textAlign: "right" }}>Cópias</div>
+            <div className="text-right">Cópias</div>
           </div>
 
           {carregando && (
-            <div style={{ padding: 20, textAlign: "center", color: C.muted, fontSize: 13 }}>
+            <div className="p-5 text-center text-gp-muted text-[13px]">
               Carregando produtos...
             </div>
           )}
 
           {!carregando && filtrados.length === 0 && (
-            <div style={{ padding: 24, textAlign: "center", color: C.muted, fontSize: 13 }}>
+            <div className="px-6 py-6 text-center text-gp-muted text-[13px]">
               Nenhum produto encontrado com os filtros atuais.
             </div>
           )}
@@ -231,16 +238,11 @@ export default function Etiquetas() {
             return (
               <div
                 key={p.id}
+                className="grid gap-[10px] px-[14px] py-[10px] items-center text-[13px] cursor-pointer"
                 style={{
-                  display: "grid",
                   gridTemplateColumns: "40px 90px 1fr 110px 130px 110px",
-                  gap: 10,
-                  padding: "10px 14px",
                   borderBottom: `1px solid ${C.border}`,
-                  alignItems: "center",
                   background: selecionado ? C.accent + "11" : "transparent",
-                  cursor: "pointer",
-                  fontSize: 13,
                 }}
                 onClick={() => alternarSelecao(p)}
               >
@@ -250,16 +252,16 @@ export default function Etiquetas() {
                     checked={selecionado}
                     onChange={() => alternarSelecao(p)}
                     onClick={(e) => e.stopPropagation()}
-                    style={{ width: 16, height: 16, cursor: "pointer", accentColor: C.accent }}
+                    aria-label={`Selecionar ${p.nome}`}
+                    className="w-4 h-4 cursor-pointer"
+                    style={{ accentColor: C.accent }}
                   />
                 </div>
-                <div style={{ color: C.muted, fontFamily: "monospace" }}>{p.codigo}</div>
-                <div style={{ color: C.text, fontWeight: 600 }}>{p.nome}</div>
-                <div style={{ color: C.muted, fontSize: 12 }}>{p.referencia || "—"}</div>
-                <div style={{ color: C.muted, fontSize: 12, fontFamily: "monospace" }}>
-                  {p.codigoBarras || "—"}
-                </div>
-                <div style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
+                <div className="text-gp-muted font-mono">{p.codigo}</div>
+                <div className="text-gp-text font-semibold">{p.nome}</div>
+                <div className="text-gp-muted text-xs">{p.referencia || "—"}</div>
+                <div className="text-gp-muted text-xs font-mono">{p.codigoBarras || "—"}</div>
+                <div className="text-right" onClick={(e) => e.stopPropagation()}>
                   <input
                     type="number"
                     min={0}
@@ -267,12 +269,8 @@ export default function Etiquetas() {
                     value={qtd || ""}
                     onChange={(e) => atualizarQtd(p.id, e.target.value)}
                     placeholder="0"
-                    style={{
-                      width: 70,
-                      background: C.surface, color: C.text,
-                      border: `1px solid ${C.border}`, borderRadius: 6,
-                      padding: "5px 8px", fontSize: 13, textAlign: "center",
-                    }}
+                    className="w-[70px] bg-gp-surface text-gp-text rounded-md px-2 py-[5px] text-[13px] text-center"
+                    style={{ border: `1px solid ${C.border}` }}
                   />
                 </div>
               </div>
@@ -301,17 +299,24 @@ export default function Etiquetas() {
   );
 }
 
-const botaoPrimario = {
+const botaoPrimario: CSSProperties = {
   background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
   color: C.white,
-  border: "none", borderRadius: 8,
-  padding: "10px 18px", fontSize: 13, fontWeight: 700,
+  border: "none",
+  borderRadius: 8,
+  padding: "10px 18px",
+  fontSize: 13,
+  fontWeight: 700,
   cursor: "pointer",
 };
 
-const botaoSecundario = {
-  background: C.surface, color: C.text,
-  border: `1px solid ${C.border}`, borderRadius: 8,
-  padding: "8px 14px", fontSize: 12, fontWeight: 600,
+const botaoSecundario: CSSProperties = {
+  background: C.surface,
+  color: C.text,
+  border: `1px solid ${C.border}`,
+  borderRadius: 8,
+  padding: "8px 14px",
+  fontSize: 12,
+  fontWeight: 600,
   cursor: "pointer",
 };

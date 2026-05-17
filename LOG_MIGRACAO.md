@@ -1,7 +1,7 @@
 # LOG_MIGRACAO.md — Migração GestãoPRO para TypeScript + Tailwind
 
 > **Continuidade entre sessões.** Atualizar a cada pausa.
-> Última atualização: **2026-05-17** (sessão 4 — 41 migrações totais)
+> Última atualização: **2026-05-17** (sessão 5 — 46 migrações totais)
 
 ---
 
@@ -40,7 +40,7 @@ Migração gradual do GestãoPRO de:
 
 ---
 
-## 📦 Módulos migrados (41 migrações, 35 commits)
+## 📦 Módulos migrados (46 migrações, 40 commits)
 
 | # | Commit | Módulo | Tipo | Observação |
 |---|---|---|---|---|
@@ -70,10 +70,16 @@ Migração gradual do GestãoPRO de:
 | 39 | `91bbccc` | `PesquisaPublicaNps.tsx` | tela | Tela publica de NPS (escala 0-10 + comentario) |
 | 40 | `a2b7c13` | `Etiquetas.tsx` | tela | Impressao em lote com window.print |
 | 41 | `7d3fd5f` | `Nps.tsx` | tela | Admin do CRM NPS (KPIs + lista) |
+| 42 | `4cdb968` | `Reativacao.tsx` | tela CRM | Aniversariantes + reativacao de inativos |
+| 43 | `9ca640f` | `Tarefas.tsx` | tela CRM | CRUD de follow-ups + modal + 4 filtros + 4 selects a11y |
+| 44 | `0741708` | `Fidelidade.tsx` | tela CRM | Programa de pontos: config + consulta + ajuste manual |
+| 45 | `5f44b9d` | `Segmentos.tsx` | tela CRM | RFM + tags + 2 modais (gerenciar tags por cliente + CRUD geral) |
+| 46 | `9aab5d0` | `Funil.tsx` | tela CRM | Kanban drag-and-drop de 6 etapas + modal de oportunidade |
 
 **Pasta `src/lib/` agora 100% TypeScript** (exceto `impressora.js` que é WIP do usuário).
 **Bootstrap e telas publicas** (main, Login, Signup, PesquisaPublicaNps) tambem em TS.
 **Telas administrativas pequenas/medias** (Sistema, Logs, Projeto, Configuracoes, Empresa, Aparencia, Etiquetas, Nps) em TS.
+**Telas CRM** (Reativacao, Tarefas, Fidelidade, Segmentos, Funil) em TS — sessão 5.
 **Todos os 10 components reutilizaveis em `src/components/`** em TS (exceto `PerfilClienteModal` denso).
 **Pasta `src/pages/financeiro/components/` 100% TS** (12 arquivos).
 
@@ -81,27 +87,27 @@ Migração gradual do GestãoPRO de:
 
 ## 📋 Arquivos ainda como `.jsx` (próximos candidatos)
 
-Total: **36 arquivos** (.js/.jsx) em `src/`. Lista organizada por dificuldade crescente:
-
-### 🟢 Pequenos / utilitários
-- `src/components/cupons/fmt.js` — util de formatação (⚠️ ligado à feature Impressora WIP)
+Total: **20 arquivos** (.js/.jsx) em `src/`. Lista organizada por dificuldade crescente:
 
 ### 🟡 Components grandes restantes
 - `src/components/PerfilClienteModal.jsx` (996 linhas) — DENSO, várias abas
 
-### 🟡 Telas médias restantes (CRUD + filtros)
-- `src/Projeto.jsx` (451 linhas) — tela de roadmap interno
-- `src/Aparencia.jsx` (619 linhas) — settings de tema, denso mas isolado
-- `src/Configuracoes.jsx` — config da empresa (exporta `urlLogotipo` já usado por `HeaderRelatorio.tsx`)
-- `src/Empresa.jsx` — perfil + estatísticas da empresa logada
-- `src/AdminMasterApp.jsx` — área super-admin (denso, multi-aba)
+### 🟡 Telas CRM restantes
+- `src/Automacoes.jsx` — automação de mensagens
+- `src/DashboardCrm.jsx` — dashboard agregado do CRM
+
+### 🟡 Telas operacionais (CRUDs + listas)
 - `src/Clientes.jsx`, `src/Fornecedores.jsx`, `src/Produtos.jsx` — CRUDs clássicos
 - `src/Compras.jsx`, `src/Estoque.jsx`, `src/Orcamentos.jsx`
-- `src/Comissoes.jsx`, `src/Fidelidade.jsx`, `src/Tarefas.jsx`
-- `src/Funil.jsx`, `src/Segmentos.jsx`, `src/Automacoes.jsx`, `src/Nps.jsx`, `src/Reativacao.jsx`, `src/DashboardCrm.jsx`
-- `src/Dashboard.jsx`, `src/Relatorios.jsx`, `src/Etiquetas.jsx`
-- `src/PesquisaPublicaNps.jsx`
+- `src/Comissoes.jsx`
+- `src/Dashboard.jsx`, `src/Relatorios.jsx`
 - `src/MovimentarEstoqueModal.jsx`
+
+### 🟡 Tela grande do financeiro novo
+- `src/pages/financeiro/FinanceiroPage.jsx` (tela principal, components já em TS)
+
+### 🟠 Admin
+- `src/AdminMasterApp.jsx` — área super-admin (denso, multi-aba)
 
 ### 🔴 Telas grandes e críticas (deixar por último)
 - `src/App.jsx` (~700 linhas) — root da app, sidebar, roteamento
@@ -109,11 +115,6 @@ Total: **36 arquivos** (.js/.jsx) em `src/`. Lista organizada por dificuldade cr
 - `src/Caixa.jsx` — abertura/fechamento de caixa
 - `src/Financeiro.jsx` — contas a pagar/receber
 - `src/Funcionarios.jsx` — CRUD de users + permissões
-
-### 📁 Pastas inteiras
-- `src/components/` (10 arquivos .jsx)
-- `src/components/cupons/` (8 arquivos .jsx + 1 .js) — relacionados à feature Impressora (WIP do usuário)
-- `src/pages/financeiro/` (12 arquivos .jsx) — refator recente da tela Financeiro
 
 ### ⚠️ WIP do usuário — **NÃO migrar até feature finalizar**
 - `src/lib/impressora.js`
@@ -165,20 +166,20 @@ Para mudanças em UI, idealmente também `npm run dev` + teste visual (eu não c
 
 ---
 
-## 📂 Onde paramos (estado em 2026-05-17, sessão 4)
+## 📂 Onde paramos (estado em 2026-05-17, sessão 5)
 
-- **Último commit:** `7d3fd5f refactor(nps): migra Nps.jsx para TSX + Tailwind`
+- **Último commit:** `9aab5d0 refactor(funil): migra Funil.jsx para TSX + Tailwind`
 - **Branch:** `main` (sincronizada com `origin/main`)
 - **Working tree não-vazio:** O usuário tem feature **Impressora** em andamento (arquivos untracked + hunks em App.jsx/Caixa.jsx/Financeiro.jsx/PDV.jsx). **Não tocar enquanto não finalizar.**
-- **Progresso:** 43 arquivos `.ts`/`.tsx` vs 36 arquivos `.jsx`/`.js` restantes. **~54% migrado** (passou da metade!).
+- **Progresso:** 48 arquivos `.ts`/`.tsx` vs 20 arquivos `.jsx`/`.js` restantes. **~70% migrado**.
+- **Sessão 5 entregou (5 migrações):** Reativacao → Tarefas → Fidelidade → Segmentos → Funil. Telas CRM restantes: apenas Automacoes e DashboardCrm.
 - **Próximo módulo sugerido:**
-  1. `src/Reativacao.jsx` (375), `src/Tarefas.jsx` (626), `src/Fidelidade.jsx` (543) — telas do CRM
-  2. `src/Segmentos.jsx`, `src/Funil.jsx`, `src/Automacoes.jsx`, `src/DashboardCrm.jsx` — outras telas CRM
-  3. CRUDs: `Clientes`, `Fornecedores`, `Produtos`, `Estoque`, `Compras`, `Orcamentos`, `Comissoes`, `Relatorios`, `Dashboard`, `MovimentarEstoqueModal`
-  4. `src/pages/financeiro/FinanceiroPage.jsx` (tela principal do financeiro novo)
-  5. `src/components/PerfilClienteModal.jsx` (996 linhas — modal com várias abas)
-  6. `src/AdminMasterApp.jsx` — área super-admin (multi-aba)
-  7. ⚠️ Por último (críticos): `App.jsx`, `PDV.jsx`, `Caixa.jsx`, `Financeiro.jsx`, `Funcionarios.jsx`
+  1. `src/Automacoes.jsx`, `src/DashboardCrm.jsx` — fechar o ciclo CRM
+  2. CRUDs: `Clientes`, `Fornecedores`, `Produtos`, `Estoque`, `Compras`, `Orcamentos`, `Comissoes`, `Relatorios`, `Dashboard`, `MovimentarEstoqueModal`
+  3. `src/pages/financeiro/FinanceiroPage.jsx` (tela principal do financeiro novo)
+  4. `src/components/PerfilClienteModal.jsx` (996 linhas — modal com várias abas)
+  5. `src/AdminMasterApp.jsx` — área super-admin (multi-aba)
+  6. ⚠️ Por último (críticos): `App.jsx`, `PDV.jsx`, `Caixa.jsx`, `Financeiro.jsx`, `Funcionarios.jsx`
 
 ---
 

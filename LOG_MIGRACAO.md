@@ -1,7 +1,7 @@
 # LOG_MIGRACAO.md — Migração GestãoPRO para TypeScript + Tailwind
 
 > **Continuidade entre sessões.** Atualizar a cada pausa.
-> Última atualização: **2026-05-17** (sessão 5 — 46 migrações totais)
+> Última atualização: **2026-05-17** (sessão 6 — 50 migrações totais 🎉)
 
 ---
 
@@ -40,7 +40,7 @@ Migração gradual do GestãoPRO de:
 
 ---
 
-## 📦 Módulos migrados (46 migrações, 40 commits)
+## 📦 Módulos migrados (50 migrações, 44 commits)
 
 | # | Commit | Módulo | Tipo | Observação |
 |---|---|---|---|---|
@@ -75,11 +75,16 @@ Migração gradual do GestãoPRO de:
 | 44 | `0741708` | `Fidelidade.tsx` | tela CRM | Programa de pontos: config + consulta + ajuste manual |
 | 45 | `5f44b9d` | `Segmentos.tsx` | tela CRM | RFM + tags + 2 modais (gerenciar tags por cliente + CRUD geral) |
 | 46 | `9aab5d0` | `Funil.tsx` | tela CRM | Kanban drag-and-drop de 6 etapas + modal de oportunidade |
+| 47 | `1227f46` | `Automacoes.tsx` | tela CRM | Regras de automacao + modal + 3 tipos de gatilho |
+| 48 | `77c038d` | `DashboardCrm.tsx` | tela CRM | Dashboard consolidado: funil + segmentos + top LTV + risco + performance |
+| 49 | `da0f4ee` | `MovimentarEstoqueModal.tsx` | modal | Movimentacao de estoque (ENTRADA/SAIDA/AJUSTE) + previa |
+| 50 | `e226e0a` | `Comissoes.tsx` | tela | Config de comissoes + simulador em tempo real (2 abas) |
 
 **Pasta `src/lib/` agora 100% TypeScript** (exceto `impressora.js` que é WIP do usuário).
 **Bootstrap e telas publicas** (main, Login, Signup, PesquisaPublicaNps) tambem em TS.
 **Telas administrativas pequenas/medias** (Sistema, Logs, Projeto, Configuracoes, Empresa, Aparencia, Etiquetas, Nps) em TS.
-**Telas CRM** (Reativacao, Tarefas, Fidelidade, Segmentos, Funil) em TS — sessão 5.
+**Ciclo CRM 100% TS** (Reativacao, Tarefas, Fidelidade, Segmentos, Funil, Automacoes, DashboardCrm) — sessões 5+6.
+**Comissoes** + **MovimentarEstoqueModal** em TS (sessão 6).
 **Todos os 10 components reutilizaveis em `src/components/`** em TS (exceto `PerfilClienteModal` denso).
 **Pasta `src/pages/financeiro/components/` 100% TS** (12 arquivos).
 
@@ -87,21 +92,15 @@ Migração gradual do GestãoPRO de:
 
 ## 📋 Arquivos ainda como `.jsx` (próximos candidatos)
 
-Total: **20 arquivos** (.js/.jsx) em `src/`. Lista organizada por dificuldade crescente:
+Total: **16 arquivos** (.js/.jsx) em `src/`. Lista organizada por dificuldade crescente:
 
 ### 🟡 Components grandes restantes
 - `src/components/PerfilClienteModal.jsx` (996 linhas) — DENSO, várias abas
 
-### 🟡 Telas CRM restantes
-- `src/Automacoes.jsx` — automação de mensagens
-- `src/DashboardCrm.jsx` — dashboard agregado do CRM
-
 ### 🟡 Telas operacionais (CRUDs + listas)
 - `src/Clientes.jsx`, `src/Fornecedores.jsx`, `src/Produtos.jsx` — CRUDs clássicos
 - `src/Compras.jsx`, `src/Estoque.jsx`, `src/Orcamentos.jsx`
-- `src/Comissoes.jsx`
 - `src/Dashboard.jsx`, `src/Relatorios.jsx`
-- `src/MovimentarEstoqueModal.jsx`
 
 ### 🟡 Tela grande do financeiro novo
 - `src/pages/financeiro/FinanceiroPage.jsx` (tela principal, components já em TS)
@@ -166,20 +165,19 @@ Para mudanças em UI, idealmente também `npm run dev` + teste visual (eu não c
 
 ---
 
-## 📂 Onde paramos (estado em 2026-05-17, sessão 5)
+## 📂 Onde paramos (estado em 2026-05-17, sessão 6)
 
-- **Último commit:** `9aab5d0 refactor(funil): migra Funil.jsx para TSX + Tailwind`
+- **Último commit:** `e226e0a refactor(comissoes): migra Comissoes.jsx para TSX + Tailwind`
 - **Branch:** `main` (sincronizada com `origin/main`)
 - **Working tree não-vazio:** O usuário tem feature **Impressora** em andamento (arquivos untracked + hunks em App.jsx/Caixa.jsx/Financeiro.jsx/PDV.jsx). **Não tocar enquanto não finalizar.**
-- **Progresso:** 48 arquivos `.ts`/`.tsx` vs 20 arquivos `.jsx`/`.js` restantes. **~70% migrado**.
-- **Sessão 5 entregou (5 migrações):** Reativacao → Tarefas → Fidelidade → Segmentos → Funil. Telas CRM restantes: apenas Automacoes e DashboardCrm.
+- **Progresso:** 52 arquivos `.ts`/`.tsx` vs 16 arquivos `.jsx`/`.js` restantes. **~76% migrado**.
+- **Sessão 6 entregou (4 migrações):** Automacoes → DashboardCrm → MovimentarEstoqueModal → Comissoes. **Ciclo CRM 100% migrado** (7 telas).
 - **Próximo módulo sugerido:**
-  1. `src/Automacoes.jsx`, `src/DashboardCrm.jsx` — fechar o ciclo CRM
-  2. CRUDs: `Clientes`, `Fornecedores`, `Produtos`, `Estoque`, `Compras`, `Orcamentos`, `Comissoes`, `Relatorios`, `Dashboard`, `MovimentarEstoqueModal`
-  3. `src/pages/financeiro/FinanceiroPage.jsx` (tela principal do financeiro novo)
-  4. `src/components/PerfilClienteModal.jsx` (996 linhas — modal com várias abas)
-  5. `src/AdminMasterApp.jsx` — área super-admin (multi-aba)
-  6. ⚠️ Por último (críticos): `App.jsx`, `PDV.jsx`, `Caixa.jsx`, `Financeiro.jsx`, `Funcionarios.jsx`
+  1. CRUDs operacionais: `Clientes`, `Fornecedores`, `Produtos`, `Compras`, `Estoque`, `Orcamentos`, `Dashboard`, `Relatorios`
+  2. `src/pages/financeiro/FinanceiroPage.jsx` (tela principal do financeiro novo)
+  3. `src/components/PerfilClienteModal.jsx` (996 linhas — modal com várias abas)
+  4. `src/AdminMasterApp.jsx` — área super-admin (multi-aba)
+  5. ⚠️ Por último (críticos): `App.jsx`, `PDV.jsx`, `Caixa.jsx`, `Financeiro.jsx`, `Funcionarios.jsx`
 
 ---
 

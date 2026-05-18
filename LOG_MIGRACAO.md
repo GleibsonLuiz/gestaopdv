@@ -1,7 +1,7 @@
 # LOG_MIGRACAO.md — Migração GestãoPRO para TypeScript + Tailwind
 
 > **Continuidade entre sessões.** Atualizar a cada pausa.
-> Última atualização: **2026-05-17** (sessão 8 — 58 migrações totais)
+> Última atualização: **2026-05-18** (sessão 9 — 59 migrações totais)
 
 ---
 
@@ -40,7 +40,7 @@ Migração gradual do GestãoPRO de:
 
 ---
 
-## 📦 Módulos migrados (58 migrações, 52 commits)
+## 📦 Módulos migrados (59 migrações, 53 commits)
 
 | # | Commit | Módulo | Tipo | Observação |
 |---|---|---|---|---|
@@ -87,6 +87,7 @@ Migração gradual do GestãoPRO de:
 | 56 | `1cae960` | `Orcamentos.tsx` | CRUD | Orcamentos / OS com maquina de estados + conversao em venda + impressao |
 | 57 | `72eceb9` | `Dashboard.tsx` | tela | Lazy migration (2057 linhas, 40 sub-componentes) |
 | 58 | `1c561c9` | `Relatorios.tsx` | tela | Lazy migration com @ts-nocheck (3374 linhas, jsPDF) |
+| 59 | `4018fed` | `FinanceiroPage.tsx` | tela | Tela principal do financeiro novo (777 linhas, 4 abas) reusando tipos exportados (KpiData, Bill, TabDef, SessionUser) |
 
 **Pasta `src/lib/` agora 100% TypeScript** (exceto `impressora.js` que é WIP do usuário).
 **Bootstrap e telas publicas** (main, Login, Signup, PesquisaPublicaNps) tambem em TS.
@@ -95,6 +96,7 @@ Migração gradual do GestãoPRO de:
 **Comissoes** + **MovimentarEstoqueModal** em TS (sessão 6).
 **4 CRUDs principais em TS**: Fornecedores, Clientes, Estoque, Produtos (sessão 7).
 **Sessão 8 — Compras, Orcamentos, Dashboard, Relatorios** em TS (lazy migration para os 2 ultimos por tamanho).
+**Sessão 9 — FinanceiroPage** em TS (1 migracao). Demais candidatos ja precisam tocar em arquivos com WIP do usuario (App/Caixa/Financeiro/PDV) ou sao denso/critico.
 **Todos os 10 components reutilizaveis em `src/components/`** em TS (exceto `PerfilClienteModal` denso).
 **Pasta `src/pages/financeiro/components/` 100% TS** (12 arquivos).
 
@@ -102,13 +104,10 @@ Migração gradual do GestãoPRO de:
 
 ## 📋 Arquivos ainda como `.jsx` (próximos candidatos)
 
-Total: **8 arquivos** (.js/.jsx) em `src/`. Lista organizada por dificuldade crescente:
+Total: **7 arquivos** (.js/.jsx) em `src/`. Lista organizada por dificuldade crescente:
 
 ### 🟡 Components grandes restantes
 - `src/components/PerfilClienteModal.jsx` (996 linhas) — DENSO, várias abas
-
-### 🟡 Tela grande do financeiro novo
-- `src/pages/financeiro/FinanceiroPage.jsx` (tela principal, components já em TS)
 
 ### 🟠 Admin
 - `src/AdminMasterApp.jsx` — área super-admin (denso, multi-aba)
@@ -170,18 +169,17 @@ Para mudanças em UI, idealmente também `npm run dev` + teste visual (eu não c
 
 ---
 
-## 📂 Onde paramos (estado em 2026-05-17, sessão 8)
+## 📂 Onde paramos (estado em 2026-05-18, sessão 9)
 
-- **Último commit:** `1c561c9 refactor(relatorios): migra Relatorios.jsx para TSX (com @ts-nocheck)`
+- **Último commit:** `4018fed refactor(financeiro): migra FinanceiroPage.jsx para TSX`
 - **Branch:** `main` (sincronizada com `origin/main`)
-- **Working tree não-vazio:** O usuário tem feature **Impressora** em andamento (arquivos untracked + hunks em App.jsx/Caixa.jsx/Financeiro.jsx/PDV.jsx). **Não tocar enquanto não finalizar.**
-- **Progresso:** 60 arquivos `.ts`/`.tsx` vs 8 arquivos `.jsx`/`.js` restantes. **~88% migrado**.
-- **Sessão 8 entregou (4 migrações):** Compras → Orcamentos → Dashboard (lazy) → Relatorios (lazy, @ts-nocheck).
+- **Working tree não-vazio:** O usuário tem feature **Impressora** em andamento + **Inventário contagem cega** (novos arquivos no backend: `inventarioController.ts`, `routes/inventarios.ts`, migração). **Não tocar enquanto não finalizar.**
+- **Progresso:** 61 arquivos `.ts`/`.tsx` vs 7 arquivos `.jsx`/`.js` restantes. **~90% migrado**.
+- **Sessão 9 entregou (1 migração):** FinanceiroPage (tela principal do financeiro novo, 777 linhas).
 - **Próximo módulo sugerido:**
-  1. `src/pages/financeiro/FinanceiroPage.jsx` (tela principal do financeiro novo)
-  2. `src/components/PerfilClienteModal.jsx` (996 linhas — modal com várias abas)
-  3. `src/AdminMasterApp.jsx` — área super-admin (multi-aba)
-  4. ⚠️ Por último (críticos): `App.jsx`, `PDV.jsx`, `Caixa.jsx`, `Financeiro.jsx`, `Funcionarios.jsx`
+  1. `src/components/PerfilClienteModal.jsx` (996 linhas — modal com várias abas, denso)
+  2. `src/AdminMasterApp.jsx` — área super-admin (multi-aba)
+  3. ⚠️ Por último (críticos com WIP do usuário misturado): `App.jsx`, `PDV.jsx`, `Caixa.jsx`, `Financeiro.jsx`, `Funcionarios.jsx`
 
 ### 💡 Padrão "Lazy Migration" (estabelecido na sessão 8)
 

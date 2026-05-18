@@ -12,7 +12,7 @@ import Funcionarios from "./Funcionarios.jsx";
 import Comissoes from "./Comissoes.jsx";
 import FinanceiroPage from "./pages/financeiro/FinanceiroPage.jsx";
 import Caixa from "./Caixa";
-import PDV from "./PDV.jsx";
+import PDV from "./PDV";
 import Dashboard from "./Dashboard.jsx";
 import Relatorios from "./Relatorios.jsx";
 import Projeto from "./Projeto.jsx";

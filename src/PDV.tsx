@@ -1,14 +1,19 @@
+// @ts-nocheck — lazy migration: nucleo do PDV (2800 linhas, 22 sub-componentes).
+// Tela mais critica do sistema (vendas em tempo real, atalhos, cestinha,
+// recibo com auto-print, historico). Tipar tudo de uma vez seria arriscado
+// — manter @ts-nocheck e refinar em etapa propria, ja com o sistema
+// inteiro em TS pra apoiar o type narrowing.
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { C } from "./lib/theme.js";
-import { api, BASE_URL } from "./lib/api.js";
-import { useConfiguracaoEmpresa, formatarEndereco } from "./HeaderRelatorio.jsx";
-import { obterConfigImpressora, devePrintar } from "./lib/impressora.js";
-import CupomEnvelope from "./components/cupons/CupomEnvelope.jsx";
-import CupomVenda from "./components/cupons/CupomVenda.jsx";
-import { GerenciarFormasModal } from "./Financeiro.jsx";
-import { useModalKeys } from "./lib/modalKeys.js";
-import ActionsMenu from "./components/ActionsMenu.jsx";
-import SelectBusca from "./components/SelectBusca.jsx";
+import { C } from "./lib/theme";
+import { api, BASE_URL } from "./lib/api";
+import { useConfiguracaoEmpresa, formatarEndereco } from "./HeaderRelatorio";
+import { obterConfigImpressora, devePrintar } from "./lib/impressora";
+import CupomEnvelope from "./components/cupons/CupomEnvelope";
+import CupomVenda from "./components/cupons/CupomVenda";
+import { GerenciarFormasModal } from "./Financeiro";
+import { useModalKeys } from "./lib/modalKeys";
+import ActionsMenu from "./components/ActionsMenu";
+import SelectBusca from "./components/SelectBusca";
 
 function urlImagem(imagem) {
   if (!imagem) return null;

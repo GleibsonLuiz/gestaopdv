@@ -1,7 +1,7 @@
 # LOG_MIGRACAO.md — Migração GestãoPRO para TypeScript + Tailwind
 
 > **Continuidade entre sessões.** Atualizar a cada pausa.
-> Última atualização: **2026-05-17** (sessão 7 — 54 migrações totais)
+> Última atualização: **2026-05-17** (sessão 8 — 58 migrações totais)
 
 ---
 
@@ -40,7 +40,7 @@ Migração gradual do GestãoPRO de:
 
 ---
 
-## 📦 Módulos migrados (54 migrações, 48 commits)
+## 📦 Módulos migrados (58 migrações, 52 commits)
 
 | # | Commit | Módulo | Tipo | Observação |
 |---|---|---|---|---|
@@ -83,6 +83,10 @@ Migração gradual do GestãoPRO de:
 | 52 | `e7a81ae` | `Clientes.tsx` | CRUD | Clientes + 3 filtros + status funil + tags + PerfilClienteModal |
 | 53 | `154b1fd` | `Estoque.tsx` | CRUD | Auditoria de movimentacoes + nova movimentacao |
 | 54 | `2643eed` | `Produtos.tsx` | CRUD | Maior CRUD: 3 abas + fiscal NF-e completo + dropzone imagem + markup |
+| 55 | `1d7e6bc` | `Compras.tsx` | CRUD | Compras de fornecedores + bloco financeiro (parcelas) + estorno |
+| 56 | `1cae960` | `Orcamentos.tsx` | CRUD | Orcamentos / OS com maquina de estados + conversao em venda + impressao |
+| 57 | `72eceb9` | `Dashboard.tsx` | tela | Lazy migration (2057 linhas, 40 sub-componentes) |
+| 58 | `1c561c9` | `Relatorios.tsx` | tela | Lazy migration com @ts-nocheck (3374 linhas, jsPDF) |
 
 **Pasta `src/lib/` agora 100% TypeScript** (exceto `impressora.js` que é WIP do usuário).
 **Bootstrap e telas publicas** (main, Login, Signup, PesquisaPublicaNps) tambem em TS.
@@ -90,6 +94,7 @@ Migração gradual do GestãoPRO de:
 **Ciclo CRM 100% TS** (Reativacao, Tarefas, Fidelidade, Segmentos, Funil, Automacoes, DashboardCrm) — sessões 5+6.
 **Comissoes** + **MovimentarEstoqueModal** em TS (sessão 6).
 **4 CRUDs principais em TS**: Fornecedores, Clientes, Estoque, Produtos (sessão 7).
+**Sessão 8 — Compras, Orcamentos, Dashboard, Relatorios** em TS (lazy migration para os 2 ultimos por tamanho).
 **Todos os 10 components reutilizaveis em `src/components/`** em TS (exceto `PerfilClienteModal` denso).
 **Pasta `src/pages/financeiro/components/` 100% TS** (12 arquivos).
 
@@ -97,14 +102,10 @@ Migração gradual do GestãoPRO de:
 
 ## 📋 Arquivos ainda como `.jsx` (próximos candidatos)
 
-Total: **12 arquivos** (.js/.jsx) em `src/`. Lista organizada por dificuldade crescente:
+Total: **8 arquivos** (.js/.jsx) em `src/`. Lista organizada por dificuldade crescente:
 
 ### 🟡 Components grandes restantes
 - `src/components/PerfilClienteModal.jsx` (996 linhas) — DENSO, várias abas
-
-### 🟡 CRUDs operacionais restantes
-- `src/Compras.jsx`, `src/Orcamentos.jsx` — fluxo de compra/orcamento
-- `src/Dashboard.jsx`, `src/Relatorios.jsx` — visualizacoes agregadas
 
 ### 🟡 Tela grande do financeiro novo
 - `src/pages/financeiro/FinanceiroPage.jsx` (tela principal, components já em TS)
@@ -169,19 +170,29 @@ Para mudanças em UI, idealmente também `npm run dev` + teste visual (eu não c
 
 ---
 
-## 📂 Onde paramos (estado em 2026-05-17, sessão 7)
+## 📂 Onde paramos (estado em 2026-05-17, sessão 8)
 
-- **Último commit:** `2643eed refactor(produtos): migra Produtos.jsx para TSX + Tailwind`
+- **Último commit:** `1c561c9 refactor(relatorios): migra Relatorios.jsx para TSX (com @ts-nocheck)`
 - **Branch:** `main` (sincronizada com `origin/main`)
 - **Working tree não-vazio:** O usuário tem feature **Impressora** em andamento (arquivos untracked + hunks em App.jsx/Caixa.jsx/Financeiro.jsx/PDV.jsx). **Não tocar enquanto não finalizar.**
-- **Progresso:** 56 arquivos `.ts`/`.tsx` vs 12 arquivos `.jsx`/`.js` restantes. **~82% migrado**.
-- **Sessão 7 entregou (4 migrações):** Fornecedores → Clientes → Estoque → Produtos. **4 CRUDs principais 100% migrados**.
+- **Progresso:** 60 arquivos `.ts`/`.tsx` vs 8 arquivos `.jsx`/`.js` restantes. **~88% migrado**.
+- **Sessão 8 entregou (4 migrações):** Compras → Orcamentos → Dashboard (lazy) → Relatorios (lazy, @ts-nocheck).
 - **Próximo módulo sugerido:**
-  1. CRUDs restantes: `Compras`, `Orcamentos`, `Dashboard`, `Relatorios`
-  2. `src/pages/financeiro/FinanceiroPage.jsx` (tela principal do financeiro novo)
-  3. `src/components/PerfilClienteModal.jsx` (996 linhas — modal com várias abas)
-  4. `src/AdminMasterApp.jsx` — área super-admin (multi-aba)
-  5. ⚠️ Por último (críticos): `App.jsx`, `PDV.jsx`, `Caixa.jsx`, `Financeiro.jsx`, `Funcionarios.jsx`
+  1. `src/pages/financeiro/FinanceiroPage.jsx` (tela principal do financeiro novo)
+  2. `src/components/PerfilClienteModal.jsx` (996 linhas — modal com várias abas)
+  3. `src/AdminMasterApp.jsx` — área super-admin (multi-aba)
+  4. ⚠️ Por último (críticos): `App.jsx`, `PDV.jsx`, `Caixa.jsx`, `Financeiro.jsx`, `Funcionarios.jsx`
+
+### 💡 Padrão "Lazy Migration" (estabelecido na sessão 8)
+
+Para arquivos > 1500 linhas onde tipagem estrita explodiria a sessão:
+1. `git mv .jsx → .tsx`
+2. Script: `function NAME({...}) {` → `function NAME({...}: any) {`
+3. Limpar `from "./lib/X.js"` → `from "./lib/X"`
+4. SVG: `strokeLinecap: "round"` → `"round" as const`
+5. Se erros ainda forem >100, adicionar `// @ts-nocheck` no topo com comentario justificando
+
+Exemplos: Dashboard (lazy puro), Relatorios (@ts-nocheck por jsPDF + 3374 linhas).
 
 ---
 

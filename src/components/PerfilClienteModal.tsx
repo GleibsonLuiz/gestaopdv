@@ -1,17 +1,18 @@
 import { useEffect, useState, useCallback } from "react";
-import { C } from "../lib/theme.js";
-import { api } from "../lib/api.js";
-import BotoesContatoCliente from "./BotoesContatoCliente.jsx";
+import type { FormEvent } from "react";
+import { C } from "../lib/theme";
+import { api } from "../lib/api";
+import BotoesContatoCliente from "./BotoesContatoCliente";
 
-const fmtBRL = (v) =>
+const fmtBRL = (v: number | string | null | undefined) =>
   Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-const fmtData = (iso) => {
+const fmtData = (iso: string | null | undefined) => {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("pt-BR");
 };
 
-const fmtDataHora = (iso) => {
+const fmtDataHora = (iso: string | null | undefined) => {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 };
@@ -66,7 +67,7 @@ const ABAS = [
   { id: "orcamentos",  label: "Orçamentos" },
 ];
 
-function Pill({ status, mapa }) {
+function Pill({ status, mapa }: { status: string; mapa: Record<string, { label: string; cor: string }> }) {
   const info = mapa[status] || { label: status, cor: C.muted };
   return (
     <span style={{
@@ -85,7 +86,7 @@ function Pill({ status, mapa }) {
   );
 }
 
-function KpiCard({ label, valor, sub, cor }) {
+function KpiCard({ label, valor, sub, cor }: { label: string; valor: string | number; sub?: string | null; cor?: string }) {
   return (
     <div style={{
       background: C.card,
@@ -109,7 +110,7 @@ function KpiCard({ label, valor, sub, cor }) {
   );
 }
 
-function TabelaVazia({ msg }) {
+function TabelaVazia({ msg }: { msg: string }) {
   return (
     <div style={{ textAlign: "center", padding: "40px 0", color: C.muted, fontSize: 13 }}>
       {msg}
@@ -119,8 +120,8 @@ function TabelaVazia({ msg }) {
 
 // ============ ABAS ============
 
-function AbaInteracoes({ clienteId, user, onContadorChange }) {
-  const [interacoes, setInteracoes] = useState([]);
+function AbaInteracoes({ clienteId, user, onContadorChange }: { clienteId: string; user: any; onContadorChange?: (n: number) => void }) {
+  const [interacoes, setInteracoes] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [form, setForm] = useState({ tipo: "ANOTACAO", descricao: "", data: "" });
@@ -129,7 +130,7 @@ function AbaInteracoes({ clienteId, user, onContadorChange }) {
   const carregar = useCallback(async () => {
     setCarregando(true);
     try {
-      const d = await api.listarInteracoes(clienteId);
+      const d = (await api.listarInteracoes(clienteId)) as any[];
       setInteracoes(d);
       onContadorChange?.(d.length);
     } catch {}
@@ -138,7 +139,7 @@ function AbaInteracoes({ clienteId, user, onContadorChange }) {
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  async function registrar(e) {
+  async function registrar(e: FormEvent) {
     e.preventDefault();
     if (!form.descricao.trim()) { setErro("Descrição é obrigatória"); return; }
     setSalvando(true);
@@ -152,19 +153,19 @@ function AbaInteracoes({ clienteId, user, onContadorChange }) {
       setForm({ tipo: "ANOTACAO", descricao: "", data: "" });
       await carregar();
     } catch (err) {
-      setErro(err.message);
+      setErro((err as Error).message);
     } finally {
       setSalvando(false);
     }
   }
 
-  async function deletar(id) {
+  async function deletar(id: string) {
     if (!confirm("Excluir esta interação?")) return;
     try {
       await api.excluirInteracao(clienteId, id);
-      setInteracoes(prev => prev.filter(i => i.id !== id));
+      setInteracoes(prev => prev.filter((i: any) => i.id !== id));
     } catch (err) {
-      alert(err.message);
+      alert((err as Error).message);
     }
   }
 
@@ -253,8 +254,8 @@ function AbaInteracoes({ clienteId, user, onContadorChange }) {
             position: "absolute", left: 19, top: 0, bottom: 0,
             width: 2, background: `${C.border}`, zIndex: 0,
           }} />
-          {interacoes.map((int) => {
-            const info = TIPO_INTERACAO[int.tipo] || TIPO_INTERACAO.ANOTACAO;
+          {interacoes.map((int: any) => {
+            const info = (TIPO_INTERACAO as any)[int.tipo] || TIPO_INTERACAO.ANOTACAO;
             return (
               <div key={int.id} style={{
                 display: "flex", gap: 14, paddingBottom: 20, position: "relative", zIndex: 1,
@@ -323,10 +324,10 @@ const CONTATO_VAZIO = {
   principal: false, observacoes: "",
 };
 
-function AbaContatos({ clienteId, user, onContadorChange }) {
-  const [contatos, setContatos] = useState([]);
+function AbaContatos({ clienteId, user, onContadorChange }: { clienteId: string; user: any; onContadorChange?: (n: number) => void }) {
+  const [contatos, setContatos] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(true);
-  const [editando, setEditando] = useState(null);
+  const [editando, setEditando] = useState<any>(null);
   const [erro, setErro] = useState("");
 
   const podeEditar = user?.role === "ADMIN" || user?.role === "GERENTE";
@@ -335,11 +336,11 @@ function AbaContatos({ clienteId, user, onContadorChange }) {
   const carregar = useCallback(async () => {
     setCarregando(true);
     try {
-      const d = await api.listarContatos(clienteId);
+      const d = (await api.listarContatos(clienteId)) as any[];
       setContatos(d);
       onContadorChange?.(d.length);
     } catch (err) {
-      setErro(err.message);
+      setErro((err as Error).message);
     } finally {
       setCarregando(false);
     }
@@ -347,7 +348,7 @@ function AbaContatos({ clienteId, user, onContadorChange }) {
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  async function salvar(e) {
+  async function salvar(e: FormEvent) {
     e.preventDefault();
     if (!editando.nome.trim()) { setErro("Nome é obrigatório"); return; }
     setErro("");
@@ -360,17 +361,17 @@ function AbaContatos({ clienteId, user, onContadorChange }) {
       setEditando(null);
       await carregar();
     } catch (err) {
-      setErro(err.message);
+      setErro((err as Error).message);
     }
   }
 
-  async function excluir(c) {
+  async function excluir(c: any) {
     if (!confirm(`Excluir contato "${c.nome}"?`)) return;
     try {
       await api.excluirContato(clienteId, c.id);
       await carregar();
     } catch (err) {
-      alert(err.message);
+      alert((err as Error).message);
     }
   }
 
@@ -479,7 +480,7 @@ function AbaContatos({ clienteId, user, onContadorChange }) {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {contatos.map((c) => (
+          {contatos.map((c: any) => (
             <div key={c.id} style={{
               background: C.card,
               border: `1px solid ${c.principal ? C.accent + "55" : C.border}`,
@@ -545,7 +546,7 @@ function AbaContatos({ clienteId, user, onContadorChange }) {
   );
 }
 
-function inputContato() {
+function inputContato(): React.CSSProperties {
   return {
     background: C.bg, color: C.text, border: `1px solid ${C.border}`,
     borderRadius: 6, padding: "8px 10px", fontSize: 12, outline: "none",
@@ -553,7 +554,7 @@ function inputContato() {
   };
 }
 
-function btnContato(cor) {
+function btnContato(cor: string): React.CSSProperties {
   return {
     background: cor + "22", color: cor, padding: "3px 8px",
     borderRadius: 4, fontSize: 12, textDecoration: "none",
@@ -561,9 +562,9 @@ function btnContato(cor) {
   };
 }
 
-function AbaResumo({ kpis, cliente }) {
+function AbaResumo({ kpis, cliente }: { kpis: any; cliente: any }) {
   const diasDesdeUltimaCompra = kpis.ultimaCompra
-    ? Math.floor((Date.now() - new Date(kpis.ultimaCompra)) / 86400000)
+    ? Math.floor((Date.now() - new Date(kpis.ultimaCompra).getTime()) / 86400000)
     : null;
 
   return (
@@ -596,7 +597,7 @@ function AbaResumo({ kpis, cliente }) {
           Dados cadastrais
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "10px 24px" }}>
-          {[
+          {([
             ["CPF/CNPJ", cliente.cpfCnpj],
             ["E-mail", cliente.email],
             ["Telefone", cliente.telefone],
@@ -604,7 +605,7 @@ function AbaResumo({ kpis, cliente }) {
             ["CEP", cliente.cep],
             ["Endereço", cliente.endereco],
             ["Observações", cliente.observacoes],
-          ].map(([label, val]) => val ? (
+          ] as Array<[string, string | null | undefined]>).map(([label, val]) => val ? (
             <div key={label}>
               <span style={{ display: "block", fontSize: 10, color: C.muted, fontWeight: 600, textTransform: "uppercase" }}>{label}</span>
               <span style={{ fontSize: 13, color: C.text }}>{val}</span>
@@ -622,8 +623,7 @@ function AbaResumo({ kpis, cliente }) {
   );
 }
 
-function AbaCompras({ vendas }) {
-  const concluidas = vendas.filter(v => v.status !== "CANCELADA");
+function AbaCompras({ vendas }: { vendas: any[] }) {
   if (vendas.length === 0) return <TabelaVazia msg="Nenhuma venda registrada para este cliente." />;
 
   return (
@@ -639,18 +639,18 @@ function AbaCompras({ vendas }) {
           </tr>
         </thead>
         <tbody>
-          {vendas.map((v, i) => (
+          {vendas.map((v: any, i: number) => (
             <tr key={v.id} style={{ borderBottom: `1px solid ${C.border}22`, background: i % 2 === 0 ? "transparent" : `${C.surface}55` }}>
               <td style={{ padding: "8px 10px", color: C.muted, fontWeight: 600 }}>#{v.numero}</td>
               <td style={{ padding: "8px 10px", color: C.text, whiteSpace: "nowrap" }}>{fmtDataHora(v.createdAt)}</td>
               <td style={{ padding: "8px 10px", color: C.muted, maxWidth: 200 }}>
-                <span title={v.itens.map(it => `${it.quantidade}× ${it.produto.nome}`).join(", ")}>
+                <span title={v.itens.map((it: any) => `${it.quantidade}× ${it.produto.nome}`).join(", ")}>
                   {v.itens.length === 0 ? "—" : v.itens.length === 1
                     ? `${v.itens[0].quantidade}× ${v.itens[0].produto.nome}`
                     : `${v.itens.length} itens`}
                 </span>
               </td>
-              <td style={{ padding: "8px 10px", color: C.text }}>{FORMA_LABEL[v.formaPagamento] || v.formaPagamento}</td>
+              <td style={{ padding: "8px 10px", color: C.text }}>{(FORMA_LABEL as any)[v.formaPagamento] || v.formaPagamento}</td>
               <td style={{ padding: "8px 10px", color: C.green, fontWeight: 600, whiteSpace: "nowrap" }}>{fmtBRL(v.total)}</td>
               <td style={{ padding: "8px 10px" }}><Pill status={v.status} mapa={STATUS_VENDA} /></td>
             </tr>
@@ -666,7 +666,7 @@ function AbaCompras({ vendas }) {
   );
 }
 
-function AbaFinanceiro({ contas }) {
+function AbaFinanceiro({ contas }: { contas: any[] }) {
   if (contas.length === 0) return <TabelaVazia msg="Nenhuma conta a receber registrada." />;
 
   return (
@@ -682,7 +682,7 @@ function AbaFinanceiro({ contas }) {
           </tr>
         </thead>
         <tbody>
-          {contas.map((c, i) => (
+          {contas.map((c: any, i: number) => (
             <tr key={c.id} style={{ borderBottom: `1px solid ${C.border}22`, background: i % 2 === 0 ? "transparent" : `${C.surface}55` }}>
               <td style={{ padding: "8px 10px", color: C.text, maxWidth: 220 }}>{c.descricao}</td>
               <td style={{ padding: "8px 10px", color: C.muted, whiteSpace: "nowrap" }}>
@@ -709,7 +709,7 @@ function AbaFinanceiro({ contas }) {
   );
 }
 
-function AbaOrcamentos({ orcamentos }) {
+function AbaOrcamentos({ orcamentos }: { orcamentos: any[] }) {
   if (orcamentos.length === 0) return <TabelaVazia msg="Nenhum orçamento registrado para este cliente." />;
 
   return (
@@ -725,7 +725,7 @@ function AbaOrcamentos({ orcamentos }) {
           </tr>
         </thead>
         <tbody>
-          {orcamentos.map((o, i) => (
+          {orcamentos.map((o: any, i: number) => (
             <tr key={o.id} style={{ borderBottom: `1px solid ${C.border}22`, background: i % 2 === 0 ? "transparent" : `${C.surface}55` }}>
               <td style={{ padding: "8px 10px", color: C.muted, fontWeight: 600 }}>#{o.numero}</td>
               <td style={{ padding: "8px 10px", color: C.text }}>
@@ -752,12 +752,18 @@ function AbaOrcamentos({ orcamentos }) {
 
 // ============ MODAL PRINCIPAL ============
 
-export default function PerfilClienteModal({ clienteId, onFechar, user }) {
-  const [dados, setDados] = useState(null);
+interface PerfilClienteModalProps {
+  clienteId: string;
+  onFechar: () => void;
+  user: any;
+}
+
+export default function PerfilClienteModal({ clienteId, onFechar, user }: PerfilClienteModalProps) {
+  const [dados, setDados] = useState<any>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [aba, setAba] = useState("resumo");
-  const [templates, setTemplates] = useState([]);
+  const [templates, setTemplates] = useState<any[]>([]);
 
   const carregar = useCallback(async () => {
     if (!clienteId) return;
@@ -767,7 +773,7 @@ export default function PerfilClienteModal({ clienteId, onFechar, user }) {
       const d = await api.perfilCliente(clienteId);
       setDados(d);
     } catch (err) {
-      setErro(err.message);
+      setErro((err as Error).message);
     } finally {
       setCarregando(false);
     }
@@ -776,22 +782,24 @@ export default function PerfilClienteModal({ clienteId, onFechar, user }) {
   useEffect(() => { carregar(); }, [carregar]);
 
   useEffect(() => {
-    api.listarTemplates({ ativo: "true" }).then(setTemplates).catch(() => setTemplates([]));
+    api.listarTemplates({ ativo: "true" })
+      .then((d) => setTemplates((d as any[]) || []))
+      .catch(() => setTemplates([]));
   }, []);
 
   useEffect(() => {
-    function onKey(e) {
+    function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onFechar();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onFechar]);
 
-  const [qtdInteracoes, setQtdInteracoes] = useState(null);
-  const [qtdContatos, setQtdContatos] = useState(null);
+  const [qtdInteracoes, setQtdInteracoes] = useState<number | null>(null);
+  const [qtdContatos, setQtdContatos] = useState<number | null>(null);
 
   const abasComContador = ABAS.map(a => {
-    let count = null;
+    let count: number | null = null;
     if (dados) {
       if (a.id === "compras") count = dados.vendas.length;
       if (a.id === "financeiro") count = dados.contasReceber.length;
@@ -853,7 +861,7 @@ export default function PerfilClienteModal({ clienteId, onFechar, user }) {
             )}
             {dados?.cliente?.tags && dados.cliente.tags.length > 0 && (
               <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
-                {dados.cliente.tags.map((t) => (
+                {dados.cliente.tags.map((t: any) => (
                   <span key={t.id} style={{
                     background: t.cor + "22", color: t.cor,
                     padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: 700,

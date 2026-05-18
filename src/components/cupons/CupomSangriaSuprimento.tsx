@@ -1,11 +1,37 @@
-import CupomCabecalho from "./CupomCabecalho.jsx";
-import CupomRodape from "./CupomRodape.jsx";
-import { fmtBRL, fmtData } from "./fmt.js";
+import CupomCabecalho from "./CupomCabecalho";
+import CupomRodape from "./CupomRodape";
+import { fmtBRL, fmtData } from "./fmt";
+import type { EmpresaCupom, CfgCupom } from "./CupomCabecalho";
 
 // Comprovante de sangria (saida) ou suprimento (entrada) de dinheiro do
 // caixa. Recebe a movimentacao retornada pelo backend.
 
-export default function CupomSangriaSuprimento({ movimentacao, caixa, operador, empresa, cfg }) {
+type Movimentacao = {
+  tipo?: "SANGRIA" | "SUPRIMENTO" | string;
+  valor?: number | string | null;
+  createdAt?: string | Date | null;
+  saldoAntes?: number | string | null;
+  saldoDepois?: number | string | null;
+  descricao?: string | null;
+};
+
+type Caixa = {
+  numero?: number | null;
+};
+
+type Operador = {
+  nome?: string | null;
+};
+
+type Props = {
+  movimentacao: Movimentacao | null | undefined;
+  caixa?: Caixa | null;
+  operador?: Operador | null;
+  empresa: EmpresaCupom;
+  cfg: CfgCupom;
+};
+
+export default function CupomSangriaSuprimento({ movimentacao, caixa, operador, empresa, cfg }: Props) {
   const ehSangria = movimentacao?.tipo === "SANGRIA";
   const titulo = ehSangria ? "SANGRIA DE CAIXA" : "SUPRIMENTO DE CAIXA";
   const subtitulo = ehSangria ? "Saída de dinheiro" : "Entrada de dinheiro";

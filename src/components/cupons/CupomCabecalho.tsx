@@ -1,5 +1,7 @@
-import { urlLogotipo } from "../../Configuracoes.jsx";
-import { formatarEndereco } from "../../HeaderRelatorio.jsx";
+import { urlLogotipo } from "../../Configuracoes";
+import { formatarEndereco } from "../../HeaderRelatorio";
+import type { ConfiguracaoEmpresa } from "../../Configuracoes";
+import type { ConfigImpressora } from "../../lib/impressora";
 
 // Cabecalho padrao do cupom: logo (opcional) + nome + CNPJ + endereco +
 // contato + linhas extras do cabecalhoExtra. Aparece em TODOS os templates
@@ -9,7 +11,15 @@ import { formatarEndereco } from "../../HeaderRelatorio.jsx";
 //   - mostrarLogo, mostrarCnpj
 //   - cabecalhoExtra (3 linhas livres)
 
-export default function CupomCabecalho({ empresa, cfg }) {
+export type EmpresaCupom = ConfiguracaoEmpresa | null | undefined;
+export type CfgCupom = Partial<ConfigImpressora> | null | undefined;
+
+type Props = {
+  empresa: EmpresaCupom;
+  cfg: CfgCupom;
+};
+
+export default function CupomCabecalho({ empresa, cfg }: Props) {
   const logoUrl = cfg?.mostrarLogo !== false ? urlLogotipo(empresa?.logotipo) : null;
   const enderecoCompleto = empresa ? formatarEndereco(empresa) : "";
   const linhasExtras = (cfg?.cabecalhoExtra || "").split("\n").map(s => s.trim()).filter(Boolean);
@@ -35,9 +45,9 @@ export default function CupomCabecalho({ empresa, cfg }) {
       )}
       {(empresa?.telefone || empresa?.email) && (
         <div className="cupom-centro cupom-mini">
-          {empresa.telefone}
-          {empresa.telefone && empresa.email && " · "}
-          {empresa.email}
+          {empresa?.telefone}
+          {empresa?.telefone && empresa?.email && " · "}
+          {empresa?.email}
         </div>
       )}
       {linhasExtras.map((l, i) => (

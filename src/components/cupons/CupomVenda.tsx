@@ -1,6 +1,8 @@
-import CupomCabecalho from "./CupomCabecalho.jsx";
-import CupomRodape from "./CupomRodape.jsx";
-import { fmtBRL, fmtData, fmtQtd, FORMA_LABEL } from "./fmt.js";
+import CupomCabecalho from "./CupomCabecalho";
+import CupomRodape from "./CupomRodape";
+import { fmtBRL, fmtData, fmtQtd, FORMA_LABEL } from "./fmt";
+import type { FormaPagamento } from "./fmt";
+import type { EmpresaCupom, CfgCupom } from "./CupomCabecalho";
 
 // Conteudo do cupom de venda. Substitui o markup inline que ficava dentro
 // de PDV.ReciboModal. Pode ser usado:
@@ -9,6 +11,44 @@ import { fmtBRL, fmtData, fmtQtd, FORMA_LABEL } from "./fmt.js";
 //
 // Respeita flags da ConfiguracaoImpressora: mostrarVendedor, mostrarCliente.
 
+type ProdutoItem = {
+  codigo?: string | number | null;
+  nome?: string | null;
+  unidade?: string | null;
+};
+
+type ItemVenda = {
+  id: string | number;
+  quantidade: number | string;
+  precoUnitario: number | string;
+  subtotal: number | string;
+  produto?: ProdutoItem | null;
+};
+
+type Cliente = { nome?: string | null; cpfCnpj?: string | null };
+type Usuario = { nome?: string | null };
+
+export type VendaCupom = {
+  numero: number | string;
+  createdAt: string | Date;
+  total: number | string;
+  desconto?: number | string | null;
+  formaPagamento?: FormaPagamento | string | null;
+  observacoes?: string | null;
+  cliente?: Cliente | null;
+  user?: Usuario | null;
+  itens?: ItemVenda[] | null;
+};
+
+type Props = {
+  venda: VendaCupom;
+  empresa: EmpresaCupom;
+  cfg: CfgCupom;
+  valorRecebido?: number | string;
+  troco?: number | string;
+  modoReimpressao?: boolean;
+};
+
 export default function CupomVenda({
   venda,
   empresa,
@@ -16,9 +56,13 @@ export default function CupomVenda({
   valorRecebido = 0,
   troco = 0,
   modoReimpressao = false,
-}) {
+}: Props) {
   const subtotalCupom = Number(venda.total) + Number(venda.desconto || 0);
   const mostrarRecebidoTroco = Number(valorRecebido) > 0;
+  const forma = venda.formaPagamento;
+  const formaLabel = forma && forma in FORMA_LABEL
+    ? FORMA_LABEL[forma as FormaPagamento]
+    : forma;
 
   return (
     <>
@@ -75,7 +119,7 @@ export default function CupomVenda({
         <span>{fmtBRL(venda.total)}</span>
       </div>
       <hr className="cupom-divisor" />
-      <div>Pagamento: <span className="cupom-bold">{FORMA_LABEL[venda.formaPagamento] || venda.formaPagamento}</span></div>
+      <div>Pagamento: <span className="cupom-bold">{formaLabel}</span></div>
       {mostrarRecebidoTroco && (
         <>
           <div className="cupom-linha">

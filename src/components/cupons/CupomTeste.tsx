@@ -1,11 +1,17 @@
-import CupomCabecalho from "./CupomCabecalho.jsx";
-import CupomRodape from "./CupomRodape.jsx";
+import CupomCabecalho from "./CupomCabecalho";
+import CupomRodape from "./CupomRodape";
+import type { EmpresaCupom, CfgCupom } from "./CupomCabecalho";
 
 // Cupom de teste — exercita cabecalho, divisores, alinhamentos, fonte
 // grande/normal e rodape. Usado pelo botao "Imprimir cupom de teste" da
 // tela de Configuracao da Impressora.
 
-export default function CupomTeste({ empresa, cfg }) {
+type Props = {
+  empresa: EmpresaCupom;
+  cfg: CfgCupom;
+};
+
+export default function CupomTeste({ empresa, cfg }: Props) {
   return (
     <>
       <CupomCabecalho empresa={empresa} cfg={cfg} />

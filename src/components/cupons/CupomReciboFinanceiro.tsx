@@ -1,16 +1,46 @@
-import CupomCabecalho from "./CupomCabecalho.jsx";
-import CupomRodape from "./CupomRodape.jsx";
-import { fmtBRL, fmtData, FORMA_LABEL } from "./fmt.js";
+import CupomCabecalho from "./CupomCabecalho";
+import CupomRodape from "./CupomRodape";
+import { fmtBRL, fmtData, FORMA_LABEL } from "./fmt";
+import type { FormaPagamento } from "./fmt";
+import type { EmpresaCupom, CfgCupom } from "./CupomCabecalho";
 
 // Recibo de pagamento (PAGAR) ou recebimento (RECEBER). Modelo brasileiro
 // classico: "Recebemos de X a importancia de Y referente a...".
-//
-// Props:
-//   tipo: "PAGAR" | "RECEBER"
-//   conta: { titulo, valor, vencimento, dataPagamento, formaPagamento,
-//            fornecedor?, cliente?, numero, observacoes }
 
-export default function CupomReciboFinanceiro({ tipo, conta, operador, empresa, cfg }) {
+type Contraparte = {
+  nome?: string | null;
+  cpfCnpj?: string | null;
+};
+
+type Conta = {
+  titulo?: string | null;
+  descricao?: string | null;
+  valor?: number | string | null;
+  valorPago?: number | string | null;
+  vencimento?: string | Date | null;
+  dataPagamento?: string | Date | null;
+  formaPagamento?: FormaPagamento | string | null;
+  fornecedor?: Contraparte | null;
+  fornecedorNome?: string | null;
+  fornecedorCpfCnpj?: string | null;
+  cliente?: Contraparte | null;
+  clienteNome?: string | null;
+  clienteCpfCnpj?: string | null;
+  numero?: number | string | null;
+  observacoes?: string | null;
+};
+
+type Operador = { nome?: string | null };
+
+type Props = {
+  tipo: "PAGAR" | "RECEBER";
+  conta: Conta | null | undefined;
+  operador?: Operador | null;
+  empresa: EmpresaCupom;
+  cfg: CfgCupom;
+};
+
+export default function CupomReciboFinanceiro({ tipo, conta, operador, empresa, cfg }: Props) {
   const ehReceber = tipo === "RECEBER";
   const titulo = ehReceber ? "RECIBO DE PAGAMENTO" : "COMPROVANTE DE PAGAMENTO";
   const acao = ehReceber ? "Recebemos de" : "Pagamos a";
@@ -21,6 +51,10 @@ export default function CupomReciboFinanceiro({ tipo, conta, operador, empresa, 
     ? (conta?.cliente?.cpfCnpj || conta?.clienteCpfCnpj)
     : (conta?.fornecedor?.cpfCnpj || conta?.fornecedorCpfCnpj);
   const valor = Number(conta?.valorPago ?? conta?.valor) || 0;
+  const forma = conta?.formaPagamento;
+  const formaLabel = forma && forma in FORMA_LABEL
+    ? FORMA_LABEL[forma as FormaPagamento]
+    : forma;
 
   return (
     <>
@@ -49,10 +83,10 @@ export default function CupomReciboFinanceiro({ tipo, conta, operador, empresa, 
         <span>Pagamento:</span>
         <span>{conta?.dataPagamento ? fmtData(conta.dataPagamento) : fmtData(new Date().toISOString())}</span>
       </div>
-      {conta?.formaPagamento && (
+      {forma && (
         <div className="cupom-linha">
           <span>Forma:</span>
-          <span>{FORMA_LABEL[conta.formaPagamento] || conta.formaPagamento}</span>
+          <span>{formaLabel}</span>
         </div>
       )}
       {cfg?.mostrarVendedor !== false && operador?.nome && (

@@ -1,6 +1,7 @@
-import CupomCabecalho from "./CupomCabecalho.jsx";
-import CupomRodape from "./CupomRodape.jsx";
-import { fmtBRL, fmtData } from "./fmt.js";
+import CupomCabecalho from "./CupomCabecalho";
+import CupomRodape from "./CupomRodape";
+import { fmtBRL, fmtData } from "./fmt";
+import type { EmpresaCupom, CfgCupom } from "./CupomCabecalho";
 
 // Comprovante de fechamento de caixa. Recebe o caixa fechado retornado
 // pelo backend (com totais embutidos) + a conferencia revelada
@@ -9,7 +10,43 @@ import { fmtBRL, fmtData } from "./fmt.js";
 // "Conferencia cega": o backend so revela o saldo esperado apos o POST.
 // Imprimimos os 4 numeros lado a lado pra fechar com clareza.
 
-function Linha({ label, valor, destaque }) {
+type Totais = {
+  totalSuprimentos?: number | string | null;
+  totalVendasDinheiro?: number | string | null;
+  totalReceberDinheiro?: number | string | null;
+  totalSangrias?: number | string | null;
+  totalPagarDinheiro?: number | string | null;
+  totalVendasOutras?: number | string | null;
+  porForma?: Array<{ forma: string; total: number | string }> | null;
+};
+
+type Caixa = {
+  numero?: number | null;
+  abertoEm?: string | Date | null;
+  fechadoEm?: string | Date | null;
+  saldoInicial?: number | string | null;
+  totais?: Totais | null;
+  observacoesFechamento?: string | null;
+};
+
+type Conferencia = {
+  contado?: number | string | null;
+  esperado?: number | string | null;
+  diferenca?: number | string | null;
+  troco?: number | string | null;
+};
+
+type Operador = { nome?: string | null };
+
+type Props = {
+  caixa: Caixa | null | undefined;
+  conferencia: Conferencia | null | undefined;
+  operador?: Operador | null;
+  empresa: EmpresaCupom;
+  cfg: CfgCupom;
+};
+
+function Linha({ label, valor, destaque }: { label: string; valor: string; destaque?: boolean }) {
   return (
     <div className={`cupom-linha${destaque ? " cupom-bold" : ""}`}>
       <span>{label}</span>
@@ -20,12 +57,12 @@ function Linha({ label, valor, destaque }) {
 
 export default function CupomFechamentoCaixa({
   caixa,
-  conferencia, // { contado, esperado, diferenca, troco }
+  conferencia,
   operador,
   empresa,
   cfg,
-}) {
-  const t = caixa?.totais || {};
+}: Props) {
+  const t: Totais = caixa?.totais || {};
   const dif = Number(conferencia?.diferenca ?? 0);
   const statusDif = dif === 0 ? "SEM DIFERENCA" : dif > 0 ? "SOBRA" : "QUEBRA";
 

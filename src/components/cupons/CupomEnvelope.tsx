@@ -1,4 +1,6 @@
-import { paginaDeLargura, larguraEmTela } from "../../lib/impressora.js";
+import type { ReactNode } from "react";
+import { paginaDeLargura, larguraEmTela } from "../../lib/impressora";
+import type { CfgCupom } from "./CupomCabecalho";
 
 // Wrapper de impressao. Aplica:
 //   - @media print: isola .cupom-imprimivel (esconde o resto da tela)
@@ -8,12 +10,18 @@ import { paginaDeLargura, larguraEmTela } from "../../lib/impressora.js";
 // Usado em DOIS modos:
 //   1. INLINE — dentro de uma modal aberta, o cupom ja esta no DOM oculto.
 //      Basta chamar window.print() (PDV.ReciboModal faz isso).
-//   2. PORTAL — via imprimirDocumento() do lib/impressora.js, monta este
+//   2. PORTAL — via imprimirDocumento() do lib/impressora.ts, monta este
 //      componente num container temporario, espera paint, dispara print().
 //
 // O conteudo concreto (CupomVenda, CupomSangria, etc) vem como children.
 
-export default function CupomEnvelope({ cfg, children, preview = false }) {
+type Props = {
+  cfg: CfgCupom;
+  children?: ReactNode;
+  preview?: boolean;
+};
+
+export default function CupomEnvelope({ cfg, children, preview = false }: Props) {
   const largura = cfg?.largura || "MM_80";
   const fonte = cfg?.fonteBase || 12;
   const margem = cfg?.margemMm ?? 4;

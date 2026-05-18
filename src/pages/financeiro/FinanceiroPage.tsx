@@ -13,7 +13,7 @@ import {
   ContaModal,
   PagarReceberModal,
   AnexosModal,
-} from "../../Financeiro.jsx";
+} from "../../Financeiro";
 
 type TipoConta = "pagar" | "receber";
 type StatusConta = "PENDENTE" | "PAGA" | "ATRASADA" | "CANCELADA";

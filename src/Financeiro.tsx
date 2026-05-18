@@ -1,46 +1,46 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { C } from "./lib/theme.js";
-import { api, BASE_URL, getUser } from "./lib/api.js";
-import ActionsMenu from "./components/ActionsMenu.jsx";
-import { useConfiguracaoEmpresa } from "./HeaderRelatorio.jsx";
-import { obterConfigImpressora, devePrintar, imprimirDocumento } from "./lib/impressora.js";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { C } from "./lib/theme";
+import { api, BASE_URL, getUser } from "./lib/api";
+import ActionsMenu from "./components/ActionsMenu";
+import { useConfiguracaoEmpresa } from "./HeaderRelatorio";
+import { obterConfigImpressora, devePrintar, imprimirDocumento } from "./lib/impressora";
 import CupomEnvelope from "./components/cupons/CupomEnvelope.jsx";
 import CupomReciboFinanceiro from "./components/cupons/CupomReciboFinanceiro.jsx";
 
 
-const fmtBRL = (v) => {
+const fmtBRL = (v: any) => {
   const n = Number(v);
   if (!Number.isFinite(n)) return "—";
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 };
 
-const fmtData = (iso) => {
+const fmtData = (iso: any) => {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("pt-BR");
 };
 
-const STATUS_INFO = {
+const STATUS_INFO: Record<string, { label: string; cor: string }> = {
   PENDENTE: { label: "Pendente", cor: C.yellow },
   PAGA: { label: "Paga", cor: C.green },
   ATRASADA: { label: "Atrasada", cor: C.red },
   CANCELADA: { label: "Cancelada", cor: C.muted },
 };
 
-function diasDiff(iso) {
+function diasDiff(iso: any) {
   if (!iso) return 0;
   const venc = new Date(iso);
   venc.setHours(0, 0, 0, 0);
   const hoje = new Date();
   hoje.setHours(0, 0, 0, 0);
-  return Math.round((venc - hoje) / 86400000);
+  return Math.round((venc.getTime() - hoje.getTime()) / 86400000);
 }
 
-function statusEfetivo(conta) {
+function statusEfetivo(conta: any) {
   if (conta.status === "PAGA" || conta.status === "CANCELADA") return conta.status;
   return diasDiff(conta.vencimento) < 0 ? "ATRASADA" : "PENDENTE";
 }
 
-export default function Financeiro({ user }) {
+export default function Financeiro({ user }: any) {
   const [aba, setAba] = useState("pagar");
   const podeEditar = user.role === "ADMIN" || user.role === "GERENTE";
   const ehReceber = aba === "receber";
@@ -67,7 +67,7 @@ export default function Financeiro({ user }) {
   );
 }
 
-function BtnAba({ ativa, cor, onClick, children }) {
+function BtnAba({ ativa, cor, onClick, children }: any) {
   return (
     <button onClick={onClick} style={{
       padding: "10px 18px", borderRadius: 8, border: "none",
@@ -78,12 +78,12 @@ function BtnAba({ ativa, cor, onClick, children }) {
   );
 }
 
-function ListaContas({ tipo, podeEditar }) {
+function ListaContas({ tipo, podeEditar }: any) {
   const ehPagar = tipo === "pagar";
   const rotuloEntidade = ehPagar ? "Fornecedor" : "Cliente";
   const empresa = useConfiguracaoEmpresa();
 
-  const [contas, setContas] = useState([]);
+  const [contas, setContas] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
   const [mensagem, setMensagem] = useState("");
@@ -91,16 +91,16 @@ function ListaContas({ tipo, podeEditar }) {
   const [filtroStatus, setFiltroStatus] = useState("");
   const [filtroEntidade, setFiltroEntidade] = useState("");
   const [vencidas, setVencidas] = useState(false);
-  const [entidades, setEntidades] = useState([]);
-  const [editando, setEditando] = useState(null);
+  const [entidades, setEntidades] = useState<any[]>([]);
+  const [editando, setEditando] = useState<any>(null);
   const [novoAberto, setNovoAberto] = useState(false);
-  const [recebendoPagando, setRecebendoPagando] = useState(null);
-  const [anexandoEm, setAnexandoEm] = useState(null);
+  const [recebendoPagando, setRecebendoPagando] = useState<any>(null);
+  const [anexandoEm, setAnexandoEm] = useState<any>(null);
 
   const carregar = useCallback(async () => {
     setCarregando(true); setErro("");
     try {
-      const args = {
+      const args: any = {
         search,
         status: filtroStatus,
         dataInicio: "", dataFim: "",
@@ -109,10 +109,10 @@ function ListaContas({ tipo, podeEditar }) {
       if (ehPagar) args.fornecedorId = filtroEntidade;
       else args.clienteId = filtroEntidade;
       const data = ehPagar
-        ? await api.listarContasPagar(args)
-        : await api.listarContasReceber(args);
+        ? await api.listarContasPagar(args) as any[]
+        : await api.listarContasReceber(args) as any[];
       setContas(data);
-    } catch (err) {
+    } catch (err: any) {
       setErro(err.message);
     } finally {
       setCarregando(false);
@@ -125,10 +125,10 @@ function ListaContas({ tipo, podeEditar }) {
     const promise = ehPagar
       ? api.listarFornecedores({ ativo: "true" })
       : api.listarClientes({ ativo: "true" });
-    promise.then(setEntidades).catch(() => {});
+    promise.then((data: any) => setEntidades(Array.isArray(data) ? data : [])).catch(() => {});
   }, [ehPagar]);
 
-  function flash(t) {
+  function flash(t: string) {
     setMensagem(t);
     setTimeout(() => setMensagem(""), 3000);
   }
@@ -161,7 +161,7 @@ function ListaContas({ tipo, podeEditar }) {
     };
   }, [contas]);
 
-  async function executarPagarReceber(conta, payload) {
+  async function executarPagarReceber(conta: any, payload: any) {
     try {
       if (ehPagar) await api.pagarConta(conta.id, payload);
       else await api.receberConta(conta.id, payload);
@@ -193,12 +193,12 @@ function ListaContas({ tipo, podeEditar }) {
       }
 
       carregar();
-    } catch (err) {
+    } catch (err: any) {
       alert(err.message);
     }
   }
 
-  async function imprimirReciboReimpressao(conta) {
+  async function imprimirReciboReimpressao(conta: any) {
     const cfgImp = await obterConfigImpressora();
     await imprimirDocumento(
       <CupomEnvelope cfg={cfgImp}>
@@ -213,14 +213,14 @@ function ListaContas({ tipo, podeEditar }) {
     );
   }
 
-  async function executarReabrir(conta) {
+  async function executarReabrir(conta: any) {
     if (!confirm("Reabrir esta conta? O recebimento/pagamento sera removido.")) return;
     try {
       if (ehPagar) await api.reabrirContaPagar(conta.id);
       else await api.reabrirContaReceber(conta.id);
       flash("Conta reaberta");
       carregar();
-    } catch (err) {
+    } catch (err: any) {
       alert(err.message);
     }
   }
@@ -232,7 +232,7 @@ function ListaContas({ tipo, podeEditar }) {
       else await api.cancelarContaReceber(conta.id);
       flash("Conta cancelada");
       carregar();
-    } catch (err) {
+    } catch (err: any) {
       alert(err.message);
     }
   }
@@ -536,7 +536,7 @@ function ListaContas({ tipo, podeEditar }) {
 
 // ============ Componentes auxiliares ============
 
-function CardKpi({ icone, rotulo, valor, detalhe, cor }) {
+function CardKpi({ icone, rotulo, valor, detalhe, cor }: any) {
   return (
     <div style={{
       background: C.card, border: `1px solid ${C.border}`,
@@ -555,7 +555,7 @@ function CardKpi({ icone, rotulo, valor, detalhe, cor }) {
   );
 }
 
-export function ContaModal({ tipo, conta, entidades, onCancelar, onSalvar }) {
+export function ContaModal({ tipo, conta, entidades, onCancelar, onSalvar }: any) {
   const ehPagar = tipo === "pagar";
   const editar = !!conta;
   const [descricao, setDescricao] = useState(conta?.descricao || "");
@@ -607,7 +607,7 @@ export function ContaModal({ tipo, conta, entidades, onCancelar, onSalvar }) {
     if (!vencimento) { setErro("Vencimento é obrigatório"); return; }
     if (liquido <= 0) { setErro("Valor líquido (bruto + juros + multa - desconto) deve ser maior que zero"); return; }
 
-    const payload = {
+    const payload: any = {
       descricao,
       valorBruto: vb,
       juros: parseFloat(String(juros).replace(",", ".")) || 0,
@@ -638,7 +638,7 @@ export function ContaModal({ tipo, conta, entidades, onCancelar, onSalvar }) {
         else await api.criarContaReceber(payload);
       }
       onSalvar();
-    } catch (err) {
+    } catch (err: any) {
       setErro(err.message);
     } finally {
       setSalvando(false);
@@ -792,7 +792,7 @@ export function ContaModal({ tipo, conta, entidades, onCancelar, onSalvar }) {
   );
 }
 
-function BtnRecorrencia({ ativa, onClick, children }) {
+function BtnRecorrencia({ ativa, onClick, children }: any) {
   return (
     <button type="button" onClick={onClick} style={{
       flex: 1, padding: "8px 10px", borderRadius: 8,
@@ -815,14 +815,14 @@ const FORMAS_PAGAMENTO = [
 
 // Data de hoje em formato YYYY-MM-DD usando o fuso LOCAL. toISOString()
 // retorna em UTC e em fusos negativos (ex: BRT) joga "ontem" depois das 21h.
-function hojeLocal() {
+function hojeLocal(): string {
   const d = new Date();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${d.getFullYear()}-${m}-${dd}`;
 }
 
-export function PagarReceberModal({ tipo, conta, podeEditar, onCancelar, onConfirmar }) {
+export function PagarReceberModal({ tipo, conta, podeEditar, onCancelar, onConfirmar }: any) {
   const ehPagar = tipo === "pagar";
   const [data, setData] = useState(hojeLocal());
   const [ajustar, setAjustar] = useState(false);
@@ -833,10 +833,10 @@ export function PagarReceberModal({ tipo, conta, podeEditar, onCancelar, onConfi
   // "custom:<id>" para formas cadastradas pelo usuario. No submit traduzimos
   // de volta para o enum FormaPagamento.
   const [formaSel, setFormaSel] = useState("default:DINHEIRO");
-  const [formasCustom, setFormasCustom] = useState([]);
+  const [formasCustom, setFormasCustom] = useState<any[]>([]);
   const [gerenciarAberto, setGerenciarAberto] = useState(false);
   const [caixaId, setCaixaId] = useState(""); // "" => default backend (caixa do user); "FORA" => null (fora do PDV)
-  const [caixasAbertos, setCaixasAbertos] = useState([]);
+  const [caixasAbertos, setCaixasAbertos] = useState<any[]>([]);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -844,7 +844,7 @@ export function PagarReceberModal({ tipo, conta, podeEditar, onCancelar, onConfi
   // lancar a movimentacao. Default fica "" (backend usa o caixa do user).
   useEffect(() => {
     api.listarCaixas({ status: "ABERTO" })
-      .then(lista => {
+      .then((lista: any) => {
         setCaixasAbertos(Array.isArray(lista) ? lista : (lista?.caixas || []));
       })
       .catch(() => setCaixasAbertos([]));
@@ -852,7 +852,7 @@ export function PagarReceberModal({ tipo, conta, podeEditar, onCancelar, onConfi
 
   const recarregarFormasCustom = useCallback(() => {
     return api.listarFormasPagamento({ ativo: "true" })
-      .then(lista => setFormasCustom(Array.isArray(lista) ? lista : []))
+      .then((lista: any) => setFormasCustom(Array.isArray(lista) ? lista : []))
       .catch(() => setFormasCustom([]));
   }, []);
 
@@ -880,7 +880,7 @@ export function PagarReceberModal({ tipo, conta, podeEditar, onCancelar, onConfi
     return valorBrutoOriginal + j + m - d;
   }, [ajustar, juros, multa, desconto, valorBrutoOriginal, conta.valor]);
 
-  async function confirmar(e) {
+  async function confirmar(e: any) {
     e.preventDefault();
     setErro("");
     if (!data) { setErro("Informe a data"); return; }
@@ -889,7 +889,7 @@ export function PagarReceberModal({ tipo, conta, podeEditar, onCancelar, onConfi
     }
     setSalvando(true);
     try {
-      const payload = ehPagar ? { pagamento: data } : { recebimento: data };
+      const payload: any = ehPagar ? { pagamento: data } : { recebimento: data };
       payload.formaPagamento = formaPagamentoEnum;
       // caixaId: "FORA" -> null explicito (nao registra no caixa); "" -> nao envia (default backend); uuid -> caixa especifico
       if (caixaId === "FORA") payload.caixaId = null;
@@ -900,7 +900,7 @@ export function PagarReceberModal({ tipo, conta, podeEditar, onCancelar, onConfi
         payload.desconto = parseFloat(String(desconto).replace(",", ".")) || 0;
       }
       await onConfirmar(payload);
-    } catch (err) {
+    } catch (err: any) {
       setErro(err.message);
       setSalvando(false);
     }
@@ -1042,7 +1042,7 @@ export function PagarReceberModal({ tipo, conta, podeEditar, onCancelar, onConfi
   );
 }
 
-export function AnexosModal({ tipo, conta, podeEditar, onFechar }) {
+export function AnexosModal({ tipo, conta, podeEditar, onFechar }: any) {
   const ehPagar = tipo === "pagar";
   const [anexos, setAnexos] = useState(conta.anexos || []);
   const [enviando, setEnviando] = useState(false);
@@ -1055,27 +1055,27 @@ export function AnexosModal({ tipo, conta, podeEditar, onFechar }) {
       const novo = ehPagar
         ? await api.anexarContaPagar(conta.id, file)
         : await api.anexarContaReceber(conta.id, file);
-      setAnexos(prev => [...prev, novo]);
-    } catch (err) {
+      setAnexos((prev: any[]) => [...prev, novo]);
+    } catch (err: any) {
       setErro(err.message);
     } finally {
       setEnviando(false);
     }
   }
 
-  async function excluir(anexo) {
+  async function excluir(anexo: any) {
     if (!confirm(`Excluir anexo "${anexo.nomeOriginal}"?`)) return;
     setErro("");
     try {
       if (ehPagar) await api.excluirAnexoContaPagar(conta.id, anexo.id);
       else await api.excluirAnexoContaReceber(conta.id, anexo.id);
-      setAnexos(prev => prev.filter(a => a.id !== anexo.id));
-    } catch (err) {
+      setAnexos((prev: any[]) => prev.filter((a: any) => a.id !== anexo.id));
+    } catch (err: any) {
       setErro(err.message);
     }
   }
 
-  function fmtTamanho(bytes) {
+  function fmtTamanho(bytes: any) {
     if (!bytes) return "—";
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -1177,7 +1177,7 @@ export function AnexosModal({ tipo, conta, podeEditar, onFechar }) {
   );
 }
 
-function Campo({ label, children }) {
+function Campo({ label, children }: any) {
   return (
     <div style={{ marginBottom: 12 }}>
       <label style={{
@@ -1194,11 +1194,11 @@ function Campo({ label, children }) {
 // continua sendo o enum base, preservando relatorios e historico.
 //
 // Exportado para ser reusado em PDV.jsx e Compras.jsx.
-export function GerenciarFormasModal({ podeExcluir, onFechar }) {
-  const [formas, setFormas] = useState([]);
+export function GerenciarFormasModal({ podeExcluir, onFechar }: any) {
+  const [formas, setFormas] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
-  const [editando, setEditando] = useState(null); // null = nova; objeto = editando
+  const [editando, setEditando] = useState<any>(null); // null = nova; objeto = editando
   const [nome, setNome] = useState("");
   const [icone, setIcone] = useState("");
   const [base, setBase] = useState("DINHEIRO");
@@ -1208,9 +1208,9 @@ export function GerenciarFormasModal({ podeExcluir, onFechar }) {
   const carregar = useCallback(async () => {
     setCarregando(true);
     try {
-      const lista = await api.listarFormasPagamento();
+      const lista: any = await api.listarFormasPagamento();
       setFormas(Array.isArray(lista) ? lista : []);
-    } catch (err) {
+    } catch (err: any) {
       setErro(err.message);
     } finally {
       setCarregando(false);
@@ -1224,7 +1224,7 @@ export function GerenciarFormasModal({ podeExcluir, onFechar }) {
     setBase("DINHEIRO"); setOrdem("0"); setErro("");
   }
 
-  function iniciarEdicao(f) {
+  function iniciarEdicao(f: any) {
     setEditando(f);
     setNome(f.nome);
     setIcone(f.icone || "");
@@ -1233,14 +1233,14 @@ export function GerenciarFormasModal({ podeExcluir, onFechar }) {
     setErro("");
   }
 
-  async function salvar(e) {
+  async function salvar(e: any) {
     e.preventDefault();
     setErro("");
     const nomeTrim = nome.trim();
     if (!nomeTrim) { setErro("Informe um nome"); return; }
     setSalvando(true);
     try {
-      const payload = {
+      const payload: any = {
         nome: nomeTrim,
         icone: icone.trim() || null,
         baseFormaPagamento: base,
@@ -1254,14 +1254,14 @@ export function GerenciarFormasModal({ podeExcluir, onFechar }) {
       }
       await carregar();
       limparForm();
-    } catch (err) {
+    } catch (err: any) {
       setErro(err.message);
     } finally {
       setSalvando(false);
     }
   }
 
-  async function alternarAtivo(f) {
+  async function alternarAtivo(f: any) {
     setErro("");
     try {
       await api.atualizarFormaPagamento(f.id, {
@@ -1272,17 +1272,17 @@ export function GerenciarFormasModal({ podeExcluir, onFechar }) {
         ativo: !f.ativo,
       });
       await carregar();
-    } catch (err) { setErro(err.message); }
+    } catch (err: any) { setErro(err.message); }
   }
 
-  async function remover(f) {
+  async function remover(f: any) {
     if (!confirm(`Excluir a forma "${f.nome}"?`)) return;
     setErro("");
     try {
       await api.excluirFormaPagamento(f.id);
       await carregar();
       if (editando?.id === f.id) limparForm();
-    } catch (err) { setErro(err.message); }
+    } catch (err: any) { setErro(err.message); }
   }
 
   return (
@@ -1406,7 +1406,7 @@ export function GerenciarFormasModal({ podeExcluir, onFechar }) {
   );
 }
 
-const LABEL_BASE = {
+const LABEL_BASE: Record<string, string> = {
   DINHEIRO: "Dinheiro",
   PIX: "PIX",
   CARTAO_DEBITO: "Débito",
@@ -1415,45 +1415,45 @@ const LABEL_BASE = {
   CREDIARIO: "Crediário",
 };
 
-const inputStyle = {
+const inputStyle: CSSProperties = {
   background: C.surface, border: `1px solid ${C.border}`,
   borderRadius: 8, padding: "9px 12px", color: C.text, fontSize: 13,
   outline: "none", boxSizing: "border-box", width: "100%",
 };
 
-const modalOverlay = {
+const modalOverlay: CSSProperties = {
   position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)",
   display: "flex", alignItems: "center", justifyContent: "center",
   padding: 20, zIndex: 100,
 };
 
-const modalCard = {
+const modalCard: CSSProperties = {
   background: C.card, border: `1px solid ${C.border}`, borderRadius: 14,
   width: "100%", maxWidth: 480, maxHeight: "92vh", overflowY: "auto", padding: 24,
 };
 
-const modalHeader = {
+const modalHeader: CSSProperties = {
   display: "flex", justifyContent: "space-between", alignItems: "flex-start",
   marginBottom: 18,
 };
 
-const btnFechar = {
+const btnFechar: CSSProperties = {
   background: "transparent", border: "none", color: C.muted,
   fontSize: 22, cursor: "pointer",
 };
 
-const btnSecundario = {
+const btnSecundario: CSSProperties = {
   background: C.surface, border: `1px solid ${C.border}`, color: C.text,
   borderRadius: 8, padding: "10px 18px", fontWeight: 600, fontSize: 13, cursor: "pointer",
 };
 
-const btnPrimario = {
+const btnPrimario: CSSProperties = {
   background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
   color: C.white, border: "none", borderRadius: 8,
   padding: "10px 22px", fontWeight: 700, fontSize: 13, cursor: "pointer",
 };
 
-function btnAcao(cor) {
+function btnAcao(cor: string): CSSProperties {
   return {
     background: cor + "22", border: `1px solid ${cor}55`, color: cor,
     borderRadius: 6, padding: "5px 10px", fontSize: 11, fontWeight: 600,
@@ -1461,7 +1461,7 @@ function btnAcao(cor) {
   };
 }
 
-function badgeMini(cor) {
+function badgeMini(cor: string): CSSProperties {
   return {
     display: "inline-flex", alignItems: "center", gap: 3,
     padding: "1px 7px", borderRadius: 5,

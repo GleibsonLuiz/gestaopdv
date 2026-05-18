@@ -1,23 +1,23 @@
-import { useEffect, useState, useCallback } from "react";
-import { C } from "./lib/theme.js";
-import { api } from "./lib/api.js";
+import { useEffect, useState, useCallback, type CSSProperties } from "react";
+import { C } from "./lib/theme";
+import { api } from "./lib/api";
 import { MODULOS, permissoesPadrao, IDS_MODULOS } from "./lib/permissoes";
-import ActionsMenu from "./components/ActionsMenu.jsx";
+import ActionsMenu from "./components/ActionsMenu";
 
 
-const ROLE_INFO = {
+const ROLE_INFO: Record<string, { label: string; cor: string; icone: string }> = {
   ADMIN:    { label: "Admin",    cor: C.purple, icone: "★" },
   GERENTE:  { label: "Gerente",  cor: C.accent, icone: "♦" },
   VENDEDOR: { label: "Vendedor", cor: C.green,  icone: "●" },
 };
 
-const fmtData = (iso) => {
+const fmtData = (iso: any) => {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("pt-BR");
 };
 
-export default function Funcionarios({ user }) {
-  const [funcionarios, setFuncionarios] = useState([]);
+export default function Funcionarios({ user }: any) {
+  const [funcionarios, setFuncionarios] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
   const [busca, setBusca] = useState("");
@@ -33,9 +33,9 @@ export default function Funcionarios({ user }) {
     setCarregando(true);
     setErro("");
     try {
-      const data = await api.listarFuncionarios({ search: busca, ativo: filtroAtivo, role: filtroRole });
+      const data = await api.listarFuncionarios({ search: busca, ativo: filtroAtivo, role: filtroRole }) as any[];
       setFuncionarios(data);
-    } catch (err) {
+    } catch (err: any) {
       setErro(err.message);
     } finally {
       setCarregando(false);
@@ -47,18 +47,18 @@ export default function Funcionarios({ user }) {
     return () => clearTimeout(t);
   }, [carregar]);
 
-  function flash(msg) {
+  function flash(msg: string) {
     setMensagem(msg);
     setTimeout(() => setMensagem(""), 2500);
   }
 
-  async function excluir(f) {
+  async function excluir(f: any) {
     if (!confirm(`Desativar funcionário "${f.nome}"?`)) return;
     try {
       await api.excluirFuncionario(f.id);
       flash(`Funcionário "${f.nome}" desativado.`);
       carregar();
-    } catch (err) {
+    } catch (err: any) {
       alert(err.message);
     }
   }
@@ -217,7 +217,7 @@ export default function Funcionarios({ user }) {
   );
 }
 
-function FuncionarioModal({ funcionario, usuarioLogadoId, onCancelar, onSalvar }) {
+function FuncionarioModal({ funcionario, usuarioLogadoId, onCancelar, onSalvar }: any) {
   const editando = !!funcionario;
   const [nome, setNome] = useState(funcionario?.nome || "");
   const [email, setEmail] = useState(funcionario?.email || "");
@@ -236,7 +236,7 @@ function FuncionarioModal({ funcionario, usuarioLogadoId, onCancelar, onSalvar }
   const ehVoce = funcionario?.id === usuarioLogadoId;
   const ehAdminEscolhido = role === "ADMIN";
 
-  function alternarPermissao(id) {
+  function alternarPermissao(id: string) {
     setPermissoes(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
@@ -244,13 +244,13 @@ function FuncionarioModal({ funcionario, usuarioLogadoId, onCancelar, onSalvar }
     });
   }
 
-  function aplicarPreset(preset) {
+  function aplicarPreset(preset: string) {
     if (preset === "todos") setPermissoes(new Set(IDS_MODULOS));
     else if (preset === "nenhum") setPermissoes(new Set());
     else setPermissoes(new Set(permissoesPadrao(role)));
   }
 
-  async function salvar(e) {
+  async function salvar(e: any) {
     e.preventDefault();
     setErro("");
 
@@ -261,7 +261,7 @@ function FuncionarioModal({ funcionario, usuarioLogadoId, onCancelar, onSalvar }
 
     setSalvando(true);
     try {
-      const payload = {
+      const payload: any = {
         nome: nome.trim().toUpperCase(),
         email: email.trim().toLowerCase(),
         role,
@@ -277,7 +277,7 @@ function FuncionarioModal({ funcionario, usuarioLogadoId, onCancelar, onSalvar }
         f = await api.criarFuncionario(payload);
       }
       onSalvar(f, !editando);
-    } catch (err) {
+    } catch (err: any) {
       setErro(err.message);
     } finally {
       setSalvando(false);
@@ -365,7 +365,7 @@ function FuncionarioModal({ funcionario, usuarioLogadoId, onCancelar, onSalvar }
   );
 }
 
-function Campo({ label, children }) {
+function Campo({ label, children }: any) {
   return (
     <div>
       <label style={{ display: "block", color: C.muted, fontSize: 12, marginBottom: 6, fontWeight: 600 }}>{label}</label>
@@ -374,7 +374,7 @@ function Campo({ label, children }) {
   );
 }
 
-function PermissoesSecao({ permissoes, ehAdmin, onToggle, onPreset, role }) {
+function PermissoesSecao({ permissoes, ehAdmin, onToggle, onPreset, role }: any) {
   const total = MODULOS.length;
   const marcadas = ehAdmin ? total : permissoes.size;
 
@@ -447,7 +447,7 @@ function PermissoesSecao({ permissoes, ehAdmin, onToggle, onPreset, role }) {
   );
 }
 
-function SwitchVisual({ ativa }) {
+function SwitchVisual({ ativa }: any) {
   return (
     <span style={{
       width: 30, height: 16, borderRadius: 999, position: "relative",
@@ -463,55 +463,55 @@ function SwitchVisual({ ativa }) {
   );
 }
 
-const btnPreset = {
+const btnPreset: CSSProperties = {
   background: C.card, border: `1px solid ${C.border}`, color: C.muted,
   borderRadius: 6, padding: "5px 10px", fontSize: 11, fontWeight: 600,
   cursor: "pointer",
 };
 
-const inputStyle = {
+const inputStyle: CSSProperties = {
   width: "100%", background: C.surface, border: `1px solid ${C.border}`,
   borderRadius: 8, padding: "9px 12px", color: C.text, fontSize: 13,
   outline: "none", boxSizing: "border-box",
 };
 
-const selectCompacto = {
+const selectCompacto: CSSProperties = {
   background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8,
   padding: "10px 12px", color: C.text, fontSize: 13, cursor: "pointer", outline: "none",
 };
 
-const modalOverlay = {
+const modalOverlay: CSSProperties = {
   position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)",
   display: "flex", alignItems: "center", justifyContent: "center",
   padding: 20, zIndex: 100,
 };
 
-const modalCard = {
+const modalCard: CSSProperties = {
   background: C.card, border: `1px solid ${C.border}`, borderRadius: 14,
   width: "100%", maxHeight: "92vh", overflowY: "auto", padding: 24,
 };
 
-const modalHeader = {
+const modalHeader: CSSProperties = {
   display: "flex", justifyContent: "space-between", alignItems: "flex-start",
   marginBottom: 18,
 };
 
-const btnFechar = {
+const btnFechar: CSSProperties = {
   background: "transparent", border: "none", color: C.muted, fontSize: 22, cursor: "pointer",
 };
 
-const btnSecundario = {
+const btnSecundario: CSSProperties = {
   background: C.surface, border: `1px solid ${C.border}`, color: C.text,
   borderRadius: 8, padding: "10px 18px", fontWeight: 600, fontSize: 13, cursor: "pointer",
 };
 
-const btnPrimario = {
+const btnPrimario: CSSProperties = {
   background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
   color: C.white, border: "none", borderRadius: 8,
   padding: "10px 22px", fontWeight: 700, fontSize: 13, cursor: "pointer",
 };
 
-function btnIcone(cor) {
+function btnIcone(cor: string): CSSProperties {
   return {
     background: cor + "22", border: `1px solid ${cor}55`, color: cor,
     borderRadius: 6, padding: "5px 12px", fontSize: 12, fontWeight: 600,

@@ -18,6 +18,7 @@ import Relatorios from "./Relatorios.jsx";
 import Projeto from "./Projeto.jsx";
 import Sistema from "./Sistema.jsx";
 import Configuracoes from "./Configuracoes.jsx";
+import ConfiguracoesImpressora from "./ConfiguracoesImpressora.jsx";
 import Empresa from "./Empresa.jsx";
 import TrocarSenhaModal from "./TrocarSenhaModal.jsx";
 import Aparencia from "./Aparencia.jsx";
@@ -217,6 +218,7 @@ export default function App() {
     if (t === "projeto" || t === "aparencia") return true;
     if (t === "sistema" || t === "logs") return user?.role === "ADMIN";
     if (t === "empresa") return user?.role === "ADMIN" || user?.role === "GERENTE";
+    if (t === "impressora") return user?.role === "ADMIN" || user?.role === "GERENTE";
     return podeAcessar(user, TELA_MODULO[t]);
   }
 
@@ -225,7 +227,7 @@ export default function App() {
     if (!user) return;
     if (!podeVer(tela)) {
       const primeira = ["pdv","dashboard","dashboardcrm","caixa","clientes","segmentos","reativacao","tarefas","fidelidade","funil","automacoes","nps","fornecedores","produtos","etiquetas",
-        "estoque","compras","orcamentos","financeiro","relatorios","comissoes","funcionarios","projeto","sistema","empresa"].find(podeVer);
+        "estoque","compras","orcamentos","financeiro","relatorios","comissoes","funcionarios","projeto","sistema","empresa","impressora"].find(podeVer);
       if (primeira && primeira !== tela) setTela(primeira);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -459,6 +461,9 @@ export default function App() {
           {(user.role === "ADMIN" || user.role === "GERENTE") && (
             <Item icone="🏢" label="Empresa" ativo={tela === "empresa"} onClick={() => navegar("empresa")} />
           )}
+          {(user.role === "ADMIN" || user.role === "GERENTE") && (
+            <Item icone="🖨️" label="Impressora" ativo={tela === "impressora"} onClick={() => navegar("impressora")} />
+          )}
           <Item icone="📋" label="Projeto" ativo={tela === "projeto"} onClick={() => navegar("projeto")} />
           {user.role === "ADMIN" && (
             <Item icone="📜" label="Logs" ativo={tela === "logs"} onClick={() => navegar("logs")} />
@@ -657,6 +662,12 @@ export default function App() {
             <>
               <PageHeader titulo="Empresa" subtitulo="Identidade do tenant, dados fiscais e estatísticas" />
               <Empresa user={user} />
+            </>
+          )}
+          {tela === "impressora" && (user.role === "ADMIN" || user.role === "GERENTE") && (
+            <>
+              <PageHeader titulo="Impressora" subtitulo="Configurações de impressão não-fiscal — cupons, recibos, sangrias e fechamento" />
+              <ConfiguracoesImpressora user={user} />
             </>
           )}
           {tela === "relatorios" && (

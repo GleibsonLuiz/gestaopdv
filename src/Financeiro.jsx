@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { C } from "./lib/theme.js";
-import { api, BASE_URL } from "./lib/api.js";
+import { api, BASE_URL, getUser } from "./lib/api.js";
 import ActionsMenu from "./components/ActionsMenu.jsx";
+import { useConfiguracaoEmpresa } from "./HeaderRelatorio.jsx";
+import { obterConfigImpressora, devePrintar, imprimirDocumento } from "./lib/impressora.js";
+import CupomEnvelope from "./components/cupons/CupomEnvelope.jsx";
+import CupomReciboFinanceiro from "./components/cupons/CupomReciboFinanceiro.jsx";
 
 
 const fmtBRL = (v) => {
@@ -77,6 +81,7 @@ function BtnAba({ ativa, cor, onClick, children }) {
 function ListaContas({ tipo, podeEditar }) {
   const ehPagar = tipo === "pagar";
   const rotuloEntidade = ehPagar ? "Fornecedor" : "Cliente";
+  const empresa = useConfiguracaoEmpresa();
 
   const [contas, setContas] = useState([]);
   const [carregando, setCarregando] = useState(false);
@@ -162,10 +167,50 @@ function ListaContas({ tipo, podeEditar }) {
       else await api.receberConta(conta.id, payload);
       flash(ehPagar ? "Conta marcada como paga" : "Conta marcada como recebida");
       setRecebendoPagando(null);
+
+      // Auto-imprime recibo se a config permitir. Monta a conta com os dados
+      // pagos a partir do payload (mais barato que um GET a mais).
+      const cfgImp = await obterConfigImpressora();
+      if (cfgImp.imprimirAutomatico && devePrintar("RECIBO_FIN", cfgImp)) {
+        const contaImpressao = {
+          ...conta,
+          valorPago: payload?.valorPago ?? payload?.valor ?? conta.valor,
+          dataPagamento: payload?.dataPagamento || new Date().toISOString(),
+          formaPagamento: payload?.formaPagamento || conta.formaPagamento,
+          observacoes: payload?.observacoes || conta.observacoes,
+        };
+        await imprimirDocumento(
+          <CupomEnvelope cfg={cfgImp}>
+            <CupomReciboFinanceiro
+              tipo={ehPagar ? "PAGAR" : "RECEBER"}
+              conta={contaImpressao}
+              operador={getUser()}
+              empresa={empresa}
+              cfg={cfgImp}
+            />
+          </CupomEnvelope>,
+        );
+      }
+
       carregar();
     } catch (err) {
       alert(err.message);
     }
+  }
+
+  async function imprimirReciboReimpressao(conta) {
+    const cfgImp = await obterConfigImpressora();
+    await imprimirDocumento(
+      <CupomEnvelope cfg={cfgImp}>
+        <CupomReciboFinanceiro
+          tipo={ehPagar ? "PAGAR" : "RECEBER"}
+          conta={conta}
+          operador={getUser()}
+          empresa={empresa}
+          cfg={cfgImp}
+        />
+      </CupomEnvelope>,
+    );
   }
 
   async function executarReabrir(conta) {
@@ -410,6 +455,13 @@ function ListaContas({ tipo, podeEditar }) {
                       color: C.accent,
                       onClick: () => setEditando(c),
                       hidden: ehFinalizada || !podeEditar,
+                    },
+                    {
+                      label: "Imprimir recibo",
+                      icon: "🖨",
+                      color: C.accent,
+                      onClick: () => imprimirReciboReimpressao(c),
+                      hidden: c.status !== "PAGA",
                     },
                     {
                       label: "Reabrir",

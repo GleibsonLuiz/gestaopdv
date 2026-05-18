@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { C } from "./lib/theme.js";
 import { api } from "./lib/api.js";
-import HeaderRelatorio from "./HeaderRelatorio.jsx";
+import HeaderRelatorio, { useConfiguracaoEmpresa } from "./HeaderRelatorio.jsx";
 import { useModalKeys } from "./lib/modalKeys.js";
+import { obterConfigImpressora, devePrintar, imprimirDocumento } from "./lib/impressora.js";
+import CupomEnvelope from "./components/cupons/CupomEnvelope.jsx";
+import CupomSangriaSuprimento from "./components/cupons/CupomSangriaSuprimento.jsx";
+import CupomFechamentoCaixa from "./components/cupons/CupomFechamentoCaixa.jsx";
 
 const fmtBRL = (v) => {
   const n = Number(v);
@@ -636,10 +640,28 @@ function ModalFechar({ caixa, user, onCancelar, onSucesso }) {
   const [observacoes, setObservacoes] = useState("");
   const [autorizacao, setAutorizacao] = useState({ email: "", senha: "" });
   const [revelado, setRevelado] = useState(null);
+  const [caixaFechado, setCaixaFechado] = useState(null);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+  const empresa = useConfiguracaoEmpresa();
   const exigeAutorizacao = user?.role === "VENDEDOR";
   useModalKeys(true, { onClose: () => !salvando && onCancelar() });
+
+  async function imprimirComprovante() {
+    if (!caixaFechado || !revelado) return;
+    const cfgImp = await obterConfigImpressora();
+    await imprimirDocumento(
+      <CupomEnvelope cfg={cfgImp}>
+        <CupomFechamentoCaixa
+          caixa={caixaFechado}
+          conferencia={revelado}
+          operador={user}
+          empresa={empresa}
+          cfg={cfgImp}
+        />
+      </CupomEnvelope>,
+    );
+  }
 
   async function salvar(e) {
     e.preventDefault();
@@ -662,11 +684,29 @@ function ModalFechar({ caixa, user, onCancelar, onSucesso }) {
         emailAutorizacao: exigeAutorizacao ? autorizacao.email : undefined,
         senhaAutorizacao: exigeAutorizacao ? autorizacao.senha : undefined,
       });
-      setRevelado({
+      const conferencia = {
         contado, troco,
         esperado: Number(r.saldoFinalEsperado),
         diferenca: Number(r.diferenca),
-      });
+      };
+      setCaixaFechado(r);
+      setRevelado(conferencia);
+
+      // Auto-imprime se a config permitir.
+      const cfgImp = await obterConfigImpressora();
+      if (cfgImp.imprimirAutomatico && devePrintar("FECHAMENTO_CAIXA", cfgImp)) {
+        await imprimirDocumento(
+          <CupomEnvelope cfg={cfgImp}>
+            <CupomFechamentoCaixa
+              caixa={r}
+              conferencia={conferencia}
+              operador={user}
+              empresa={empresa}
+              cfg={cfgImp}
+            />
+          </CupomEnvelope>,
+        );
+      }
     } catch (err) {
       setErro(err.message);
       setSalvando(false);
@@ -697,6 +737,9 @@ function ModalFechar({ caixa, user, onCancelar, onSucesso }) {
             cor={dif === 0 ? C.green : dif > 0 ? C.yellow : C.red} />
         </div>
         <RodapeModal>
+          <button onClick={imprimirComprovante} style={btnCancelar}>
+            🖨️ Imprimir comprovante
+          </button>
           <button onClick={() => onSucesso(dif)} style={btnPrimario}>Concluir</button>
         </RodapeModal>
       </ModalShell>
@@ -752,6 +795,8 @@ export function ModalManual({ caixa, user, tipo, onCancelar, onSucesso }) {
   const [autorizacao, setAutorizacao] = useState({ email: "", senha: "" });
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+  const [movRegistrada, setMovRegistrada] = useState(null);
+  const empresa = useConfiguracaoEmpresa();
   const exigeAutorizacao = ehSangria && user?.role === "VENDEDOR";
   useModalKeys(true, { onClose: () => !salvando && onCancelar() });
 
@@ -766,16 +811,75 @@ export function ModalManual({ caixa, user, tipo, onCancelar, onSucesso }) {
     setSalvando(true);
     try {
       const fn = ehSangria ? api.sangriaCaixa : api.suprimentoCaixa;
-      await fn(caixa.id, {
+      const mov = await fn(caixa.id, {
         valor: v,
         descricao,
         ...(exigeAutorizacao
           ? { emailAutorizacao: autorizacao.email, senhaAutorizacao: autorizacao.senha }
           : {}),
       });
-      onSucesso();
+      // Se config liga auto-impressao deste tipo, dispara antes de confirmar.
+      const cfgImp = await obterConfigImpressora();
+      const tipoCupom = ehSangria ? "SANGRIA" : "SUPRIMENTO";
+      if (cfgImp.imprimirAutomatico && devePrintar(tipoCupom, cfgImp)) {
+        await imprimirDocumento(
+          <CupomEnvelope cfg={cfgImp}>
+            <CupomSangriaSuprimento
+              movimentacao={mov}
+              caixa={caixa}
+              operador={user}
+              empresa={empresa}
+              cfg={cfgImp}
+            />
+          </CupomEnvelope>,
+        );
+      }
+      setMovRegistrada(mov);
     } catch (err) { setErro(err.message); }
     finally { setSalvando(false); }
+  }
+
+  async function imprimirManual() {
+    const cfgImp = await obterConfigImpressora();
+    await imprimirDocumento(
+      <CupomEnvelope cfg={cfgImp}>
+        <CupomSangriaSuprimento
+          movimentacao={movRegistrada}
+          caixa={caixa}
+          operador={user}
+          empresa={empresa}
+          cfg={cfgImp}
+        />
+      </CupomEnvelope>,
+    );
+  }
+
+  // Tela pos-sucesso: oferece reimpressao manual + concluir.
+  if (movRegistrada) {
+    return (
+      <ModalShell
+        titulo={ehSangria ? "✂ Sangria registrada" : "＋ Suprimento registrado"}
+        onFechar={onSucesso}
+      >
+        <div style={{ textAlign: "center", padding: "10px 0 18px" }}>
+          <div style={{ fontSize: 44 }}>✅</div>
+          <div style={{ color: C.white, fontWeight: 700, fontSize: 18, marginTop: 6 }}>
+            {fmtBRL(movRegistrada.valor)} {ehSangria ? "retirado(s) do caixa" : "adicionado(s) ao caixa"}
+          </div>
+          <div style={{ color: C.muted, fontSize: 12, marginTop: 4 }}>
+            Novo saldo: {fmtBRL(movRegistrada.saldoDepois)}
+          </div>
+        </div>
+        <RodapeModal>
+          <button type="button" onClick={imprimirManual} style={btnCancelar}>
+            🖨️ Imprimir comprovante
+          </button>
+          <button type="button" onClick={onSucesso} style={btnPrimario}>
+            Concluir
+          </button>
+        </RodapeModal>
+      </ModalShell>
+    );
   }
 
   return (

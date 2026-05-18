@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { C } from "./lib/theme.js";
 import { api, BASE_URL } from "./lib/api.js";
 import { useConfiguracaoEmpresa, formatarEndereco } from "./HeaderRelatorio.jsx";
-import { urlLogotipo } from "./Configuracoes.jsx";
+import { obterConfigImpressora, devePrintar } from "./lib/impressora.js";
+import CupomEnvelope from "./components/cupons/CupomEnvelope.jsx";
+import CupomVenda from "./components/cupons/CupomVenda.jsx";
 import { GerenciarFormasModal } from "./Financeiro.jsx";
 import { useModalKeys } from "./lib/modalKeys.js";
 import ActionsMenu from "./components/ActionsMenu.jsx";
@@ -1921,12 +1923,40 @@ function TotalAnimado({ valor }) {
 // ==================== RECIBO ====================
 
 function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpressao = false }) {
-  const subtotalCupom = Number(venda.total) + Number(venda.desconto || 0);
   const mostrarRecebidoTroco = Number(valorRecebido) > 0;
   const empresa = useConfiguracaoEmpresa();
-  const logoUrl = empresa ? urlLogotipo(empresa.logotipo) : null;
-  const enderecoCompleto = empresa ? formatarEndereco(empresa) : "";
   const novaVendaBtnRef = useRef(null);
+  const [cfgImp, setCfgImp] = useState(null);
+  const printDispatchedRef = useRef(false);
+
+  // Carrega ConfiguracaoImpressora — usada para decidir auto-print, vias e
+  // largura/conteudo do cupom. Cacheada (TTL 30s no helper).
+  useEffect(() => {
+    let ativo = true;
+    obterConfigImpressora().then(c => { if (ativo) setCfgImp(c); });
+    return () => { ativo = false; };
+  }, []);
+
+  // Auto-imprime ao abrir o recibo (apenas no fluxo de venda concluida —
+  // reimpressao requer clique explicito). Respeita cfgImp.imprimirAutomatico
+  // e cfgImp.imprimirVenda. Espera o cupom estar no DOM (paint) + imagens.
+  useEffect(() => {
+    if (printDispatchedRef.current) return;
+    if (modoReimpressao) return;
+    if (!cfgImp || !empresa) return;
+    if (!devePrintar("VENDA", cfgImp)) return;
+    if (!cfgImp.imprimirAutomatico) return;
+    printDispatchedRef.current = true;
+    const vias = Math.max(1, Number(cfgImp.viasVenda) || 1);
+    let i = 0;
+    const disparar = () => {
+      window.print();
+      i += 1;
+      if (i < vias) setTimeout(disparar, 500);
+    };
+    // 2 RAFs + microtask para garantir paint e que o logo carregou.
+    requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(disparar, 100)));
+  }, [cfgImp, empresa, modoReimpressao]);
 
   // Foca o botão principal (Nova Venda no fluxo PDV; Fechar na reimpressão).
   // Tenta imediatamente e de novo apos ticks caso outro setTimeout(0) esteja
@@ -1945,48 +1975,11 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpr
   return (
     <>
       <style>{`
-        @media print {
-          @page { size: 80mm auto; margin: 4mm; }
-          body * { visibility: hidden !important; }
-          .cupom-imprimivel, .cupom-imprimivel * { visibility: visible !important; }
-          .cupom-imprimivel {
-            position: absolute !important;
-            left: 0 !important; top: 0 !important;
-            width: 100% !important;
-            background: white !important;
-            color: black !important;
-          }
-        }
-        .cupom-imprimivel {
-          position: absolute;
-          left: -9999px;
-          top: -9999px;
-          width: 80mm;
-          background: white;
-          color: black;
-          font-family: 'Courier New', Courier, monospace;
-          font-size: 12px;
-          line-height: 1.4;
-          padding: 8px 6px;
-        }
-        .cupom-imprimivel .cupom-divisor {
-          border: 0;
-          border-top: 1px dashed #000;
-          margin: 6px 0;
-        }
         .recibo-nova-venda:focus,
         .recibo-nova-venda:focus-visible {
           box-shadow: 0 0 0 3px var(--pdv-accent-glow), 0 6px 18px -6px var(--pdv-accent-glow), 0 1px 0 rgba(255,255,255,.2) inset;
           transform: translateY(-1px);
         }
-        .cupom-imprimivel .cupom-linha {
-          display: flex;
-          justify-content: space-between;
-          gap: 8px;
-        }
-        .cupom-imprimivel .cupom-centro { text-align: center; }
-        .cupom-imprimivel .cupom-bold { font-weight: 700; }
-        .cupom-imprimivel .cupom-grande { font-size: 14px; font-weight: 700; }
       `}</style>
 
       <div onClick={onFechar} className="pdv-modal-bg">
@@ -2084,101 +2077,19 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpr
         </div>
       </div>
 
-      {/* Cupom oculto, visível apenas na impressão */}
-      <div className="cupom-imprimivel" aria-hidden="true">
-        {logoUrl && (
-          <div className="cupom-centro" style={{ marginBottom: 4 }}>
-            <img src={logoUrl} alt="" style={{ maxHeight: 50, maxWidth: "70%", objectFit: "contain" }} />
-          </div>
-        )}
-        <div className="cupom-centro cupom-bold">
-          {empresa?.nomeFantasia || empresa?.razaoSocial || "GESTÃOPRO"}
-        </div>
-        {empresa?.nomeFantasia && empresa?.razaoSocial !== empresa?.nomeFantasia && (
-          <div className="cupom-centro" style={{ fontSize: 10 }}>{empresa.razaoSocial}</div>
-        )}
-        {empresa?.cnpj && (
-          <div className="cupom-centro" style={{ fontSize: 10 }}>CNPJ {empresa.cnpj}</div>
-        )}
-        {enderecoCompleto && (
-          <div className="cupom-centro" style={{ fontSize: 10 }}>{enderecoCompleto}</div>
-        )}
-        {(empresa?.telefone || empresa?.email) && (
-          <div className="cupom-centro" style={{ fontSize: 10 }}>
-            {empresa.telefone}
-            {empresa.telefone && empresa.email && " · "}
-            {empresa.email}
-          </div>
-        )}
-        <hr className="cupom-divisor" />
-        <div className="cupom-centro cupom-bold">CUPOM DE VENDA</div>
-        <div className="cupom-centro" style={{ fontSize: 10 }}>** NÃO É DOCUMENTO FISCAL **</div>
-        {modoReimpressao && (
-          <div className="cupom-centro cupom-bold" style={{ fontSize: 11, marginTop: 2 }}>
-            ** 2ª VIA — REIMPRESSÃO **
-          </div>
-        )}
-        <hr className="cupom-divisor" />
-        <div>Venda: <span className="cupom-bold">#{venda.numero}</span></div>
-        <div>Data: {fmtData(venda.createdAt)}</div>
-        {venda.cliente?.nome && <div>Cliente: {venda.cliente.nome}</div>}
-        {venda.cliente?.cpfCnpj && <div>CPF/CNPJ: {venda.cliente.cpfCnpj}</div>}
-        <div>Vendedor: {venda.user?.nome}</div>
-        <hr className="cupom-divisor" />
-        <div className="cupom-linha cupom-bold">
-          <span>ITEM</span>
-          <span>VALOR</span>
-        </div>
-        <hr className="cupom-divisor" />
-        {venda.itens?.map(it => (
-          <div key={it.id} style={{ marginBottom: 4 }}>
-            <div>{it.produto?.codigo} {it.produto?.nome}</div>
-            <div className="cupom-linha">
-              <span>{it.quantidade} {it.produto?.unidade || ""} x {fmtBRL(it.precoUnitario)}</span>
-              <span>{fmtBRL(it.subtotal)}</span>
-            </div>
-          </div>
-        ))}
-        <hr className="cupom-divisor" />
-        <div className="cupom-linha">
-          <span>Subtotal:</span>
-          <span>{fmtBRL(subtotalCupom)}</span>
-        </div>
-        {Number(venda.desconto) > 0 && (
-          <div className="cupom-linha">
-            <span>Desconto:</span>
-            <span>- {fmtBRL(venda.desconto)}</span>
-          </div>
-        )}
-        <hr className="cupom-divisor" />
-        <div className="cupom-linha cupom-grande">
-          <span>TOTAL:</span>
-          <span>{fmtBRL(venda.total)}</span>
-        </div>
-        <hr className="cupom-divisor" />
-        <div>Pagamento: <span className="cupom-bold">{FORMA_LABEL[venda.formaPagamento]}</span></div>
-        {mostrarRecebidoTroco && (
-          <>
-            <div className="cupom-linha">
-              <span>Valor recebido:</span>
-              <span>{fmtBRL(valorRecebido)}</span>
-            </div>
-            <div className="cupom-linha cupom-bold">
-              <span>TROCO:</span>
-              <span>{fmtBRL(troco)}</span>
-            </div>
-          </>
-        )}
-        {venda.observacoes && (
-          <>
-            <hr className="cupom-divisor" />
-            <div>Obs: {venda.observacoes}</div>
-          </>
-        )}
-        <hr className="cupom-divisor" />
-        <div className="cupom-centro" style={{ marginTop: 6 }}>OBRIGADO PELA PREFERÊNCIA!</div>
-        <div className="cupom-centro" style={{ fontSize: 10, marginTop: 4 }}>{fmtData(new Date().toISOString())}</div>
-      </div>
+      {/* Cupom oculto, visivel apenas na impressao — quando habilitado */}
+      {cfgImp && devePrintar("VENDA", cfgImp) && (
+        <CupomEnvelope cfg={cfgImp}>
+          <CupomVenda
+            venda={venda}
+            empresa={empresa}
+            cfg={cfgImp}
+            valorRecebido={valorRecebido}
+            troco={troco}
+            modoReimpressao={modoReimpressao}
+          />
+        </CupomEnvelope>
+      )}
     </>
   );
 }

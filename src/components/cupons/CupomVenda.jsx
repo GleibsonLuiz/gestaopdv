@@ -1,6 +1,6 @@
 import CupomCabecalho from "./CupomCabecalho.jsx";
 import CupomRodape from "./CupomRodape.jsx";
-import { fmtBRL, fmtData, FORMA_LABEL } from "./fmt.js";
+import { fmtBRL, fmtData, fmtQtd, FORMA_LABEL } from "./fmt.js";
 
 // Conteudo do cupom de venda. Substitui o markup inline que ficava dentro
 // de PDV.ReciboModal. Pode ser usado:
@@ -53,7 +53,7 @@ export default function CupomVenda({
         <div key={it.id} style={{ marginBottom: 4 }}>
           <div>{it.produto?.codigo} {it.produto?.nome}</div>
           <div className="cupom-linha">
-            <span>{it.quantidade} {it.produto?.unidade || ""} x {fmtBRL(it.precoUnitario)}</span>
+            <span>{fmtQtd(it.quantidade)} {it.produto?.unidade || ""} x {fmtBRL(it.precoUnitario)}</span>
             <span>{fmtBRL(it.subtotal)}</span>
           </div>
         </div>

@@ -99,7 +99,9 @@ export async function inicio(req, res, next) {
       topProdutos = topGroups
         .map(g => {
           const p = mapa.get(g.produtoId);
-          return p ? { ...p, vendidos: g._sum.quantidade ?? 0 } : null;
+          // _sum.quantidade agora vem como Decimal (ItemVenda.quantidade
+          // virou Decimal(12,3)). Coerce para number antes de serializar.
+          return p ? { ...p, vendidos: Number(g._sum.quantidade) || 0 } : null;
         })
         .filter(Boolean);
     }

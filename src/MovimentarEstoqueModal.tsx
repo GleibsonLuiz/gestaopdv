@@ -3,6 +3,14 @@ import { C } from "./lib/theme";
 import { api } from "./lib/api";
 import SelectBusca from "./components/SelectBusca";
 
+// Estoque/quantidade agora aceitam decimal (Decimal(12,3) no banco) —
+// produtos vendidos por metro/kg/L preservam fracao.
+const fmtQtd = (v: number | string | null | undefined): string => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "0";
+  return n.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+};
+
 // ============ TIPOS ============
 
 type TipoMov = "ENTRADA" | "SAIDA" | "AJUSTE";
@@ -49,11 +57,12 @@ export default function MovimentarEstoqueModal({
 
   const previewDepois = useMemo(() => {
     if (!produto || quantidade === "") return null;
-    const q = parseInt(quantidade, 10);
+    const q = parseFloat(String(quantidade).replace(",", "."));
     if (!Number.isFinite(q)) return null;
-    if (tipo === "ENTRADA") return produto.estoque + q;
-    if (tipo === "SAIDA") return produto.estoque - q;
-    if (tipo === "AJUSTE") return q;
+    const estoqueAtual = Number(produto.estoque) || 0;
+    if (tipo === "ENTRADA") return Math.round((estoqueAtual + q) * 1000) / 1000;
+    if (tipo === "SAIDA") return Math.round((estoqueAtual - q) * 1000) / 1000;
+    if (tipo === "AJUSTE") return Math.round(q * 1000) / 1000;
     return null;
   }, [produto, tipo, quantidade]);
 
@@ -61,12 +70,14 @@ export default function MovimentarEstoqueModal({
     e.preventDefault();
     setErro("");
     if (!produtoId) { setErro("Selecione um produto"); return; }
-    const q = parseInt(quantidade, 10);
-    if (!Number.isFinite(q)) { setErro("Quantidade inválida"); return; }
-    if (tipo !== "AJUSTE" && q <= 0) { setErro("Quantidade deve ser maior que zero"); return; }
-    if (tipo === "AJUSTE" && q < 0) { setErro("Para ajuste, informe um valor >= 0"); return; }
-    if (tipo === "SAIDA" && produto && q > produto.estoque) {
-      setErro(`Estoque insuficiente. Disponível: ${produto.estoque}`); return;
+    const qRaw = parseFloat(String(quantidade).replace(",", "."));
+    if (!Number.isFinite(qRaw)) { setErro("Quantidade inválida"); return; }
+    if (tipo !== "AJUSTE" && qRaw <= 0) { setErro("Quantidade deve ser maior que zero"); return; }
+    if (tipo === "AJUSTE" && qRaw < 0) { setErro("Para ajuste, informe um valor >= 0"); return; }
+    const q = Math.round(qRaw * 1000) / 1000;
+    const estoqueAtual = produto ? Number(produto.estoque) || 0 : 0;
+    if (tipo === "SAIDA" && produto && q > estoqueAtual + 1e-9) {
+      setErro(`Estoque insuficiente. Disponível: ${estoqueAtual}`); return;
     }
 
     setSalvando(true);
@@ -124,7 +135,7 @@ export default function MovimentarEstoqueModal({
             opcoes={produtos}
             value={produtoId}
             onChange={setProdutoId}
-            labelFn={(p) => `${p.codigo} — ${p.nome} (estoque: ${p.estoque})`}
+            labelFn={(p) => `${p.codigo} — ${p.nome} (estoque: ${fmtQtd(p.estoque)})`}
             filtroOpcoes={(p) => p.tipoItem !== "SERVICO"}
             placeholder="Buscar produto..."
             disabled={!!produtoInicial}
@@ -157,6 +168,7 @@ export default function MovimentarEstoqueModal({
         <Campo label={tipo === "AJUSTE" ? "Estoque deve ficar com *" : "Quantidade *"}>
           <input
             type="number"
+            step="0.001"
             min="0"
             value={quantidade}
             onChange={(e) => setQuantidade(e.target.value)}
@@ -191,13 +203,13 @@ export default function MovimentarEstoqueModal({
           >
             <div className="text-gp-muted text-[11px] mb-1 font-semibold">PRÉVIA</div>
             <div className="text-gp-text text-sm">
-              Estoque <span className="font-mono">{produto.estoque}</span>
+              Estoque <span className="font-mono">{fmtQtd(produto.estoque)}</span>
               {" → "}
               <span
                 className="font-mono font-bold"
                 style={{ color: previewDepois < 0 ? C.red : tipoCor }}
               >
-                {previewDepois}
+                {fmtQtd(previewDepois)}
               </span>
               {previewDepois < 0 && <span className="text-gp-red ml-2 text-xs">⚠ Negativo</span>}
             </div>

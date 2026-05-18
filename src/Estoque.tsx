@@ -56,6 +56,13 @@ const fmtData = (iso: string | null | undefined): string => {
   return d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 };
 
+// Quantidade fracionaria (Decimal(12,3) no banco) — exibe ate 3 casas.
+const fmtQtd = (v: number | string | null | undefined): string => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "0";
+  return n.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+};
+
 // ============ COMPONENTE PRINCIPAL ============
 
 interface EstoqueProps {
@@ -112,7 +119,7 @@ export default function Estoque({ user }: EstoqueProps) {
   function aposSalvar(mov: unknown) {
     const m = mov as Movimentacao;
     setModalAberto(false);
-    flash(`${TIPO_INFO[m.tipo].label} registrada (estoque: ${m.estoqueAntes} → ${m.estoqueDepois})`);
+    flash(`${TIPO_INFO[m.tipo].label} registrada (estoque: ${fmtQtd(m.estoqueAntes)} → ${fmtQtd(m.estoqueDepois)})`);
     carregar();
   }
 
@@ -232,10 +239,10 @@ export default function Estoque({ user }: EstoqueProps) {
                 className="text-right font-bold"
                 style={{ color: t.cor }}
               >
-                {m.tipo === "SAIDA" ? "-" : m.tipo === "ENTRADA" ? "+" : ""}{m.quantidade}
+                {m.tipo === "SAIDA" ? "-" : m.tipo === "ENTRADA" ? "+" : ""}{fmtQtd(m.quantidade)}
               </div>
               <div className="text-right text-gp-text font-mono text-xs">
-                {m.estoqueAntes} → <span className="text-gp-white font-bold">{m.estoqueDepois}</span>
+                {fmtQtd(m.estoqueAntes)} → <span className="text-gp-white font-bold">{fmtQtd(m.estoqueDepois)}</span>
               </div>
               <div className="text-gp-muted text-xs">{m.motivo || "—"}</div>
               <div className="text-gp-muted text-xs">{m.user?.nome || "—"}</div>

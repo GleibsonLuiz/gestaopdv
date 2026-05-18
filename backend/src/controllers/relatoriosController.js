@@ -87,7 +87,9 @@ export async function relatorioVendas(req, res, next) {
     const mapaProd = new Map(produtos.map(p => [p.id, p]));
     const topProdutos = topProdutosRaw.map(t => ({
       produto: mapaProd.get(t.produtoId) || null,
-      quantidade: t._sum.quantidade || 0,
+      // _sum.quantidade agora vem como Decimal (ItemVenda.quantidade virou
+      // Decimal(12,3)). Coerce para number antes de serializar.
+      quantidade: Number(t._sum.quantidade) || 0,
       total: toNum(t._sum.subtotal),
     }));
 

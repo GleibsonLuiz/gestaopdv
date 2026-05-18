@@ -7,6 +7,14 @@ export const fmtBRL = (v) => {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 };
 
+// Quantidade fracionaria (Decimal(12,3) no banco) — exibe ate 3 casas
+// suprimindo zeros a direita. "1.500" -> "1,5", "2.000" -> "2".
+export const fmtQtd = (v) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "0";
+  return n.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+};
+
 export const fmtData = (iso) => {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });

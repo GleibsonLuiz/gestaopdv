@@ -271,7 +271,7 @@ export async function resumo(req, res, next) {
       prisma.$queryRaw`
         SELECT
           COALESCE(SUM(estoque * COALESCE("precoCusto", 0)), 0)::float AS valor,
-          COALESCE(SUM(estoque), 0)::int AS quantidade
+          COALESCE(SUM(estoque), 0)::float AS quantidade
         FROM produtos
         WHERE ativo = true
           AND "tipoItem" = 'PRODUTO'
@@ -301,7 +301,7 @@ export async function resumo(req, res, next) {
           COALESCE(c.id, '__sem_categoria__') AS id,
           COALESCE(c.nome, 'Sem categoria') AS nome,
           COALESCE(SUM(iv.subtotal), 0)::float AS total,
-          COALESCE(SUM(iv.quantidade), 0)::int AS quantidade
+          COALESCE(SUM(iv.quantidade), 0)::float AS quantidade
         FROM itens_venda iv
         JOIN vendas v ON v.id = iv."vendaId"
         JOIN produtos p ON p.id = iv."produtoId"
@@ -371,7 +371,9 @@ export async function resumo(req, res, next) {
     const mapaProdutos = new Map(produtosTop.map(p => [p.id, p]));
     const topProdutos = topProdutosRaw.map(t => ({
       produto: mapaProdutos.get(t.produtoId) || null,
-      quantidade: t._sum.quantidade || 0,
+      // _sum.quantidade agora vem como Decimal (ItemVenda.quantidade virou
+      // Decimal(12,3)). Coerce para number antes de serializar.
+      quantidade: Number(t._sum.quantidade) || 0,
       total: toNum(t._sum.subtotal),
     }));
 

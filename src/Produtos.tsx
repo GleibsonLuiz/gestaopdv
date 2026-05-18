@@ -155,6 +155,14 @@ const fmtBRL = (v: number | string | null | undefined): string => {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 };
 
+// Estoque agora aceita decimal (Decimal(12,3)) — exibe ate 3 casas suprimindo
+// zeros a direita. "1.500" -> "1,5", "2.000" -> "2".
+const fmtQtd = (v: number | string | null | undefined): string => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "0";
+  return n.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+};
+
 function proximoCodigoSugerido(produtos: Produto[]): string {
   const numericos = produtos
     .map((p) => String(p.codigo || "").match(/^(\d+)$/))
@@ -549,7 +557,9 @@ export default function Produtos({ user }: ProdutosProps) {
           <div className="py-[30px] text-center text-gp-muted text-[13px]">Nenhum produto encontrado.</div>
         ) : produtos.map((p) => {
           const ehServico = p.tipoItem === "SERVICO";
-          const baixo = !ehServico && p.estoque <= p.estoqueMinimo;
+          // estoque/estoqueMinimo agora sao Decimal(12,3) — convertem para
+          // Number antes de comparar (vem como string da API JSON).
+          const baixo = !ehServico && Number(p.estoque) <= Number(p.estoqueMinimo);
           return (
             <div
               key={p.id}
@@ -619,7 +629,7 @@ export default function Produtos({ user }: ProdutosProps) {
                   </span>
                 ) : (
                   <span style={{ color: baixo ? C.red : C.text, fontWeight: baixo ? 700 : 500 }}>
-                    {p.estoque}
+                    {fmtQtd(p.estoque)}
                     {baixo && <span className="text-[10px] ml-1.5">⚠</span>}
                   </span>
                 )}
@@ -830,7 +840,7 @@ export default function Produtos({ user }: ProdutosProps) {
                       <CampoLux label={form.tipoItem === "SERVICO" ? "Estoque (n/a)" : "Estoque atual"}>
                         <input
                           className="lux-input"
-                          type="number" min="0"
+                          type="number" step="0.001" min="0"
                           value={form.tipoItem === "SERVICO" ? "" : form.estoque}
                           onChange={(e) => setForm({ ...form, estoque: e.target.value })}
                           disabled={form.tipoItem === "SERVICO"}
@@ -841,7 +851,7 @@ export default function Produtos({ user }: ProdutosProps) {
                       <CampoLux label={form.tipoItem === "SERVICO" ? "Mínimo (n/a)" : "Estoque mínimo"}>
                         <input
                           className="lux-input"
-                          type="number" min="0"
+                          type="number" step="0.001" min="0"
                           value={form.tipoItem === "SERVICO" ? "" : form.estoqueMinimo}
                           onChange={(e) => setForm({ ...form, estoqueMinimo: e.target.value })}
                           disabled={form.tipoItem === "SERVICO"}

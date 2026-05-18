@@ -28,6 +28,14 @@ function toInt(v, fallback = 0) {
   return Number.isFinite(n) ? n : NaN;
 }
 
+// Estoque vira Decimal(12,3) — arredonda para 3 casas para casar com o banco.
+function toQtd(v, fallback = 0) {
+  if (v === undefined || v === null || v === "") return fallback;
+  const n = typeof v === "number" ? v : Number(String(v).replace(",", "."));
+  if (!Number.isFinite(n)) return NaN;
+  return Math.round(n * 1000) / 1000;
+}
+
 const INCLUDE_REL = {
   categoria: { select: { id: true, nome: true } },
   fornecedor: { select: { id: true, nome: true } },
@@ -57,7 +65,7 @@ export async function listar(req, res, next) {
     });
 
     if (estoqueBaixo === "true") {
-      produtos = produtos.filter(p => p.estoque <= p.estoqueMinimo);
+      produtos = produtos.filter(p => Number(p.estoque) <= Number(p.estoqueMinimo));
     }
 
     res.json(produtos);
@@ -114,8 +122,8 @@ export async function criar(req, res, next) {
     let estoque = 0;
     let estoqueMinimo = 0;
     if (tipoItem === "PRODUTO") {
-      estoque = toInt(req.body.estoque, 0);
-      estoqueMinimo = toInt(req.body.estoqueMinimo, 0);
+      estoque = toQtd(req.body.estoque, 0);
+      estoqueMinimo = toQtd(req.body.estoqueMinimo, 0);
       if (Number.isNaN(estoque) || estoque < 0) return res.status(400).json({ erro: "Estoque invalido" });
       if (Number.isNaN(estoqueMinimo) || estoqueMinimo < 0) return res.status(400).json({ erro: "Estoque minimo invalido" });
     }
@@ -244,12 +252,12 @@ export async function atualizar(req, res, next) {
     // Estoque so e aceito quando o item NAO esta sendo marcado como SERVICO
     // (campo ja zerado acima nesse caso).
     if (req.body.estoque !== undefined && data.tipoItem !== "SERVICO") {
-      const v = toInt(req.body.estoque, NaN);
+      const v = toQtd(req.body.estoque, NaN);
       if (Number.isNaN(v) || v < 0) return res.status(400).json({ erro: "Estoque invalido" });
       data.estoque = v;
     }
     if (req.body.estoqueMinimo !== undefined && data.tipoItem !== "SERVICO") {
-      const v = toInt(req.body.estoqueMinimo, NaN);
+      const v = toQtd(req.body.estoqueMinimo, NaN);
       if (Number.isNaN(v) || v < 0) return res.status(400).json({ erro: "Estoque minimo invalido" });
       data.estoqueMinimo = v;
     }

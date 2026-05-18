@@ -81,6 +81,14 @@ function toInt(v: unknown): number | null {
   return Number.isFinite(n) ? n : NaN;
 }
 
+// Quantidade contada / estoque agora sao Decimal(12,3). Aceita fracao.
+function toQtd(v: unknown): number | null {
+  if (v === undefined || v === null || v === "") return null;
+  const n = typeof v === "number" ? v : Number(String(v).replace(",", "."));
+  if (!Number.isFinite(n)) return NaN;
+  return Math.round(n * 1000) / 1000;
+}
+
 // =====================================================================
 // LISTAR
 // =====================================================================
@@ -119,8 +127,9 @@ export async function obter(req: Request, res: Response, next: NextFunction) {
     // do snapshot de precoCusto. NUNCA confia no precoCusto atual do produto
     // (que pode ter mudado depois da abertura).
     const itensComCalculos = inv.itens.map((item) => {
-      const contada = item.quantidadeContada;
-      const dif = contada === null ? null : contada - item.estoqueLogico;
+      const contada = item.quantidadeContada === null ? null : Number(item.quantidadeContada);
+      const logico = Number(item.estoqueLogico);
+      const dif = contada === null ? null : Math.round((contada - logico) * 1000) / 1000;
       const custoUnit = item.precoCustoMomento ? Number(item.precoCustoMomento) : 0;
       const impactoFinanceiro = dif === null ? null : Number((dif * custoUnit).toFixed(2));
       return {
@@ -312,7 +321,7 @@ export async function salvarContagens(req: Request, res: Response, next: NextFun
     // Valida cada contagem antes de tocar no banco — payload todo-ou-nada.
     for (const c of contagens) {
       if (!c.itemId) return res.status(400).json({ erro: "itemId e obrigatorio" });
-      const q = toInt(c.quantidadeContada);
+      const q = toQtd(c.quantidadeContada);
       if (q === null || !Number.isFinite(q) || q < 0) {
         return res.status(400).json({
           erro: `Quantidade invalida para o item ${c.itemId}`,
@@ -326,7 +335,7 @@ export async function salvarContagens(req: Request, res: Response, next: NextFun
     const agora = new Date();
     await prisma.$transaction(async (tx) => {
       for (const c of contagens) {
-        const q = toInt(c.quantidadeContada)!;
+        const q = toQtd(c.quantidadeContada)!;
         // Recupera estoqueLogico do snapshot para calcular diferenca.
         const item = await tx.inventarioItem.findFirst({
           where: { id: c.itemId, inventarioId: req.params.id },
@@ -337,11 +346,12 @@ export async function salvarContagens(req: Request, res: Response, next: NextFun
             statusHttp: 400,
           });
         }
+        const diferenca = Math.round((q - Number(item.estoqueLogico)) * 1000) / 1000;
         await tx.inventarioItem.update({
           where: { id: item.id },
           data: {
             quantidadeContada: q,
-            diferenca: q - item.estoqueLogico,
+            diferenca,
             observacao: c.observacao?.trim() || null,
             contadoEm: agora,
           },
@@ -411,11 +421,11 @@ export async function consolidar(req: Request, res: Response, next: NextFunction
             statusHttp: 404,
           });
         }
-        const estoqueAntes = prod.estoque;
-        const estoqueDepois = item.quantidadeContada!;
+        const estoqueAntes = Number(prod.estoque);
+        const estoqueDepois = Number(item.quantidadeContada!);
         if (estoqueAntes === estoqueDepois) continue; // sem mudanca real
 
-        const delta = estoqueDepois - estoqueAntes;
+        const delta = Math.round((estoqueDepois - estoqueAntes) * 1000) / 1000;
         await tx.produto.update({
           where: { id: prod.id },
           data: { estoque: estoqueDepois },

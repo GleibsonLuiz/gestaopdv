@@ -91,6 +91,14 @@ const fmtBRL = (v: number | string | null | undefined): string => {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 };
 
+// Quantidade fracionaria (Decimal(12,3) no banco) — exibe ate 3 casas,
+// suprime zeros a direita.
+const fmtQtd = (v: number | string | null | undefined): string => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "0";
+  return n.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+};
+
 const fmtData = (iso: string | null | undefined): string => {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
@@ -437,7 +445,7 @@ function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }: NovaC
     for (let i = 0; i < itens.length; i++) {
       const it = itens[i];
       if (!it.produtoId) { setErro(`Item ${i + 1}: selecione o produto`); return; }
-      const q = parseInt(it.quantidade, 10);
+      const q = parseFloat(String(it.quantidade).replace(",", "."));
       if (!Number.isFinite(q) || q <= 0) { setErro(`Item ${i + 1}: quantidade inválida`); return; }
       const p = parseFloat(String(it.precoUnitario).replace(",", "."));
       if (!Number.isFinite(p) || p < 0) { setErro(`Item ${i + 1}: preço unitário inválido`); return; }
@@ -549,7 +557,7 @@ function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }: NovaC
         </div>
 
         <div
-          className="bg-gp-surface rounded-[10px] overflow-hidden"
+          className="bg-gp-surface rounded-[10px] overflow-visible"
           style={{ border: `1px solid ${C.border}` }}
         >
           <div
@@ -558,6 +566,8 @@ function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }: NovaC
               gridTemplateColumns: "2.5fr 80px 130px 130px 40px",
               padding: "8px 12px",
               borderBottom: `1px solid ${C.border}`,
+              borderTopLeftRadius: 10,
+              borderTopRightRadius: 10,
             }}
           >
             <div>Produto</div>
@@ -593,7 +603,8 @@ function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }: NovaC
                 />
                 <input
                   type="number"
-                  min="1"
+                  step="0.001"
+                  min="0.001"
                   value={it.quantidade}
                   onChange={(e) => atualizarItem(idx, "quantidade", e.target.value)}
                   required
@@ -894,7 +905,7 @@ function DetalheCompraModal({ compra, podeEstornar, onFechar, onEstornado }: Det
                 <div className="text-gp-white font-semibold">{it.produto?.nome}</div>
                 <div className="text-gp-muted font-mono text-[11px]">{it.produto?.codigo}</div>
               </div>
-              <div className="text-right text-gp-text">{it.quantidade} {it.produto?.unidade || ""}</div>
+              <div className="text-right text-gp-text">{fmtQtd(it.quantidade)} {it.produto?.unidade || ""}</div>
               <div className="text-right text-gp-text">{fmtBRL(it.precoUnitario)}</div>
               <div className="text-right text-gp-green font-semibold">{fmtBRL(it.subtotal)}</div>
             </div>

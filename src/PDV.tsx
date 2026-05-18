@@ -79,6 +79,14 @@ const fmtBRL = (v) => {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 };
 
+// Formata quantidade exibindo decimais apenas quando existem (1.5 -> "1,5",
+// 2 -> "2"). Bate com Decimal(12,3) do schema (ate 3 casas).
+const fmtQtd = (v) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "0";
+  return n.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+};
+
 // Quebra "1234.56" em { int: "1.234", dec: "56" } pra renderizar o R$ com
 // rítmo tipográfico (símbolo + inteiros grandes + centavos menores).
 const fmtPartes = (v) => {
@@ -377,24 +385,28 @@ function NovaVenda({ user }) {
     : 0;
 
   function adicionarProduto(p, qtd = 1) {
-    const incremento = Math.max(1, parseInt(qtd, 10) || 1);
+    // Quantidade aceita decimal (vendas por metro/kg). Backend e DB usam
+    // Decimal(12,3) — ver Produto.estoque / ItemVenda.quantidade no schema.
+    const qtdNum = typeof qtd === "number" ? qtd : parseFloat(String(qtd).replace(",", "."));
+    const incremento = Math.max(0.001, Number.isFinite(qtdNum) ? qtdNum : 1);
     const ehServico = p.tipoItem === "SERVICO";
+    const estoqueProduto = Number(p.estoque) || 0;
     setCarrinho(prev => {
       const idx = prev.findIndex(it => it.produtoId === p.id);
       if (idx >= 0) {
         const qtdAtual = prev[idx].quantidade;
         // Servico: ignora limite de estoque.
-        if (!ehServico && qtdAtual + incremento > p.estoque) {
-          flashErro(`Estoque insuficiente de "${p.nome}" (disponível: ${p.estoque}).`);
+        if (!ehServico && qtdAtual + incremento > estoqueProduto + 1e-9) {
+          flashErro(`Estoque insuficiente de "${p.nome}" (disponível: ${estoqueProduto}).`);
           return prev;
         }
         // Move o item incrementado para o topo (UX típica de PDV).
-        const atualizado = { ...prev[idx], quantidade: qtdAtual + incremento };
+        const atualizado = { ...prev[idx], quantidade: Math.round((qtdAtual + incremento) * 1000) / 1000 };
         const restante = prev.filter((_, i) => i !== idx);
         return [atualizado, ...restante];
       }
-      if (!ehServico && p.estoque < incremento) {
-        flashErro(`Estoque insuficiente de "${p.nome}" (disponível: ${p.estoque}).`);
+      if (!ehServico && estoqueProduto + 1e-9 < incremento) {
+        flashErro(`Estoque insuficiente de "${p.nome}" (disponível: ${estoqueProduto}).`);
         return prev;
       }
       const novoItem = {
@@ -404,11 +416,11 @@ function NovaVenda({ user }) {
         unidade: p.unidade,
         // Para servicos guardamos Infinity como estoque "logico" — assim os
         // controles + e definirQuantidade nao bloqueiam nada.
-        estoque: ehServico ? Infinity : p.estoque,
+        estoque: ehServico ? Infinity : estoqueProduto,
         tipoItem: p.tipoItem || "PRODUTO",
         precoUnitario: Number(p.precoVenda),
         imagem: p.imagem || null,
-        quantidade: incremento,
+        quantidade: Math.round(incremento * 1000) / 1000,
       };
       return [novoItem, ...prev];
     });
@@ -440,9 +452,14 @@ function NovaVenda({ user }) {
 
   function confirmarQtdModal() {
     if (!qtdModalProduto) return;
-    const n = Math.max(1, parseInt(qtdModalValor, 10) || 0);
-    if (qtdModalProduto.tipoItem !== "SERVICO" && n > qtdModalProduto.estoque) {
-      flashErro(`Estoque insuficiente de "${qtdModalProduto.nome}" (disponível: ${qtdModalProduto.estoque}).`);
+    // Quantidade fracionaria — produtos por metro/kg confirmam 1,5; 2,25 etc.
+    const raw = parseFloat(String(qtdModalValor).replace(",", "."));
+    const n = Number.isFinite(raw) && raw > 0
+      ? Math.max(0.001, Math.round(raw * 1000) / 1000)
+      : 1;
+    const estoqueProduto = Number(qtdModalProduto.estoque) || 0;
+    if (qtdModalProduto.tipoItem !== "SERVICO" && n > estoqueProduto + 1e-9) {
+      flashErro(`Estoque insuficiente de "${qtdModalProduto.nome}" (disponível: ${estoqueProduto}).`);
       return;
     }
     adicionarProduto(qtdModalProduto, n);
@@ -497,11 +514,14 @@ function NovaVenda({ user }) {
   }
 
   function definirQuantidade(produtoId, valor) {
-    const n = parseInt(valor, 10);
-    if (!Number.isFinite(n) || n <= 0) return;
+    // Aceita decimal (1.5m, 2.5kg). Arredonda para 3 casas — bate com o
+    // banco (Decimal(12,3)).
+    const parsed = typeof valor === "number" ? valor : parseFloat(String(valor).replace(",", "."));
+    if (!Number.isFinite(parsed) || parsed <= 0) return;
+    const n = Math.round(parsed * 1000) / 1000;
     setCarrinho(prev => prev.map(it => {
       if (it.produtoId !== produtoId) return it;
-      if (n > it.estoque) {
+      if (n > it.estoque + 1e-9) {
         setErro(`Estoque insuficiente de "${it.nome}" (disponível: ${it.estoque}).`);
         setTimeout(() => setErro(""), 2500);
         return { ...it, quantidade: it.estoque };
@@ -674,10 +694,13 @@ function NovaVenda({ user }) {
         };
       }
       const venda = await api.criarVenda(payload);
-      // Atualiza estoques locais
+      // Atualiza estoques locais (estoque do backend chega como Decimal
+      // serializado em string — Number() normaliza para subtracao)
       setProdutos(prev => prev.map(p => {
         const it = carrinho.find(c => c.produtoId === p.id);
-        return it ? { ...p, estoque: p.estoque - it.quantidade } : p;
+        if (!it) return p;
+        const novoEstoque = Math.round((Number(p.estoque) - Number(it.quantidade)) * 1000) / 1000;
+        return { ...p, estoque: novoEstoque };
       }));
       setPagamentoAberto(false);
       const recebido = forma === "DINHEIRO" ? valorRecebidoNum : 0;
@@ -866,7 +889,7 @@ function NovaVenda({ user }) {
                     {/* Linha 2: qtd UN x preço ....... total */}
                     <div className="pdv-cupom-linha2">
                       <span className="pdv-cupom-calc-txt">
-                        {String(it.quantidade).padStart(2, " ")} UN x {fmtBRL(it.precoUnitario)}
+                        {fmtQtd(it.quantidade)} {(it.unidade || "UN").toString().toUpperCase()} x {fmtBRL(it.precoUnitario)}
                       </span>
                       <span className="pdv-cupom-dots" />
                       <span className="pdv-cupom-total-txt">{fmtBRL(it.quantidade * it.precoUnitario)}</span>
@@ -874,7 +897,7 @@ function NovaVenda({ user }) {
                     {/* Overlay de controles — visível apenas no hover */}
                     <div className="pdv-cupom-ctrl">
                       <button className="pdv-cupom-ctrl-btn" onClick={() => alterarQuantidade(it.produtoId, -1)}>−</button>
-                      <span className="pdv-cupom-ctrl-qty">{it.quantidade}</span>
+                      <span className="pdv-cupom-ctrl-qty">{fmtQtd(it.quantidade)}</span>
                       <button className="pdv-cupom-ctrl-btn" onClick={() => alterarQuantidade(it.produtoId, +1)}>+</button>
                       {it.tipoItem === "SERVICO" && (
                         <input
@@ -896,7 +919,7 @@ function NovaVenda({ user }) {
                   <div className="pdv-cupom-ft-dashes">--------------------------------</div>
                   <div className="pdv-cupom-ft-row">
                     <span>QTD. ITENS</span>
-                    <span>{carrinho.reduce((acc, it) => acc + it.quantidade, 0)}</span>
+                    <span>{fmtQtd(carrinho.reduce((acc, it) => acc + it.quantidade, 0))}</span>
                   </div>
                   <div className="pdv-cupom-ft-row">
                     <span>SUBTOTAL</span>
@@ -1165,7 +1188,7 @@ function NovaVenda({ user }) {
                           {it.nome}
                         </div>
                         <div style={{ color: "var(--pdv-t3)", fontSize: 11, fontFamily: "'Geist Mono', monospace", marginTop: 2 }}>
-                          {it.codigo} · {it.quantidade} × {fmtBRL(it.precoUnitario)}
+                          {it.codigo} · {fmtQtd(it.quantidade)} × {fmtBRL(it.precoUnitario)}
                         </div>
                       </div>
                       <div style={{ color: "var(--pdv-accent)", fontWeight: 600, fontSize: 13.5, fontVariantNumeric: "tabular-nums" }}>
@@ -1232,15 +1255,19 @@ function NovaVenda({ user }) {
               <input
                 ref={qtdInputRef}
                 type="number"
-                min="1"
-                max={qtdModalProduto.tipoItem === "SERVICO" ? undefined : qtdModalProduto.estoque}
+                step="0.001"
+                min="0.001"
+                max={qtdModalProduto.tipoItem === "SERVICO" ? undefined : Number(qtdModalProduto.estoque) || undefined}
                 value={qtdModalValor}
                 onChange={e => setQtdModalValor(e.target.value)}
                 className="pdv-qty-input"
               />
 
               {(() => {
-                const n = Math.max(1, parseInt(qtdModalValor, 10) || 0);
+                // Quantidade fracionaria — produtos vendidos por metro/kg
+                // multiplicam direto (1.5m * R$1,80 = R$2,70).
+                const raw = parseFloat(String(qtdModalValor).replace(",", "."));
+                const n = Number.isFinite(raw) && raw > 0 ? Math.round(raw * 1000) / 1000 : 0;
                 const sub = n * Number(qtdModalProduto.precoVenda);
                 return (
                   <div className="pdv-modal-amount" style={{ margin: "12px 0 0" }}>
@@ -1306,7 +1333,7 @@ function NovaVenda({ user }) {
                 <div>
                   <div className="pdv-modal-amount-lbl">Total a receber</div>
                   <div className="pdv-modal-amount-sub">
-                    {carrinho.reduce((a,it)=>a+it.quantidade,0)} produtos
+                    {fmtQtd(carrinho.reduce((a,it)=>a+it.quantidade,0))} produtos
                     {descontoNum > 0 && <> · desconto {fmtBRL(descontoNum)}</>}
                     {descontoFidelidade > 0 && <> · pontos −{fmtBRL(descontoFidelidade)}</>}
                   </div>
@@ -2021,7 +2048,7 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpr
                   <div>
                     <div style={{ color: "var(--pdv-t1)", fontWeight: 500 }}>{it.produto?.nome}</div>
                     <div style={{ color: "var(--pdv-t3)", fontSize: 11.5, marginTop: 2, fontVariantNumeric: "tabular-nums" }}>
-                      {it.quantidade} × {fmtBRL(it.precoUnitario)}
+                      {fmtQtd(it.quantidade)} × {fmtBRL(it.precoUnitario)}
                     </div>
                   </div>
                   <div style={{ color: "var(--pdv-t1)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtBRL(it.subtotal)}</div>
@@ -2519,7 +2546,7 @@ function DetalheVendaModal({ venda, onFechar, onCancelar, onReimprimir, onReabri
                   <div style={{ color: "var(--pdv-t1)", fontWeight: 500 }}>{it.produto?.nome}</div>
                   <div style={{ color: "var(--pdv-t3)", fontFamily: "'Geist Mono', monospace", fontSize: 11 }}>{it.produto?.codigo}</div>
                 </div>
-                <div style={{ textAlign: "right", color: "var(--pdv-t2)", fontVariantNumeric: "tabular-nums" }}>{it.quantidade} {it.produto?.unidade || ""}</div>
+                <div style={{ textAlign: "right", color: "var(--pdv-t2)", fontVariantNumeric: "tabular-nums" }}>{fmtQtd(it.quantidade)} {it.produto?.unidade || ""}</div>
                 <div style={{ textAlign: "right", color: "var(--pdv-t2)", fontVariantNumeric: "tabular-nums" }}>{fmtBRL(it.precoUnitario)}</div>
                 <div style={{ textAlign: "right", color: "var(--pdv-t1)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtBRL(it.subtotal)}</div>
               </div>

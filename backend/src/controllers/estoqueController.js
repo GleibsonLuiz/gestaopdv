@@ -2,6 +2,17 @@ import prisma from "../lib/prisma.js";
 
 const TIPOS_VALIDOS = new Set(["ENTRADA", "SAIDA", "AJUSTE"]);
 
+function toNumber(v) {
+  if (v === undefined || v === null || v === "") return null;
+  const n = typeof v === "number" ? v : Number(String(v).replace(",", "."));
+  return Number.isFinite(n) ? n : NaN;
+}
+
+// Estoque com 3 casas decimais (Decimal(12,3) no banco).
+function arredQtd(n) {
+  return Math.round(n * 1000) / 1000;
+}
+
 const INCLUDE_REL = {
   produto: { select: { id: true, codigo: true, nome: true, unidade: true } },
   user: { select: { id: true, nome: true } },
@@ -37,16 +48,17 @@ export async function criar(req, res, next) {
       return res.status(400).json({ erro: "Tipo invalido (use ENTRADA, SAIDA ou AJUSTE)" });
     }
 
-    const qtd = parseInt(quantidade, 10);
-    if (!Number.isFinite(qtd)) {
+    const qtdRaw = toNumber(quantidade);
+    if (qtdRaw === null || Number.isNaN(qtdRaw)) {
       return res.status(400).json({ erro: "Quantidade invalida" });
     }
-    if (tipo !== "AJUSTE" && qtd <= 0) {
+    if (tipo !== "AJUSTE" && qtdRaw <= 0) {
       return res.status(400).json({ erro: "Quantidade deve ser maior que zero para ENTRADA/SAIDA" });
     }
-    if (tipo === "AJUSTE" && qtd < 0) {
+    if (tipo === "AJUSTE" && qtdRaw < 0) {
       return res.status(400).json({ erro: "Para AJUSTE, informe a quantidade absoluta (>= 0) que o estoque deve ficar" });
     }
+    const qtd = arredQtd(qtdRaw);
 
     const result = await prisma.$transaction(async (tx) => {
       const produto = await tx.produto.findUnique({ where: { id: produtoId } });
@@ -61,10 +73,10 @@ export async function criar(req, res, next) {
         throw e;
       }
 
-      const antes = produto.estoque;
+      const antes = Number(produto.estoque);
       let depois;
-      if (tipo === "ENTRADA") depois = antes + qtd;
-      else if (tipo === "SAIDA") depois = antes - qtd;
+      if (tipo === "ENTRADA") depois = arredQtd(antes + qtd);
+      else if (tipo === "SAIDA") depois = arredQtd(antes - qtd);
       else depois = qtd;
 
       if (depois < 0) {

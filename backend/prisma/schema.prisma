@@ -531,8 +531,11 @@ model Produto {
   tipoItem      TipoItem @default(PRODUTO)
   precoVenda    Decimal  @db.Decimal(10, 2)
   precoCusto    Decimal? @db.Decimal(10, 2)
-  estoque       Int      @default(0)
-  estoqueMinimo Int      @default(0)
+  // Estoque com 3 casas decimais — suporta unidades fracionarias (M, KG, L)
+  // alem de UN inteira. Quem vende por metro decrementa 1.5; quem vende UN
+  // continua usando inteiros naturalmente (1.000, 2.000 etc).
+  estoque       Decimal  @default(0) @db.Decimal(12, 3)
+  estoqueMinimo Decimal  @default(0) @db.Decimal(12, 3)
   unidade       String   @default("UN")
   ativo         Boolean  @default(true)
 
@@ -666,7 +669,9 @@ model Venda {
 
 model ItemVenda {
   id            String  @id @default(uuid())
-  quantidade    Int
+  // Quantidade fracionaria (ate 3 casas) — produtos vendidos por metro,
+  // quilo ou litro usam decimais; produtos em UN seguem inteiros.
+  quantidade    Decimal @db.Decimal(12, 3)
   precoUnitario Decimal @db.Decimal(10, 2)
   subtotal      Decimal @db.Decimal(10, 2)
 
@@ -712,7 +717,9 @@ model Compra {
 
 model ItemCompra {
   id            String  @id @default(uuid())
-  quantidade    Int
+  // Quantidade fracionaria (ate 3 casas) — espelha ItemVenda para que a
+  // entrada de tecido por metro/granel por kg funcione sem perda.
+  quantidade    Decimal @db.Decimal(12, 3)
   precoUnitario Decimal @db.Decimal(10, 2)
   subtotal      Decimal @db.Decimal(10, 2)
 
@@ -734,9 +741,11 @@ model ItemCompra {
 model MovimentacaoEstoque {
   id            String           @id @default(uuid())
   tipo          TipoMovimentacao
-  quantidade    Int
-  estoqueAntes  Int
-  estoqueDepois Int
+  // 3 casas decimais para acompanhar Produto.estoque. Auditoria preserva o
+  // valor exato movimentado (ex: SAIDA 1.5m de tecido) sem arredondar.
+  quantidade    Decimal          @db.Decimal(12, 3)
+  estoqueAntes  Decimal          @db.Decimal(12, 3)
+  estoqueDepois Decimal          @db.Decimal(12, 3)
   motivo        String?
   createdAt     DateTime         @default(now())
 
@@ -797,16 +806,16 @@ model InventarioItem {
   // Snapshot CONGELADO do estoque do sistema no momento da abertura.
   // NUNCA atualizado depois — e a "verdade do sistema" naquele instante,
   // contra a qual a contagem fisica sera confrontada.
-  estoqueLogico Int
+  estoqueLogico Decimal @db.Decimal(12, 3)
   // Snapshot tambem do precoCusto, pra calcular impacto financeiro mesmo
   // que o produto mude de preco depois.
   precoCustoMomento Decimal? @db.Decimal(10, 2)
   // Quantidade contada fisicamente. Null = ainda nao contado.
   // O frontend NUNCA exibe estoqueLogico ao operador da contagem.
-  quantidadeContada Int?
+  quantidadeContada Decimal? @db.Decimal(12, 3)
   // Diferenca = contada - logico. Pode ser negativo (falta) ou positivo
   // (sobra). Calculado pelo controller a cada salvamento de contagem.
-  diferenca Int? @default(0)
+  diferenca Decimal? @default(0) @db.Decimal(12, 3)
   observacao String?
   contadoEm  DateTime?
 

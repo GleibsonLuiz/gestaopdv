@@ -537,15 +537,16 @@ export async function converterEmVenda(req, res, next) {
           e.status = 400; throw e;
         }
 
-        // Valida estoque para itens do tipo PRODUTO. Quantidade pode ser
-        // decimal (m, kg) — convertemos pra inteiro arredondando pra cima
-        // antes de bater com o estoque (estoque sempre inteiro).
+        // Valida estoque para itens do tipo PRODUTO. Quantidade e estoque
+        // sao Decimal(12,3) — preserva o valor exato (1.5m de tecido baixa
+        // 1.5, nao 2).
         for (const it of orc.itens) {
           const p = it.produto;
           if (p.tipoItem === "SERVICO") continue;
-          const qtdInt = Math.ceil(Number(it.quantidade));
-          if (p.estoque < qtdInt) {
-            const e = new Error(`Estoque insuficiente de "${p.nome}". Disponivel: ${p.estoque}, solicitado: ${qtdInt}`);
+          const qtdItem = Number(it.quantidade);
+          const estoqueAtual = Number(p.estoque);
+          if (estoqueAtual < qtdItem) {
+            const e = new Error(`Estoque insuficiente de "${p.nome}". Disponivel: ${estoqueAtual}, solicitado: ${qtdItem}`);
             e.status = 400; throw e;
           }
         }
@@ -567,14 +568,17 @@ export async function converterEmVenda(req, res, next) {
               observacoes: `Gerada do orcamento #${orc.numero}`,
               itens: {
                 create: orc.itens.map((it) => {
-                  const qtdInt = Math.max(1, Math.ceil(Number(it.quantidade)));
+                  // Preserva a quantidade fracionaria do orcamento (1.5m
+                  // de tecido vira 1.5 no ItemVenda, nao 2).
+                  const qtd = Math.max(0.001, Number(it.quantidade));
+                  const qtdArred = Math.round(qtd * 1000) / 1000;
                   const subtotal = Number(it.subtotal);
                   return {
                     produtoId: it.produtoId,
-                    quantidade: qtdInt,
+                    quantidade: qtdArred,
                     // Preco unitario calculado a partir do subtotal/qtd para
                     // que (qtd * preco) bata com o subtotal do item.
-                    precoUnitario: arred(subtotal / qtdInt, 2),
+                    precoUnitario: arred(subtotal / qtdArred, 2),
                     subtotal: arred(subtotal, 2),
                   };
                 }),
@@ -592,13 +596,13 @@ export async function converterEmVenda(req, res, next) {
           vendaId: venda.id,
         });
 
-        // Baixa de estoque + movimentacoes
+        // Baixa de estoque + movimentacoes (Decimal(12,3) — preserva fracao)
         for (const it of orc.itens) {
           const p = it.produto;
           if (p.tipoItem === "SERVICO") continue;
-          const qtdInt = Math.ceil(Number(it.quantidade));
-          const antes = p.estoque;
-          const depois = antes - qtdInt;
+          const qtdItem = Math.round(Number(it.quantidade) * 1000) / 1000;
+          const antes = Number(p.estoque);
+          const depois = Math.round((antes - qtdItem) * 1000) / 1000;
           await tx.produto.update({
             where: { id: p.id },
             data: { estoque: depois },
@@ -606,7 +610,7 @@ export async function converterEmVenda(req, res, next) {
           await tx.movimentacaoEstoque.create({
             data: {
               tipo: "SAIDA",
-              quantidade: qtdInt,
+              quantidade: qtdItem,
               estoqueAntes: antes,
               estoqueDepois: depois,
               motivo: `VENDA #${venda.numero} (Orc. #${orc.numero})`,

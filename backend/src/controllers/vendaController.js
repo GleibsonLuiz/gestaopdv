@@ -43,6 +43,12 @@ function toNumber(v) {
   return Number.isFinite(n) ? n : NaN;
 }
 
+// Arredonda quantidade para 3 casas decimais — bate com o tipo
+// Decimal(12,3) usado no schema (ItemVenda.quantidade, Produto.estoque).
+function arredQtd(n) {
+  return Math.round(n * 1000) / 1000;
+}
+
 export async function listar(req, res, next) {
   try {
     const { clienteId, userId, formaPagamento, status, dataInicio, dataFim, limite } = req.query;
@@ -144,10 +150,11 @@ export async function criar(req, res, next) {
       const it = itens[i];
       const idx = i + 1;
       if (!it?.produtoId) return res.status(400).json({ erro: `Item ${idx}: produtoId obrigatorio` });
-      const qtd = parseInt(it.quantidade, 10);
-      if (!Number.isFinite(qtd) || qtd <= 0) {
+      const qtdRaw = toNumber(it.quantidade);
+      if (qtdRaw === null || Number.isNaN(qtdRaw) || qtdRaw <= 0) {
         return res.status(400).json({ erro: `Item ${idx}: quantidade deve ser > 0` });
       }
+      const qtd = arredQtd(qtdRaw);
       const preco = toNumber(it.precoUnitario);
       if (preco === null || Number.isNaN(preco) || preco < 0) {
         return res.status(400).json({ erro: `Item ${idx}: precoUnitario invalido` });
@@ -213,8 +220,9 @@ export async function criar(req, res, next) {
           }
           // Servicos nao tem estoque a validar — venda e sempre permitida.
           if (p.tipoItem === "SERVICO") continue;
-          if (p.estoque < it.quantidade) {
-            const e = new Error(`Estoque insuficiente de "${p.nome}". Disponivel: ${p.estoque}, solicitado: ${it.quantidade}`);
+          const estoqueAtual = Number(p.estoque);
+          if (estoqueAtual < it.quantidade) {
+            const e = new Error(`Estoque insuficiente de "${p.nome}". Disponivel: ${estoqueAtual}, solicitado: ${it.quantidade}`);
             e.status = 400; throw e;
           }
         }
@@ -260,8 +268,8 @@ export async function criar(req, res, next) {
           // Servicos nao baixam estoque nem geram movimentacao — apenas o
           // ItemVenda e o registro financeiro contam.
           if (p.tipoItem === "SERVICO") continue;
-          const antes = p.estoque;
-          const depois = antes - it.quantidade;
+          const antes = Number(p.estoque);
+          const depois = arredQtd(antes - it.quantidade);
           await tx.produto.update({
             where: { id: it.produtoId },
             data: { estoque: depois },
@@ -714,8 +722,9 @@ export async function cancelar(req, res, next) {
         for (const it of atual.itens) {
           const prod = await tx.produto.findUnique({ where: { id: it.produtoId } });
           if (prod.tipoItem === "SERVICO") continue;
-          const antes = prod.estoque;
-          const depois = antes + it.quantidade;
+          const antes = Number(prod.estoque);
+          const qtdItem = Number(it.quantidade);
+          const depois = arredQtd(antes + qtdItem);
           await tx.produto.update({
             where: { id: it.produtoId },
             data: { estoque: depois },
@@ -723,7 +732,7 @@ export async function cancelar(req, res, next) {
           await tx.movimentacaoEstoque.create({
             data: {
               tipo: "ENTRADA",
-              quantidade: it.quantidade,
+              quantidade: qtdItem,
               estoqueAntes: antes,
               estoqueDepois: depois,
               motivo: `CANCELAMENTO VENDA #${atual.numero}`,

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { C } from "./lib/theme.js";
-import { api } from "./lib/api.js";
+import { C } from "./lib/theme";
+import { api } from "./lib/api";
 
 
 const FONT_SANS = `"Manrope", "Segoe UI", system-ui, sans-serif`;
@@ -86,8 +86,15 @@ function niceMax(v) {
   return mult * base;
 }
 
-export default function Dashboard({ user }) {
-  const [dados, setDados] = useState(null);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type DashboardData = any;
+
+interface DashboardProps {
+  user?: { nome?: string; [extra: string]: unknown };
+}
+
+export default function Dashboard({ user }: DashboardProps) {
+  const [dados, setDados] = useState<DashboardData | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [contagem, setContagem] = useState(60);
@@ -99,7 +106,7 @@ export default function Dashboard({ user }) {
       const data = await api.obterDashboard();
       setDados(data);
     } catch (err) {
-      setErro(err.message);
+      setErro((err as Error).message);
     } finally {
       setCarregando(false);
     }
@@ -144,7 +151,7 @@ export default function Dashboard({ user }) {
   return <ConteudoDashboard dados={dados} onAtualizar={carregar} user={user} contagem={contagem} />;
 }
 
-function ConteudoDashboard({ dados, onAtualizar, user, contagem }) {
+function ConteudoDashboard({ dados, onAtualizar, user, contagem }: any) {
   const k = dados.kpis;
 
   const totalFormas = useMemo(
@@ -429,7 +436,7 @@ function SegmentedPeriodo() {
   );
 }
 
-function BotaoAtualizar({ onClick, contagem }) {
+function BotaoAtualizar({ onClick, contagem }: any) {
   return (
     <button
       onClick={onClick}
@@ -459,7 +466,7 @@ function BotaoAtualizar({ onClick, contagem }) {
 // KPI Card
 // ============================================================
 
-function KpiCard({ cor, icone, rotulo, valor, descricao, comparativo, delta, sparkline }) {
+function KpiCard({ cor, icone, rotulo, valor, descricao, comparativo, delta, sparkline }: any) {
   return (
     <article style={{
       background: `linear-gradient(180deg, ${C.card}, ${C.surface})`,
@@ -519,7 +526,7 @@ function KpiCard({ cor, icone, rotulo, valor, descricao, comparativo, delta, spa
   );
 }
 
-function DeltaPill({ texto, tipo, style }) {
+function DeltaPill({ texto, tipo, style }: any) {
   const cores = {
     up: { bg: C.green + "22", fg: C.green },
     down: { bg: C.red + "22", fg: C.red },
@@ -537,7 +544,7 @@ function DeltaPill({ texto, tipo, style }) {
   );
 }
 
-function Sparkline({ cor, pontos }) {
+function Sparkline({ cor, pontos }: any) {
   if (!pontos || pontos.length < 2) {
     return (
       <svg viewBox="0 0 200 36" preserveAspectRatio="none" style={{ width: "100%", height: "100%" }}>
@@ -573,7 +580,7 @@ function Sparkline({ cor, pontos }) {
 // Mini-tiles
 // ============================================================
 
-function MiniTile({ icone, label, valor, hint, warn, tagDelta }) {
+function MiniTile({ icone, label, valor, hint, warn, tagDelta }: any) {
   return (
     <article style={{
       background: warn
@@ -624,7 +631,7 @@ function MiniTile({ icone, label, valor, hint, warn, tagDelta }) {
 // Cards genéricos
 // ============================================================
 
-function Card({ children, padding = 18, style }) {
+function Card({ children, padding = 18, style }: any) {
   return (
     <article style={{
       background: `linear-gradient(180deg, ${C.card}, ${C.surface})`,
@@ -641,7 +648,7 @@ function Card({ children, padding = 18, style }) {
   );
 }
 
-function CardHead({ titulo, meta, acessorio }) {
+function CardHead({ titulo, meta, acessorio }: any) {
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 10, marginBottom: 12,
@@ -666,7 +673,7 @@ function CardHead({ titulo, meta, acessorio }) {
 // Gráfico de vendas semana
 // ============================================================
 
-function PainelGraficoVendas({ dados, totalSemana }) {
+function PainelGraficoVendas({ dados, totalSemana }: any) {
   const [hoveredBar, setHoveredBar] = useState(null);
 
   const totaisNum = dados.map(d => Number(d.total) || 0);
@@ -684,7 +691,7 @@ function PainelGraficoVendas({ dados, totalSemana }) {
   const barW = Math.min(40, colW * 0.5);
 
   const ticks = 5;
-  const gridY = [];
+  const gridY: { y: number; v: number }[] = [];
   for (let i = 0; i <= ticks; i++) {
     const y = padT + innerH - (i / ticks) * innerH;
     const v = (yMax * i) / ticks;
@@ -856,7 +863,7 @@ function PainelGraficoVendas({ dados, totalSemana }) {
   );
 }
 
-function TooltipBarra({ barra, W }) {
+function TooltipBarra({ barra, W }: any) {
   const pctLeft = (barra.cx / W) * 100;
   const isRight = pctLeft > 60;
   return (
@@ -906,7 +913,7 @@ function segBtn(ativo) {
 // Top produtos
 // ============================================================
 
-function PainelTopProdutos({ itens, totalMes }) {
+function PainelTopProdutos({ itens, totalMes }: any) {
   return (
     <Card>
       <CardHead
@@ -962,7 +969,7 @@ const ROLE_TAG = {
   VENDEDOR: { texto: "Vendedor", cor: "muted" },
 };
 
-function PainelTopVendedores({ itens, totalMes, qtdMes }) {
+function PainelTopVendedores({ itens, totalMes, qtdMes }: any) {
   return (
     <Card>
       <CardHead
@@ -1040,7 +1047,7 @@ function PainelTopVendedores({ itens, totalMes, qtdMes }) {
   );
 }
 
-function RoleTag({ rolinho }) {
+function RoleTag({ rolinho }: any) {
   const corMap = {
     accent: { bg: C.accent + "22", fg: C.accent },
     yellow: { bg: C.yellow + "22", fg: C.yellow },
@@ -1060,7 +1067,7 @@ function RoleTag({ rolinho }) {
 // Formas de pagamento
 // ============================================================
 
-function PainelFormasPagamento({ itens, totalGeral, qtdMes }) {
+function PainelFormasPagamento({ itens, totalGeral, qtdMes }: any) {
   const ordenados = [...itens].sort((a, b) => Number(b.total) - Number(a.total));
   const cores = [C.accent, C.green, C.yellow, C.purple, C.red, C.muted];
 
@@ -1102,7 +1109,7 @@ function PainelFormasPagamento({ itens, totalGeral, qtdMes }) {
                 cx={cx} cy={cy} r={r} fill="none" stroke={a.cor} strokeWidth="14"
                 strokeDasharray={`${a.dash} ${circ}`}
                 strokeDashoffset={a.offset}
-                strokeLinecap="round"
+                strokeLinecap={"round" as const}
                 transform={`rotate(-90 ${cx} ${cy})`}
               />
             ))}
@@ -1167,7 +1174,7 @@ function PainelFormasPagamento({ itens, totalGeral, qtdMes }) {
 // Financeiro callout
 // ============================================================
 
-function PainelFinanceiro({ tipo, titulo, icone, dados }) {
+function PainelFinanceiro({ tipo, titulo, icone, dados }: any) {
   const corPrincipal = tipo === "payable" ? C.red : C.green;
   const fundo = tipo === "payable"
     ? `linear-gradient(180deg, ${C.red}1f, ${C.card})`
@@ -1253,7 +1260,7 @@ function PainelFinanceiro({ tipo, titulo, icone, dados }) {
 // Saldo financeiro previsto
 // ============================================================
 
-function PainelSaldoFinanceiro({ pagar, receber }) {
+function PainelSaldoFinanceiro({ pagar, receber }: any) {
   const aPagar = Number(pagar?.total) || 0;
   const aReceber = Number(receber?.total) || 0;
   const saldo = aReceber - aPagar;
@@ -1327,20 +1334,20 @@ function PainelSaldoFinanceiro({ pagar, receber }) {
 // Próximas contas (7 dias)
 // ============================================================
 
-function PainelProximasContas({ pagar, receber }) {
+function PainelProximasContas({ pagar, receber }: any) {
   const hoje = new Date();
   hoje.setHours(0, 0, 0, 0);
 
   const itens = [
     ...(pagar || []).map(c => ({ ...c, tipo: "pagar" })),
     ...(receber || []).map(c => ({ ...c, tipo: "receber" })),
-  ].sort((a, b) => new Date(a.vencimento) - new Date(b.vencimento));
+  ].sort((a, b) => new Date(a.vencimento).getTime() - new Date(b.vencimento).getTime());
 
-  function fmtVenc(iso) {
+  function fmtVenc(iso: string | null | undefined) {
     if (!iso) return "—";
     const d = new Date(iso);
     if (isNaN(d.getTime())) return "—";
-    const diff = Math.round((d - hoje) / 86400000);
+    const diff = Math.round((d.getTime() - hoje.getTime()) / 86400000);
     if (diff === 0) return "Hoje";
     if (diff === 1) return "Amanhã";
     if (diff < 0) return `${Math.abs(diff)}d atrás`;
@@ -1437,7 +1444,7 @@ function PainelProximasContas({ pagar, receber }) {
 // Estoque baixo
 // ============================================================
 
-function PainelEstoqueBaixo({ itens }) {
+function PainelEstoqueBaixo({ itens }: any) {
   return (
     <Card>
       <CardHead
@@ -1503,7 +1510,7 @@ function PainelEstoqueBaixo({ itens }) {
 // Últimas vendas
 // ============================================================
 
-function PainelUltimasVendas({ itens, totalHoje, qtdHoje }) {
+function PainelUltimasVendas({ itens, totalHoje, qtdHoje }: any) {
   return (
     <Card>
       <CardHead
@@ -1561,7 +1568,7 @@ function PainelUltimasVendas({ itens, totalHoje, qtdHoje }) {
 // Últimas compras
 // ============================================================
 
-function PainelUltimasCompras({ itens }) {
+function PainelUltimasCompras({ itens }: any) {
   return (
     <Card>
       <CardHead
@@ -1607,7 +1614,7 @@ function PainelUltimasCompras({ itens }) {
 // Meta mensal com forecast
 // ============================================================
 
-function PainelMetaMensal({ meta }) {
+function PainelMetaMensal({ meta }: any) {
   const pct = Math.min(100, Math.max(0, Number(meta.percentual) || 0));
   const pctReal = Number(meta.percentual) || 0;
   const noRitmo = !!meta.noRitmo;
@@ -1723,7 +1730,7 @@ function PainelMetaMensal({ meta }) {
 // Caixa atual (status em tempo real)
 // ============================================================
 
-function PainelCaixaAtual({ caixa }) {
+function PainelCaixaAtual({ caixa }: any) {
   const saldo = Number(caixa.saldoEsperado) || 0;
   const inicial = Number(caixa.saldoInicial) || 0;
   const entradas = Number(caixa.entradas) || 0;
@@ -1801,7 +1808,7 @@ function PainelCaixaAtual({ caixa }) {
 // Top categorias do mês
 // ============================================================
 
-function PainelTopCategorias({ itens, totalMes }) {
+function PainelTopCategorias({ itens, totalMes }: any) {
   const cores = [C.accent, C.green, C.yellow, C.purple, C.red];
   return (
     <Card>
@@ -1860,7 +1867,7 @@ function PainelTopCategorias({ itens, totalMes }) {
 // Vendas por hora do dia (heatmap horizontal)
 // ============================================================
 
-function PainelVendasPorHora({ itens }) {
+function PainelVendasPorHora({ itens }: any) {
   const arr = itens.length === 24 ? itens : Array.from({ length: 24 }, (_, h) => {
     const found = itens.find(x => Number(x.hora) === h);
     return found || { hora: h, qtd: 0, total: 0 };
@@ -1984,7 +1991,7 @@ function SkeletonDashboard() {
   );
 }
 
-function Vazio({ texto }) {
+function Vazio({ texto }: any) {
   return (
     <div style={{ color: C.muted, fontSize: 12, textAlign: "center", padding: "16px 0" }}>
       {texto}
@@ -1996,7 +2003,7 @@ function Vazio({ texto }) {
 // Ícones (SVG inline, stroke 1.8)
 // ============================================================
 
-const sw = { fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round" };
+const sw = { fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
 
 function IconCart() {
   return (<svg width="18" height="18" viewBox="0 0 24 24" {...sw}><path d="M6 6h15l-1.5 9H8z" /><path d="M6 6 5 3H2" /><circle cx="9" cy="20" r="1.5" /><circle cx="18" cy="20" r="1.5" /></svg>);

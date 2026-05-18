@@ -1,7 +1,7 @@
 # LOG_MIGRACAO.md — Migração GestãoPRO para TypeScript + Tailwind
 
 > **Continuidade entre sessões.** Atualizar a cada pausa.
-> Última atualização: **2026-05-18** (sessão 9 — 60 migrações totais)
+> Última atualização: **2026-05-18** (sessão 10 — 61 migrações totais)
 
 ---
 
@@ -40,7 +40,7 @@ Migração gradual do GestãoPRO de:
 
 ---
 
-## 📦 Módulos migrados (60 migrações, 54 commits)
+## 📦 Módulos migrados (61 migrações, 55 commits)
 
 | # | Commit | Módulo | Tipo | Observação |
 |---|---|---|---|---|
@@ -89,6 +89,7 @@ Migração gradual do GestãoPRO de:
 | 58 | `1c561c9` | `Relatorios.tsx` | tela | Lazy migration com @ts-nocheck (3374 linhas, jsPDF) |
 | 59 | `4018fed` | `FinanceiroPage.tsx` | tela | Tela principal do financeiro novo (777 linhas, 4 abas) reusando tipos exportados (KpiData, Bill, TabDef, SessionUser) |
 | 60 | `0c3296b` | `PerfilClienteModal.tsx` | modal | Lazy migration (996 linhas, 6 abas: resumo/contatos/interacoes/compras/financeiro/orcamentos) |
+| 61 | `c51fc23` | `AdminMasterApp.tsx` | tela | Lazy migration com @ts-nocheck (2248 linhas, 18 sub-componentes — Login + Painel + 7 abas + 5 modais) |
 
 **Pasta `src/lib/` agora 100% TypeScript** (exceto `impressora.js` que é WIP do usuário).
 **Bootstrap e telas publicas** (main, Login, Signup, PesquisaPublicaNps) tambem em TS.
@@ -97,7 +98,8 @@ Migração gradual do GestãoPRO de:
 **Comissoes** + **MovimentarEstoqueModal** em TS (sessão 6).
 **4 CRUDs principais em TS**: Fornecedores, Clientes, Estoque, Produtos (sessão 7).
 **Sessão 8 — Compras, Orcamentos, Dashboard, Relatorios** em TS (lazy migration para os 2 ultimos por tamanho).
-**Sessão 9 — FinanceiroPage + PerfilClienteModal** em TS (2 migracoes). Restam apenas AdminMasterApp e os 5 criticos com WIP (App/Caixa/Financeiro/PDV/Funcionarios).
+**Sessão 9 — FinanceiroPage + PerfilClienteModal** em TS (2 migracoes).
+**Sessão 10 — AdminMasterApp** em TS (lazy + @ts-nocheck, 1 migracao). Restam apenas os 5 criticos com WIP (App/Caixa/Financeiro/PDV/Funcionarios).
 **Todos os 10 components reutilizaveis em `src/components/`** em TS (exceto `PerfilClienteModal` denso).
 **Pasta `src/pages/financeiro/components/` 100% TS** (12 arquivos).
 
@@ -105,10 +107,7 @@ Migração gradual do GestãoPRO de:
 
 ## 📋 Arquivos ainda como `.jsx` (próximos candidatos)
 
-Total: **6 arquivos** (.js/.jsx) em `src/`. Lista organizada por dificuldade crescente:
-
-### 🟠 Admin
-- `src/AdminMasterApp.jsx` — área super-admin (denso, multi-aba)
+Total: **5 arquivos** (.js/.jsx) em `src/`. Lista organizada por dificuldade crescente:
 
 ### 🔴 Telas grandes e críticas (deixar por último)
 - `src/App.jsx` (~700 linhas) — root da app, sidebar, roteamento
@@ -167,16 +166,14 @@ Para mudanças em UI, idealmente também `npm run dev` + teste visual (eu não c
 
 ---
 
-## 📂 Onde paramos (estado em 2026-05-18, sessão 9)
+## 📂 Onde paramos (estado em 2026-05-18, sessão 10)
 
-- **Último commit:** `0c3296b refactor(perfil-cliente): migra PerfilClienteModal.jsx para TSX (lazy)`
+- **Último commit:** `c51fc23 refactor(admin-master): migra AdminMasterApp.jsx para TSX (lazy)`
 - **Branch:** `main` (sincronizada com `origin/main`)
 - **Working tree não-vazio:** O usuário tem feature **Impressora** em andamento + **Inventário contagem cega** (novos arquivos no backend: `inventarioController.ts`, `routes/inventarios.ts`, migração). **Não tocar enquanto não finalizar.**
-- **Progresso:** 62 arquivos `.ts`/`.tsx` vs 6 arquivos `.jsx`/`.js` restantes. **~91% migrado**.
-- **Sessão 9 entregou (2 migrações):** FinanceiroPage (777 linhas) → PerfilClienteModal (lazy, 996 linhas, 6 abas).
-- **Próximo módulo sugerido:**
-  1. `src/AdminMasterApp.jsx` — área super-admin (multi-aba) — único candidato sem WIP
-  2. ⚠️ Por último (críticos com WIP do usuário misturado): `App.jsx`, `PDV.jsx`, `Caixa.jsx`, `Financeiro.jsx`, `Funcionarios.jsx`
+- **Progresso:** 63 arquivos `.ts`/`.tsx` vs 5 arquivos `.jsx`/`.js` restantes. **~93% migrado**.
+- **Sessão 10 entregou (1 migração):** AdminMasterApp.jsx → .tsx (lazy, 2248 linhas, 18 sub-componentes — Login + Painel + 7 abas + 5 modais). Aplicado `@ts-nocheck` por 135 erros triviais (boxSizing literal, catch err unknown, useState([]) virando never[]).
+- **Próximo módulo sugerido:** Confirmar com usuário se feature **Impressora + Inventário** já está pronta para commit. Se sim, migrar os 5 críticos restantes; se não, sessão fica parada aguardando finalização do WIP.
 
 ### 💡 Padrão "Lazy Migration" (estabelecido na sessão 8)
 

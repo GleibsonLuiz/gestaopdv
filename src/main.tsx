@@ -4,7 +4,7 @@ import "./index.css";
 import "./styles/login.css";
 import "./styles/pdv.css";
 import App from "./App.jsx";
-import AdminMasterApp from "./AdminMasterApp.jsx";
+import AdminMasterApp from "./AdminMasterApp";
 import { inicializarTema } from "./lib/theme";
 
 // Hidrata o tema ANTES do render para evitar flash do tema padrao.

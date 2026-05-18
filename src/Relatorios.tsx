@@ -1,8 +1,11 @@
+// @ts-nocheck — relatorios denso (3374 linhas) com integracao jsPDF + autoTable;
+// migracao gradual de tipos sera feita por modulo. Por enquanto, comportamento
+// preservado do JSX original.
 import { useCallback, useEffect, useState } from "react";
-import { C } from "./lib/theme.js";
+import { C } from "./lib/theme";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { api, BASE_URL } from "./lib/api.js";
+import { api, BASE_URL } from "./lib/api";
 import { formatarEndereco, obterConfiguracaoCache } from "./HeaderRelatorio.jsx";
 import SelectBusca from "./components/SelectBusca.jsx";
 
@@ -3053,7 +3056,7 @@ function RelatorioCarteiraCrm() {
 }
 
 // Card pódio (top 3 em estilo medalha). Itens: { nome, valor, detalhe }
-function CardPodio({ titulo, cor, itens, vazioTexto }) {
+function CardPodio({ titulo, cor, itens, vazioTexto }: any) {
   const medalhas = ["🥇", "🥈", "🥉"];
   return (
     <div style={{
@@ -3095,7 +3098,7 @@ function CardPodio({ titulo, cor, itens, vazioTexto }) {
 
 // ============ COMPONENTES AUXILIARES ============
 
-function BlocoRelatorio({ titulo, cor, filtros, onGerar, onExportar, carregando, erro, dados, children }) {
+function BlocoRelatorio({ titulo, cor, filtros, onGerar, onExportar, carregando, erro, dados, children }: any) {
   return (
     <div>
       <div style={{
@@ -3144,7 +3147,7 @@ function BlocoRelatorio({ titulo, cor, filtros, onGerar, onExportar, carregando,
   );
 }
 
-function Resumo({ cards }) {
+function Resumo({ cards }: any) {
   return (
     <div style={{
       display: "grid", gap: 10, marginBottom: 16,
@@ -3168,7 +3171,7 @@ function Resumo({ cards }) {
   );
 }
 
-function Tabela({ titulo, colunas, alinhamentos, linhas, vazioTexto }) {
+function Tabela({ titulo, colunas, alinhamentos, linhas, vazioTexto }: any) {
   return (
     <div style={{
       background: C.card, border: `1px solid ${C.border}`,
@@ -3218,7 +3221,7 @@ function Tabela({ titulo, colunas, alinhamentos, linhas, vazioTexto }) {
   );
 }
 
-function CampoData({ label, value, onChange }) {
+function CampoData({ label, value, onChange }: any) {
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
       <label style={labelStyle}>{label}</label>
@@ -3227,7 +3230,7 @@ function CampoData({ label, value, onChange }) {
   );
 }
 
-function CampoSelect({ label, value, onChange, children }) {
+function CampoSelect({ label, value, onChange, children }: any) {
   return (
     <div style={{ display: "flex", flexDirection: "column", minWidth: 160 }}>
       <label style={labelStyle}>{label}</label>
@@ -3238,7 +3241,7 @@ function CampoSelect({ label, value, onChange, children }) {
   );
 }
 
-function CampoSelectBusca({ label, opcoes, value, onChange, labelFn, subLabelFn, placeholder }) {
+function CampoSelectBusca({ label, opcoes, value, onChange, labelFn, subLabelFn, placeholder }: any) {
   return (
     <div style={{ display: "flex", flexDirection: "column", minWidth: 160 }}>
       <label style={labelStyle}>{label}</label>

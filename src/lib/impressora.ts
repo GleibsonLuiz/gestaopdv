@@ -1,14 +1,49 @@
 import { createRoot } from "react-dom/client";
-import { api } from "./api.js";
+import type { ReactElement } from "react";
+import { api } from "./api";
 
 // ConfiguracaoImpressora — cache em memoria (TTL curto). O backend cria com
 // defaults se nao existir, entao podemos confiar que sempre teremos um objeto.
 
-let cacheImpressora = null;
+export type LarguraImpressao = "MM_58" | "MM_80" | "A4";
+
+export type TipoDocumento =
+  | "VENDA"
+  | "ORCAMENTO"
+  | "SANGRIA"
+  | "SUPRIMENTO"
+  | "FECHAMENTO_CAIXA"
+  | "RECIBO_FIN"
+  | "TESTE";
+
+export type ConfigImpressora = {
+  ativo: boolean;
+  largura: LarguraImpressao;
+  fonteBase: number;
+  margemMm: number;
+  cabecalhoExtra: string | null;
+  rodapeExtra: string | null;
+  mostrarLogo: boolean;
+  mostrarCnpj: boolean;
+  mostrarVendedor: boolean;
+  mostrarCliente: boolean;
+  viasVenda: number;
+  cortarLinhasFinal: number;
+  abrirGavetaDinheiro: boolean;
+  imprimirAutomatico: boolean;
+  imprimirVenda: boolean;
+  imprimirOrcamento: boolean;
+  imprimirSangria: boolean;
+  imprimirSuprimento: boolean;
+  imprimirFechamento: boolean;
+  imprimirReciboFin: boolean;
+};
+
+let cacheImpressora: ConfigImpressora | null = null;
 let cacheImpressoraTs = 0;
 const TTL_MS = 30_000;
 
-const FALLBACK = Object.freeze({
+const FALLBACK: ConfigImpressora = Object.freeze({
   ativo: true,
   largura: "MM_80",
   fonteBase: 12,
@@ -29,13 +64,13 @@ const FALLBACK = Object.freeze({
   imprimirSuprimento: true,
   imprimirFechamento: true,
   imprimirReciboFin: true,
-});
+}) as ConfigImpressora;
 
-export async function obterConfigImpressora() {
+export async function obterConfigImpressora(): Promise<ConfigImpressora> {
   const agora = Date.now();
   if (cacheImpressora && (agora - cacheImpressoraTs) < TTL_MS) return cacheImpressora;
   try {
-    cacheImpressora = await api.obterConfiguracaoImpressora();
+    cacheImpressora = await api.obterConfiguracaoImpressora() as ConfigImpressora;
     cacheImpressoraTs = agora;
   } catch {
     cacheImpressora = FALLBACK;
@@ -43,27 +78,27 @@ export async function obterConfigImpressora() {
   return cacheImpressora;
 }
 
-export function invalidarCacheImpressora() {
+export function invalidarCacheImpressora(): void {
   cacheImpressora = null;
   cacheImpressoraTs = 0;
 }
 
 // Largura @page conforme enum LarguraImpressao do Prisma.
-export function paginaDeLargura(largura) {
+export function paginaDeLargura(largura: LarguraImpressao | string | undefined): string {
   if (largura === "MM_58") return "58mm auto";
   if (largura === "A4") return "A4";
   return "80mm auto";
 }
 
 // Largura visual do cupom oculto em tela (mesma da impressao).
-export function larguraEmTela(largura) {
+export function larguraEmTela(largura: LarguraImpressao | string | undefined): string {
   if (largura === "MM_58") return "58mm";
   if (largura === "A4") return "180mm";
   return "80mm";
 }
 
 // Mapeia tipo de documento -> chave booleana do schema.
-const FLAG_POR_TIPO = {
+const FLAG_POR_TIPO: Record<TipoDocumento, keyof ConfigImpressora | null> = {
   VENDA: "imprimirVenda",
   ORCAMENTO: "imprimirOrcamento",
   SANGRIA: "imprimirSangria",
@@ -73,7 +108,7 @@ const FLAG_POR_TIPO = {
   TESTE: null, // teste ignora flags, sempre imprime
 };
 
-export function devePrintar(tipo, cfg) {
+export function devePrintar(tipo: TipoDocumento, cfg: ConfigImpressora | null | undefined): boolean {
   if (!cfg?.ativo) return false;
   const flag = FLAG_POR_TIPO[tipo];
   if (flag === undefined) return false; // tipo desconhecido
@@ -83,17 +118,17 @@ export function devePrintar(tipo, cfg) {
 
 // Espera ~2 frames + onload das imagens do nodo antes de imprimir.
 // Sem isso, a primeira impressao apos createRoot pode sair sem o logo.
-async function aguardarPaintEImagens(container) {
-  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+async function aguardarPaintEImagens(container: HTMLElement): Promise<void> {
+  await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
   const imgs = Array.from(container.querySelectorAll("img"));
   const pendentes = imgs.filter(i => !i.complete);
   if (pendentes.length === 0) return;
   await Promise.race([
-    Promise.all(pendentes.map(i => new Promise(r => {
-      i.addEventListener("load", r, { once: true });
-      i.addEventListener("error", r, { once: true });
+    Promise.all(pendentes.map(i => new Promise<void>(r => {
+      i.addEventListener("load", () => r(), { once: true });
+      i.addEventListener("error", () => r(), { once: true });
     }))),
-    new Promise(r => setTimeout(r, 1500)),
+    new Promise<void>(r => setTimeout(() => r(), 1500)),
   ]);
 }
 
@@ -102,7 +137,10 @@ async function aguardarPaintEImagens(container) {
 // espera o paint + onload de imagens, dispara window.print() e desmonta no
 // afterprint. Usado para Caixa, Financeiro e botao de teste — o PDV ja tem
 // o cupom embutido no ReciboModal e pode chamar window.print() direto.
-export async function imprimirDocumento(elemento, { viasVenda = 1 } = {}) {
+export async function imprimirDocumento(
+  elemento: ReactElement,
+  { viasVenda = 1 }: { viasVenda?: number } = {},
+): Promise<void> {
   const container = document.createElement("div");
   container.setAttribute("data-cupom-portal", "true");
   document.body.appendChild(container);

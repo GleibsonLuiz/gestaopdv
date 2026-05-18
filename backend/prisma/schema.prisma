@@ -174,6 +174,18 @@ enum StatusClienteFunil {
   PERDIDO
 }
 
+// Inventario com contagem cega. Fluxo:
+//   ABERTO     - gestor abriu, snapshot do estoque logico congelado por item,
+//                operador digita contagens (sem ver o sistema)
+//   CONCLUIDO  - gestor consolidou: estoques ajustados, movimentacoes AJUSTE
+//                geradas, contagens nao podem mais ser alteradas
+//   CANCELADO  - gestor descartou; nenhuma mudanca em estoque
+enum StatusInventario {
+  ABERTO
+  CONCLUIDO
+  CANCELADO
+}
+
 // ETAPA 12: planos comerciais. Cada um pode ter limites (decididos no
 // codigo, nao no banco — facil ajustar sem migration).
 //   TRIAL      - 14 dias, todas features liberadas
@@ -203,15 +215,15 @@ enum TipoNotificacao {
 // posicao na lista (NACIONAL = 0, ESTRANGEIRA_IMP_DIRETA = 1, ...)
 // preserva o mapeamento direto para o XML.
 enum OrigemMercadoria {
-  NACIONAL                      // 0
-  ESTRANGEIRA_IMP_DIRETA        // 1
-  ESTRANGEIRA_ADQUIRIDA_BR      // 2
-  NACIONAL_IMP_SUP_40           // 3 (Conteudo Importacao > 40% e <= 70%)
-  NACIONAL_PROC_BAS             // 4 (processos produtivos basicos)
-  NACIONAL_IMP_INF_40           // 5 (CI <= 40%)
-  ESTRANGEIRA_IMP_SEM_SIM       // 6 (importacao direta, sem similar nacional)
-  ESTRANGEIRA_ADQ_SEM_SIM       // 7 (adquirida no BR, sem similar nacional)
-  NACIONAL_IMP_SUP_70           // 8 (CI > 70%)
+  NACIONAL // 0
+  ESTRANGEIRA_IMP_DIRETA // 1
+  ESTRANGEIRA_ADQUIRIDA_BR // 2
+  NACIONAL_IMP_SUP_40 // 3 (Conteudo Importacao > 40% e <= 70%)
+  NACIONAL_PROC_BAS // 4 (processos produtivos basicos)
+  NACIONAL_IMP_INF_40 // 5 (CI <= 40%)
+  ESTRANGEIRA_IMP_SEM_SIM // 6 (importacao direta, sem similar nacional)
+  ESTRANGEIRA_ADQ_SEM_SIM // 7 (adquirida no BR, sem similar nacional)
+  NACIONAL_IMP_SUP_70 // 8 (CI > 70%)
 }
 
 // ETAPA 14: Regime tributario do item. Define se vamos popular cstIcms
@@ -219,9 +231,9 @@ enum OrigemMercadoria {
 // Guardado por produto (nao so por empresa) porque permite cenarios
 // mistos — empresa Simples revendendo produto com ST embutido, etc.
 enum RegimeTributario {
-  SIMPLES_NACIONAL              // CRT=1 — usa CSOSN
-  SIMPLES_EXCESSO_SUBLIMITE     // CRT=2 — usa CSOSN
-  REGIME_NORMAL                 // CRT=3 — usa CST do ICMS
+  SIMPLES_NACIONAL // CRT=1 — usa CSOSN
+  SIMPLES_EXCESSO_SUBLIMITE // CRT=2 — usa CSOSN
+  REGIME_NORMAL // CRT=3 — usa CST do ICMS
 }
 
 // ============ MULTI-TENANT ============
@@ -235,24 +247,24 @@ enum RegimeTributario {
 // permitir o backfill dos registros existentes. FASE 2 (proxima migration)
 // torna NOT NULL apos o backfill.
 model Empresa {
-  id        String   @id @default(uuid())
-  nome      String
-  cnpj      String?  @unique
-  ativo     Boolean  @default(true)
+  id               String    @id @default(uuid())
+  nome             String
+  cnpj             String?   @unique
+  ativo            Boolean   @default(true)
   // ETAPA 11: motivo + data de suspensao. Quando ativo=false, motivoSuspensao
   // explica pro user (mostrado na tela de login bloqueado). suspensaEm e
   // setado pelo super-admin no momento do PATCH /admin-master/empresas/:id/status.
-  motivoSuspensao String?
-  suspensaEm      DateTime?
+  motivoSuspensao  String?
+  suspensaEm       DateTime?
   // ETAPA 12: plano comercial. TRIAL e o default (14 dias gratis). expiraEm
   // controla validade do plano atual — quando vence, login retorna 403 com
   // motivo "Plano expirado em XX/XX/XXXX". Super-admin renova via tela
   // /admin-master.
-  plano       Plano    @default(TRIAL)
-  expiraEm    DateTime?
+  plano            Plano     @default(TRIAL)
+  expiraEm         DateTime?
   observacoesPlano String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   // Back-relations (uma por modelo com tenantId)
   formasPagamentoCustom  FormaPagamentoCustom[]
@@ -272,6 +284,7 @@ model Empresa {
   anexos                 Anexo[]
   caixas                 Caixa[]
   configuracaoEmpresa    ConfiguracaoEmpresa?
+  configuracaoImpressora ConfiguracaoImpressora?
   movimentacoesCaixa     MovimentacaoCaixa[]
   orcamentos             Orcamento[]
   itensOrcamento         ItemOrcamento[]
@@ -291,6 +304,8 @@ model Empresa {
   historicoOportunidades HistoricoOportunidade[]
   logsAuditoria          LogAuditoria[]
   notificacoesRecebidas  Notificacao[]
+  inventarios            Inventario[]
+  inventarioItens        InventarioItem[]
 
   @@map("empresas")
 }
@@ -354,6 +369,7 @@ model User {
   logsAuditoria            LogAuditoria[]
   notificacoesCriadas      Notificacao[]           @relation("NotificacaoCriador")
   notificacoesLidas        NotificacaoLida[]
+  inventarios              Inventario[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -428,16 +444,16 @@ model Cliente {
 // Os campos fiscais (ie, indIEDest, crt, codigos IBGE) sao opcionais hoje
 // mas obedecem a estrutura exigida pela SEFAZ para evitar retrabalho.
 model Fornecedor {
-  id        String   @id @default(uuid())
+  id           String  @id @default(uuid())
   // `nome` = razao social (nome juridico). `nomeFantasia` e o nome de mercado.
-  nome           String
-  nomeFantasia   String?
+  nome         String
+  nomeFantasia String?
   // Pessoa fisica ou juridica: "PF" | "PJ". Usado para validar formato do
   // documento (cnpj armazena CPF tambem; nao desdobra em duas colunas).
-  tipoPessoa     String?
-  cnpj           String?
-  email          String?
-  telefone       String?
+  tipoPessoa   String?
+  cnpj         String?
+  email        String?
+  telefone     String?
 
   // --- Endereco segregado (padrao SEFAZ) ---
   // Os antigos `endereco`/`cidade`/`estado` foram mantidos para retrocompat
@@ -457,19 +473,19 @@ model Fornecedor {
   // --- Dados fiscais / tributarios ---
   // Inscricao Estadual: aceita string ou null. Se ieIsenta=true, ie deve
   // ser null (validado no controller).
-  ie         String?
-  ieIsenta   Boolean @default(false)
+  ie        String?
+  ieIsenta  Boolean @default(false)
   // Inscricao Municipal (necessaria para servicos / NFS-e).
-  im         String?
+  im        String?
   // Indicador de IE do destinatario (campo indIEDest da NF-e):
   // 1 = Contribuinte ICMS, 2 = Isento, 9 = Nao contribuinte.
-  indIEDest  Int?
+  indIEDest Int?
   // Codigo de Regime Tributario (CRT):
   // 1 = Simples Nacional, 2 = Simples Nacional/Excesso, 3 = Regime Normal.
-  crt        Int?
+  crt       Int?
 
   // E-mail dedicado para recebimento de XML/DANFE da NF-e.
-  emailNFe   String?
+  emailNFe String?
 
   ativo     Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -529,63 +545,63 @@ model Produto {
   // NCM (Nomenclatura Comum do Mercosul) — 8 digitos. Obrigatorio em
   // 100% das NF-e (rejeicao 778 se vazio/invalido). Tem que constar na
   // TIPI; aqui validamos so formato.
-  ncm              String?            @db.VarChar(8)
+  ncm String? @db.VarChar(8)
 
   // CEST (Codigo Especificador da Substituicao Tributaria) — 7 digitos.
   // Condicionalmente obrigatorio (so para itens com ST, Conv. 92/2015).
-  cest             String?            @db.VarChar(7)
+  cest String? @db.VarChar(7)
 
   // CFOP padrao de saida (4 digitos, comeca com 5/6/7). Default usado
   // ao emitir nota; pode ser sobrescrito por operacao (interestadual
   // muda 5xxx -> 6xxx).
-  cfopPadrao       String?            @db.VarChar(4)
+  cfopPadrao String? @db.VarChar(4)
 
   // Origem (Tabela A) — sempre presente no XML. Default NACIONAL cobre
   // ~95% dos casos em papelaria/comercio brasileiro.
-  origem           OrigemMercadoria   @default(NACIONAL)
+  origem OrigemMercadoria @default(NACIONAL)
 
   // Unidade tributavel — pode diferir da comercial (ex: vende em CX,
   // tributa em UN). Vazio = usa o campo `unidade` na emissao.
-  unidadeTributavel String?           @db.VarChar(6)
+  unidadeTributavel String? @db.VarChar(6)
 
   // Regime do item — define qual dos dois campos (cstIcms/csosnIcms)
   // sera populado no XML. Default SIMPLES_NACIONAL = cenario mais comum.
-  regimeTributario RegimeTributario   @default(SIMPLES_NACIONAL)
+  regimeTributario RegimeTributario @default(SIMPLES_NACIONAL)
 
   // CST do ICMS — 3 digitos (Tabela B SEFAZ). So em REGIME_NORMAL.
   // Exemplos: "000" tributada integral, "020" com red. BC, "040" isenta,
   // "060" ICMS ja retido por ST, "090" outras.
-  cstIcms          String?            @db.VarChar(3)
+  cstIcms String? @db.VarChar(3)
 
   // CSOSN — 4 digitos (Tabela B Simples). So em SIMPLES_*.
   // Exemplos: "101" com permissao de credito, "102" sem permissao,
   // "500" ICMS cobrado por ST, "900" outras.
-  csosnIcms        String?            @db.VarChar(4)
+  csosnIcms String? @db.VarChar(4)
 
   // Aliquota efetiva do ICMS (%). No Simples costuma ficar zerada
   // (recolhido no DAS); em regime normal varia 7-25% por UF/produto.
-  aliquotaIcms     Decimal?           @db.Decimal(5, 2)
+  aliquotaIcms Decimal? @db.Decimal(5, 2)
 
   // PIS / COFINS — CST de 2 digitos + aliquota. Obrigatorios em toda
   // NF-e modelo 55 e NFC-e modelo 65. Em Simples geralmente "49"
   // (outras operacoes de saida) com aliquota 0.
-  cstPis           String?            @db.VarChar(2)
-  aliquotaPis      Decimal?           @db.Decimal(7, 4)
-  cstCofins        String?            @db.VarChar(2)
-  aliquotaCofins   Decimal?           @db.Decimal(7, 4)
+  cstPis         String?  @db.VarChar(2)
+  aliquotaPis    Decimal? @db.Decimal(7, 4)
+  cstCofins      String?  @db.VarChar(2)
+  aliquotaCofins Decimal? @db.Decimal(7, 4)
 
   // cBenef — Codigo de Beneficio Fiscal (ate 10 chars). Obrigatorio
   // quando o produto goza de algum beneficio (red. BC, diferimento,
   // isencao especifica). Cada UF publica sua tabela.
-  codBeneficioFiscal String?          @db.VarChar(10)
+  codBeneficioFiscal String? @db.VarChar(10)
 
   // Pesos em kg (3 casas). Nao obrigatorios na NF-e, mas SEFAZ
   // recomenda — usados em notas de transporte e auditoria fiscal.
-  pesoLiquido      Decimal?           @db.Decimal(10, 3)
-  pesoBruto        Decimal?           @db.Decimal(10, 3)
+  pesoLiquido Decimal? @db.Decimal(10, 3)
+  pesoBruto   Decimal? @db.Decimal(10, 3)
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   categoriaId String?
   categoria   Categoria? @relation(fields: [categoriaId], references: [id])
@@ -596,10 +612,11 @@ model Produto {
   tenantId String
   tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  itensVenda     ItemVenda[]
-  itensCompra    ItemCompra[]
-  itensOrcamento ItemOrcamento[]
-  movimentacoes  MovimentacaoEstoque[]
+  itensVenda      ItemVenda[]
+  itensCompra     ItemCompra[]
+  itensOrcamento  ItemOrcamento[]
+  movimentacoes   MovimentacaoEstoque[]
+  inventarioItens InventarioItem[]
 
   @@unique([tenantId, codigo])
   @@unique([tenantId, codigoBarras])
@@ -735,6 +752,77 @@ model MovimentacaoEstoque {
   @@index([produtoId, createdAt])
   @@index([tenantId])
   @@map("movimentacoes_estoque")
+}
+
+// ============ INVENTARIO (CONTAGEM CEGA) ============
+//
+// Modulo de auditoria fisica de estoque. O fluxo "cego" significa que o
+// operador que conta NAO ve o estoqueLogico do sistema — assim a contagem
+// nao e enviesada. O snapshot e tirado no momento da abertura (Inventario
+// ABERTO) e a consolidacao gera AJUSTE em MovimentacaoEstoque dentro de
+// uma transacao Prisma (atomico — ou tudo, ou nada).
+
+model Inventario {
+  id              String           @id @default(uuid())
+  // Numero sequencial POR TENANT. Calculado no controller via MAX+1.
+  numero          Int
+  descricao       String?
+  observacoes     String?
+  // Snapshot do filtro aplicado na abertura (categoria/localizacao). Mantido
+  // como referencia textual para o relatorio; o filtro real ja foi aplicado
+  // ao gerar os itens em InventarioItem.
+  filtroCategoria String?
+  status          StatusInventario @default(ABERTO)
+  dataInicio      DateTime         @default(now())
+  dataFim         DateTime?
+
+  // Responsavel pela abertura (gestor). Operador da contagem nao precisa
+  // ser User — pode ser anotado em `observacoes` ou em campo livre no item.
+  responsavelId String
+  responsavel   User   @relation(fields: [responsavelId], references: [id])
+
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  itens InventarioItem[]
+
+  @@unique([tenantId, numero])
+  @@index([tenantId, status])
+  @@map("inventarios")
+}
+
+model InventarioItem {
+  id String @id @default(uuid())
+
+  // Snapshot CONGELADO do estoque do sistema no momento da abertura.
+  // NUNCA atualizado depois — e a "verdade do sistema" naquele instante,
+  // contra a qual a contagem fisica sera confrontada.
+  estoqueLogico Int
+  // Snapshot tambem do precoCusto, pra calcular impacto financeiro mesmo
+  // que o produto mude de preco depois.
+  precoCustoMomento Decimal? @db.Decimal(10, 2)
+  // Quantidade contada fisicamente. Null = ainda nao contado.
+  // O frontend NUNCA exibe estoqueLogico ao operador da contagem.
+  quantidadeContada Int?
+  // Diferenca = contada - logico. Pode ser negativo (falta) ou positivo
+  // (sobra). Calculado pelo controller a cada salvamento de contagem.
+  diferenca Int? @default(0)
+  observacao String?
+  contadoEm  DateTime?
+
+  inventarioId String
+  inventario   Inventario @relation(fields: [inventarioId], references: [id], onDelete: Cascade)
+
+  produtoId String
+  produto   Produto @relation(fields: [produtoId], references: [id])
+
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([inventarioId, produtoId])
+  @@index([tenantId])
+  @@index([inventarioId])
+  @@map("inventario_itens")
 }
 
 model ContaPagar {
@@ -894,6 +982,60 @@ model ConfiguracaoEmpresa {
   tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("configuracao_empresa")
+}
+
+// ============ CONFIGURACAO IMPRESSORA NAO-FISCAL ============
+// Singleton por tenant. Define largura/layout do cupom termico e quais
+// documentos imprimem (venda, orcamento, sangria/suprimento, fechamento,
+// recibo financeiro). Lido pelo helper src/lib/impressora.js no frontend
+// antes de cada chamada a window.print(). Hoje so impacta o caminho
+// "browser print" (window.print() + @media print). Espaco reservado pra
+// futura integracao ESC/POS via agente local ou IP de impressora de rede.
+
+enum LarguraImpressao {
+  MM_58
+  MM_80
+  A4
+}
+
+model ConfiguracaoImpressora {
+  id    String  @id @default(uuid())
+  ativo Boolean @default(true)
+
+  // Layout fisico
+  largura   LarguraImpressao @default(MM_80)
+  fonteBase Int              @default(12)
+  margemMm  Int              @default(4)
+
+  // Conteudo opcional do cupom (sobre/sob os dados da empresa)
+  cabecalhoExtra  String?
+  rodapeExtra     String?
+  mostrarLogo     Boolean @default(true)
+  mostrarCnpj     Boolean @default(true)
+  mostrarVendedor Boolean @default(true)
+  mostrarCliente  Boolean @default(true)
+
+  // Comportamento de impressao
+  viasVenda           Int     @default(1)
+  cortarLinhasFinal   Int     @default(4)
+  abrirGavetaDinheiro Boolean @default(false)
+  imprimirAutomatico  Boolean @default(true)
+
+  // Quais documentos imprimem
+  imprimirVenda      Boolean @default(true)
+  imprimirOrcamento  Boolean @default(true)
+  imprimirSangria    Boolean @default(true)
+  imprimirSuprimento Boolean @default(true)
+  imprimirFechamento Boolean @default(true)
+  imprimirReciboFin  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenantId String  @unique
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("configuracao_impressora")
 }
 
 model MovimentacaoCaixa {

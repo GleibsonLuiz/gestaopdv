@@ -37,11 +37,13 @@ const MODELOS_COM_TENANT = new Set([
   "Fornecedor", "Categoria", "Produto", "Venda", "ItemVenda",
   "Compra", "ItemCompra", "MovimentacaoEstoque", "ContaPagar",
   "ContaReceber", "Anexo", "Caixa", "ConfiguracaoEmpresa",
+  "ConfiguracaoImpressora",
   "MovimentacaoCaixa", "Orcamento", "ItemOrcamento",
   "ConfiguracaoFidelidade", "PontosCliente", "MovimentacaoPontos",
   "Tarefa", "Interacao", "Oportunidade", "Tag", "ClienteTag",
   "Contato", "PesquisaNps", "TemplateMensagem", "RegraAutomacao",
   "LogAutomacao", "HistoricoOportunidade", "LogAuditoria",
+  "Inventario", "InventarioItem",
 ]);
 
 function tenantAtual() {

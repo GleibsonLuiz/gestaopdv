@@ -7,6 +7,7 @@ export const IDS_MODULOS = [
   "FORNECEDORES",
   "PRODUTOS",
   "ESTOQUE",
+  "INVENTARIO",
   "COMPRAS",
   "ORCAMENTOS",
   "OPORTUNIDADES",
@@ -36,7 +37,7 @@ export function permissoesPadrao(role) {
   if (role === "ADMIN") return [...IDS_MODULOS];
   if (role === "GERENTE") {
     return ["PDV","DASHBOARD","CAIXA","CLIENTES","FORNECEDORES","PRODUTOS",
-            "ESTOQUE","COMPRAS","ORCAMENTOS","OPORTUNIDADES","AUTOMACOES","NPS",
+            "ESTOQUE","INVENTARIO","COMPRAS","ORCAMENTOS","OPORTUNIDADES","AUTOMACOES","NPS",
             "FINANCEIRO","RELATORIOS","COMISSOES"];
   }
   return ["PDV","CAIXA","CLIENTES","PRODUTOS","ORCAMENTOS","OPORTUNIDADES"];

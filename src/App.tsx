@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { C } from "./lib/theme.js";
+import { useState, useEffect, useRef, type CSSProperties } from "react";
+import { C } from "./lib/theme";
 import Login from "./Login.jsx";
 import Clientes from "./Clientes.jsx";
 import Fornecedores from "./Fornecedores.jsx";
@@ -33,7 +33,7 @@ import Nps from "./Nps.jsx";
 import PesquisaPublicaNps from "./PesquisaPublicaNps.jsx";
 import Alertas from "./Alertas.jsx";
 import Logs from "./Logs.jsx";
-import { getUser, getToken, clearSession, api } from "./lib/api.js";
+import { getUser, getToken, clearSession, api } from "./lib/api";
 import { podeAcessar } from "./lib/permissoes";
 
 
@@ -44,7 +44,7 @@ const PREF_SIDEBAR_KEY = "gestao_sidebar_collapsed";
 // Helper de persistencia. Hoje grava em localStorage. Quando houver
 // PUT /auth/preferencias no backend, plugar aqui — manter localStorage como
 // cache local (escrita otimista) e disparar o request em paralelo.
-function salvarPreferenciaSidebar(collapsed) {
+function salvarPreferenciaSidebar(collapsed: boolean) {
   try { localStorage.setItem(PREF_SIDEBAR_KEY, collapsed ? "1" : "0"); } catch {}
   // TODO(sync-db): quando o endpoint existir, descomentar:
   // api.salvarPreferencia({ sidebarCollapsed: collapsed }).catch(() => {});
@@ -95,14 +95,14 @@ export default function App() {
   // useState para nao re-renderizar a cada update.
   const [npsToken] = useState(() => getNpsToken());
 
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<any>(null);
   const [carregando, setCarregando] = useState(true);
   const [tela, setTela] = useState("pdv");
   const [menuUsuario, setMenuUsuario] = useState(false);
   const [trocarSenhaAberto, setTrocarSenhaAberto] = useState(false);
   const [sidebarAberta, setSidebarAberta] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => lerPreferenciaSidebar());
-  const menuRef = useRef(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   function alternarColapso() {
     setSidebarCollapsed((v) => {
@@ -115,12 +115,12 @@ export default function App() {
   const sidebarLargura = sidebarCollapsed ? SIDEBAR_W_RECOLHIDA : SIDEBAR_W_EXPANDIDA;
 
   // Wrappers para injetar collapsed em todos os itens da sidebar.
-  const Item = (props) => <NavItem {...props} collapsed={sidebarCollapsed} />;
-  const Secao = (props) => <SecaoLabel {...props} collapsed={sidebarCollapsed} />;
+  const Item = (props: any) => <NavItem {...props} collapsed={sidebarCollapsed} />;
+  const Secao = (props: any) => <SecaoLabel {...props} collapsed={sidebarCollapsed} />;
 
   useEffect(() => {
-    function onClickFora(e) {
-      if (menuUsuario && menuRef.current && !menuRef.current.contains(e.target)) {
+    function onClickFora(e: MouseEvent) {
+      if (menuUsuario && menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuUsuario(false);
       }
     }
@@ -129,7 +129,7 @@ export default function App() {
   }, [menuUsuario]);
 
   useEffect(() => {
-    function onKey(e) { if (e.key === "Escape") setSidebarAberta(false); }
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") setSidebarAberta(false); }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, []);
@@ -171,13 +171,13 @@ export default function App() {
 
   // ETAPA 12: banner de notificacoes broadcast (super-admin -> todos clientes).
   // Carrega ao logar e a cada 5 minutos. User dismissa via X (marcar-lida).
-  const [notificacoes, setNotificacoes] = useState([]);
+  const [notificacoes, setNotificacoes] = useState<any[]>([]);
   useEffect(() => {
     if (!user) { setNotificacoes([]); return; }
     let ativo = true;
     async function buscar() {
       try {
-        const r = await api.notificacoesMinhas();
+        const r = await api.notificacoesMinhas() as { notificacoes?: any[] };
         if (ativo) setNotificacoes(r.notificacoes || []);
       } catch { /* silencioso */ }
     }
@@ -186,19 +186,19 @@ export default function App() {
     return () => { ativo = false; clearInterval(id); };
   }, [user]);
 
-  async function fecharNotificacao(notifId) {
+  async function fecharNotificacao(notifId: string) {
     setNotificacoes(ns => ns.filter(n => n.id !== notifId));
     try { await api.notificacoesMarcarLida(notifId); } catch { /* silencioso */ }
   }
 
-  function navegar(t) {
+  function navegar(t: string) {
     setTela(t);
     setSidebarAberta(false);
   }
 
   // Mapeia cada tela do app para o modulo de permissao correspondente.
   // "projeto" e ferramenta interna, fica liberada.
-  const TELA_MODULO = {
+  const TELA_MODULO: Record<string, string> = {
     pdv: "PDV", dashboard: "DASHBOARD", dashboardcrm: "DASHBOARD", caixa: "CAIXA", clientes: "CLIENTES",
     fornecedores: "FORNECEDORES", produtos: "PRODUTOS", etiquetas: "PRODUTOS", estoque: "ESTOQUE",
     compras: "COMPRAS", orcamentos: "ORCAMENTOS",
@@ -214,12 +214,12 @@ export default function App() {
     reativacao: "CLIENTES",
   };
 
-  function podeVer(t) {
+  function podeVer(t: string) {
     if (t === "projeto" || t === "aparencia") return true;
     if (t === "sistema" || t === "logs") return user?.role === "ADMIN";
     if (t === "empresa") return user?.role === "ADMIN" || user?.role === "GERENTE";
     if (t === "impressora") return user?.role === "ADMIN" || user?.role === "GERENTE";
-    return podeAcessar(user, TELA_MODULO[t]);
+    return podeAcessar(user, TELA_MODULO[t] as any);
   }
 
   // Se o usuario abriu uma tela sem permissao (ex: cache), redireciona para a primeira disponivel.
@@ -610,7 +610,7 @@ export default function App() {
           {tela === "etiquetas" && (
             <>
               <PageHeader titulo="Etiquetas de Preço" subtitulo="Impressão em lote — selecione produtos por categoria e quantidade de cópias" />
-              <Etiquetas user={user} />
+              <Etiquetas />
             </>
           )}
           {tela === "estoque" && (
@@ -641,13 +641,13 @@ export default function App() {
             <Automacoes user={user} />
           )}
           {tela === "dashboardcrm" && (
-            <DashboardCrm user={user} />
+            <DashboardCrm />
           )}
           {tela === "reativacao" && (
             <Reativacao user={user} />
           )}
           {tela === "nps" && (
-            <Nps user={user} />
+            <Nps />
           )}
           {tela === "financeiro" && (
             <FinanceiroPage user={user} />
@@ -673,7 +673,7 @@ export default function App() {
           {tela === "relatorios" && (
             <>
               <PageHeader titulo="Relatórios" subtitulo="Relatórios analíticos com exportação em PDF" />
-              <Relatorios user={user} />
+              <Relatorios />
             </>
           )}
           {tela === "tarefas" && (
@@ -717,8 +717,8 @@ export default function App() {
               <PageHeader titulo="Sistema" subtitulo="Operações administrativas e zona de perigo" />
               <Sistema
                 user={user}
-                onResetar={(resumo) => {
-                  const total = Object.values(resumo?.removidos || {}).reduce((a, b) => a + b, 0);
+                onResetar={(resumo: any) => {
+                  const total = Object.values(resumo?.removidos || {}).reduce((a: any, b: any) => a + b, 0);
                   alert(`✓ Sistema resetado com sucesso.\n\n${total} registros removidos em ${Object.keys(resumo?.removidos || {}).length} tabelas.\n\nRedirecionando para o Dashboard...`);
                   navegar(podeAcessar(user, "DASHBOARD") ? "dashboard" : "pdv");
                 }}
@@ -735,13 +735,13 @@ export default function App() {
   );
 }
 
-const menuItem = {
+const menuItem: CSSProperties = {
   display: "block", width: "100%", textAlign: "left",
   background: "transparent", border: "none", color: C.text,
   padding: "10px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
 };
 
-function NavItem({ icone, label, ativo, destaque, collapsed, onClick }) {
+function NavItem({ icone, label, ativo, destaque, collapsed, onClick }: any) {
   const bg = ativo
     ? (destaque ? `linear-gradient(135deg, ${C.accent}, ${C.purple})` : C.accent + "22")
     : "transparent";
@@ -777,7 +777,7 @@ function NavItem({ icone, label, ativo, destaque, collapsed, onClick }) {
   );
 }
 
-function SecaoLabel({ children, collapsed }) {
+function SecaoLabel({ children, collapsed }: any) {
   if (collapsed) {
     return <div style={{ height: 1, background: C.border, margin: "10px 12px 6px" }} />;
   }
@@ -792,7 +792,7 @@ function SecaoLabel({ children, collapsed }) {
   );
 }
 
-function PageHeader({ titulo, subtitulo }) {
+function PageHeader({ titulo, subtitulo }: any) {
   return (
     <div style={{ marginBottom: 18 }}>
       <div style={{ color: C.white, fontSize: 22, fontWeight: 800 }}>{titulo}</div>

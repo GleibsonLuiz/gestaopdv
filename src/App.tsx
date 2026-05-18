@@ -11,7 +11,7 @@ import Orcamentos from "./Orcamentos.jsx";
 import Funcionarios from "./Funcionarios.jsx";
 import Comissoes from "./Comissoes.jsx";
 import FinanceiroPage from "./pages/financeiro/FinanceiroPage.jsx";
-import Caixa from "./Caixa.jsx";
+import Caixa from "./Caixa";
 import PDV from "./PDV.jsx";
 import Dashboard from "./Dashboard.jsx";
 import Relatorios from "./Relatorios.jsx";

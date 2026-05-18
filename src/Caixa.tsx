@@ -1,30 +1,30 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
-import { C } from "./lib/theme.js";
-import { api } from "./lib/api.js";
-import HeaderRelatorio, { useConfiguracaoEmpresa } from "./HeaderRelatorio.jsx";
-import { useModalKeys } from "./lib/modalKeys.js";
-import { obterConfigImpressora, devePrintar, imprimirDocumento } from "./lib/impressora.js";
+import { useEffect, useState, useCallback, type CSSProperties } from "react";
+import { C } from "./lib/theme";
+import { api } from "./lib/api";
+import HeaderRelatorio, { useConfiguracaoEmpresa } from "./HeaderRelatorio";
+import { useModalKeys } from "./lib/modalKeys";
+import { obterConfigImpressora, devePrintar, imprimirDocumento } from "./lib/impressora";
 import CupomEnvelope from "./components/cupons/CupomEnvelope.jsx";
 import CupomSangriaSuprimento from "./components/cupons/CupomSangriaSuprimento.jsx";
 import CupomFechamentoCaixa from "./components/cupons/CupomFechamentoCaixa.jsx";
 
-const fmtBRL = (v) => {
+const fmtBRL = (v: any) => {
   const n = Number(v);
   if (!Number.isFinite(n)) return "R$ 0,00";
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 };
 
-const fmtData = (iso) => {
+const fmtData = (iso: any) => {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 };
 
-const fmtDataCurta = (iso) => {
+const fmtDataCurta = (iso: any) => {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("pt-BR");
 };
 
-const TIPO_INFO = {
+const TIPO_INFO: Record<string, { label: string; icone: string; cor: string; sinal?: string }> = {
   ABERTURA:      { label: "Abertura",       icone: "🟢", cor: "accent" },
   VENDA:         { label: "Venda",          icone: "🛒", cor: "green",  sinal: "+" },
   ESTORNO_VENDA: { label: "Estorno venda",  icone: "↩",  cor: "red",    sinal: "−" },
@@ -35,7 +35,7 @@ const TIPO_INFO = {
   FECHAMENTO:    { label: "Fechamento",     icone: "🔒", cor: "purple" },
 };
 
-const FORMA_LABEL = {
+const FORMA_LABEL: Record<string, string> = {
   DINHEIRO: "Dinheiro",
   CARTAO_CREDITO: "Crédito",
   CARTAO_DEBITO: "Débito",
@@ -44,9 +44,9 @@ const FORMA_LABEL = {
   CREDIARIO: "Crediário",
 };
 
-export default function Caixa({ user }) {
+export default function Caixa({ user }: any) {
   const [aba, setAba] = useState("atual");
-  const [caixaAtual, setCaixaAtual] = useState(null);
+  const [caixaAtual, setCaixaAtual] = useState<any>(null);
   const [tipoCaixa, setTipoCaixa] = useState("INDEPENDENTE");
   const [carregando, setCarregando] = useState(true);
   const [mensagem, setMensagem] = useState("");
@@ -56,10 +56,10 @@ export default function Caixa({ user }) {
     setCarregando(true);
     setErro("");
     try {
-      const data = await api.obterCaixaAtual();
+      const data = await api.obterCaixaAtual() as { caixa: any; tipoCaixa?: string };
       setCaixaAtual(data.caixa);
       setTipoCaixa(data.tipoCaixa || "INDEPENDENTE");
-    } catch (err) {
+    } catch (err: any) {
       setErro(err.message);
     } finally {
       setCarregando(false);
@@ -68,7 +68,7 @@ export default function Caixa({ user }) {
 
   useEffect(() => { recarregar(); }, [recarregar]);
 
-  function flash(t) {
+  function flash(t: string) {
     setMensagem(t);
     setTimeout(() => setMensagem(""), 2500);
   }
@@ -104,7 +104,7 @@ export default function Caixa({ user }) {
           user={user}
           caixa={caixaAtual}
           carregando={carregando}
-          onMudar={(msg) => { flash(msg); recarregar(); }}
+          onMudar={(msg: string) => { flash(msg); recarregar(); }}
           onErro={setErro}
         />
       )}
@@ -112,7 +112,7 @@ export default function Caixa({ user }) {
         <AbaExtrato caixaId={caixaAtual.id} />
       )}
       {aba === "historico" && (
-        <AbaHistorico user={user} onAbrirExtrato={() => setAba("extrato")} />
+        <AbaHistorico />
       )}
     </div>
   );
@@ -120,8 +120,8 @@ export default function Caixa({ user }) {
 
 // ==================== ABA: MEU CAIXA ====================
 
-function AbaAtual({ user, caixa, carregando, onMudar, onErro }) {
-  const [modal, setModal] = useState(null); // 'abrir' | 'fechar' | 'sangria' | 'suprimento'
+function AbaAtual({ user, caixa, carregando, onMudar, onErro }: any) {
+  const [modal, setModal] = useState<string | null>(null); // 'abrir' | 'fechar' | 'sangria' | 'suprimento'
 
   if (carregando) {
     return <div style={vazioStyle}>Carregando…</div>;
@@ -299,7 +299,7 @@ function AbaAtual({ user, caixa, carregando, onMudar, onErro }) {
   );
 }
 
-function tempoAberto(iso) {
+function tempoAberto(iso: any) {
   if (!iso) return "—";
   const ms = Date.now() - new Date(iso).getTime();
   const h = Math.floor(ms / 3600000);
@@ -309,8 +309,8 @@ function tempoAberto(iso) {
 
 // ==================== ABA: EXTRATO ====================
 
-function AbaExtrato({ caixaId }) {
-  const [dados, setDados] = useState(null);
+function AbaExtrato({ caixaId }: any) {
+  const [dados, setDados] = useState<any>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
 
@@ -320,7 +320,7 @@ function AbaExtrato({ caixaId }) {
     try {
       const r = await api.obterExtratoCaixa(caixaId);
       setDados(r);
-    } catch (err) {
+    } catch (err: any) {
       setErro(err.message);
     } finally {
       setCarregando(false);
@@ -458,15 +458,15 @@ function AbaExtrato({ caixaId }) {
 // ==================== ABA: HISTÓRICO ====================
 
 function AbaHistorico() {
-  const [caixas, setCaixas] = useState([]);
+  const [caixas, setCaixas] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [filtros, setFiltros] = useState({ status: "", dataInicio: "", dataFim: "" });
-  const [extratoId, setExtratoId] = useState(null);
+  const [extratoId, setExtratoId] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
     try {
-      const r = await api.listarCaixas(filtros);
+      const r = await api.listarCaixas(filtros) as any[];
       setCaixas(r);
     } catch {
       setCaixas([]);
@@ -569,22 +569,22 @@ function AbaHistorico() {
 
 // ==================== MODAIS ====================
 
-function ModalAbrir({ onCancelar, onSucesso }) {
+function ModalAbrir({ onCancelar, onSucesso }: any) {
   const [saldoInicial, setSaldoInicial] = useState("");
   const [observacoes, setObservacoes] = useState("");
-  const [sugestao, setSugestao] = useState(null);
+  const [sugestao, setSugestao] = useState<any>(null);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   useModalKeys(true, { onClose: () => !salvando && onCancelar() });
 
   useEffect(() => {
-    api.sugerirTrocoCaixa().then(r => {
+    api.sugerirTrocoCaixa().then((r: any) => {
       setSugestao(r);
       setSaldoInicial(String(r.sugestao || 0));
     }).catch(() => setSaldoInicial("0"));
   }, []);
 
-  async function salvar(e) {
+  async function salvar(e: any) {
     e.preventDefault();
     setErro("");
     const valor = Number(String(saldoInicial).replace(",", "."));
@@ -593,7 +593,7 @@ function ModalAbrir({ onCancelar, onSucesso }) {
     try {
       await api.abrirCaixa({ saldoInicial: valor, observacoesAbertura: observacoes });
       onSucesso();
-    } catch (err) { setErro(err.message); }
+    } catch (err: any) { setErro(err.message); }
     finally { setSalvando(false); }
   }
 
@@ -634,13 +634,13 @@ function ModalAbrir({ onCancelar, onSucesso }) {
   );
 }
 
-function ModalFechar({ caixa, user, onCancelar, onSucesso }) {
+function ModalFechar({ caixa, user, onCancelar, onSucesso }: any) {
   const [saldoContado, setSaldoContado] = useState("");
   const [trocoProximo, setTrocoProximo] = useState("");
   const [observacoes, setObservacoes] = useState("");
   const [autorizacao, setAutorizacao] = useState({ email: "", senha: "" });
-  const [revelado, setRevelado] = useState(null);
-  const [caixaFechado, setCaixaFechado] = useState(null);
+  const [revelado, setRevelado] = useState<any>(null);
+  const [caixaFechado, setCaixaFechado] = useState<any>(null);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const empresa = useConfiguracaoEmpresa();
@@ -663,7 +663,7 @@ function ModalFechar({ caixa, user, onCancelar, onSucesso }) {
     );
   }
 
-  async function salvar(e) {
+  async function salvar(e: any) {
     e.preventDefault();
     setErro("");
     const contado = Number(String(saldoContado).replace(",", "."));
@@ -683,7 +683,7 @@ function ModalFechar({ caixa, user, onCancelar, onSucesso }) {
         observacoesFechamento: observacoes,
         emailAutorizacao: exigeAutorizacao ? autorizacao.email : undefined,
         senhaAutorizacao: exigeAutorizacao ? autorizacao.senha : undefined,
-      });
+      }) as any;
       const conferencia = {
         contado, troco,
         esperado: Number(r.saldoFinalEsperado),
@@ -707,7 +707,7 @@ function ModalFechar({ caixa, user, onCancelar, onSucesso }) {
           </CupomEnvelope>,
         );
       }
-    } catch (err) {
+    } catch (err: any) {
       setErro(err.message);
       setSalvando(false);
     }
@@ -788,19 +788,19 @@ function ModalFechar({ caixa, user, onCancelar, onSucesso }) {
   );
 }
 
-export function ModalManual({ caixa, user, tipo, onCancelar, onSucesso }) {
+export function ModalManual({ caixa, user, tipo, onCancelar, onSucesso }: any) {
   const ehSangria = tipo === "sangria";
   const [valor, setValor] = useState("");
   const [descricao, setDescricao] = useState("");
   const [autorizacao, setAutorizacao] = useState({ email: "", senha: "" });
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
-  const [movRegistrada, setMovRegistrada] = useState(null);
+  const [movRegistrada, setMovRegistrada] = useState<any>(null);
   const empresa = useConfiguracaoEmpresa();
   const exigeAutorizacao = ehSangria && user?.role === "VENDEDOR";
   useModalKeys(true, { onClose: () => !salvando && onCancelar() });
 
-  async function salvar(e) {
+  async function salvar(e: any) {
     e.preventDefault();
     setErro("");
     const v = Number(String(valor).replace(",", "."));
@@ -811,7 +811,7 @@ export function ModalManual({ caixa, user, tipo, onCancelar, onSucesso }) {
     setSalvando(true);
     try {
       const fn = ehSangria ? api.sangriaCaixa : api.suprimentoCaixa;
-      const mov = await fn(caixa.id, {
+      const mov: any = await fn(caixa.id, {
         valor: v,
         descricao,
         ...(exigeAutorizacao
@@ -835,7 +835,7 @@ export function ModalManual({ caixa, user, tipo, onCancelar, onSucesso }) {
         );
       }
       setMovRegistrada(mov);
-    } catch (err) { setErro(err.message); }
+    } catch (err: any) { setErro(err.message); }
     finally { setSalvando(false); }
   }
 
@@ -923,7 +923,7 @@ export function ModalManual({ caixa, user, tipo, onCancelar, onSucesso }) {
 
 // ==================== HELPERS UI ====================
 
-function BotaoAba({ ativo, onClick, disabled, children }) {
+function BotaoAba({ ativo, onClick, disabled, children }: any) {
   return (
     <button onClick={onClick} disabled={disabled} style={{
       background: ativo ? `linear-gradient(135deg, ${C.accent}, ${C.purple})` : C.surface,
@@ -936,7 +936,7 @@ function BotaoAba({ ativo, onClick, disabled, children }) {
   );
 }
 
-function CardKpi({ titulo, valor, icone, cor, destaque }) {
+function CardKpi({ titulo, valor, icone, cor, destaque }: any) {
   return (
     <div style={{
       background: destaque ? `linear-gradient(135deg, ${cor}33, ${cor}11)` : C.card,
@@ -954,7 +954,7 @@ function CardKpi({ titulo, valor, icone, cor, destaque }) {
   );
 }
 
-function Mini({ titulo, valor, cor }) {
+function Mini({ titulo, valor, cor }: any) {
   return (
     <div style={{ textAlign: "center", minWidth: 120 }}>
       <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.4 }}>
@@ -965,7 +965,7 @@ function Mini({ titulo, valor, cor }) {
   );
 }
 
-function RodapeBloco({ titulo, valor, cor, destaque }) {
+function RodapeBloco({ titulo, valor, cor, destaque }: any) {
   return (
     <div style={{ textAlign: "center" }}>
       <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, letterSpacing: 0.4 }}>
@@ -979,7 +979,7 @@ function RodapeBloco({ titulo, valor, cor, destaque }) {
   );
 }
 
-function KpiBox({ titulo, valor, cor }) {
+function KpiBox({ titulo, valor, cor }: any) {
   return (
     <div style={{
       background: C.surface, border: `1px solid ${cor}55`, borderRadius: 10,
@@ -995,7 +995,7 @@ function KpiBox({ titulo, valor, cor }) {
   );
 }
 
-function AutorizacaoGerente({ valor, onMudar, acao }) {
+function AutorizacaoGerente({ valor, onMudar, acao }: any) {
   return (
     <div style={{
       marginTop: 14, marginBottom: 10, padding: "12px 14px", borderRadius: 10,
@@ -1028,7 +1028,7 @@ function AutorizacaoGerente({ valor, onMudar, acao }) {
   );
 }
 
-function ModalShell({ titulo, children, onFechar }) {
+function ModalShell({ titulo, children, onFechar }: any) {
   return (
     <div onClick={onFechar} style={{
       position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
@@ -1053,7 +1053,7 @@ function ModalShell({ titulo, children, onFechar }) {
   );
 }
 
-function Campo({ label, children }) {
+function Campo({ label, children }: any) {
   return (
     <div style={{ marginBottom: 12 }}>
       <label style={{ display: "block", color: C.muted, fontSize: 12, marginBottom: 6, fontWeight: 600 }}>
@@ -1064,7 +1064,7 @@ function Campo({ label, children }) {
   );
 }
 
-function RodapeModal({ children, dicaTeclado = "Esc cancela · Enter confirma" }) {
+function RodapeModal({ children, dicaTeclado = "Esc cancela · Enter confirma" }: any) {
   return (
     <div style={{ marginTop: 16 }}>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
@@ -1080,60 +1080,60 @@ function RodapeModal({ children, dicaTeclado = "Esc cancela · Enter confirma" }
   );
 }
 
-const inputStyle = {
+const inputStyle: CSSProperties = {
   width: "100%", background: C.surface, border: `1px solid ${C.border}`,
   borderRadius: 8, padding: "10px 12px", color: C.text, fontSize: 13,
   outline: "none", boxSizing: "border-box",
 };
 
-const selectStyle = {
+const selectStyle: CSSProperties = {
   background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8,
   padding: "10px 12px", color: C.text, fontSize: 13, cursor: "pointer",
 };
 
-const btnPrimario = {
+const btnPrimario: CSSProperties = {
   background: `linear-gradient(135deg, ${C.green}, #15803d)`,
   color: C.white, border: "none", borderRadius: 8,
   padding: "11px 22px", fontWeight: 700, fontSize: 14, cursor: "pointer",
   boxShadow: `0 2px 10px ${C.green}55`,
 };
 
-const btnPrimarioVermelho = {
+const btnPrimarioVermelho: CSSProperties = {
   background: `linear-gradient(135deg, ${C.red}, #991b1b)`,
   color: C.white, border: "none", borderRadius: 8,
   padding: "11px 22px", fontWeight: 700, fontSize: 14, cursor: "pointer",
 };
 
-const btnCancelar = {
+const btnCancelar: CSSProperties = {
   background: C.surface, border: `1px solid ${C.border}`, color: C.text,
   borderRadius: 8, padding: "10px 18px", fontWeight: 600, fontSize: 13, cursor: "pointer",
 };
 
-function btnSecundario(cor) {
+function btnSecundario(cor: string): CSSProperties {
   return {
     background: cor + "22", border: `1px solid ${cor}66`, color: cor,
     borderRadius: 8, padding: "9px 16px", fontWeight: 700, fontSize: 13, cursor: "pointer",
   };
 }
 
-function alertStyle(cor) {
+function alertStyle(cor: string): CSSProperties {
   return {
     marginBottom: 12, padding: "10px 14px", borderRadius: 8,
     background: cor + "22", border: `1px solid ${cor}55`, color: cor, fontSize: 13,
   };
 }
 
-const dicaStyle = {
+const dicaStyle: CSSProperties = {
   marginBottom: 14, padding: "10px 14px", borderRadius: 8,
   background: C.accent + "22", border: `1px solid ${C.accent}55`,
   color: C.text, fontSize: 12, lineHeight: 1.5,
 };
 
-const erroStyle = {
+const erroStyle: CSSProperties = {
   marginTop: 10, padding: "10px 12px", borderRadius: 8,
   background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red, fontSize: 13,
 };
 
-const vazioStyle = {
+const vazioStyle: CSSProperties = {
   padding: 30, textAlign: "center", color: C.muted, fontSize: 13,
 };

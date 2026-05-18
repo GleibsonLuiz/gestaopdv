@@ -999,18 +999,18 @@
 
 /* ─── Top sellers grid (cestinha vazia) ────────────────────── */
 .pdv-top-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(clamp(140px, 14vw, 180px), 1fr)); gap: 8px;
-  padding: 0 clamp(12px, 1.4vw, 18px) 16px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(clamp(130px, 13vw, 170px), 1fr)); gap: 6px;
+  padding: 0 clamp(12px, 1.4vw, 18px) 10px;
 }
 .pdv-top-card {
   position: relative;
   background: var(--pdv-surf-2);
   border: 1px solid var(--pdv-line);
   border-radius: var(--pdv-r-md);
-  padding: 12px;
+  padding: 7px 10px;
   cursor: pointer;
   text-align: left;
-  display: flex; gap: 10px; align-items: center;
+  display: flex; gap: 8px; align-items: center;
   transition: transform .15s, border-color .15s, background .15s;
   font-family: inherit; color: inherit;
 }
@@ -1018,15 +1018,15 @@
 .pdv-top-card:disabled { opacity: .45; cursor: not-allowed; transform: none; }
 .pdv-top-card-info { flex: 1; min-width: 0; }
 .pdv-top-card-name {
-  color: var(--pdv-t1); font-size: 12.5px; font-weight: 500; line-height: 1.3;
+  color: var(--pdv-t1); font-size: 12px; font-weight: 500; line-height: 1.25;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 .pdv-top-card-foot {
   display: flex; justify-content: space-between; align-items: center;
 }
 .pdv-top-card-price {
-  color: var(--pdv-accent); font-weight: 600; font-size: 13px;
+  color: var(--pdv-accent); font-weight: 600; font-size: 12.5px;
   font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
 }
 .pdv-top-card-stock {
@@ -1035,10 +1035,10 @@
 
 /* Section heading inside cestinha empty */
 .pdv-section-hd {
-  padding: 8px 18px 8px; display: flex;
+  padding: 6px clamp(12px, 1.4vw, 18px) 4px; display: flex;
   align-items: baseline; justify-content: space-between;
 }
-.pdv-section-hd .pdv-card-title { font-size: 12px; }
+.pdv-section-hd .pdv-card-title { font-size: 13px; font-weight: 600; }
 .pdv-section-hd .helper { color: var(--pdv-t3); font-size: 11px; }
 
 /* ─── Recent sales (ultimasVendas) ─────────────────────────── */
@@ -1046,7 +1046,7 @@
   display: grid;
   grid-template-columns: clamp(48px, 5vw, 60px) minmax(0, 1fr) clamp(80px, 9vw, 110px) clamp(100px, 11vw, 130px) clamp(60px, 6vw, 70px);
   gap: clamp(8px, 1vw, 14px); align-items: center;
-  padding: 11px clamp(12px, 1.4vw, 18px);
+  padding: 6px clamp(12px, 1.4vw, 18px);
   font-size: 12.5px; border-top: 1px solid var(--pdv-line);
   cursor: pointer;
   width: 100%; background: transparent; border-left: 0; border-right: 0; border-bottom: 0;

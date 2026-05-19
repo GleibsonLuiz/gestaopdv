@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { C } from "./lib/theme.js";
-import { api } from "./lib/api.js";
+import type { CSSProperties, FormEvent, ReactNode } from "react";
+import { C } from "./lib/theme";
+import { api } from "./lib/api";
+import type { SessionUser } from "./lib/api";
 import {
   invalidarCacheImpressora,
   imprimirDocumento,
-} from "./lib/impressora.js";
-import { useConfiguracaoEmpresa } from "./HeaderRelatorio.jsx";
-import CupomEnvelope from "./components/cupons/CupomEnvelope.jsx";
-import CupomTeste from "./components/cupons/CupomTeste.jsx";
+} from "./lib/impressora";
+import type { ConfigImpressora, LarguraImpressao } from "./lib/impressora";
+import { useConfiguracaoEmpresa } from "./HeaderRelatorio";
+import CupomEnvelope from "./components/cupons/CupomEnvelope";
+import CupomTeste from "./components/cupons/CupomTeste";
 
 // Tela de configuracao da impressora nao-fiscal. Layout em duas colunas:
 //   - Esquerda: formulario (largura, layout, conteudo, comportamento,
@@ -17,7 +20,12 @@ import CupomTeste from "./components/cupons/CupomTeste.jsx";
 // Permissao: rota PUT exige ADMIN/GERENTE. GET livre porque o cupom do
 // PDV/Caixa/Financeiro tambem precisa ler a config.
 
-const DEFAULTS = {
+type FormState = Omit<ConfigImpressora, "cabecalhoExtra" | "rodapeExtra"> & {
+  cabecalhoExtra: string;
+  rodapeExtra: string;
+};
+
+const DEFAULTS: FormState = {
   ativo: true,
   largura: "MM_80",
   fonteBase: 12,
@@ -40,13 +48,22 @@ const DEFAULTS = {
   imprimirReciboFin: true,
 };
 
-const LARGURAS = [
+type LarguraOpt = { id: LarguraImpressao; label: string };
+const LARGURAS: LarguraOpt[] = [
   { id: "MM_58", label: "58 mm (térmica pequena)" },
   { id: "MM_80", label: "80 mm (térmica padrão)" },
   { id: "A4", label: "A4 (folha comum)" },
 ];
 
-const DOCUMENTOS = [
+type DocumentoCampo =
+  | "imprimirVenda"
+  | "imprimirOrcamento"
+  | "imprimirSangria"
+  | "imprimirSuprimento"
+  | "imprimirFechamento"
+  | "imprimirReciboFin";
+
+const DOCUMENTOS: { campo: DocumentoCampo; label: string }[] = [
   { campo: "imprimirVenda", label: "Cupom de venda (PDV)" },
   { campo: "imprimirOrcamento", label: "Orçamento" },
   { campo: "imprimirSangria", label: "Sangria de caixa" },
@@ -55,8 +72,21 @@ const DOCUMENTOS = [
   { campo: "imprimirReciboFin", label: "Recibo de pagamento/recebimento" },
 ];
 
-export default function ConfiguracoesImpressora({ user }) {
-  const [form, setForm] = useState(DEFAULTS);
+type Props = {
+  user: SessionUser;
+};
+
+function normalizar(cfg: Partial<ConfigImpressora> | null | undefined): FormState {
+  return {
+    ...DEFAULTS,
+    ...(cfg || {}),
+    cabecalhoExtra: cfg?.cabecalhoExtra || "",
+    rodapeExtra: cfg?.rodapeExtra || "",
+  };
+}
+
+export default function ConfiguracoesImpressora({ user }: Props) {
+  const [form, setForm] = useState<FormState>(DEFAULTS);
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
@@ -70,33 +100,28 @@ export default function ConfiguracoesImpressora({ user }) {
     api.obterConfiguracaoImpressora()
       .then(cfg => {
         if (!ativo || !cfg) return;
-        setForm({
-          ...DEFAULTS,
-          ...cfg,
-          cabecalhoExtra: cfg.cabecalhoExtra || "",
-          rodapeExtra: cfg.rodapeExtra || "",
-        });
+        setForm(normalizar(cfg as Partial<ConfigImpressora>));
       })
-      .catch(err => setErro(err.message))
+      .catch((err: Error) => setErro(err.message))
       .finally(() => setCarregando(false));
     return () => { ativo = false; };
   }, []);
 
-  function flash(t) {
+  function flash(t: string) {
     setMensagem(t);
     setTimeout(() => setMensagem(""), 2500);
   }
 
-  function alterar(campo, valor) {
+  function alterar<K extends keyof FormState>(campo: K, valor: FormState[K]) {
     setForm(f => ({ ...f, [campo]: valor }));
   }
 
-  async function salvar(e) {
+  async function salvar(e?: FormEvent) {
     e?.preventDefault?.();
     setErro("");
     setSalvando(true);
     try {
-      const payload = {
+      const payload: ConfigImpressora = {
         ...form,
         cabecalhoExtra: form.cabecalhoExtra?.trim() || null,
         rodapeExtra: form.rodapeExtra?.trim() || null,
@@ -105,12 +130,12 @@ export default function ConfiguracoesImpressora({ user }) {
         viasVenda: Number(form.viasVenda),
         cortarLinhasFinal: Number(form.cortarLinhasFinal),
       };
-      const atualizado = await api.salvarConfiguracaoImpressora(payload);
-      setForm({ ...DEFAULTS, ...atualizado, cabecalhoExtra: atualizado.cabecalhoExtra || "", rodapeExtra: atualizado.rodapeExtra || "" });
+      const atualizado = await api.salvarConfiguracaoImpressora(payload) as Partial<ConfigImpressora>;
+      setForm(normalizar(atualizado));
       invalidarCacheImpressora();
       flash("Configuração salva.");
     } catch (err) {
-      setErro(err.message);
+      setErro((err as Error).message);
     } finally {
       setSalvando(false);
     }
@@ -126,13 +151,13 @@ export default function ConfiguracoesImpressora({ user }) {
         { viasVenda: 1 },
       );
     } catch (err) {
-      setErro(err.message);
+      setErro((err as Error).message);
     }
   }
 
   // Mantemos o preview "vivo" — re-renderiza a cada alteracao do form,
   // sem precisar salvar primeiro.
-  const cfgPreview = useMemo(() => ({ ...form }), [form]);
+  const cfgPreview = useMemo<FormState>(() => ({ ...form }), [form]);
 
   if (carregando) {
     return <div style={{ color: C.muted, padding: 20 }}>Carregando configurações...</div>;
@@ -174,14 +199,14 @@ export default function ConfiguracoesImpressora({ user }) {
                 label="Fonte base (px)"
                 min={8} max={24}
                 value={form.fonteBase}
-                onChange={v => alterar("fonteBase", v)}
+                onChange={v => alterar("fonteBase", Number(v))}
                 disabled={!podeEditar}
               />
               <Numerico
                 label="Margem (mm)"
                 min={0} max={20}
                 value={form.margemMm}
-                onChange={v => alterar("margemMm", v)}
+                onChange={v => alterar("margemMm", Number(v))}
                 disabled={!podeEditar}
               />
             </div>
@@ -221,8 +246,8 @@ export default function ConfiguracoesImpressora({ user }) {
 
         <Card titulo="Comportamento">
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <Numerico label="Vias por venda" min={1} max={3} value={form.viasVenda} onChange={v => alterar("viasVenda", v)} disabled={!podeEditar} />
-            <Numerico label="Linhas em branco no fim" min={0} max={12} value={form.cortarLinhasFinal} onChange={v => alterar("cortarLinhasFinal", v)} disabled={!podeEditar} />
+            <Numerico label="Vias por venda" min={1} max={3} value={form.viasVenda} onChange={v => alterar("viasVenda", Number(v))} disabled={!podeEditar} />
+            <Numerico label="Linhas em branco no fim" min={0} max={12} value={form.cortarLinhasFinal} onChange={v => alterar("cortarLinhasFinal", Number(v))} disabled={!podeEditar} />
           </div>
           <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
             <Switch
@@ -313,7 +338,7 @@ export default function ConfiguracoesImpressora({ user }) {
 
 // ===== Helpers de UI =====
 
-function Card({ titulo, children }) {
+function Card({ titulo, children }: { titulo: string; children?: ReactNode }) {
   return (
     <section style={{
       background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10,
@@ -327,7 +352,7 @@ function Card({ titulo, children }) {
   );
 }
 
-function Alerta({ tipo, children }) {
+function Alerta({ tipo, children }: { tipo: "erro" | "sucesso"; children?: ReactNode }) {
   const cor = tipo === "erro" ? C.red : C.green;
   return (
     <div style={{
@@ -337,7 +362,7 @@ function Alerta({ tipo, children }) {
   );
 }
 
-function Label({ children }) {
+function Label({ children }: { children?: ReactNode }) {
   return (
     <label style={{ fontSize: 12, color: C.text, fontWeight: 600, marginBottom: 4, display: "block" }}>
       {children}
@@ -345,7 +370,15 @@ function Label({ children }) {
   );
 }
 
-function Switch({ label, descricao, checked, onChange, disabled }) {
+type SwitchProps = {
+  label: string;
+  descricao?: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+};
+
+function Switch({ label, descricao, checked, onChange, disabled }: SwitchProps) {
   return (
     <label style={{
       display: "flex", alignItems: "flex-start", gap: 10,
@@ -367,7 +400,14 @@ function Switch({ label, descricao, checked, onChange, disabled }) {
   );
 }
 
-function Radio({ label, checked, onChange, disabled }) {
+type RadioProps = {
+  label: string;
+  checked: boolean;
+  onChange: () => void;
+  disabled?: boolean;
+};
+
+function Radio({ label, checked, onChange, disabled }: RadioProps) {
   return (
     <label style={{
       display: "inline-flex", alignItems: "center", gap: 8,
@@ -383,7 +423,16 @@ function Radio({ label, checked, onChange, disabled }) {
   );
 }
 
-function Numerico({ label, value, onChange, min, max, disabled }) {
+type NumericoProps = {
+  label: string;
+  value: number | string;
+  onChange: (v: string) => void;
+  min?: number;
+  max?: number;
+  disabled?: boolean;
+};
+
+function Numerico({ label, value, onChange, min, max, disabled }: NumericoProps) {
   return (
     <div>
       <Label>{label}</Label>
@@ -400,13 +449,13 @@ function Numerico({ label, value, onChange, min, max, disabled }) {
   );
 }
 
-const inputStyle = {
+const inputStyle: CSSProperties = {
   background: C.bg, border: `1px solid ${C.border}`, color: C.text,
   padding: "8px 12px", borderRadius: 8, fontSize: 13, width: "100%",
   outline: "none",
 };
 
-const textareaStyle = {
+const textareaStyle: CSSProperties = {
   ...inputStyle,
   fontFamily: "'Segoe UI', sans-serif",
   resize: "vertical",

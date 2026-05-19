@@ -69,6 +69,33 @@
 
 .pdv-redesign ::selection { background: var(--pdv-accent-glow); color: var(--pdv-t1); }
 
+/* ─── Foco por teclado (a11y) ─────────────────────────────────
+   Ring escandalosamente visivel para PDV operado por teclado: outline
+   3px verde com offset 2px. Usa :focus-visible para NAO aparecer em
+   cliques de mouse (o operador veterano nao precisa ver ring no
+   workflow normal de cliques). Cobre buttons, inputs, selects e
+   anchors dentro do PDV — nao sangra para o resto do app. */
+.pdv-redesign button:focus-visible,
+.pdv-redesign input:focus-visible,
+.pdv-redesign select:focus-visible,
+.pdv-redesign textarea:focus-visible,
+.pdv-redesign a:focus-visible,
+.pdv-redesign [tabindex]:focus-visible {
+  outline: 3px solid var(--pdv-accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+/* Input da busca ja tem destaque proprio (.pdv-scan.is-focused) — nao
+   duplicar. O outline ali seria redundante e quebraria o gradient. */
+.pdv-redesign .pdv-scan input:focus-visible { outline: none; }
+/* Botoes que ja tem box-shadow forte no estado ativo (pay buttons,
+   nav tabs) mostram outline um pouco mais discreto para nao competir. */
+.pdv-redesign .pdv-pay-btn:focus-visible,
+.pdv-redesign .pdv-nav-btn:focus-visible {
+  outline-offset: 1px;
+  outline-width: 2px;
+}
+
 .pdv-redesign *::-webkit-scrollbar { width: 8px; height: 8px; }
 .pdv-redesign *::-webkit-scrollbar-track { background: transparent; }
 .pdv-redesign *::-webkit-scrollbar-thumb { background: var(--pdv-line-3); border-radius: 4px; }
@@ -979,7 +1006,10 @@
   letter-spacing: .08em; text-transform: uppercase; margin-bottom: 10px;
 }
 .pdv-short-grid {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  /* overflow visible permite o divisor do nth-child(3) aparecer dentro
+     do gap entre F10 (transacao) e Esc (navegacao). */
+  overflow: visible;
 }
 .pdv-vendedor-aviso {
   background: var(--pdv-surf);
@@ -996,23 +1026,62 @@
   font-weight: 500;
 }
 .pdv-short-btn {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  position: relative;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 5px;
   background: var(--pdv-surf-2); border: 1px solid var(--pdv-line);
   border-radius: 9px; padding: 9px 11px;
   cursor: pointer; text-align: left; line-height: 1.2;
-  transition: border-color .12s, background .12s;
+  transition: border-color .12s, background .12s, transform .08s;
   font-family: inherit;
 }
 .pdv-short-btn:disabled { opacity: .35; cursor: not-allowed; }
-.pdv-short-btn:not(:disabled):hover { background: var(--pdv-surf-3); border-color: var(--pdv-line-3); }
+.pdv-short-btn:not(:disabled):hover {
+  background: var(--pdv-surf-3); border-color: var(--pdv-line-3);
+  transform: translateY(-1px);
+}
+.pdv-short-btn:not(:disabled):active { transform: translateY(0); }
+/* Divisor visual entre F10 (transacao) e Esc (navegacao). Reforca a
+   separacao mental "estou finalizando" vs "estou navegando", evita
+   apertar Esc achando que e o atalho de finalizar. */
+.pdv-short-btn:nth-child(3)::before {
+  content: ""; position: absolute;
+  left: -5px; top: 25%; bottom: 25%;
+  width: 1px; background: var(--pdv-line-3);
+  pointer-events: none;
+}
+/* Estilo "tecla fisica" para o atalho — fundo, borda dupla embaixo
+   (simula altura), monoespaca. Antes era so texto colorido (parecia
+   tag decorativa, nao acao). */
 .pdv-short-key {
   font-family: 'Geist Mono', ui-monospace, monospace;
-  font-size: 10.5px; font-weight: 600; letter-spacing: .04em;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
+  background: var(--pdv-surf);
+  border: 1px solid var(--pdv-line-3);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 1px 6px;
+  line-height: 1.2;
+  min-width: 22px; text-align: center;
 }
-.pdv-short-key.k-warn { color: var(--pdv-c-rose); }
-.pdv-short-key.k-ok { color: var(--pdv-accent); }
-.pdv-short-key.k-mut { color: var(--pdv-t3); }
-.pdv-short-key.k-info { color: var(--pdv-c-sky); }
+.pdv-short-key.k-warn {
+  color: var(--pdv-c-rose);
+  border-color: color-mix(in oklab, var(--pdv-c-rose) 30%, var(--pdv-line));
+  border-bottom-color: color-mix(in oklab, var(--pdv-c-rose) 50%, var(--pdv-line));
+}
+.pdv-short-key.k-ok {
+  color: var(--pdv-accent);
+  border-color: color-mix(in oklab, var(--pdv-accent) 30%, var(--pdv-line));
+  border-bottom-color: color-mix(in oklab, var(--pdv-accent) 50%, var(--pdv-line));
+}
+.pdv-short-key.k-mut { color: var(--pdv-t2); }
+.pdv-short-key.k-info {
+  color: var(--pdv-c-sky);
+  border-color: color-mix(in oklab, var(--pdv-c-sky) 30%, var(--pdv-line));
+  border-bottom-color: color-mix(in oklab, var(--pdv-c-sky) 50%, var(--pdv-line));
+}
+.pdv-short-btn:not(:disabled):hover .pdv-short-key {
+  background: var(--pdv-surf-2);
+}
 .pdv-short-lbl { color: var(--pdv-t1); font-size: 12px; font-weight: 500; }
 
 /* ─── Forma de pagamento (F1-F6) ───────────────────────────── */

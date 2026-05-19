@@ -1,7 +1,11 @@
-import { useEffect, useMemo, useState, useCallback, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useCallback, lazy, Suspense, type CSSProperties, type ReactNode } from "react";
 import { C } from "./lib/theme";
 import { api, type SessionUser, type Role } from "./lib/api";
-import RelatorioComissoes from "./components/RelatorioComissoes";
+
+// Lazy: RelatorioComissoes carrega recharts (~400 kB). Sai do chunk
+// principal de Comissoes — so e baixado quando o usuario abre a aba
+// "Evolucao" (a aba default e "config").
+const RelatorioComissoes = lazy(() => import("./components/RelatorioComissoes"));
 
 // ============ TIPOS ============
 
@@ -96,7 +100,15 @@ export default function Comissoes({ user }: ComissoesProps) {
       </div>
 
       {aba === "config" && <ComissoesConfig user={user} />}
-      {aba === "evolucao" && <RelatorioComissoes />}
+      {aba === "evolucao" && (
+        <Suspense fallback={
+          <div style={{ padding: 40, textAlign: "center", color: C.muted, fontSize: 13 }}>
+            Carregando gráficos...
+          </div>
+        }>
+          <RelatorioComissoes />
+        </Suspense>
+      )}
     </div>
   );
 }

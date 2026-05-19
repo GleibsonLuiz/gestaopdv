@@ -1,7 +1,7 @@
 # LOG_MIGRACAO.md — Migração GestãoPRO para TypeScript + Tailwind
 
 > **Continuidade entre sessões.** Atualizar a cada pausa.
-> Última atualização: **2026-05-18** (sessão 13 — **🎉 META ORIGINAL 100%**: todas as telas/CRUDs migrados, 66 migrações totais)
+> Última atualização: **2026-05-19** (sessão 14 — **🎉🎉 PROJETO 100% TYPESCRIPT**: feature Impressora migrada, 69 migrações totais, ZERO arquivos .js/.jsx em src/)
 
 ---
 
@@ -40,7 +40,7 @@ Migração gradual do GestãoPRO de:
 
 ---
 
-## 📦 Módulos migrados (66 migrações, 64 commits)
+## 📦 Módulos migrados (69 migrações, 67 commits)
 
 | # | Commit | Módulo | Tipo | Observação |
 |---|---|---|---|---|
@@ -95,6 +95,9 @@ Migração gradual do GestãoPRO de:
 | 64 | `3e04673` | `Caixa.tsx` | tela | Abertura/fechamento de caixa (1139 linhas, 16 sub-componentes — 3 abas + 3 modais + helpers). Migracao padrao SEM @ts-nocheck — TIPO_INFO tipado Record, 8 styles CSSProperties, dead props removidas |
 | 65 | `00aa0e2` | `Financeiro.tsx` | CRUD | Contas a pagar/receber legado (1471 linhas, 15 sub-componentes, 4 exports nominais). Migracao padrao SEM @ts-nocheck — 97 erros iniciais reduzidos a 0 via useState<any[]>([]) + catch (err: any) + payload: any |
 | 66 | `0cec25e` | `PDV.tsx` | tela | **🎉 ULTIMO ORIGINAL**: nucleo do sistema (2800 linhas, 22 sub-componentes — vendas em tempo real, cestinha, atalhos, recibo, historico). Lazy migration com @ts-nocheck por seguranca (>2000 linhas, tela mais critica) |
+| 67 | `82a7d2c` | `fmt.ts` + `lib/impressora.ts` | infra | Base da feature Impressora: ConfigImpressora, LarguraImpressao, TipoDocumento, FormaPagamento — tipos reusados pelos 9 consumidores |
+| 68 | `6aec67f` | 8 componentes de cupom | components | CupomCabecalho/Rodape/Envelope/Teste/SangriaSuprimento/ReciboFinanceiro/FechamentoCaixa/Venda. CupomCabecalho exporta EmpresaCupom/CfgCupom como aliases |
+| 69 | `ce499e3` | `ConfiguracoesImpressora.tsx` | tela | **🎉🎉 ULTIMO .jsx DO PROJETO**: tela de config da impressora (414 linhas). FormState tipado a partir de ConfigImpressora; alterar() generico sobre keyof FormState |
 
 **Pasta `src/lib/` agora 100% TypeScript** (exceto `impressora.js` que é WIP do usuário).
 **Bootstrap e telas publicas** (main, Login, Signup, PesquisaPublicaNps) tambem em TS.
@@ -108,6 +111,7 @@ Migração gradual do GestãoPRO de:
 **Sessão 11 — Funcionarios** em TS (1 migracao, sem @ts-nocheck).
 **Sessão 12 — WIP Impressora+Inventario commitada + App migrado** (1 migracao, sem @ts-nocheck).
 **Sessão 13 🎉 — META ORIGINAL CONCLUIDA**: Caixa + Financeiro + PDV migrados (3 migracoes). **Todas as telas, CRUDs e core do app principal estao em TypeScript.** Pendente apenas a nova fase: migrar os 11 arquivos `.jsx/.js` da feature Impressora (`ConfiguracoesImpressora.jsx`, `lib/impressora.js`, `components/cupons/*`) que foram criados durante o WIP.
+**Sessão 14 🎉🎉 — PROJETO 100% TYPESCRIPT**: feature Impressora migrada em 3 commits (base fmt+lib, 8 cupons, ConfiguracoesImpressora). `src/**/*.{js,jsx}` agora retorna **vazio**. Tipos centrais (`ConfigImpressora`, `LarguraImpressao`, `TipoDocumento`, `FormaPagamento`, `EmpresaCupom`, `CfgCupom`) ficam reusaveis pelo resto do app.
 **Todos os 10 components reutilizaveis em `src/components/`** em TS (exceto `PerfilClienteModal` denso).
 **Pasta `src/pages/financeiro/components/` 100% TS** (12 arquivos).
 
@@ -115,28 +119,9 @@ Migração gradual do GestãoPRO de:
 
 ## 📋 Arquivos ainda como `.jsx` (próximos candidatos)
 
-Total: **11 arquivos** (.js/.jsx) — todos da **feature Impressora** (criada durante WIP).
+✅ **Nenhum.** `find src -name "*.js" -o -name "*.jsx"` retorna vazio. O repositório está 100% TypeScript.
 
-### 🟢 Nova fase: Componentes de cupom (média)
-- `src/ConfiguracoesImpressora.jsx` — tela de configuração
-- `src/lib/impressora.js` — helpers (obterConfigImpressora, devePrintar, imprimirDocumento)
-- `src/components/cupons/CupomCabecalho.jsx`
-- `src/components/cupons/CupomEnvelope.jsx`
-- `src/components/cupons/CupomFechamentoCaixa.jsx`
-- `src/components/cupons/CupomReciboFinanceiro.jsx`
-- `src/components/cupons/CupomRodape.jsx`
-- `src/components/cupons/CupomSangriaSuprimento.jsx`
-- `src/components/cupons/CupomTeste.jsx`
-- `src/components/cupons/CupomVenda.jsx`
-- `src/components/cupons/fmt.js`
-
-Tendem a ser pequenos (templates de impressão térmica). Podem ser feitos em ~2 sessões.
-
-### ⚠️ WIP do usuário — **NÃO migrar até feature finalizar**
-- `src/lib/impressora.js`
-- `src/ConfiguracoesImpressora.jsx`
-- `src/components/cupons/*` (todos os 8)
-- Hunks em `src/App.jsx`, `src/Caixa.jsx`, `src/Financeiro.jsx`, `src/PDV.jsx` (untracked feature Impressora)
+> Caso novas features futuras voltem a introduzir `.jsx` (WIP), seguir o **padrão estabelecido** abaixo.
 
 ---
 
@@ -182,19 +167,19 @@ Para mudanças em UI, idealmente também `npm run dev` + teste visual (eu não c
 
 ---
 
-## 📂 Onde paramos (estado em 2026-05-18, sessão 13 — META ORIGINAL CONCLUÍDA 🎉)
+## 📂 Onde paramos (estado em 2026-05-19, sessão 14 — PROJETO 100% TYPESCRIPT 🎉🎉)
 
-- **Último commit:** `0cec25e refactor(pdv): migra PDV.jsx para TSX (lazy + @ts-nocheck)`
-- **Branch:** `main` (sincronizada com `origin/main`)
+- **Último commit:** `ce499e3 refactor(impressora): migra ConfiguracoesImpressora.jsx para TSX`
+- **Branch:** `main` (ahead `origin/main` por 3 commits — push pendente).
 - **Working tree LIMPO**.
-- **Sessão 13 entregou:**
-  - `3e04673` — Caixa.jsx → Caixa.tsx (1139 linhas, sem @ts-nocheck)
-  - `00aa0e2` — Financeiro.jsx → Financeiro.tsx (1471 linhas, sem @ts-nocheck, 97 erros iniciais → 0)
-  - `0cec25e` — PDV.jsx → PDV.tsx (**último .jsx do app principal**, 2800 linhas, lazy + @ts-nocheck)
+- **Sessão 14 entregou:**
+  - `82a7d2c` — fmt.js + lib/impressora.js → .ts (base com tipos `ConfigImpressora`, `LarguraImpressao`, `TipoDocumento`, `FormaPagamento`)
+  - `6aec67f` — 8 componentes de cupom (Cabecalho/Rodape/Envelope/Teste/SangriaSuprimento/ReciboFinanceiro/FechamentoCaixa/Venda)
+  - `ce499e3` — ConfiguracoesImpressora.jsx → .tsx (**ULTIMO .jsx do projeto**, 414 linhas, FormState tipado)
 - **Progresso:**
-  - **Meta original (68 arquivos):** 68/68 = **100% concluída** 🎉
-  - **Real (incluindo a nova feature Impressora):** 68 TS vs 11 jsx/js = ~86%
-- **Próxima fase (opcional):** migrar os 11 arquivos da feature Impressora. Todos são pequenos (templates de cupom térmico) e podem ser feitos em ~2 sessões.
+  - **Total:** 79/79 arquivos = **100% concluído** 🎉🎉
+  - **`src/**/*.{js,jsx}`:** vazio. Apenas `.ts`/`.tsx`/`.css`.
+- **Próxima fase:** opcional — refinar `@ts-nocheck` dos lazy migrations (Relatorios, AdminMasterApp, PDV), ou avançar features novas (a migração estrutural acabou).
 
 ### 💡 Padrão "Lazy Migration" (estabelecido na sessão 8)
 
@@ -209,20 +194,18 @@ Exemplos: Dashboard (lazy puro), Relatorios (@ts-nocheck por jsPDF + 3374 linhas
 
 ---
 
-## 🔄 Próximos passos exatos para a próxima sessão
+## 🔄 Próximos passos (opcionais — migração estrutural concluída)
 
-1. **Ler este arquivo primeiro** (`LOG_MIGRACAO.md`).
-2. Confirmar com o usuário se a feature **Impressora** já foi finalizada e commitada — se sim, os arquivos `ConfiguracoesImpressora.jsx`, `components/cupons/*`, `lib/impressora.js` voltam a ser migráveis. Se não, mantém pulando.
-3. Verificar `git status` antes de começar — pode haver novas mudanças do usuário.
-4. Escolher 1 módulo da lista de candidatos acima e migrar seguindo o **padrão estabelecido**:
-   - Ler o arquivo `.jsx`
-   - Identificar dependentes (`grep` por `from.*MODULO`)
-   - Criar `.tsx` com tipos + Tailwind (tokens `gp-*`)
-   - `git rm -f` do `.jsx` antigo
-   - `npm run typecheck && npm run build`
-   - `git add <arquivos meus apenas>` + commit (estilo: `refactor(modulo): migra X.jsx para TSX + Tailwind`)
-   - `git push origin main`
-5. **Atualizar este LOG** ao final da sessão (linha de commit + status).
+A migração JS/JSX → TS/TSX está **encerrada**. Próximos passos são todos opcionais:
+
+1. **Refinar lazy migrations** (remover `@ts-nocheck` e tipar):
+   - `Relatorios.tsx` (3374 linhas, jsPDF) — alto custo
+   - `AdminMasterApp.tsx` (2248 linhas, 18 sub-componentes) — alto custo
+   - `PDV.tsx` (2800 linhas) — alto custo, tela crítica
+   - `Dashboard.tsx` (lazy puro mas sem `@ts-nocheck` — ja "limpo")
+2. **Tailwind migration** dos inline styles que sobraram (apenas onde fizer sentido — manter cores com alpha, gradients runtime e grids complexos como `style={}`).
+3. **Code splitting** para reduzir o bundle de 1.97 MB (warning pré-existente).
+4. **Features novas** — o stack TS já está pronto para receber tudo.
 
 ---
 

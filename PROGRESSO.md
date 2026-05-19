@@ -1163,9 +1163,39 @@ GET /funcionarios → 20 registros
 
 ---
 
+### Sessão — 2026-05-19 (UX review do PDV + 2 features CRM + cron)
+
+Sessão longa de polimento + features pós-MVP. **15 commits no main.**
+
+**UX review completo do PDV** (12 itens, baseado em screenshot enviado pelo usuário + análise técnica):
+1. `7686f95` codificação cromática F1-F6 (DINHEIRO=emerald, PIX=cyan BACEN, DEBITO=sky, CREDITO=amber, BOLETO=violet, CREDIARIO=rose) + busca prominente (17px, ícone 40×40, fundo gradient accent) + preço dominante nos cards (clamp 15-19px, peso 700)
+2. `1285ca4` estado vazio orientativo (pill "aguardando bipagem" com pulso + 3 passos numerados quando no-data) + reordenação dinâmica F1-F6 por frequência real dos últimos 90 dias (backend retorna `formasFrequencia` em `pdvController.inicio`, frontend usa `FORMAS_ORDENADAS` via useMemo)
+3. `f0ceb0c` numeração 1-9 nos cards "Mais vendidos" + atalho Alt+digit (Alt evita conflito com scanner que dispara dígitos sem modifier <30ms)
+4. `5a18c92` responsividade 1024-1280px (novo breakpoint que comprime F1-F6 lateral) + altura curta ≤720px (badge F10 do Finalizar com destaque accent-ink)
+5. `f30723f` cards SERVIÇO/crítico (chip violet/amber + barra lateral âmbar quando estoque ≤ mínimo) + tooltip nos nomes truncados + aba Histórico com affordance real (opacity .65 + borda accent na ativa) + bloco "Vendas de hoje" reescrito ("R$ X · N vendas" em vez de "100%" isolado)
+6. `e19b31c` atalhos rápidos (F8/F10/Esc/Enter) como teclas físicas (border-bottom 2px) + divisor vertical entre transação (F10) e navegação (Esc) + ring de foco a11y (`:focus-visible` 3px accent + offset 2px, escopado a `.pdv-redesign`)
+7. `be5c605` aba inativa em tema claro com `opacity: .72` (WCAG AA folgado em pergaminho)
+
+**Features CRM/automação:**
+8. `6b60104` **Conversão Oportunidade GANHO → Venda no PDV**: schema já tinha `Oportunidade.vendaId @unique` — agora wiring completo. `vendaController.criar` aceita `oportunidadeId` opcional, valida fora da transação (etapa GANHO + vendaId null + cliente bate), `updateMany` defensivo dentro da tx (count=0 → 409 reverte tudo). App.tsx tem state `pdvContexto`, Funil passa callback `onConverterEmVenda`, PDV recebe `contextoInicial` (pré-seleciona cliente, banner roxo "Convertendo Oportunidade #N · finalize pra vincular", injeta `oportunidadeId` no payload). Card GANHO no Funil: badge verde "✓ Convertida em Venda #N" se já convertida, botão "🛒 Converter em venda →" se livre, hint "Sem cliente" se faltar vínculo.
+9. `d8b6ba9` **Cron diário das automações (Vercel Cron)**: novo handler `cronExecutarTodos` em automacaoController, rota dedicada `/cron/automacoes` (GET+POST) montada fora do `authRequired` global. Auth via header `Bearer ${CRON_SECRET}`. Itera tenants ativos não-expirados via `prismaRaw`, executa todas as regras ativas por tenant em `tenantStorage.run({tenantId})`, executor = 1º ADMIN/GERENTE ativo. Tolerante a falhas (uma regra/tenant não impede os próximos). `vercel.json` do backend ganha `crons: [{path:"/cron/automacoes", schedule:"0 12 * * *"}]` (12h UTC = 9h Brasília). `CRON_SECRET` documentado em `.env.example` com instrução `openssl rand -hex 32`. Smoke test confirmou 401 sem auth / 401 auth errada / 200 itera 3 tenants ativos.
+
+**Bônus — correção de memória:**
+- MEMORY.md estava obsoleto em 2 trilhas que apareciam "em andamento" mas estavam 100% concluídas: Multi-Tenant (9/9 + Admin Master 13/13 desde commit `7fdf80c`) e Sequência Relatórios CRM (7/7 entregues nos commits `11242d9`→`afc85be`). Corrigido. Novo memory `feedback_pdv_ux_padrao.md` registra o padrão estabelecido na sessão (codificação cromática, atalhos físicos, hierarquia preço>nome, ring de foco) com aviso "LER antes de editar PDV.tsx/pdv.css".
+
+**Para ativar o cron em produção** (pós-deploy do commit `d8b6ba9`):
+1. `openssl rand -hex 32` pra gerar a chave
+2. Adicionar `CRON_SECRET` em Vercel → projeto backend → Settings → Environment Variables (Production + Preview)
+3. Próximo deploy do backend instala o cron automaticamente
+4. Verificar em Vercel → projeto backend → Crons que o job apareceu
+
+---
+
 ## Onde paramos
 
 **🎉 Projeto completo — 14/14 etapas MVP + 10 melhorias pós-MVP + 10 prioridades CRM + 9/9 etapas Multi-Tenant + 13/13 etapas Admin Master entregues.**
+
+**Sessão 2026-05-19 entregou:** 7 commits de UX no PDV (review técnico completo) + 1 commit de feature CRM (Conversão Oportunidade→Venda) + 1 commit de automação (Cron diário Vercel). 15 commits em main, todos com typecheck+build verdes.
 
 Em 2026-05-16, **Fornecedores NF-e ready**: extensão do cadastro de fornecedores espelhando o que a ETAPA 14 fez em Produto. 16 campos novos no schema (nomeFantasia, tipoPessoa, endereço segregado completo com códigos IBGE, ie+ieIsenta, im, indIEDest 1/2/9, crt 1/2/3, emailNFe). Migration aplicada no Neon. Controller valida regras SEFAZ (indIEDest=1 exige IE; indIEDest=2 exige IE nula). Form refatorado em 3 seções (Dados básicos / Fiscais / Endereço), toggle PF↔PJ que troca a máscara do documento, ViaCEP estendido para popular código IBGE do município, tabela estática de 27 UFs para código IBGE da UF. Stub `consultarCnpjCadastral` deixado pronto para futura integração com BrasilAPI.
 
@@ -1272,28 +1302,28 @@ Extensão do cadastro de Fornecedores para conformidade NF-e — espelha o que a
 
 ### Próxima decisão (a ser tomada)
 
-**Relatórios CRM — continuar a sequência iniciada em 2026-05-15:**
-A aba "🎯 CRM" em Relatórios foi entregue com a estrutura de sub-tabs já pronta; falta implementar os 6 sub-relatórios restantes. Ordem sugerida (e justificativa):
-- **(crm-1)** Performance Comercial — reaproveita muito código do Funil (mesmas tabelas `Oportunidade` + `User`), foco em atividade do vendedor (ciclo, conversão, ticket, tarefas concluídas, interações).
-- **(crm-2)** Carteira de Clientes (RFM) — segmentação on-the-fly (lógica já existe em `dashboardCrmController.classificarSegmento`), Top LTV, distribuição por segmento. Alto valor para gestão.
-- **(crm-3)** NPS Consolidado — você já coleta `PesquisaNps` pós-venda; falta NPS Score, distribuição Detratores/Neutros/Promotores, ranking por vendedor, lista de detratores recentes para recuperação.
-- **(crm-4)** Atividades & Cadência — volume de interações por tipo/vendedor, cobertura da carteira (% clientes contatados), SLA de tarefas.
-- **(crm-5)** Motivos de Perda — já calculado no Funil; pode virar relatório dedicado com gráfico por concorrente/razão.
-- **(crm-6)** Forecast / Previsão — agrupa oportunidades por mês de `dataFechamentoPrevista`, com valor ponderado, para os próximos 3-6 meses.
+**Trilhas concluídas na sessão 2026-05-19** (não precisam mais entrar na lista):
+- ✅ Relatórios CRM 7/7 (confirmado: já estavam todos no código, memory estava obsoleto)
+- ✅ Multi-Tenant 9/9 + Admin Master 13/13 (confirmado: signup público foi feito mas fechado em ETAPA 10)
+- ✅ UX review completo do PDV (12 itens, 7 commits — codificação cromática F1-F6, busca prominente, atalhos Alt+digit, estado vazio, breakpoints, cards SVC/crítico, aba Histórico, atalhos físicos, ring de foco, WCAG tema claro)
+- ✅ **(a)** Cron automático das automações — `d8b6ba9`. Falta apenas setar `CRON_SECRET` em produção
+- ✅ **(d)** Conversão Oportunidade GANHA → Venda — `6b60104`. Wiring completo, schema já antecipava
 
-**Possíveis evoluções do CRM (fora do escopo das 10 prioridades originais):**
-- **(a)** Cron automático das automações — hoje a execução é manual via botão "Executar agora". Adicionar Vercel Cron (em `vercel.json`) chamando `POST /automacoes/executar` 1x/dia com header de autorização (chave em env). Sem isso, automações dependem de gestor abrir a tela e clicar.
-- **(b)** Variável `{{linkNps}}` nos templates — útil para mandar pesquisa via WhatsApp direto da tela do cliente. Hoje o link vem da tela NPS (botão "💬 Enviar" / "🔗 Copiar link").
-- **(c)** Lead scoring no PerfilClienteModal — endpoint `GET /clientes/:id/score` que calcula só para um cliente (hoje o score só aparece em Segmentos, que faz cálculo em lote).
-- **(d)** Conversão Oportunidade GANHA → Venda automática — botão no card que abre PDV pré-preenchido com cliente.
-- **(e)** Análise de motivos de perda — agregação `GROUP BY motivoPerda` em Oportunidades para identificar padrões (preço, prazo, concorrente).
+**Próximos candidatos (em ordem de ROI estimado):**
 
-**Lacunas pré-existentes (do escopo original):**
-- **(f)** Implementar `PUT /auth/preferencias` (campo `User.preferencias Json?`) e migrar tema/sidebar do `localStorage` para a conta — destrava sync entre dispositivos.
-- **(g)** Filtro por cliente no relatório de vendas (UI já tem o select de clientes em outras telas; reaproveitar).
-- **(h)** Auditoria do Reset Total (log estruturado de execuções).
-- **(i)** Chip-cluster pequeno na linha da tabela de Funcionários mostrando que módulos cada um tem.
-- **(j)** Encerrar o projeto.
+- **(f)** `PUT /auth/preferencias` (campo `User.preferencias Json?`) e migrar tema/sidebar do `localStorage` para a conta — destrava sync entre dispositivos. **Médio esforço, alto valor** (operadores que alternam entre máquinas perdem config hoje).
+- **(b)** Variável `{{linkNps}}` nos templates de mensagem — útil para mandar pesquisa via WhatsApp direto da tela do cliente. **Pequeno esforço, médio valor**. Hoje o link vem da tela NPS.
+- **(c)** Lead scoring no PerfilClienteModal — endpoint `GET /clientes/:id/score` que calcula só para um cliente. **Pequeno esforço, médio valor**. Hoje o score só aparece em Segmentos (cálculo em lote).
+- **(e)** Análise de motivos de perda — agregação `GROUP BY motivoPerda` em Oportunidades. **Pequeno esforço, baixo-médio valor** (já existe no Funil).
+- **(g)** Filtro por cliente no relatório de vendas — backend aceita, UI não expõe. **Trivial**.
+- **(h)** Auditoria estruturada do Reset Total — log de execuções. **Pequeno**.
+- **(i)** Chip-cluster na tabela de Funcionários mostrando módulos. **Pequeno**.
+
+**Ainda pendentes de validação visual** (sessão 2026-05-19 entregou 7 commits de UX no PDV, mas nenhum foi validado no navegador):
+- Abrir `http://localhost:5173`, fazer login, ir pro PDV e percorrer o checklist de 12 pontos da sessão anterior (codificação cromática, busca prominente, atalhos Alt+digit em cards vazios, estado vazio orientativo, cards SERVIÇO/crítico, aba Histórico, atalhos rodapé como teclas, ring de foco com Tab, breakpoints 1024×768, banner de conversão Oportunidade→Venda)
+- Validar conversão CRM: criar oportunidade GANHO com cliente, clicar "🛒 Converter em venda →", confirmar pré-seleção + banner + vínculo após finalizar
+
+**Para ativar cron em produção:** ver instruções na seção "Sessão — 2026-05-19" acima.
 
 ### Como retomar
 
@@ -1305,3 +1335,6 @@ A aba "🎯 CRM" em Relatórios foi entregue com a estrutura de sub-tabs já pro
 2. Abrir [http://localhost:5173/](http://localhost:5173/)
 3. Login: `admin@gestaopro.local` / `admin123`
 4. Para ver o tracker com 13/13 concluídas: ir em **Projeto** e clicar em **Ressincronizar** (caso o localStorage do navegador ainda tenha o estado antigo).
+
+**Memórias relevantes pra ler antes de mexer no PDV** (sessão 2026-05-19):
+- `~/.claude/projects/d--gestao-pdv/memory/feedback_pdv_ux_padrao.md` — codificação cromática F1-F6, atalhos físicos, ring de foco, hierarquia preço>nome. **Não desfazer sem motivo.**

@@ -1090,6 +1090,25 @@
 }
 .pdv-top-card:hover { background: var(--pdv-surf-3); border-color: var(--pdv-line-3); transform: translateY(-1px); }
 .pdv-top-card:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+/* Numero do atalho (tecla 1-9) no canto superior direito do card. So
+   funciona quando a busca esta vazia — sinalizado pelo helper acima. */
+.pdv-top-card-num {
+  position: absolute; top: 4px; right: 6px;
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: 10px; font-weight: 600;
+  color: var(--pdv-t3);
+  background: var(--pdv-surf-3);
+  border: 1px solid var(--pdv-line);
+  border-radius: 5px;
+  padding: 1px 5px;
+  line-height: 1.2;
+  letter-spacing: .02em;
+  pointer-events: none;
+}
+.pdv-top-card:hover .pdv-top-card-num {
+  color: var(--pdv-accent);
+  border-color: color-mix(in oklab, var(--pdv-accent) 30%, var(--pdv-line));
+}
 .pdv-top-card-info {
   flex: 1; min-width: 0;
   display: flex; flex-direction: column; justify-content: space-between;

@@ -632,6 +632,23 @@ function NovaVenda({ user }) {
   //   Esc     fecha modais auxiliares e refoca busca
   useEffect(() => {
     function onKeyDown(e) {
+      // Alt+1..9 -> adiciona o N-esimo card de "Mais vendidos" quando o
+      // carrinho esta vazio (estado em que AcessoRapido esta visivel).
+      // Modifier Alt evita conflito com bipagem do scanner (que dispara
+      // digitos sem modifier em <30ms) e com digitacao livre na busca.
+      if (e.altKey && !e.ctrlKey && !e.metaKey && /^[1-9]$/.test(e.key)) {
+        if (carrinhoRef.current.length > 0) return;
+        const idx = Number(e.key) - 1;
+        const p = (topProdutosRef.current || [])[idx];
+        if (!p) return;
+        e.preventDefault();
+        if (p.tipoItem !== "SERVICO" && p.estoque <= 0) {
+          flashErro(`Sem estoque de "${p.nome}".`);
+          return;
+        }
+        adicionarProduto(p, 1);
+        return;
+      }
       const mapa = formaPorTeclaRef.current || {};
       if (mapa[e.key]) {
         e.preventDefault();
@@ -668,8 +685,10 @@ function NovaVenda({ user }) {
   const pagamentoAbertoRef = useRef(pagamentoAberto);
   const abrirPagamentoRef = useRef(null);
   const confirmarPagamentoRef = useRef(null);
+  const topProdutosRef = useRef(painel.topProdutos);
   useEffect(() => { carrinhoRef.current = carrinho; }, [carrinho]);
   useEffect(() => { pagamentoAbertoRef.current = pagamentoAberto; }, [pagamentoAberto]);
+  useEffect(() => { topProdutosRef.current = painel.topProdutos; }, [painel.topProdutos]);
 
   function abrirPagamento() {
     setErro("");
@@ -1904,19 +1923,24 @@ function AcessoRapido({ user, topProdutos, ultimasVendas, onAdicionar, onAbrirVe
               Mais vendidos · 30 dias
               <span className="pill">{topProdutos.length}</span>
             </div>
-            <div className="helper">clique para adicionar</div>
+            <div className="helper">Alt+1–{Math.min(topProdutos.length, 9)} ou clique</div>
           </div>
           <div className="pdv-top-grid">
-            {topProdutos.map(p => {
+            {topProdutos.map((p, idx) => {
               const semEstoque = p.tipoItem !== "SERVICO" && p.estoque <= 0;
+              const numero = idx + 1;
+              const temAtalho = numero <= 9;
               return (
                 <button
                   key={p.id} type="button"
                   onClick={() => !semEstoque && onAdicionar(p)}
                   disabled={semEstoque}
-                  title={semEstoque ? "Sem estoque" : `Adicionar ${p.nome}`}
+                  title={semEstoque ? "Sem estoque" : `Adicionar ${p.nome}${temAtalho ? ` (tecla ${numero})` : ""}`}
                   className="pdv-top-card"
                 >
+                  {temAtalho && (
+                    <span className="pdv-top-card-num" aria-hidden="true">{numero}</span>
+                  )}
                   <FotoProduto url={p.imagem} nome={p.nome} tamanho={42} servico={p.tipoItem === "SERVICO"} />
                   <div className="pdv-top-card-info">
                     <div className="pdv-top-card-name">{p.nome}</div>

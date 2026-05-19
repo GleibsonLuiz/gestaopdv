@@ -1251,6 +1251,24 @@ GET /nps/cliente/00000000-0000-.../link-pendente → 404 { erro: "Cliente nao te
 ```
 TypeScript `tsc --noEmit` limpo. `npm run build` verde.
 
+### Sessão — 2026-05-19 (continuação — impressão da folha de contagem cega)
+
+Gap identificado pela inspeção: o módulo de Inventário tinha tela web de contagem cega ([src/InventarioContagem.tsx](src/InventarioContagem.tsx)) mas **não havia como imprimir a folha em papel** — operador precisava ficar com notebook/tablet ao lado da prateleira. Adicionado fluxo de impressão PDF.
+
+**Frontend:**
+- Novo helper isolado [src/lib/folhaCegaPdf.ts](src/lib/folhaCegaPdf.ts) — gera PDF paisagem A4 via jsPDF + jspdf-autotable. Layout:
+  - Cabeçalho: logo/nome empresa + CNPJ à esquerda, "FOLHA DE CONTAGEM CEGA · Inventário #N" à direita
+  - Sub-cabeçalho: descrição, categoria filtrada, data de abertura, total de itens
+  - Aviso laranja "ATENÇÃO: esta folha NÃO mostra o estoque do sistema"
+  - Tabela: # · Código · Cód. barras · Produto · Un. · Categoria · **Qtd. contada (vazia)** · **Observação (vazia)** — ordenada por categoria → nome (operador caminha por gôndola)
+  - `minCellHeight: 8mm` em cada linha para caber caligrafia
+  - Footer com paginação "Folha X de Y" + duas linhas de assinatura (Conferente / Supervisor) — quebra de página automática se não couber.
+- [src/Inventario.tsx](src/Inventario.tsx): novo `imprimirFolha(inv)` busca `api.folhaInventario(id)` + `api.obterEmpresa()` em paralelo, chama o gerador, dispara download. Novo item "🖨 Imprimir folha cega" no `ActionsMenu` (mesma condição de "Contar" — só aparece com status ABERTO).
+
+**Decisão de design:** helper em lib nova em vez de reusar `criarPDF` do Relatorios.tsx — esse arquivo tem `@ts-nocheck` (3374 linhas, denso). Extrair os helpers genéricos seria refator desnecessário só pra essa feature. Bonus: o build agora compartilha o chunk `jspdf.plugin.autotable` entre Relatorios e folhaCegaPdf (Relatorios caiu de 521 kB → 91.91 kB).
+
+**Smoke-test:** TypeScript limpo, build verde. Validação visual depende do usuário (não gera PDF via CLI).
+
 ---
 
 ## Onde paramos

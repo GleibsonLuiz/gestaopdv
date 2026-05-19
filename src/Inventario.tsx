@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, lazy, Suspense, type CSSProperties, t
 import { C } from "./lib/theme";
 import { api, type SessionUser } from "./lib/api";
 import ActionsMenu from "./components/ActionsMenu";
+import { gerarFolhaCegaPdf, type FolhaCegaPayload, type EmpresaParaCabecalho } from "./lib/folhaCegaPdf";
 
 // Lazy: a folha de contagem so e carregada quando o usuario clica em
 // "Contar". Mesmo principio vale para o detalhe (gestor) — mantem o
@@ -120,6 +121,22 @@ export default function Inventario({ user }: InventarioProps) {
       carregar();
     } catch (err) {
       alert((err as Error).message);
+    }
+  }
+
+  // Imprime a folha de contagem cega (PDF paisagem). Busca a folha + dados
+  // da empresa em paralelo e dispara o download. Erro nao bloqueia a UI —
+  // mostra alerta com a mensagem do backend.
+  async function imprimirFolha(inv: Inventario) {
+    try {
+      flash(`Gerando folha #${inv.numero}…`);
+      const [folha, empresa] = await Promise.all([
+        api.folhaInventario(inv.id) as Promise<FolhaCegaPayload>,
+        api.obterEmpresa().catch(() => null) as Promise<EmpresaParaCabecalho | null>,
+      ]);
+      gerarFolhaCegaPdf(folha, empresa);
+    } catch (err) {
+      alert(`Falha ao gerar folha: ${(err as Error).message}`);
     }
   }
 
@@ -271,6 +288,12 @@ export default function Inventario({ user }: InventarioProps) {
                           icon: "📋",
                           color: C.accent,
                           onClick: () => setContandoId(inv.id),
+                        },
+                        {
+                          label: "Imprimir folha cega",
+                          icon: "🖨",
+                          color: C.muted,
+                          onClick: () => imprimirFolha(inv),
                         },
                         ...(podeGerir
                           ? [

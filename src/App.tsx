@@ -13,6 +13,7 @@ const Fornecedores = lazy(() => import("./Fornecedores"));
 const Produtos = lazy(() => import("./Produtos"));
 const Etiquetas = lazy(() => import("./Etiquetas"));
 const Estoque = lazy(() => import("./Estoque"));
+const Inventario = lazy(() => import("./Inventario"));
 const Compras = lazy(() => import("./Compras"));
 const Orcamentos = lazy(() => import("./Orcamentos"));
 const Funcionarios = lazy(() => import("./Funcionarios"));
@@ -219,6 +220,7 @@ export default function App() {
   const TELA_MODULO: Record<string, string> = {
     pdv: "PDV", dashboard: "DASHBOARD", dashboardcrm: "DASHBOARD", caixa: "CAIXA", clientes: "CLIENTES",
     fornecedores: "FORNECEDORES", produtos: "PRODUTOS", etiquetas: "PRODUTOS", estoque: "ESTOQUE",
+    inventario: "INVENTARIO",
     compras: "COMPRAS", orcamentos: "ORCAMENTOS",
     funil: "OPORTUNIDADES",
     automacoes: "AUTOMACOES",
@@ -245,7 +247,7 @@ export default function App() {
     if (!user) return;
     if (!podeVer(tela)) {
       const primeira = ["pdv","dashboard","dashboardcrm","caixa","clientes","segmentos","reativacao","tarefas","fidelidade","funil","automacoes","nps","fornecedores","produtos","etiquetas",
-        "estoque","compras","orcamentos","financeiro","relatorios","comissoes","funcionarios","projeto","sistema","empresa","impressora"].find(podeVer);
+        "estoque","inventario","compras","orcamentos","financeiro","relatorios","comissoes","funcionarios","projeto","sistema","empresa","impressora"].find(podeVer);
       if (primeira && primeira !== tela) setTela(primeira);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -458,6 +460,9 @@ export default function App() {
           {podeAcessar(user, "ESTOQUE") && (
             <Item icone="🗃️" label="Estoque" ativo={tela === "estoque"} onClick={() => navegar("estoque")} />
           )}
+          {podeAcessar(user, "INVENTARIO") && (
+            <Item icone="📋" label="Inventário" ativo={tela === "inventario"} onClick={() => navegar("inventario")} />
+          )}
           {podeAcessar(user, "COMPRAS") && (
             <Item icone="🛍️" label="Compras" ativo={tela === "compras"} onClick={() => navegar("compras")} />
           )}
@@ -646,6 +651,12 @@ export default function App() {
             <>
               <PageHeader titulo="Controle de Estoque" subtitulo="Histórico e movimentações (entrada, saída, ajuste)" />
               <Estoque user={user} />
+            </>
+          )}
+          {tela === "inventario" && (
+            <>
+              <PageHeader titulo="Inventário" subtitulo="Contagem cega de estoque — o operador conta sem ver o valor do sistema" />
+              <Inventario user={user} />
             </>
           )}
           {tela === "compras" && (

@@ -316,6 +316,23 @@ export const api = {
   estornarCompra: (id: string, motivo: string) =>
     request(`/compras/${id}/estornar`, { method: "POST", body: { motivo } }),
 
+  // ==================== INVENTARIO COM CONTAGEM CEGA ====================
+  // O backend NUNCA expoe estoqueLogico ao operador da contagem — a
+  // resposta de getFolhaContagem ja vem filtrada. So o gestor (obter)
+  // recebe divergencias e impacto financeiro.
+  listarInventarios: (filtros: StringDict = {}) =>
+    request(`/inventarios${qsFrom(filtros)}`),
+  obterInventario: (id: string) => request(`/inventarios/${id}`),
+  abrirInventario: (data: unknown) =>
+    request("/inventarios", { method: "POST", body: data }),
+  folhaInventario: (id: string) => request(`/inventarios/${id}/folha`),
+  salvarContagensInventario: (id: string, contagens: unknown) =>
+    request(`/inventarios/${id}/contagens`, { method: "POST", body: { contagens } }),
+  consolidarInventario: (id: string) =>
+    request(`/inventarios/${id}/consolidar`, { method: "POST" }),
+  cancelarInventario: (id: string) =>
+    request(`/inventarios/${id}/cancelar`, { method: "POST" }),
+
   // Lista enxuta de usuarios ativos {id, nome, role} para selects de
   // "responsavel" — disponivel para todos (nao exige modulo FUNCIONARIOS).
   listarResponsaveis: () => request("/funcionarios/responsaveis"),

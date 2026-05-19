@@ -1072,7 +1072,11 @@
 
 /* ─── Top sellers grid (cestinha vazia) ────────────────────── */
 .pdv-top-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(clamp(150px, 14vw, 190px), 1fr)); gap: 8px;
+  display: grid;
+  /* auto-fit colapsa colunas vazias quando ha menos itens que slots
+     disponiveis — evita "fantasma" em larguras intermediarias. */
+  grid-template-columns: repeat(auto-fit, minmax(clamp(150px, 14vw, 190px), 1fr));
+  gap: 8px;
   padding: 0 clamp(12px, 1.4vw, 18px) 10px;
 }
 .pdv-top-card {
@@ -1114,7 +1118,11 @@
   display: flex; flex-direction: column; justify-content: space-between;
 }
 .pdv-top-card-name {
-  color: var(--pdv-t1); font-size: 12.5px; font-weight: 500; line-height: 1.25;
+  color: var(--pdv-t1);
+  /* clamp escala suave entre 12px (telas pequenas) e 13.5px (>=1600px).
+     Cobre 1024-1920 sem queda de legibilidade em monitor antigo. */
+  font-size: clamp(12px, 0.95vw, 13.5px);
+  font-weight: 500; line-height: 1.25;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .pdv-top-card-foot {
@@ -1123,9 +1131,11 @@
 }
 /* Preço é o ponto focal do card — operador confirma valor com o cliente em
    voz alta. Subir para 17px / 700 e cor accent garante leitura à distância
-   e diferencia da hierarquia "nome do produto". */
+   e diferencia da hierarquia "nome do produto". clamp evita esmagar em
+   PDV legado 1024x768 e expande em monitores grandes. */
 .pdv-top-card-price {
-  color: var(--pdv-accent); font-weight: 700; font-size: 17px;
+  color: var(--pdv-accent); font-weight: 700;
+  font-size: clamp(15px, 1.25vw, 19px);
   font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
   line-height: 1; flex: 1; min-width: 0;
 }
@@ -1355,6 +1365,21 @@
   .pdv-pay-btn { padding: 12px 14px; }
 }
 
+/* PDV legado / notebook estreito (1024-1280px): comprime o painel direito
+   sem esconder. Botoes F1-F6 ficam mais densos mas mantem distincao
+   cromatica. Cards "Mais vendidos" ja escalam via clamp. Operador continua
+   podendo pre-selecionar a forma pelo painel OU usar o modal (F10). */
+@media (max-width: 1280px) and (min-width: 921px) {
+  .pdv-main { grid-template-columns: minmax(0, 1fr) clamp(300px, 26vw, 360px); }
+  .pdv-pay-btn { padding: 8px 10px 8px 12px; gap: 4px; }
+  .pdv-pay-btn .pay-icon { width: 22px; height: 22px; font-size: 12px; }
+  .pdv-pay-btn .pay-lbl { font-size: 11.5px; }
+  .pdv-pay-btn .pay-key { font-size: 9.5px; }
+  .pdv-side { gap: 10px; }
+  .pdv-totals-card { padding: 14px; }
+  .pdv-shortcuts-label { font-size: 11px; }
+}
+
 /* Notebook estreito (<= 1180px): painel lateral encolhe */
 @media (max-width: 1180px) {
   .pdv-main { grid-template-columns: minmax(0, 1fr) 320px; }
@@ -1437,4 +1462,26 @@
 @media (max-height: 760px) and (min-width: 921px) {
   .pdv-cart-list { max-height: calc(100vh - 280px); }
   .pdv-side { max-height: calc(100vh - 80px); top: 70px; }
+}
+
+/* PDV legado 1024x768: altura muito justa. Comprime ainda mais o painel
+   lateral pra garantir que tudo cabe sem scroll. Cards F1-F6 viram
+   2 linhas de 3 com padding minimo. "VENDAS DE HOJE" e o chip do
+   vendedor ficam compactos. */
+@media (max-height: 720px) and (min-width: 921px) {
+  .pdv-side { gap: 8px; top: 64px; max-height: calc(100vh - 72px); }
+  .pdv-pay-card { padding: 8px 10px; }
+  .pdv-pay-btn { padding: 6px 9px 6px 11px; }
+  .pdv-pay-btn .pay-icon { width: 20px; height: 20px; }
+  .pdv-pay-btn::before { width: 2px; }
+  .pdv-shortcuts-label { font-size: 10.5px; margin-bottom: 4px; }
+  .pdv-totals-card { padding: 12px; }
+  .pdv-btn-finalize { padding: 12px; font-size: 13px; }
+  /* Reforca o atalho F10 nessas resolucoes — o operador depende mais do
+     teclado quando a tela esta apertada. */
+  .pdv-btn-finalize .pdv-kbd {
+    background: color-mix(in oklab, var(--pdv-accent-ink) 18%, transparent);
+    color: var(--pdv-accent-ink);
+    font-weight: 700;
+  }
 }

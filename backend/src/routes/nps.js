@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { authRequired, requirePermissao } from "../middlewares/auth.js";
 import {
-  obterPublico, responderPublico, resumo, listar,
+  obterPublico, responderPublico, resumo, listar, linkPendenteCliente,
 } from "../controllers/npsController.js";
 
 const router = Router();
@@ -18,6 +18,7 @@ router.use(authRequired);
 router.use(requirePermissao("NPS"));
 
 router.get("/resumo", resumo);
+router.get("/cliente/:clienteId/link-pendente", linkPendenteCliente);
 router.get("/", listar);
 
 export default router;

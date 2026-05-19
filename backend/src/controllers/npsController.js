@@ -139,6 +139,35 @@ export async function resumo(req, res, next) {
   }
 }
 
+// Retorna o link publico da pesquisa NPS pendente mais recente de um cliente.
+// Usado pelo template {{linkNps}} no editor de mensagens (WhatsApp/Email).
+// Estrategia conservadora: nao cria pesquisa nova — toda venda com clienteId
+// ja gera uma pesquisa automaticamente (ver vendaController), entao basta
+// reusar a pendente. Se o cliente nao tem pendente, retorna 404 (front
+// fica responsavel por avisar o usuario).
+export async function linkPendenteCliente(req, res, next) {
+  try {
+    const { clienteId } = req.params;
+    if (!clienteId) return res.status(400).json({ erro: "clienteId obrigatorio" });
+
+    const pesquisa = await prisma.pesquisaNps.findFirst({
+      where: { clienteId, respondidaEm: null },
+      orderBy: { createdAt: "desc" },
+      select: { token: true, createdAt: true, vendaId: true },
+    });
+    if (!pesquisa) {
+      return res.status(404).json({ erro: "Cliente nao tem pesquisa NPS pendente" });
+    }
+    res.json({
+      token: pesquisa.token,
+      criadaEm: pesquisa.createdAt,
+      vendaId: pesquisa.vendaId,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // Lista de respostas + pendentes (para o gestor copiar links e enviar).
 export async function listar(req, res, next) {
   try {

@@ -386,6 +386,12 @@ export const api = {
     request(`/nps/resumo${qsFrom(filtros)}`),
   listarPesquisasNps: (filtros: StringDict = {}) =>
     request(`/nps${qsFrom(filtros)}`),
+  // Retorna { token, criadaEm, vendaId } da pesquisa NPS pendente mais
+  // recente do cliente. 404 quando o cliente nao tem pesquisa pendente.
+  obterLinkNpsPendente: (clienteId: string) =>
+    request<{ token: string; criadaEm: string; vendaId: string }>(
+      `/nps/cliente/${clienteId}/link-pendente`,
+    ),
 
   // ==================== AUTOMACOES (CRM) ====================
   listarAutomacoes: (filtros: StringDict = {}) =>

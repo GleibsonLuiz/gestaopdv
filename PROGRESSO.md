@@ -1224,6 +1224,33 @@ TypeScript `npx tsc --noEmit` limpo. `npm run build` verde (apenas warnings pré
 
 **Consequência prática:** trocar de máquina ou navegador agora preserva tema, acento, densidade, fontSize, radius, reduzirMovimento, sublinharLinks, modoAutomatico e estado da sidebar — antes ficavam todos em `localStorage`. Fechou item (f) da próxima decisão. Lacuna registrada no PROGRESSO ("Preferências de UI no servidor") agora **resolvida**.
 
+### Sessão — 2026-05-19 (continuação — variável {{linkNps}} nos templates)
+
+Trilha (b) da fila. O caso de uso é: o gestor abre o cliente, escolhe um template de WhatsApp/Email que termina com "responda nossa pesquisa: {{linkNps}}" e o sistema injeta automaticamente o link público da pesquisa NPS pendente do cliente — sem precisar abrir a tela `📊 NPS` para copiar o link manualmente.
+
+**Backend** (`backend/src/controllers/npsController.js` + `routes/nps.js`):
+- Novo handler `linkPendenteCliente(req, res)`. Acha a pesquisa NPS mais recente com `respondidaEm: null` do cliente e retorna `{ token, criadaEm, vendaId }`. 404 se não houver pendente.
+- Rota `GET /nps/cliente/:clienteId/link-pendente` protegida por `authRequired + requirePermissao("NPS")`.
+- **Decisão consciente:** não cria pesquisas novas. O schema exige `PesquisaNps.vendaId` único e obrigatório — toda venda com cliente já gera uma pesquisa automaticamente em `vendaController`. Se o cliente nunca teve venda ou todas as pesquisas estão respondidas, o endpoint retorna 404 e o front avisa o usuário.
+
+**Frontend:**
+- `src/lib/templates.ts`:
+  - Nova interface `ExtrasTemplate { linkNps?: string | null }`.
+  - `aplicarVariaveis(texto, cliente, kpis, extras?)` — 4º parâmetro opcional para variáveis async resolvidas pelo caller.
+  - Nova função utilitária `temLinkNps(texto)` que detecta `{{linkNps}}` no texto.
+  - `VARIAVEIS_DISPONIVEIS` ganha `linkNps` (aparece no editor de templates).
+  - `ClienteParaTemplate` ganha `id?: string` (necessário para o fetch).
+- `src/lib/api.ts`: `api.obterLinkNpsPendente(clienteId)` tipado com `{ token, criadaEm, vendaId }`.
+- `src/components/BotoesContatoCliente.tsx`: `abrirComTemplate` virou `async`. Se o template (corpo ou assunto) contém `{{linkNps}}` e o cliente tem `id`, faz fetch antes de aplicar variáveis. 404 mostra `alert` claro; falha de rede mantém placeholder vazio para não quebrar o envio.
+
+**Smoke-test (rodado contra Neon):**
+```
+GET /nps/?status=PENDENTES&limite=3 → 3 pesquisas pendentes encontradas
+GET /nps/cliente/dd4455fa-.../link-pendente → 200 { token, criadaEm, vendaId }
+GET /nps/cliente/00000000-0000-.../link-pendente → 404 { erro: "Cliente nao tem pesquisa NPS pendente" }
+```
+TypeScript `tsc --noEmit` limpo. `npm run build` verde.
+
 ---
 
 ## Onde paramos
@@ -1345,10 +1372,10 @@ Extensão do cadastro de Fornecedores para conformidade NF-e — espelha o que a
 - ✅ **(d)** Conversão Oportunidade GANHA → Venda — `6b60104`. Wiring completo, schema já antecipava
 - ✅ Validação visual dos 11 itens das sessões anteriores (UX PDV + Conversão CRM) — usuário confirmou OK
 - ✅ **(f)** Sync de preferências de UI entre dispositivos — `User.preferencias Json?` + `PUT /auth/preferencias` (merge raso); frontend hidrata em `me()`/`login()`, sync debounced em tema (500ms) e sidebar (400ms)
+- ✅ **(b)** Variável `{{linkNps}}` nos templates de mensagem — `GET /nps/cliente/:clienteId/link-pendente` + `aplicarVariaveis(..., extras)` + `BotoesContatoCliente` resolve o link antes de abrir WhatsApp/Email
 
 **Próximos candidatos (em ordem de ROI estimado):**
 
-- **(b)** Variável `{{linkNps}}` nos templates de mensagem — útil para mandar pesquisa via WhatsApp direto da tela do cliente. **Pequeno esforço, médio valor**. Hoje o link vem da tela NPS.
 - **(c)** Lead scoring no PerfilClienteModal — endpoint `GET /clientes/:id/score` que calcula só para um cliente. **Pequeno esforço, médio valor**. Hoje o score só aparece em Segmentos (cálculo em lote).
 - **(e)** Análise de motivos de perda — agregação `GROUP BY motivoPerda` em Oportunidades. **Pequeno esforço, baixo-médio valor** (já existe no Funil).
 - **(g)** Filtro por cliente no relatório de vendas — backend aceita, UI não expõe. **Trivial**.

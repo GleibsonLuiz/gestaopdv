@@ -11,6 +11,9 @@
 //   {{totalGasto}}   total gasto formatado em R$
 //   {{valorEmAberto}} contas a receber em aberto formatado em R$
 //   {{recenciaDias}} dias desde a ultima compra ou "—"
+//   {{linkNps}}      link publico da pesquisa NPS pendente do cliente.
+//                    Resolvido pelo caller via api.obterLinkNpsPendente e
+//                    passado em `extras` (nao e calculado a partir do cliente).
 
 export interface ClienteKpis {
   totalGasto?: number;
@@ -23,6 +26,7 @@ export interface ClienteKpis {
 }
 
 export interface ClienteParaTemplate {
+  id?: string;
   nome?: string;
   telefone?: string;
   email?: string;
@@ -53,16 +57,31 @@ const fmtData = (iso: string | null | undefined): string => {
   return d.toLocaleDateString("pt-BR");
 };
 
+// Variaveis adicionais que dependem de fetch ou contexto externo (nao
+// derivam direto do cliente). Resolvidas pelo caller e injetadas em
+// `aplicarVariaveis(..., kpis, extras)`. Hoje so {{linkNps}}.
+export interface ExtrasTemplate {
+  linkNps?: string | null;
+}
+
+// Detecta se o texto referencia alguma variavel async. Os callers usam
+// para decidir se precisam fazer fetch antes de chamar aplicarVariaveis.
+export function temLinkNps(texto: string | null | undefined): boolean {
+  return !!texto && /\{\{linkNps\}\}/.test(texto);
+}
+
 // Recebe um cliente com `tags` e (opcional) `rfm`/`kpis`. Aceita tambem a
 // forma rasa retornada por /clientes/segmentos (cliente + rfm).
 export function aplicarVariaveis(
   texto: string | null | undefined,
   cliente: ClienteParaTemplate | null | undefined,
   kpis: ClienteKpis | null = null,
+  extras: ExtrasTemplate | null = null,
 ): string {
   if (!texto) return "";
   const c = cliente || {};
   const k: ClienteKpis = kpis || c.kpis || c.rfm || {};
+  const ex: ExtrasTemplate = extras || {};
 
   const nome = c.nome || "";
   const primeiroNome = nome.trim().split(/\s+/)[0] || "";
@@ -82,6 +101,7 @@ export function aplicarVariaveis(
     totalGasto: fmtBRL(totalGasto),
     valorEmAberto: fmtBRL(valorEmAberto),
     recenciaDias: recenciaDias != null ? String(recenciaDias) : "—",
+    linkNps: ex.linkNps || "",
   };
 
   return String(texto).replace(/\{\{(\w+)\}\}/g, (_, chave: string) => {
@@ -101,6 +121,7 @@ export const VARIAVEIS_DISPONIVEIS: { chave: string; desc: string }[] = [
   { chave: "totalGasto", desc: "Total gasto (R$)" },
   { chave: "valorEmAberto", desc: "Valor em aberto (R$)" },
   { chave: "recenciaDias", desc: "Dias desde a última compra" },
+  { chave: "linkNps", desc: "Link público da pesquisa NPS pendente (requer venda)" },
 ];
 
 // Gera o link final para abrir a mensagem.

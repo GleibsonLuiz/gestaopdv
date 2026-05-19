@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, type CSSProperties } from "react";
 import { C } from "../lib/theme";
-import { aplicarVariaveis, gerarLink, type ClienteParaTemplate, type ClienteKpis, type TipoMensagem } from "../lib/templates";
+import { aplicarVariaveis, gerarLink, temLinkNps, type ClienteParaTemplate, type ClienteKpis, type TipoMensagem, type ExtrasTemplate } from "../lib/templates";
+import { api } from "../lib/api";
 
 // Componente reutilizavel de botoes de contato (WhatsApp / Telefone / Email).
 // Cada botao mostra dropdown com templates do tipo + opcao "Mensagem em branco".
@@ -129,9 +130,26 @@ function BotaoComTemplates({ tipo, cliente, kpis, templates, icone, label, cor, 
     };
   }, [aberto]);
 
-  function abrirComTemplate(template: Template | null) {
-    const corpo = template ? aplicarVariaveis(template.corpo, cliente, kpis) : "";
-    const assunto = template?.assunto ? aplicarVariaveis(template.assunto, cliente, kpis) : "";
+  async function abrirComTemplate(template: Template | null) {
+    // {{linkNps}} requer fetch antes de aplicar variaveis. Resolvemos
+    // serialmente — se 404 (cliente sem pesquisa pendente) avisa e segue
+    // com placeholder vazio. Falha de rede tambem nao bloqueia o envio.
+    const extras: ExtrasTemplate = {};
+    if (template && cliente.id && (temLinkNps(template.corpo) || temLinkNps(template.assunto))) {
+      try {
+        const r = await api.obterLinkNpsPendente(cliente.id);
+        extras.linkNps = `${window.location.origin}/?nps=${r.token}`;
+      } catch (e: unknown) {
+        const status = (e as { status?: number })?.status;
+        if (status === 404) {
+          alert("Este cliente não tem pesquisa NPS pendente. O link ficará vazio na mensagem.");
+        }
+        extras.linkNps = "";
+      }
+    }
+
+    const corpo = template ? aplicarVariaveis(template.corpo, cliente, kpis, extras) : "";
+    const assunto = template?.assunto ? aplicarVariaveis(template.assunto, cliente, kpis, extras) : "";
     const link = gerarLink({
       tipo, corpo, assunto,
       telefone: cliente.telefone,

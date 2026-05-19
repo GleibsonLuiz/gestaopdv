@@ -129,20 +129,24 @@ const fmtData = (iso) => {
 // Mapeamento de cor (CSS var name) por forma de pagamento — usado em pílulas
 // e no dashboard de "vendas hoje por forma".
 const FORMA_COR_VAR = {
-  DINHEIRO: "var(--pdv-c-lime)",
-  PIX: "var(--pdv-accent)",
+  DINHEIRO: "var(--pdv-accent)",
+  PIX: "var(--pdv-c-cyan)",
   CARTAO_DEBITO: "var(--pdv-c-sky)",
-  CARTAO_CREDITO: "var(--pdv-c-violet)",
-  BOLETO: "var(--pdv-c-amber)",
+  CARTAO_CREDITO: "var(--pdv-c-amber)",
+  BOLETO: "var(--pdv-c-violet)",
   CREDIARIO: "var(--pdv-c-rose)",
 };
 
+// Codificação cromática por método (memória muscular do operador): cada
+// método tem cor distinta e estável; aplicada na borda lateral + fundo do
+// ícone. PIX em ciano BACEN, dinheiro em verde-bandeira, demais conforme
+// convenção de bandeiras (débito azul / crédito laranja-âmbar etc).
 const FORMA_COR_CLASSE = {
-  DINHEIRO: "pdv-pay-c-lime",
-  PIX: "pdv-pay-c-emerald",
+  DINHEIRO: "pdv-pay-c-emerald",
+  PIX: "pdv-pay-c-cyan",
   CARTAO_DEBITO: "pdv-pay-c-sky",
-  CARTAO_CREDITO: "pdv-pay-c-violet",
-  BOLETO: "pdv-pay-c-amber",
+  CARTAO_CREDITO: "pdv-pay-c-amber",
+  BOLETO: "pdv-pay-c-violet",
   CREDIARIO: "pdv-pay-c-rose",
 };
 

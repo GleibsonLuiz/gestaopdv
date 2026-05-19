@@ -66,6 +66,11 @@ interface HistoricoEntry {
   observacao?: string | null;
 }
 
+interface VendaRef {
+  id: string;
+  numero: number;
+}
+
 interface Oportunidade {
   id: string;
   numero: number;
@@ -85,6 +90,10 @@ interface Oportunidade {
   createdAt?: string;
   updatedAt?: string;
   historico?: HistoricoEntry[];
+  // Quando a oportunidade GANHO ja foi convertida em venda, traz a venda
+  // resultante. Frontend mostra badge "Venda #N" em vez do botao "Converter".
+  vendaId?: string | null;
+  venda?: VendaRef | null;
 }
 
 interface FormOportunidade {
@@ -139,9 +148,18 @@ interface ConfirmPerda {
 
 interface FunilProps {
   user: SessionUser;
+  // Callback do App.tsx pra navegar pro PDV com contexto da oportunidade.
+  // Opcional para nao quebrar outras callsites (DashboardCrm, telas que
+  // embedam Funil sem fluxo de conversao).
+  onConverterEmVenda?: (ctx: {
+    clienteId: string;
+    oportunidadeId: string;
+    numero: number;
+    titulo: string;
+  }) => void;
 }
 
-export default function Funil({ user }: FunilProps) {
+export default function Funil({ user, onConverterEmVenda }: FunilProps) {
   const [oportunidades, setOportunidades] = useState<Oportunidade[]>([]);
   const [resumo, setResumo] = useState<ResumoFunil | null>(null);
   const [carregando, setCarregando] = useState(true);
@@ -399,6 +417,7 @@ export default function Funil({ user }: FunilProps) {
                       onDragEnd={onDragEnd}
                       onClick={() => abrirEdicao(op)}
                       podeEditar={podeEditar}
+                      onConverterEmVenda={onConverterEmVenda}
                     />
                   ))}
                 </div>
@@ -585,9 +604,15 @@ interface CardOportunidadeProps {
   onDragEnd: () => void;
   onClick: () => void;
   podeEditar: boolean;
+  onConverterEmVenda?: (ctx: {
+    clienteId: string;
+    oportunidadeId: string;
+    numero: number;
+    titulo: string;
+  }) => void;
 }
 
-function CardOportunidade({ op, etapa, arrastando, onDragStart, onDragEnd, onClick, podeEditar }: CardOportunidadeProps) {
+function CardOportunidade({ op, etapa, arrastando, onDragStart, onDragEnd, onClick, podeEditar, onConverterEmVenda }: CardOportunidadeProps) {
   const valor = Number(op.valorEstimado || 0);
   const ponderado = valor * (Number(op.probabilidade || 0) / 100);
   const diasFechar = op.dataFechamentoPrevista
@@ -665,6 +690,64 @@ function CardOportunidade({ op, etapa, arrastando, onDragStart, onDragEnd, onCli
         <div className="mt-1.5 text-[10px] text-gp-red italic">
           ✗ {op.motivoPerda}
         </div>
+      )}
+
+      {/* Conversao para Venda — so em GANHO. Badge "Venda #N" se ja
+          convertido, botao "Converter em venda" caso contrario. Sem
+          cliente nao da pra converter (PDV exige clienteId pra vincular
+          o LTV/pontos do cliente — operador deve voltar e completar). */}
+      {etapa.id === "GANHO" && op.vendaId && (
+        <div
+          className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold rounded"
+          style={{
+            padding: "3px 7px",
+            color: C.green,
+            background: C.green + "1c",
+            border: `1px solid ${C.green}55`,
+          }}
+          title="Esta oportunidade ja foi convertida em uma venda"
+        >
+          ✓ Convertida em Venda{op.venda?.numero ? ` #${op.venda.numero}` : ""}
+        </div>
+      )}
+      {etapa.id === "GANHO" && !op.vendaId && podeEditar && onConverterEmVenda && (
+        op.clienteId ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onConverterEmVenda({
+                clienteId: op.clienteId!,
+                oportunidadeId: op.id,
+                numero: op.numero,
+                titulo: op.titulo,
+              });
+            }}
+            className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold rounded cursor-pointer"
+            style={{
+              padding: "4px 8px",
+              color: C.green,
+              background: C.green + "1c",
+              border: `1px solid ${C.green}55`,
+              fontFamily: "inherit",
+            }}
+            title="Abrir o PDV com este cliente pre-selecionado e vincular a venda a oportunidade ao finalizar"
+          >
+            🛒 Converter em venda →
+          </button>
+        ) : (
+          <div
+            className="mt-1.5 inline-flex items-center gap-1 text-[10px] italic rounded"
+            style={{
+              padding: "3px 7px",
+              color: C.muted,
+              border: `1px dashed ${C.border}`,
+            }}
+            title="Para converter, edite a oportunidade e vincule um cliente cadastrado"
+          >
+            ⚠ Sem cliente — abra o card pra vincular
+          </div>
+        )
       )}
     </div>
   );

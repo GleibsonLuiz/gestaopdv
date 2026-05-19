@@ -101,10 +101,33 @@ export async function obter(req, res, next) {
 
 export async function criar(req, res, next) {
   try {
-    const { clienteId, formaPagamento, observacoes, itens, gerarContaReceber } = req.body;
+    const { clienteId, formaPagamento, observacoes, itens, gerarContaReceber, oportunidadeId } = req.body;
     const desconto = req.body.desconto !== undefined ? toNumber(req.body.desconto) : 0;
     const pontosResgatarRaw = parseInt(req.body.pontosResgatar, 10);
     const pontosResgatar = Number.isFinite(pontosResgatarRaw) && pontosResgatarRaw > 0 ? pontosResgatarRaw : 0;
+
+    // Conversao Oportunidade GANHO -> Venda: valida fora da transacao para
+    // falhar rapido antes de qualquer write. Re-checado dentro da transacao
+    // (linha de update) contra race conditions de outro usuario tocando a
+    // oportunidade no meio tempo.
+    if (oportunidadeId) {
+      const op = await prisma.oportunidade.findUnique({
+        where: { id: oportunidadeId },
+        select: { id: true, etapa: true, vendaId: true, clienteId: true, numero: true },
+      });
+      if (!op) {
+        return res.status(404).json({ erro: "Oportunidade nao encontrada" });
+      }
+      if (op.etapa !== "GANHO") {
+        return res.status(400).json({ erro: "So e possivel converter oportunidades em etapa GANHO" });
+      }
+      if (op.vendaId) {
+        return res.status(400).json({ erro: "Oportunidade ja foi convertida em outra venda" });
+      }
+      if (op.clienteId && clienteId && op.clienteId !== clienteId) {
+        return res.status(400).json({ erro: "Cliente da venda nao bate com o cliente da oportunidade" });
+      }
+    }
 
     if (!formaPagamento || !FORMAS_VALIDAS.has(formaPagamento)) {
       return res.status(400).json({ erro: "Forma de pagamento invalida" });
@@ -262,6 +285,21 @@ export async function criar(req, res, next) {
           descricao: `VENDA #${vendaCriada.numero}${clienteId ? "" : " — CONSUMIDOR"}`,
           vendaId: vendaCriada.id,
         });
+
+        // Conversao Oportunidade -> Venda: vincula vendaId. updateMany com
+        // where defensivo (etapa GANHO + vendaId null) cobre race condition:
+        // se outro user moveu/converteu no meio tempo, count=0 e revertemos.
+        if (oportunidadeId) {
+          const r = await tx.oportunidade.updateMany({
+            where: { id: oportunidadeId, etapa: "GANHO", vendaId: null },
+            data: { vendaId: vendaCriada.id },
+          });
+          if (r.count === 0) {
+            const e = new Error("Oportunidade foi alterada por outro usuario durante a conversao");
+            e.status = 409;
+            throw e;
+          }
+        }
 
         for (const it of itensNorm) {
           const p = mapaProdutos.get(it.produtoId);

@@ -117,6 +117,16 @@ export default function App() {
   const [user, setUser] = useState<any>(null);
   const [carregando, setCarregando] = useState(true);
   const [tela, setTela] = useState("pdv");
+  // Contexto opcional ao navegar pro PDV vindo de outro modulo (ex: Funil ->
+  // Converter oportunidade em venda). Quando definido, PDV pre-seleciona o
+  // cliente, mostra banner no topo e injeta `oportunidadeId` no payload da
+  // venda ao finalizar. Limpo automaticamente ao sair do PDV.
+  const [pdvContexto, setPdvContexto] = useState<null | {
+    clienteId: string;
+    oportunidadeId: string;
+    numero: number;
+    titulo: string;
+  }>(null);
   const [menuUsuario, setMenuUsuario] = useState(false);
   const [trocarSenhaAberto, setTrocarSenhaAberto] = useState(false);
   const [sidebarAberta, setSidebarAberta] = useState(false);
@@ -300,7 +310,13 @@ export default function App() {
       <div style={{ background: C.bg, minHeight: "100vh", fontFamily: "'Segoe UI', sans-serif", color: C.text }}>
         <style>{ESTILO_RESPONSIVO}</style>
         <Suspense fallback={<TelaCarregando />}>
-          <PDV user={user} onSair={() => setTela("dashboard")} sair={sair} />
+          <PDV
+            user={user}
+            onSair={() => { setPdvContexto(null); setTela("dashboard"); }}
+            sair={sair}
+            contextoInicial={pdvContexto}
+            onContextoConsumido={() => setPdvContexto(null)}
+          />
         </Suspense>
       </div>
     );
@@ -672,7 +688,13 @@ export default function App() {
             </>
           )}
           {tela === "funil" && (
-            <Funil user={user} />
+            <Funil
+              user={user}
+              onConverterEmVenda={(ctx) => {
+                setPdvContexto(ctx);
+                setTela("pdv");
+              }}
+            />
           )}
           {tela === "segmentos" && (
             <Segmentos user={user} />

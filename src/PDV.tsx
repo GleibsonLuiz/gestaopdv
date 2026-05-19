@@ -150,8 +150,11 @@ const FORMA_COR_CLASSE = {
   CREDIARIO: "pdv-pay-c-rose",
 };
 
-export default function PDV({ user, onSair, sair }) {
-  const [aba, setAba] = useState("nova");
+export default function PDV({ user, onSair, sair, contextoInicial, onContextoConsumido }) {
+  // Quando chega com contextoInicial (ex: convertendo oportunidade), forca
+  // a aba "nova" — Historico nao faz sentido nesse fluxo. O contexto e
+  // consumido pelo NovaVenda no primeiro render util.
+  const [aba, setAba] = useState(contextoInicial ? "nova" : "nova");
   return (
     <div className="pdv-redesign" style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
       <PDVHeader
@@ -160,7 +163,9 @@ export default function PDV({ user, onSair, sair }) {
         onSair={onSair} sairConta={sair}
       />
       <div className="pdv-app">
-        {aba === "nova" ? <NovaVenda user={user} /> : <Historico user={user} />}
+        {aba === "nova"
+          ? <NovaVenda user={user} contextoInicial={contextoInicial} onContextoConsumido={onContextoConsumido} />
+          : <Historico user={user} />}
       </div>
     </div>
   );
@@ -256,13 +261,17 @@ function PDVHeader({ user, aba, setAba, onSair, sairConta }) {
 
 // ==================== NOVA VENDA ====================
 
-function NovaVenda({ user }) {
+function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
   const empresa = useConfiguracaoEmpresa();
   const [produtos, setProdutos] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [busca, setBusca] = useState("");
   const [carrinho, setCarrinho] = useState([]);
   const [clienteId, setClienteId] = useState("");
+  // Rastreia conversao Oportunidade -> Venda (vindo do Funil). Quando setado,
+  // a finalizacao da venda passa `oportunidadeId` no payload pro backend
+  // vincular automaticamente. Limpo ao cancelar conversao ou apos sucesso.
+  const [oportunidadeConvertendo, setOportunidadeConvertendo] = useState(null);
   const [forma, setForma] = useState("DINHEIRO");
   const [desconto, setDesconto] = useState("0");
   const [observacoes, setObservacoes] = useState("");
@@ -389,6 +398,21 @@ function NovaVenda({ user }) {
   useEffect(() => {
     buscaRef.current?.focus();
   }, []);
+
+  // Consome contextoInicial (vindo do Funil via App.tsx): pre-seleciona o
+  // cliente, registra a oportunidade que esta sendo convertida e avisa o
+  // App pra limpar o contexto (evita reaplicar em re-render).
+  useEffect(() => {
+    if (!contextoInicial) return;
+    if (contextoInicial.clienteId) setClienteId(contextoInicial.clienteId);
+    setOportunidadeConvertendo({
+      id: contextoInicial.oportunidadeId,
+      numero: contextoInicial.numero,
+      titulo: contextoInicial.titulo,
+    });
+    onContextoConsumido?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contextoInicial]);
 
   // Sugestões aparecem só com texto digitado — vista limpa quando idle, focada
   // em bipagem por scanner. Servicos sempre aparecem (estoque nao se aplica).
@@ -741,7 +765,15 @@ function NovaVenda({ user }) {
           parcelas: parseInt(contaParcelas, 10) || 1,
         };
       }
+      // Conversao Oportunidade -> Venda: backend vincula vendaId na mesma
+      // transacao que cria a venda. Se o vinculo falhar (409 race), a venda
+      // inteira reverte — operador pode tentar de novo.
+      if (oportunidadeConvertendo?.id) {
+        payload.oportunidadeId = oportunidadeConvertendo.id;
+      }
       const venda = await api.criarVenda(payload);
+      // Limpa estado de conversao apos sucesso para evitar reaplicar.
+      if (oportunidadeConvertendo) setOportunidadeConvertendo(null);
       // Atualiza estoques locais (estoque do backend chega como Decimal
       // serializado em string — Number() normaliza para subtracao)
       setProdutos(prev => prev.map(p => {
@@ -811,6 +843,23 @@ function NovaVenda({ user }) {
             className="pdv-btn-finalize"
             style={{ width: "auto", padding: "10px 20px", fontSize: 13, flexShrink: 0 }}
           >🟢 Abrir Caixa</button>
+        </div>
+      )}
+
+      {oportunidadeConvertendo && (
+        <div className="pdv-conversao-banner" role="status">
+          <span className="pdv-conversao-icon">🎯</span>
+          <span className="pdv-conversao-text">
+            Convertendo <b>Oportunidade #{oportunidadeConvertendo.numero}</b>
+            {oportunidadeConvertendo.titulo ? <> — &ldquo;{oportunidadeConvertendo.titulo}&rdquo;</> : null}
+            <span className="pdv-conversao-hint"> · finalize a venda para vincular automaticamente</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setOportunidadeConvertendo(null)}
+            className="pdv-conversao-cancelar"
+            title="Cancelar a conversão (a venda nao sera vinculada a oportunidade)"
+          >✕ Cancelar conversão</button>
         </div>
       )}
 

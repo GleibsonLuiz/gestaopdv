@@ -400,6 +400,40 @@
   letter-spacing: .04em; flex-shrink: 0;
 }
 
+/* ─── Banner de conversao Oportunidade -> Venda ────────────── */
+/* Faixa de status no topo do PDV quando o operador esta convertendo uma
+   oportunidade do Funil. Visual em accent-2 (roxo) pra nao confundir com
+   accent verde do PDV — sinaliza "modo especial" mas nao agressivo. */
+.pdv-conversao-banner {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px clamp(14px, 1.4vw, 20px);
+  background: color-mix(in oklab, var(--pdv-accent-2) 12%, var(--pdv-surf));
+  border: 1px solid color-mix(in oklab, var(--pdv-accent-2) 35%, var(--pdv-line));
+  border-radius: var(--pdv-r-md);
+  margin-bottom: 10px;
+  color: var(--pdv-t1);
+  font-size: 13px;
+  box-shadow: var(--pdv-shadow-1);
+}
+.pdv-conversao-icon { font-size: 18px; flex-shrink: 0; }
+.pdv-conversao-text { flex: 1; min-width: 0; line-height: 1.4; }
+.pdv-conversao-text b { color: var(--pdv-accent-2); font-weight: 600; }
+.pdv-conversao-hint { color: var(--pdv-t3); font-size: 11.5px; }
+.pdv-conversao-cancelar {
+  background: transparent;
+  border: 1px solid color-mix(in oklab, var(--pdv-c-rose) 35%, var(--pdv-line));
+  color: var(--pdv-c-rose);
+  padding: 6px 11px; border-radius: 6px;
+  font-size: 12px; font-weight: 500;
+  cursor: pointer; flex-shrink: 0;
+  font-family: inherit;
+  transition: background .12s, border-color .12s;
+}
+.pdv-conversao-cancelar:hover {
+  background: color-mix(in oklab, var(--pdv-c-rose) 10%, transparent);
+  border-color: var(--pdv-c-rose);
+}
+
 /* ─── Layout split ─────────────────────────────────────────── */
 .pdv-main {
   display: grid;

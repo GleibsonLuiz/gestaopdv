@@ -1808,14 +1808,23 @@ function ModalAbrirCaixaPDV({ onCancelar, onSucesso }) {
 // mostrando apenas o total do dia + chips minimalistas. Click expande para os
 // cards detalhados. Estado persistido em localStorage.
 function FormasPagamentoTopo({ resumo, role }) {
-  const r = resumo || { porForma: [] };
+  const r = resumo || { porForma: [], quantidade: 0 };
   const totalPagamentos = r.porForma.reduce((acc, f) => acc + f.total, 0);
+  const qtdVendas = r.quantidade || r.porForma.reduce((acc, f) => acc + (f.quantidade || 0), 0);
   const dataLabel = new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
   const semVendas = r.porForma.length === 0;
   const formasOrdenadas = [...r.porForma].sort((a, b) => b.total - a.total);
   const maxValor = formasOrdenadas.reduce((m, f) => Math.max(m, f.total), 0) || 1;
   // VENDEDOR ve apenas percentuais; GERENTE/ADMIN veem valores em R$.
   const mostrarValor = role === "ADMIN" || role === "GERENTE";
+  // Resumo numerico contextual: "R$ 50,00 · 3 vendas" para gerente,
+  // "3 vendas" para vendedor. Substitui o antigo "100%" isolado que
+  // nao dizia 100% DE QUE.
+  const totalLabel = semVendas
+    ? "—"
+    : mostrarValor
+      ? `${fmtBRL(totalPagamentos)} · ${qtdVendas} ${qtdVendas === 1 ? "venda" : "vendas"}`
+      : `${qtdVendas} ${qtdVendas === 1 ? "venda" : "vendas"}`;
 
   return (
     <div className="pdv-graf-formas">
@@ -1823,10 +1832,8 @@ function FormasPagamentoTopo({ resumo, role }) {
         <span className="pdv-graf-icon">◆</span>
         <span className="pdv-graf-lbl">Vendas de hoje</span>
         <span className="pdv-graf-date">{dataLabel}</span>
-        <span className="pdv-graf-total">
-          {semVendas
-            ? <span className="pdv-graf-total-mut">—</span>
-            : mostrarValor ? fmtBRL(totalPagamentos) : "100%"}
+        <span className="pdv-graf-total" title={semVendas ? "" : `${qtdVendas} venda(s) finalizada(s) hoje${mostrarValor ? ` totalizando ${fmtBRL(totalPagamentos)}` : ""}`}>
+          {semVendas ? <span className="pdv-graf-total-mut">—</span> : totalLabel}
         </span>
       </div>
       <div className="pdv-graf-body">
@@ -1927,28 +1934,49 @@ function AcessoRapido({ user, topProdutos, ultimasVendas, onAdicionar, onAbrirVe
           </div>
           <div className="pdv-top-grid">
             {topProdutos.map((p, idx) => {
-              const semEstoque = p.tipoItem !== "SERVICO" && p.estoque <= 0;
+              const isServico = p.tipoItem === "SERVICO";
+              const estoqueNum = Number(p.estoque) || 0;
+              const minimoNum = Number(p.estoqueMinimo) || 0;
+              const semEstoque = !isServico && estoqueNum <= 0;
+              // Critico = abaixo ou igual ao minimo configurado, mas ainda
+              // com algum estoque. Sem minimo cadastrado (0), nao alerta.
+              const estoqueCritico = !isServico && !semEstoque && minimoNum > 0 && estoqueNum <= minimoNum;
               const numero = idx + 1;
               const temAtalho = numero <= 9;
+              const tooltipBase = isServico
+                ? `Serviço — ${p.nome}`
+                : semEstoque
+                  ? `Sem estoque — ${p.nome}`
+                  : estoqueCritico
+                    ? `⚠ Estoque crítico (${fmtQtd(estoqueNum)} ${p.unidade}, mínimo ${fmtQtd(minimoNum)}) — ${p.nome}`
+                    : `${p.nome} — ${fmtQtd(estoqueNum)} ${p.unidade} em estoque`;
               return (
                 <button
                   key={p.id} type="button"
                   onClick={() => !semEstoque && onAdicionar(p)}
                   disabled={semEstoque}
-                  title={semEstoque ? "Sem estoque" : `Adicionar ${p.nome}${temAtalho ? ` (tecla ${numero})` : ""}`}
-                  className="pdv-top-card"
+                  title={`${tooltipBase}${temAtalho && !semEstoque ? ` (Alt+${numero})` : ""}`}
+                  className={`pdv-top-card ${estoqueCritico ? "is-critico" : ""}`}
                 >
                   {temAtalho && (
                     <span className="pdv-top-card-num" aria-hidden="true">{numero}</span>
                   )}
-                  <FotoProduto url={p.imagem} nome={p.nome} tamanho={42} servico={p.tipoItem === "SERVICO"} />
+                  <FotoProduto url={p.imagem} nome={p.nome} tamanho={42} servico={isServico} />
                   <div className="pdv-top-card-info">
-                    <div className="pdv-top-card-name">{p.nome}</div>
+                    <div className="pdv-top-card-name" title={p.nome}>{p.nome}</div>
                     <div className="pdv-top-card-foot">
                       <span className="pdv-top-card-price">{fmtBRL(p.precoVenda)}</span>
-                      <span className="pdv-top-card-stock">
-                        {p.tipoItem === "SERVICO" ? "♾" : `${p.estoque} ${p.unidade}`}
-                      </span>
+                      {isServico ? (
+                        <span className="pdv-top-card-tag is-svc">SERVIÇO</span>
+                      ) : estoqueCritico ? (
+                        <span className="pdv-top-card-tag is-warn" title={`Mínimo: ${fmtQtd(minimoNum)} ${p.unidade}`}>
+                          ⚠ {fmtQtd(estoqueNum)} {p.unidade}
+                        </span>
+                      ) : (
+                        <span className="pdv-top-card-stock">
+                          {fmtQtd(estoqueNum)} {p.unidade}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </button>

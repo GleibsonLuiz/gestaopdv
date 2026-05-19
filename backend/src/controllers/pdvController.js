@@ -103,7 +103,7 @@ export async function inicio(req, res, next) {
         where: { id: { in: ids }, ativo: true },
         select: {
           id: true, codigo: true, codigoBarras: true, nome: true,
-          precoVenda: true, estoque: true, unidade: true,
+          precoVenda: true, estoque: true, estoqueMinimo: true, unidade: true,
           imagem: true, tipoItem: true, referencia: true,
         },
       });

@@ -97,16 +97,24 @@
 
 .pdv-nav { display: flex; gap: 4px; padding: 3px; background: var(--pdv-surf-2); border: 1px solid var(--pdv-line); border-radius: 10px; margin-left: 6px; }
 .pdv-nav-btn {
-  border: 0; background: transparent; color: var(--pdv-t2);
+  border: 0; background: transparent;
+  /* Cor da aba INATIVA: t1 com opacidade alta (em vez de t2 puro) — passa
+     a parecer "outra aba clicavel" em vez de "texto desabilitado". */
+  color: var(--pdv-t1); opacity: .65;
   padding: 8px 16px; border-radius: 7px; font-size: 13px; font-weight: 500;
   display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
   font-family: inherit;
-  transition: background .15s, color .15s;
+  transition: background .15s, color .15s, opacity .15s;
 }
-.pdv-nav-btn:hover { color: var(--pdv-t1); background: var(--pdv-surf-3); }
+.pdv-nav-btn:hover { opacity: 1; background: var(--pdv-surf-3); }
 .pdv-nav-btn.is-active {
-  color: var(--pdv-t1); background: var(--pdv-surf-3);
-  box-shadow: 0 1px 0 rgba(255,255,255,.05) inset;
+  color: var(--pdv-t1); opacity: 1;
+  background: var(--pdv-surf-3);
+  /* Reforco da aba ATIVA: borda verde sutil + sombra interna leve para
+     destacar "esta e a vista atual" alem do ponto pulsante. */
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--pdv-accent) 28%, transparent),
+    0 1px 0 rgba(255,255,255,.05) inset;
 }
 .pdv-nav-btn .dot { width: 6px; height: 6px; border-radius: 99px; background: var(--pdv-accent); box-shadow: 0 0 8px var(--pdv-accent-glow); }
 
@@ -1148,6 +1156,35 @@
   flex-shrink: 0;
   font-weight: 500;
   letter-spacing: .02em;
+}
+/* Tag generica do card — variantes is-svc (servico, sem estoque por
+   natureza) e is-warn (estoque <= minimo cadastrado). Cobre o gap
+   apontado no UX review: cards "sem estoque" precisavam de motivo
+   visual (servico VS produto critico), nao ausencia de info. */
+.pdv-top-card-tag {
+  font-size: 9.5px; font-weight: 600;
+  letter-spacing: .04em;
+  border-radius: 999px;
+  padding: 2px 7px;
+  flex-shrink: 0;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+.pdv-top-card-tag.is-svc {
+  color: var(--pdv-c-violet);
+  background: color-mix(in oklab, var(--pdv-c-violet) 12%, transparent);
+  border: 1px solid color-mix(in oklab, var(--pdv-c-violet) 30%, transparent);
+}
+.pdv-top-card-tag.is-warn {
+  color: var(--pdv-c-amber);
+  background: color-mix(in oklab, var(--pdv-c-amber) 14%, transparent);
+  border: 1px solid color-mix(in oklab, var(--pdv-c-amber) 35%, transparent);
+}
+/* Card em estado critico ganha barra esquerda ambar (3px) — sinaliza
+   "venda preferencial pra renovar pedido com fornecedor" sem assustar. */
+.pdv-top-card.is-critico {
+  border-color: color-mix(in oklab, var(--pdv-c-amber) 35%, var(--pdv-line));
+  box-shadow: inset 3px 0 0 0 var(--pdv-c-amber);
 }
 
 /* Section heading inside cestinha empty */

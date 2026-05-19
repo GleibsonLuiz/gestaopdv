@@ -4,5 +4,11 @@
   "outputDirectory": "public",
   "rewrites": [
     { "source": "/(.*)", "destination": "/api" }
+  ],
+  "crons": [
+    {
+      "path": "/cron/automacoes",
+      "schedule": "0 12 * * *"
+    }
   ]
 }

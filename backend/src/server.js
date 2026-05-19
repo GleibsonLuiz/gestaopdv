@@ -34,6 +34,7 @@ import comissoesRoutes from "./routes/comissoes.js";
 import tarefasRoutes from "./routes/tarefas.js";
 import fidelidadeRoutes from "./routes/fidelidade.js";
 import logsRoutes from "./routes/logs.js";
+import cronRoutes from "./routes/cron.js";
 import tenantsRoutes from "./routes/tenants.js";
 import empresaRoutes from "./routes/empresa.js";
 import adminMasterRoutes from "./routes/admin-master.js";
@@ -115,6 +116,9 @@ app.use("/comissoes", comissoesRoutes);
 app.use("/tarefas", tarefasRoutes);
 app.use("/fidelidade", fidelidadeRoutes);
 app.use("/logs", logsRoutes);
+// Cron endpoints — auth via header Bearer ${CRON_SECRET}, fora do middleware
+// authRequired/permissoes. Pensado pra Vercel Cron / scheduler externo.
+app.use("/cron", cronRoutes);
 
 app.use((err, req, res, _next) => {
   console.error(err);

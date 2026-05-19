@@ -1,4 +1,4 @@
-import prisma from "../lib/prisma.js";
+import prisma, { prismaRaw, tenantStorage } from "../lib/prisma.js";
 
 const TIPOS = ["CLIENTE_INATIVO", "ORCAMENTO_PARADO", "POS_VENDA_FOLLOWUP"];
 const PRIORIDADES = ["BAIXA", "MEDIA", "ALTA", "URGENTE"];
@@ -454,6 +454,80 @@ export async function executarTodas(req, res, next) {
     }
     const totalCriadas = resultados.reduce((s, r) => s + (r.criadas || 0), 0);
     res.json({ totalRegras: regras.length, totalCriadas, resultados });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Handler de cron — montado em /cron/automacoes fora do middleware authRequired.
+// Autentica via header Authorization: Bearer ${CRON_SECRET}. Itera todos os
+// tenants ativos e nao expirados, executa todas as regras ativas de cada
+// tenant em isolamento (tenantStorage). Tolerante a falhas por tenant: erro
+// em um nao impede os proximos. Executor das auditorias = primeiro
+// ADMIN/GERENTE ativo do tenant; tenants sem admin sao pulados.
+export async function cronExecutarTodos(req, res, next) {
+  try {
+    const chaveEsperada = process.env.CRON_SECRET;
+    if (!chaveEsperada) {
+      return res.status(503).json({ erro: "CRON_SECRET nao configurado no servidor" });
+    }
+    const authHeader = req.headers.authorization || "";
+    const recebido = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+    if (recebido !== chaveEsperada) {
+      return res.status(401).json({ erro: "Chave de cron invalida" });
+    }
+
+    // prismaRaw NAO injeta tenantId — usado pra listar tenants cross-tenant.
+    const agora = new Date();
+    const tenants = await prismaRaw.empresa.findMany({
+      where: {
+        ativo: true,
+        OR: [{ expiraEm: null }, { expiraEm: { gt: agora } }],
+      },
+      select: { id: true, nome: true },
+    });
+
+    const resultados = [];
+    for (const t of tenants) {
+      await tenantStorage.run({ tenantId: t.id }, async () => {
+        try {
+          const admin = await prisma.user.findFirst({
+            where: { role: { in: ["ADMIN", "GERENTE"] }, ativo: true },
+            orderBy: { createdAt: "asc" },
+            select: { id: true },
+          });
+          if (!admin) {
+            resultados.push({ tenantId: t.id, nome: t.nome, pulado: "sem admin/gerente ativo" });
+            return;
+          }
+          const regras = await prisma.regraAutomacao.findMany({ where: { ativo: true } });
+          let totalCriadas = 0;
+          let totalErros = 0;
+          for (const r of regras) {
+            try {
+              const resumo = await executarUma(r, admin.id);
+              totalCriadas += resumo.criadas || 0;
+            } catch {
+              totalErros += 1;
+            }
+          }
+          resultados.push({
+            tenantId: t.id, nome: t.nome,
+            totalRegras: regras.length, totalCriadas, totalErros,
+          });
+        } catch (e) {
+          resultados.push({ tenantId: t.id, nome: t.nome, erro: e.message });
+        }
+      });
+    }
+
+    res.json({
+      executadoEm: agora,
+      totalTenants: tenants.length,
+      tenantsProcessados: resultados.length,
+      totalCriadasGlobal: resultados.reduce((s, r) => s + (r.totalCriadas || 0), 0),
+      resultados,
+    });
   } catch (err) {
     next(err);
   }

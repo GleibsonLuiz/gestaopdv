@@ -276,7 +276,7 @@ function NovaVenda({ user }) {
   const [caixaAtual, setCaixaAtual] = useState(null);
   const [tipoCaixa, setTipoCaixa] = useState("INDEPENDENTE");
   const [caixaCarregando, setCaixaCarregando] = useState(true);
-  const [painel, setPainel] = useState({ topProdutos: [], ultimasVendas: [], resumoDia: null });
+  const [painel, setPainel] = useState({ topProdutos: [], ultimasVendas: [], resumoDia: null, formasFrequencia: [] });
   const [vendaDetalheAberta, setVendaDetalheAberta] = useState(null);
   const [sugestaoIdx, setSugestaoIdx] = useState(0); // índice destacado nas sugestões
   const [qtdModalProduto, setQtdModalProduto] = useState(null); // produto p/ modal de qtd
@@ -302,6 +302,33 @@ function NovaVenda({ user }) {
 
   const algumaModalAberta = pagamentoAberto || cancelarAberto || !!reciboAberto || !!qtdModalProduto || abrirCaixaAberto;
   const semCaixa = !caixaCarregando && !caixaAtual;
+
+  // Reordena FORMAS por uso real (ultimos 90 dias) e reatribui os atalhos
+  // F1-F6 conforme a nova posicao. Forma mais usada ganha F1 (tecla de
+  // home-row mais acessivel). Tenant sem historico cai no fallback
+  // estatico. Formas nao vistas no historico vao para o fim, mantendo
+  // sua ordem relativa original.
+  const FORMAS_ORDENADAS = useMemo(() => {
+    const ranking = painel.formasFrequencia || [];
+    if (ranking.length === 0) return FORMAS;
+    const peso = new Map(ranking.map((f, idx) => [f.formaPagamento, idx]));
+    const ordenadas = [...FORMAS].sort((a, b) => {
+      const pa = peso.has(a.id) ? peso.get(a.id) : Infinity;
+      const pb = peso.has(b.id) ? peso.get(b.id) : Infinity;
+      return pa - pb;
+    });
+    return ordenadas.map((f, idx) => ({ ...f, atalho: `F${idx + 1}` }));
+  }, [painel.formasFrequencia]);
+
+  // Mapeamento tecla -> id da forma, derivado da ordem dinamica. Ref vivo
+  // pra o listener global (linha ~607) ler sem precisar re-bindar.
+  const FORMA_POR_TECLA = useMemo(() => {
+    const map = {};
+    FORMAS_ORDENADAS.forEach(f => { map[f.atalho] = f.id; });
+    return map;
+  }, [FORMAS_ORDENADAS]);
+  const formaPorTeclaRef = useRef(FORMA_POR_TECLA);
+  useEffect(() => { formaPorTeclaRef.current = FORMA_POR_TECLA; }, [FORMA_POR_TECLA]);
 
   const focarBusca = useCallback(() => {
     setTimeout(() => buscaRef.current?.focus(), 0);
@@ -604,15 +631,13 @@ function NovaVenda({ user }) {
   //   F10     abre modal de pagamento (finalizar venda)
   //   Esc     fecha modais auxiliares e refoca busca
   useEffect(() => {
-    const FORMA_POR_TECLA = {
-      F1: "DINHEIRO", F2: "PIX", F3: "CARTAO_DEBITO",
-      F4: "CARTAO_CREDITO", F5: "BOLETO", F6: "CREDIARIO",
-    };
     function onKeyDown(e) {
-      if (FORMA_POR_TECLA[e.key]) {
+      const mapa = formaPorTeclaRef.current || {};
+      if (mapa[e.key]) {
         e.preventDefault();
-        selecionarFormaPadrao(FORMA_POR_TECLA[e.key]);
-        if (FORMA_POR_TECLA[e.key] === "DINHEIRO" && pagamentoAberto) {
+        const formaId = mapa[e.key];
+        selecionarFormaPadrao(formaId);
+        if (formaId === "DINHEIRO" && pagamentoAberto) {
           setTimeout(() => valorRecebidoRef.current?.focus(), 0);
         }
         return;
@@ -784,7 +809,13 @@ function NovaVenda({ user }) {
                 <path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.6a2 2 0 0 0 2-1.5L21 8H6"/>
               </svg>
               {carrinho.length === 0 ? (
-                <>Cestinha<span className="pill">vazia</span></>
+                <>
+                  Cestinha
+                  <span className="pill pdv-pill-waiting" title="O sistema está pronto. Bipe ou digite no campo de busca.">
+                    <span className="pdv-pill-dot pdv-pill-dot-mut" />
+                    aguardando bipagem
+                  </span>
+                </>
               ) : (
                 <>
                   <span className="pdv-cestinha-hd-lbl">Cupom em andamento</span>
@@ -1091,7 +1122,7 @@ function NovaVenda({ user }) {
           <div className="pdv-pay-card">
             <div className="pdv-shortcuts-label">F1 – F6 forma de pagamento</div>
             <div className="pdv-pay-grid">
-              {FORMAS.map(f => {
+              {FORMAS_ORDENADAS.map(f => {
                 const ativo = forma === f.id && !formaCustomId;
                 const cor = FORMA_COR_CLASSE[f.id] || "pdv-pay-c-emerald";
                 return (
@@ -1443,7 +1474,7 @@ function NovaVenda({ user }) {
                   >⚙ Gerenciar</button>
                 </div>
                 <div className="pdv-pay-grid">
-                  {FORMAS.map(f => {
+                  {FORMAS_ORDENADAS.map(f => {
                     const ativo = forma === f.id && !formaCustomId;
                     const cor = FORMA_COR_CLASSE[f.id] || "pdv-pay-c-emerald";
                     return (
@@ -1833,9 +1864,31 @@ function AcessoRapido({ user, topProdutos, ultimasVendas, onAdicionar, onAbrirVe
     return (
       <div className="pdv-cart-empty">
         <div className="pdv-cart-empty-mark">🛒</div>
-        <div>
-          <div className="pdv-cart-empty-title">Cestinha vazia</div>
-          <div className="pdv-cart-empty-sub">Bipe um produto, digite o código no campo acima ou escolha um dos mais vendidos.</div>
+        <div className="pdv-cart-empty-body">
+          <div className="pdv-cart-empty-title">Pronto para a primeira venda</div>
+          <div className="pdv-cart-empty-sub">Três formas de adicionar um produto:</div>
+          <ul className="pdv-cart-empty-steps">
+            <li>
+              <span className="pdv-cart-empty-step-num">1</span>
+              <div>
+                <b>Bipe</b> o código de barras com o leitor
+                <span className="pdv-cart-empty-step-hint">o foco está no campo de busca</span>
+              </div>
+            </li>
+            <li>
+              <span className="pdv-cart-empty-step-num">2</span>
+              <div>
+                <b>Digite</b> o nome ou código no campo à direita
+                <span className="pdv-cart-empty-step-hint">use ↑ ↓ + Enter para escolher</span>
+              </div>
+            </li>
+            <li>
+              <span className="pdv-cart-empty-step-num">3</span>
+              <div>
+                <b>Finalize</b> com <span className="pdv-kbd">F10</span> e escolha forma de pagamento (F1–F6)
+              </div>
+            </li>
+          </ul>
         </div>
       </div>
     );

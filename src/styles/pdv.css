@@ -822,10 +822,12 @@
 }
 .pdv-cupom-ctrl-rm:hover { background: rgba(180, 50, 40, .1); }
 
-/* Empty state for cart */
+/* Empty state for cart (sem topProdutos nem ultimasVendas — primeiro dia
+   do tenant ou caixa recem-aberto). Onboarding inline com 3 passos para
+   operador novo: bipe, digite, finalize. */
 .pdv-cart-empty {
-  padding: 60px 30px; text-align: center;
-  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  padding: 36px clamp(20px, 4vw, 48px) 40px;
+  display: flex; align-items: flex-start; gap: 18px;
   color: var(--pdv-t3);
 }
 .pdv-cart-empty-mark {
@@ -833,9 +835,54 @@
   background: var(--pdv-surf-2); display: grid; place-items: center;
   color: var(--pdv-t4); border: 1px dashed var(--pdv-line-3);
   font-size: 26px;
+  flex-shrink: 0;
 }
-.pdv-cart-empty-title { color: var(--pdv-t2); font-size: 14px; font-weight: 500; }
-.pdv-cart-empty-sub { color: var(--pdv-t3); font-size: 12px; max-width: 260px; line-height: 1.5; }
+.pdv-cart-empty-body { flex: 1; min-width: 0; }
+.pdv-cart-empty-title { color: var(--pdv-t1); font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+.pdv-cart-empty-sub { color: var(--pdv-t3); font-size: 12.5px; line-height: 1.5; margin-bottom: 14px; }
+.pdv-cart-empty-steps {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-direction: column; gap: 10px;
+  max-width: 460px;
+}
+.pdv-cart-empty-steps li {
+  display: flex; align-items: flex-start; gap: 10px;
+  color: var(--pdv-t2); font-size: 13px; line-height: 1.45;
+}
+.pdv-cart-empty-steps li b { color: var(--pdv-t1); font-weight: 600; }
+.pdv-cart-empty-step-num {
+  flex-shrink: 0;
+  width: 22px; height: 22px; border-radius: 999px;
+  background: color-mix(in oklab, var(--pdv-accent) 18%, var(--pdv-surf-2));
+  color: var(--pdv-accent);
+  font-size: 12px; font-weight: 700;
+  display: grid; place-items: center;
+  border: 1px solid color-mix(in oklab, var(--pdv-accent) 30%, transparent);
+}
+.pdv-cart-empty-step-hint {
+  display: block; color: var(--pdv-t3); font-size: 11.5px; margin-top: 2px;
+}
+
+/* Pill "aguardando bipagem" no header da cestinha vazia — pulso sutil
+   sinaliza que o sistema esta ATIVO esperando input, em vez de um label
+   estatico "vazia" que parece "desligado". */
+.pdv-pill-waiting {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: color-mix(in oklab, var(--pdv-accent) 8%, var(--pdv-surf-2)) !important;
+  border-color: color-mix(in oklab, var(--pdv-accent) 22%, var(--pdv-line)) !important;
+  color: var(--pdv-t2) !important;
+}
+.pdv-pill-dot-mut {
+  width: 7px; height: 7px; border-radius: 999px;
+  background: var(--pdv-accent);
+  box-shadow: 0 0 0 0 color-mix(in oklab, var(--pdv-accent) 60%, transparent);
+  animation: pdv-pulse-mut 2.2s ease-out infinite;
+}
+@keyframes pdv-pulse-mut {
+  0%   { box-shadow: 0 0 0 0   color-mix(in oklab, var(--pdv-accent) 55%, transparent); opacity: 1; }
+  70%  { box-shadow: 0 0 0 8px color-mix(in oklab, var(--pdv-accent) 0%,  transparent); opacity: .7; }
+  100% { box-shadow: 0 0 0 0   color-mix(in oklab, var(--pdv-accent) 0%,  transparent); opacity: 1; }
+}
 
 /* ─── Painel direito (totals + atalhos) ────────────────────── */
 .pdv-side {

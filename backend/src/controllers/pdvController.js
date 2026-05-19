@@ -9,6 +9,9 @@ export async function inicio(req, res, next) {
     const trintaDiasAtras = new Date();
     trintaDiasAtras.setDate(trintaDiasAtras.getDate() - 30);
 
+    const noventaDiasAtras = new Date();
+    noventaDiasAtras.setDate(noventaDiasAtras.getDate() - 90);
+
     const inicioDia = new Date();
     inicioDia.setHours(0, 0, 0, 0);
 
@@ -29,7 +32,7 @@ export async function inicio(req, res, next) {
         }
       : null;
 
-    const [topGroups, ultimasVendas, vendasHojeAgg, formasHoje] = await Promise.all([
+    const [topGroups, ultimasVendas, vendasHojeAgg, formasHoje, formasFrequenciaRaw] = await Promise.all([
       prisma.itemVenda.groupBy({
         by: ["produtoId"],
         where: {
@@ -67,6 +70,16 @@ export async function inicio(req, res, next) {
         _count: true,
         _sum: { total: true },
         orderBy: { _sum: { total: "desc" } },
+      }),
+      // Ranking de formas de pagamento por uso real nos ultimos 90 dias.
+      // Usado para reordenar dinamicamente os botoes F1-F6 do PDV: tecla
+      // mais acessivel (F1) vai pra forma mais usada. Sem reescrever a
+      // identidade do metodo — so a posicao na grade.
+      prisma.venda.groupBy({
+        by: ["formaPagamento"],
+        where: { status: "CONCLUIDA", createdAt: { gte: noventaDiasAtras } },
+        _count: true,
+        orderBy: { _count: { formaPagamento: "desc" } },
       }),
     ]);
 
@@ -106,7 +119,15 @@ export async function inicio(req, res, next) {
         .filter(Boolean);
     }
 
-    res.json({ topProdutos, ultimasVendas, resumoDia });
+    // Frontend usa este array para reordenar a grade F1-F6. Vem do
+    // backend ja ordenado (mais usado -> menos usado). Se vazio (tenant
+    // novo sem historico), o frontend cai no fallback estatico.
+    const formasFrequencia = formasFrequenciaRaw.map(f => ({
+      formaPagamento: f.formaPagamento,
+      vendas: f._count,
+    }));
+
+    res.json({ topProdutos, ultimasVendas, resumoDia, formasFrequencia });
   } catch (err) {
     next(err);
   }

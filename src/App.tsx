@@ -1,40 +1,43 @@
-import { useState, useEffect, useRef, type CSSProperties } from "react";
+import { useState, useEffect, useRef, lazy, Suspense, type CSSProperties } from "react";
 import { C } from "./lib/theme";
-import Login from "./Login.jsx";
-import Clientes from "./Clientes.jsx";
-import Fornecedores from "./Fornecedores.jsx";
-import Produtos from "./Produtos.jsx";
-import Etiquetas from "./Etiquetas.jsx";
-import Estoque from "./Estoque.jsx";
-import Compras from "./Compras.jsx";
-import Orcamentos from "./Orcamentos.jsx";
-import Funcionarios from "./Funcionarios.jsx";
-import Comissoes from "./Comissoes.jsx";
-import FinanceiroPage from "./pages/financeiro/FinanceiroPage.jsx";
-import Caixa from "./Caixa";
-import PDV from "./PDV";
-import Dashboard from "./Dashboard.jsx";
-import Relatorios from "./Relatorios.jsx";
-import Projeto from "./Projeto.jsx";
-import Sistema from "./Sistema.jsx";
-import Configuracoes from "./Configuracoes.jsx";
-import ConfiguracoesImpressora from "./ConfiguracoesImpressora.jsx";
-import Empresa from "./Empresa.jsx";
-import TrocarSenhaModal from "./TrocarSenhaModal.jsx";
-import Aparencia from "./Aparencia.jsx";
-import Tarefas from "./Tarefas.jsx";
-import Fidelidade from "./Fidelidade.jsx";
-import Funil from "./Funil.jsx";
-import Segmentos from "./Segmentos.jsx";
-import Automacoes from "./Automacoes.jsx";
-import DashboardCrm from "./DashboardCrm.jsx";
-import Reativacao from "./Reativacao.jsx";
-import Nps from "./Nps.jsx";
-import PesquisaPublicaNps from "./PesquisaPublicaNps.jsx";
-import Alertas from "./Alertas.jsx";
-import Logs from "./Logs.jsx";
+import Alertas from "./Alertas";
 import { getUser, getToken, clearSession, api } from "./lib/api";
 import { podeAcessar } from "./lib/permissoes";
+
+// Todas as telas sao lazy — cada uma vira um chunk separado e so e baixada
+// quando o usuario navegar para ela. Login fica lazy tambem (so carrega
+// quando nao ha sessao). Alertas continua eager por ser parte do shell.
+const Login = lazy(() => import("./Login"));
+const Clientes = lazy(() => import("./Clientes"));
+const Fornecedores = lazy(() => import("./Fornecedores"));
+const Produtos = lazy(() => import("./Produtos"));
+const Etiquetas = lazy(() => import("./Etiquetas"));
+const Estoque = lazy(() => import("./Estoque"));
+const Compras = lazy(() => import("./Compras"));
+const Orcamentos = lazy(() => import("./Orcamentos"));
+const Funcionarios = lazy(() => import("./Funcionarios"));
+const Comissoes = lazy(() => import("./Comissoes"));
+const FinanceiroPage = lazy(() => import("./pages/financeiro/FinanceiroPage"));
+const Caixa = lazy(() => import("./Caixa"));
+const PDV = lazy(() => import("./PDV"));
+const Dashboard = lazy(() => import("./Dashboard"));
+const Relatorios = lazy(() => import("./Relatorios"));
+const Projeto = lazy(() => import("./Projeto"));
+const Sistema = lazy(() => import("./Sistema"));
+const ConfiguracoesImpressora = lazy(() => import("./ConfiguracoesImpressora"));
+const Empresa = lazy(() => import("./Empresa"));
+const TrocarSenhaModal = lazy(() => import("./TrocarSenhaModal"));
+const Aparencia = lazy(() => import("./Aparencia"));
+const Tarefas = lazy(() => import("./Tarefas"));
+const Fidelidade = lazy(() => import("./Fidelidade"));
+const Funil = lazy(() => import("./Funil"));
+const Segmentos = lazy(() => import("./Segmentos"));
+const Automacoes = lazy(() => import("./Automacoes"));
+const DashboardCrm = lazy(() => import("./DashboardCrm"));
+const Reativacao = lazy(() => import("./Reativacao"));
+const Nps = lazy(() => import("./Nps"));
+const PesquisaPublicaNps = lazy(() => import("./PesquisaPublicaNps"));
+const Logs = lazy(() => import("./Logs"));
 
 
 const SIDEBAR_W_EXPANDIDA = 240;
@@ -88,6 +91,21 @@ function getNpsToken() {
     const params = new URLSearchParams(window.location.search);
     return params.get("nps") || null;
   } catch { return null; }
+}
+
+// Fallback de Suspense usado em todos os pontos onde uma tela lazy entra
+// em cena. Mantem aparencia consistente com a tela inicial de carregamento.
+function TelaCarregando({ alturaMin = "100vh" }: { alturaMin?: string }) {
+  return (
+    <div style={{
+      minHeight: alturaMin, display: "flex",
+      alignItems: "center", justifyContent: "center",
+      color: C.muted, fontFamily: "'Segoe UI', sans-serif",
+      padding: 24, fontSize: 13,
+    }}>
+      Carregando...
+    </div>
+  );
 }
 
 export default function App() {
@@ -234,7 +252,11 @@ export default function App() {
   }, [user, tela]);
 
   // Pesquisa publica NPS: cliente externo acessa sem login.
-  if (npsToken) return <PesquisaPublicaNps token={npsToken} />;
+  if (npsToken) return (
+    <Suspense fallback={<TelaCarregando />}>
+      <PesquisaPublicaNps token={npsToken} />
+    </Suspense>
+  );
 
   if (carregando) {
     return (
@@ -248,7 +270,11 @@ export default function App() {
     );
   }
 
-  if (!user) return <Login onSuccess={setUser} />;
+  if (!user) return (
+    <Suspense fallback={<TelaCarregando />}>
+      <Login onSuccess={setUser} />
+    </Suspense>
+  );
 
   // ETAPA 11: banner global quando sessao foi gerada via impersonate.
   // O JWT do super-admin "fingindo ser" outro user carrega claim `imp`
@@ -271,7 +297,9 @@ export default function App() {
     return (
       <div style={{ background: C.bg, minHeight: "100vh", fontFamily: "'Segoe UI', sans-serif", color: C.text }}>
         <style>{ESTILO_RESPONSIVO}</style>
-        <PDV user={user} onSair={() => setTela("dashboard")} sair={sair} />
+        <Suspense fallback={<TelaCarregando />}>
+          <PDV user={user} onSair={() => setTela("dashboard")} sair={sair} />
+        </Suspense>
       </div>
     );
   }
@@ -586,6 +614,7 @@ export default function App() {
         </div>
 
         <div style={{ padding: "24px" }}>
+          <Suspense fallback={<TelaCarregando alturaMin="60vh" />}>
           {tela === "dashboard" && (
             <Dashboard user={user} />
           )}
@@ -725,11 +754,14 @@ export default function App() {
               />
             </>
           )}
+          </Suspense>
         </div>
       </main>
 
       {trocarSenhaAberto && (
-        <TrocarSenhaModal onFechar={() => setTrocarSenhaAberto(false)} />
+        <Suspense fallback={null}>
+          <TrocarSenhaModal onFechar={() => setTrocarSenhaAberto(false)} />
+        </Suspense>
       )}
     </div>
   );

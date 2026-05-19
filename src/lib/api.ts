@@ -253,6 +253,9 @@ export const api = {
     request(`/clientes${qsFrom(filtros)}`),
   obterCliente: (id: string) => request(`/clientes/${id}`),
   perfilCliente: (id: string) => request(`/clientes/${id}/perfil`),
+  // Lead score individual (0-100) com breakdown por componente. Usa a mesma
+  // mediaTotal global de /clientes/segmentos para consistencia entre telas.
+  obterScoreCliente: (id: string) => request(`/clientes/${id}/score`),
   listarInteracoes: (clienteId: string) => request(`/clientes/${clienteId}/interacoes`),
   criarInteracao: (clienteId: string, data: unknown) =>
     request(`/clientes/${clienteId}/interacoes`, { method: "POST", body: data }),

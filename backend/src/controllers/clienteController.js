@@ -446,6 +446,85 @@ export async function obter(req, res, next) {
   }
 }
 
+// Lead score de um unico cliente. Reusa calcularScore com a mesma mediaTotal
+// global de /clientes/segmentos (vendas concluidas dos ultimos 365 dias)
+// para garantir consistencia entre Segmentos e PerfilCliente — se mostrar
+// score 72 numa tela, mostra 72 na outra.
+export async function obterScore(req, res, next) {
+  try {
+    const { id } = req.params;
+    const dias = parseInt(req.query.dias || "365", 10);
+    const desde = new Date(Date.now() - dias * 86400000);
+
+    const cliente = await prisma.cliente.findUnique({
+      where: { id },
+      select: {
+        id: true, nome: true,
+        tags: { include: { tag: true } },
+      },
+    });
+    if (!cliente) return res.status(404).json({ erro: "Cliente nao encontrado" });
+
+    const [vendasTodas, ultimaNps] = await Promise.all([
+      prisma.venda.findMany({
+        where: { status: "CONCLUIDA", createdAt: { gte: desde }, clienteId: { not: null } },
+        select: { clienteId: true, total: true, createdAt: true },
+      }),
+      prisma.pesquisaNps.findFirst({
+        where: { clienteId: id, respondidaEm: { not: null } },
+        orderBy: { respondidaEm: "desc" },
+        select: { nota: true, respondidaEm: true },
+      }),
+    ]);
+
+    // Agrega por cliente para calcular mediaTotal global (mesma logica de
+    // /clientes/segmentos). Em paralelo, ja extrai os dados do alvo.
+    const agg = new Map();
+    for (const v of vendasTodas) {
+      const a = agg.get(v.clienteId) || { qtd: 0, total: 0, ultima: null };
+      a.qtd += 1;
+      a.total += Number(v.total);
+      if (!a.ultima || v.createdAt > a.ultima) a.ultima = v.createdAt;
+      agg.set(v.clienteId, a);
+    }
+    const arr = Array.from(agg.values());
+    const mediaTotal = arr.length ? arr.reduce((s, x) => s + x.total, 0) / arr.length : 0;
+
+    const meu = agg.get(id);
+    const qtdCompras = meu?.qtd || 0;
+    const totalGasto = meu?.total || 0;
+    const recenciaDias = meu?.ultima
+      ? Math.floor((Date.now() - meu.ultima.getTime()) / 86400000)
+      : null;
+    const ticketMedio = qtdCompras > 0 ? totalGasto / qtdCompras : 0;
+    const ehVip = cliente.tags.some((ct) => ct.tag.nome === "VIP");
+
+    const info = calcularScore({
+      qtdCompras, totalGasto, recenciaDias, mediaTotal,
+      npsNota: ultimaNps?.nota ?? null,
+      ehVip,
+    });
+
+    res.json({
+      score: info.score,
+      classificacao: info.classificacao,
+      breakdown: info.breakdown,
+      janelaDias: dias,
+      kpis: {
+        qtdCompras,
+        totalGasto,
+        recenciaDias,
+        ticketMedio,
+        ultimaCompra: meu?.ultima || null,
+        npsNota: ultimaNps?.nota ?? null,
+        ehVip,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function criar(req, res, next) {
   try {
     const { nome } = req.body;

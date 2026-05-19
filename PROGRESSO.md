@@ -1269,6 +1269,36 @@ Gap identificado pela inspeção: o módulo de Inventário tinha tela web de con
 
 **Smoke-test:** TypeScript limpo, build verde. Validação visual depende do usuário (não gera PDF via CLI).
 
+### Sessão — 2026-05-19 (continuação — lead scoring no PerfilClienteModal)
+
+Trilha (c) da fila. Hoje o lead score (0-100, FRIO/MORNO/QUENTE/VIP) só aparece em `📊 Segmentos`, calculado em lote para todos os clientes ativos. Quando o operador abre o perfil de um cliente específico, não tem ideia do score — precisa voltar pra Segmentos e procurar. Trazido para o `PerfilClienteModal`.
+
+**Backend** ([backend/src/controllers/clienteController.js](backend/src/controllers/clienteController.js)):
+- Novo handler `obterScore(req, res, next)` reusa a função `calcularScore` existente.
+- **Decisão importante de consistência:** o componente Monetário do score depende da `mediaTotal` global (vendas dos últimos 365 dias agrupadas por cliente). Para garantir que o número exibido aqui bata exatamente com Segmentos, o handler refaz o mesmo agregado global — não simplifica usando só as vendas do alvo. Custo: 1 query a mais para `prisma.venda.findMany({ ... clienteId: { not: null } })` (vendas dos últimos 365 dias). Em troca, o usuário vê o mesmo 72 nas duas telas.
+- Retorna `{ score, classificacao, breakdown: {recencia, frequencia, monetario, bonus}, janelaDias, kpis: {qtdCompras, totalGasto, recenciaDias, ticketMedio, ultimaCompra, npsNota, ehVip} }`.
+- Rota `GET /clientes/:id/score` registrada em [backend/src/routes/clientes.js](backend/src/routes/clientes.js) antes de `/:id` (ordem importa no Express).
+
+**Frontend:**
+- `src/lib/api.ts`: `api.obterScoreCliente(id)`.
+- [src/components/PerfilClienteModal.tsx](src/components/PerfilClienteModal.tsx):
+  - `useEffect` separado dispara `obterScoreCliente` em paralelo ao `perfilCliente` — score é enhancement, falha silenciosa, não bloqueia o modal.
+  - Novo componente `<CardLeadScore>` renderiza:
+    - Esquerda: número grande do score com cor por classificação (FRIO cinza / MORNO azul / QUENTE laranja / VIP âmbar), ícone, label e descrição contextual
+    - Direita: 4 mini-barras de progresso para Recência/Frequência/Monetário/Bônus com valor atual / máximo (35/25/25/15)
+    - Borda esquerda 4px na cor da classificação para destaque
+  - Posicionado no topo da `AbaResumo`, acima dos KPI cards existentes.
+
+**Smoke-test (rodado contra Neon):**
+```
+GET /clientes/dd4455fa-.../score → 200
+  { score: 65, classificacao: "QUENTE",
+    breakdown: { recencia: 35, frequencia: 18, monetario: 12, bonus: 0 },
+    kpis: { qtdCompras: 4, totalGasto: 16, recenciaDias: 1, ... } }
+GET /clientes/00000000-.../score → 404 { erro: "Cliente nao encontrado" }
+```
+TypeScript `tsc --noEmit` limpo, `npm run build` verde.
+
 ---
 
 ## Onde paramos
@@ -1391,10 +1421,10 @@ Extensão do cadastro de Fornecedores para conformidade NF-e — espelha o que a
 - ✅ Validação visual dos 11 itens das sessões anteriores (UX PDV + Conversão CRM) — usuário confirmou OK
 - ✅ **(f)** Sync de preferências de UI entre dispositivos — `User.preferencias Json?` + `PUT /auth/preferencias` (merge raso); frontend hidrata em `me()`/`login()`, sync debounced em tema (500ms) e sidebar (400ms)
 - ✅ **(b)** Variável `{{linkNps}}` nos templates de mensagem — `GET /nps/cliente/:clienteId/link-pendente` + `aplicarVariaveis(..., extras)` + `BotoesContatoCliente` resolve o link antes de abrir WhatsApp/Email
+- ✅ **(c)** Lead scoring no PerfilClienteModal — `GET /clientes/:id/score` reusa `calcularScore` com mediaTotal global de 365d; `<CardLeadScore>` no topo da AbaResumo com breakdown R/F/M/Bônus
+- ✅ Impressão da folha de contagem cega (Inventário) — `src/lib/folhaCegaPdf.ts` + botão "🖨 Imprimir folha cega" no ActionsMenu (status ABERTO)
 
 **Próximos candidatos (em ordem de ROI estimado):**
-
-- **(c)** Lead scoring no PerfilClienteModal — endpoint `GET /clientes/:id/score` que calcula só para um cliente. **Pequeno esforço, médio valor**. Hoje o score só aparece em Segmentos (cálculo em lote).
 - **(e)** Análise de motivos de perda — agregação `GROUP BY motivoPerda` em Oportunidades. **Pequeno esforço, baixo-médio valor** (já existe no Funil).
 - **(g)** Filtro por cliente no relatório de vendas — backend aceita, UI não expõe. **Trivial**.
 - **(h)** Auditoria estruturada do Reset Total — log de execuções. **Pequeno**.

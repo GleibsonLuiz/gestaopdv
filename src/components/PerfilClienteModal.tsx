@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { C } from "../lib/theme";
 import { api } from "../lib/api";
 import BotoesContatoCliente from "./BotoesContatoCliente";
+import { CLASSIFICACOES_SCORE, corDoScore, type ClassificacaoScore } from "../lib/scoring";
 
 const fmtBRL = (v: number | string | null | undefined) =>
   Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -562,13 +563,95 @@ function btnContato(cor: string): React.CSSProperties {
   };
 }
 
-function AbaResumo({ kpis, cliente }: { kpis: any; cliente: any }) {
+interface ScoreResp {
+  score: number;
+  classificacao: ClassificacaoScore;
+  breakdown: { recencia: number; frequencia: number; monetario: number; bonus: number };
+  janelaDias: number;
+  kpis: {
+    qtdCompras: number;
+    totalGasto: number;
+    recenciaDias: number | null;
+    ticketMedio: number;
+    ultimaCompra: string | null;
+    npsNota: number | null;
+    ehVip: boolean;
+  };
+}
+
+// Card de lead score (0-100) com breakdown por componente R/F/M/Bonus.
+// Pesos maximos vem direto do calculo no backend: 35/25/25/15.
+function CardLeadScore({ score }: { score: ScoreResp }) {
+  const meta = CLASSIFICACOES_SCORE[score.classificacao];
+  const cor = corDoScore(score.score);
+  const linhas: Array<{ label: string; val: number; max: number }> = [
+    { label: "Recência", val: score.breakdown.recencia, max: 35 },
+    { label: "Frequência", val: score.breakdown.frequencia, max: 25 },
+    { label: "Monetário", val: score.breakdown.monetario, max: 25 },
+    { label: "Bônus", val: score.breakdown.bonus, max: 15 },
+  ];
+  return (
+    <div style={{
+      background: C.card,
+      border: `1px solid ${C.border}`,
+      borderLeft: `4px solid ${cor}`,
+      borderRadius: 12,
+      padding: "14px 18px",
+      display: "flex",
+      gap: 18,
+      alignItems: "center",
+      flexWrap: "wrap",
+    }}>
+      <div style={{ display: "flex", flexDirection: "column", minWidth: 110 }}>
+        <span style={{ fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600 }}>
+          Lead score
+        </span>
+        <span style={{ fontSize: 32, fontWeight: 800, color: cor, lineHeight: 1.1 }}>
+          {score.score}
+          <span style={{ fontSize: 14, color: C.muted, fontWeight: 500 }}>/100</span>
+        </span>
+        <span style={{ fontSize: 12, color: C.text, marginTop: 2 }}>
+          {meta.icone} <strong style={{ color: cor }}>{meta.label}</strong>
+        </span>
+        <span style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
+          {meta.desc}
+        </span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6, flex: "1 1 240px", minWidth: 220 }}>
+        {linhas.map((l) => {
+          const pct = l.max > 0 ? Math.round((l.val / l.max) * 100) : 0;
+          return (
+            <div key={l.label}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 3 }}>
+                <span style={{ color: C.muted, fontWeight: 600 }}>{l.label}</span>
+                <span style={{ color: C.text, fontVariantNumeric: "tabular-nums" }}>
+                  {l.val}/{l.max}
+                </span>
+              </div>
+              <div style={{ height: 5, background: C.surface, borderRadius: 999, overflow: "hidden" }}>
+                <div style={{
+                  width: `${pct}%`,
+                  height: "100%",
+                  background: cor,
+                  transition: "width 0.3s ease",
+                }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AbaResumo({ kpis, cliente, score }: { kpis: any; cliente: any; score: ScoreResp | null }) {
   const diasDesdeUltimaCompra = kpis.ultimaCompra
     ? Math.floor((Date.now() - new Date(kpis.ultimaCompra).getTime()) / 86400000)
     : null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {score && <CardLeadScore score={score} />}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
         <KpiCard
           label="Total gasto"
@@ -764,6 +847,9 @@ export default function PerfilClienteModal({ clienteId, onFechar, user }: Perfil
   const [erro, setErro] = useState("");
   const [aba, setAba] = useState("resumo");
   const [templates, setTemplates] = useState<any[]>([]);
+  // Score carrega em paralelo — nao bloqueia o perfil. Card so aparece
+  // quando o fetch completa.
+  const [score, setScore] = useState<ScoreResp | null>(null);
 
   const carregar = useCallback(async () => {
     if (!clienteId) return;
@@ -780,6 +866,16 @@ export default function PerfilClienteModal({ clienteId, onFechar, user }: Perfil
   }, [clienteId]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  useEffect(() => {
+    if (!clienteId) return;
+    let ativo = true;
+    setScore(null);
+    api.obterScoreCliente(clienteId)
+      .then((d) => { if (ativo) setScore(d as ScoreResp); })
+      .catch(() => { /* score e enhancement, falha silenciosa */ });
+    return () => { ativo = false; };
+  }, [clienteId]);
 
   useEffect(() => {
     api.listarTemplates({ ativo: "true" })
@@ -953,7 +1049,7 @@ export default function PerfilClienteModal({ clienteId, onFechar, user }: Perfil
             </div>
           ) : dados ? (
             <>
-              {aba === "resumo" && <AbaResumo kpis={dados.kpis} cliente={dados.cliente} />}
+              {aba === "resumo" && <AbaResumo kpis={dados.kpis} cliente={dados.cliente} score={score} />}
               {aba === "contatos" && (
                 <AbaContatos
                   clienteId={clienteId}

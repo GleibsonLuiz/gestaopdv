@@ -133,6 +133,9 @@
   font-family: inherit;
   transition: background .15s, color .15s, opacity .15s;
 }
+/* Tema claro (pergaminho): opacity .65 sobre texto escuro fica no limite
+   do WCAG AA (~4.5:1). Subir para .72 garante AA folgado. */
+[data-brilho="claro"] .pdv-nav-btn { opacity: .72; }
 .pdv-nav-btn:hover { opacity: 1; background: var(--pdv-surf-3); }
 .pdv-nav-btn.is-active {
   color: var(--pdv-t1); opacity: 1;

@@ -119,6 +119,7 @@ export async function login(req, res, next) {
         role: user.role, permissoes: user.permissoes,
         tenantId: user.tenantId,
         superAdmin: user.superAdmin === true,
+        preferencias: user.preferencias || null,
       },
       empresa: {
         id: user.tenant.id,
@@ -138,6 +139,7 @@ export async function me(req, res, next) {
       select: {
         id: true, nome: true, email: true, role: true, ativo: true, permissoes: true,
         superAdmin: true,
+        preferencias: true,
         tenantId: true,
         tenant: { select: { id: true, nome: true, cnpj: true, ativo: true } },
       },
@@ -148,6 +150,41 @@ export async function me(req, res, next) {
       ...rest,
       empresa: tenant ? { id: tenant.id, nome: tenant.nome, cnpj: tenant.cnpj } : null,
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Sincroniza preferencias de UI (tema/aparencia, sidebar) entre dispositivos.
+// O front faz merge otimista no localStorage e dispara PUT em paralelo —
+// best-effort, falha de rede nao bloqueia a UI. Payload aceita qualquer JSON
+// objeto; campos desconhecidos sao preservados (merge raso por chave de topo).
+export async function salvarPreferencias(req, res, next) {
+  try {
+    const body = req.body;
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return res.status(400).json({ erro: "Preferencias devem ser um objeto JSON" });
+    }
+    // Limite de tamanho para nao virar dump-zone. ~16KB cobre folgado
+    // qualquer preferencia razoavel; alem disso, recusa.
+    const tamanho = JSON.stringify(body).length;
+    if (tamanho > 16384) {
+      return res.status(413).json({ erro: "Preferencias excedem o limite de 16KB" });
+    }
+
+    const atual = await prisma.user.findUnique({
+      where: { id: req.user.sub },
+      select: { preferencias: true },
+    });
+    if (!atual) return res.status(404).json({ erro: "Usuario nao encontrado" });
+
+    const merged = { ...(atual.preferencias || {}), ...body };
+    const updated = await prisma.user.update({
+      where: { id: req.user.sub },
+      data: { preferencias: merged },
+      select: { preferencias: true },
+    });
+    res.json({ preferencias: updated.preferencias });
   } catch (err) {
     next(err);
   }

@@ -9,11 +9,14 @@ import prisma, { tenantStorage } from "../lib/prisma.js";
 const METODOS_MUTACAO = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 // Rotas a NAO logar (saude, raiz, e auth que tem log explicito no controller).
+// /auth/preferencias eh ignorado porque preferencia de UI nao eh evento
+// auditavel — virou ruido em log.
 const ROTAS_IGNORADAS = [
   "/health",
   "/auth/login",
   "/auth/logout",
   "/auth/trocar-senha",
+  "/auth/preferencias",
 ];
 
 // Mapeia primeiro segmento da rota -> { modulo, modelo (chave em prisma) }.

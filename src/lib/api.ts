@@ -243,6 +243,11 @@ export const api = {
     request(`/notificacoes/${id}/marcar-lida`, { method: "POST" }),
   trocarSenha: (senhaAtual: string, senhaNova: string) =>
     request("/auth/senha", { method: "PUT", body: { senhaAtual, senhaNova } }),
+  // Sync de preferencias de UI (tema, sidebar) entre dispositivos. O backend
+  // faz merge raso, entao chamadas parciais (so { sidebarCollapsed: true })
+  // preservam outras chaves.
+  salvarPreferencias: (body: Record<string, unknown>) =>
+    request("/auth/preferencias", { method: "PUT", body }),
 
   listarClientes: (filtros: StringDict = {}) =>
     request(`/clientes${qsFrom(filtros)}`),

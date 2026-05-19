@@ -14,8 +14,10 @@
 //   - Reduzir movimento, sublinhar links (data-* no <body>)
 //   - Modo automatico claro/escuro por horario
 //
-// Para mudar de tema: aplicarTema(id). A escolha persiste em localStorage
-// e (TODO) deve ser sincronizada com o backend via PUT /auth/preferencias.
+// Persistencia: localStorage como cache local + PUT /auth/preferencias
+// (debounced) para sincronizar entre dispositivos do mesmo usuario.
+
+import { api, getToken } from "./api";
 
 const PREF_TEMA_KEY = "gestao_tema";
 const PREF_APARENCIA_KEY = "gestao_aparencia_v1";
@@ -295,11 +297,39 @@ export function lerAparencia(): AparenciaEstado {
   return { ...APARENCIA_PADRAO };
 }
 
+// Debounce do PUT remoto: o usuario pode arrastar sliders (fontSize, radius)
+// e disparar dezenas de salvarAparencia em 1 segundo. Acumulamos e enviamos
+// 500ms depois do ultimo evento. localStorage continua sincrono — UI nao
+// espera a rede.
+let timerSyncAparencia: ReturnType<typeof setTimeout> | null = null;
+function syncAparenciaRemoto(estado: AparenciaEstado): void {
+  if (!getToken()) return; // sem sessao, sem sync remoto
+  if (timerSyncAparencia) clearTimeout(timerSyncAparencia);
+  timerSyncAparencia = setTimeout(() => {
+    api.salvarPreferencias({ aparencia: estado }).catch(() => {
+      /* best-effort: localStorage ja tem o valor */
+    });
+  }, 500);
+}
+
 export function salvarAparencia(estado: AparenciaEstado): void {
   try { localStorage.setItem(PREF_APARENCIA_KEY, JSON.stringify(estado)); } catch { /* ignore */ }
   try { localStorage.setItem(PREF_TEMA_KEY, estado.tema); } catch { /* ignore */ }
-  // TODO(sync-db): se estado.sincronizar e backend tiver PUT /auth/preferencias,
-  //   api.salvarPreferencia({ aparencia: estado }).catch(() => {});
+  if (estado.sincronizar !== false) syncAparenciaRemoto(estado);
+}
+
+// Aplica aparencia vinda do backend (login/me) sobre o que estava em
+// localStorage. Usado uma vez no boot apos carregar a sessao — garante que
+// trocar de maquina/navegador recupera as preferencias do usuario.
+// Importante: nao re-dispara PUT para o backend (caso contrario, multiplas
+// abas/dispositivos ficariam em loop de sync).
+export function hidratarAparenciaDoUser(remoto: Partial<AparenciaEstado> | null | undefined): void {
+  if (!remoto || typeof remoto !== "object") return;
+  const atual = lerAparencia();
+  const mesclada: AparenciaEstado = { ...atual, ...remoto };
+  try { localStorage.setItem(PREF_APARENCIA_KEY, JSON.stringify(mesclada)); } catch { /* ignore */ }
+  try { localStorage.setItem(PREF_TEMA_KEY, mesclada.tema); } catch { /* ignore */ }
+  aplicarAparencia(mesclada);
 }
 
 // API legada — mantida porque AparenciaModal e outros locais ainda chamam.

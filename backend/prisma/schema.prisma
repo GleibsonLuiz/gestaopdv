@@ -345,6 +345,10 @@ model User {
   // ver lista de TODAS as empresas e criar novos tenants. Default false: a
   // grande maioria dos users sao admins/gerentes/vendedores de uma empresa.
   superAdmin Boolean  @default(false)
+  // Preferencias de UI sincronizadas entre dispositivos. Forma:
+  // { aparencia?: {...}, sidebarCollapsed?: boolean }. Mantida como Json
+  // intencionalmente flexivel para evoluir sem migration por campo novo.
+  preferencias Json?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

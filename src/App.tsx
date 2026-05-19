@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense, type CSSProperties } from "react";
-import { C } from "./lib/theme";
+import { C, hidratarAparenciaDoUser } from "./lib/theme";
 import Alertas from "./Alertas";
 import { getUser, getToken, clearSession, api } from "./lib/api";
 import { podeAcessar } from "./lib/permissoes";
@@ -45,13 +45,19 @@ const SIDEBAR_W_EXPANDIDA = 240;
 const SIDEBAR_W_RECOLHIDA = 72;
 const PREF_SIDEBAR_KEY = "gestao_sidebar_collapsed";
 
-// Helper de persistencia. Hoje grava em localStorage. Quando houver
-// PUT /auth/preferencias no backend, plugar aqui — manter localStorage como
-// cache local (escrita otimista) e disparar o request em paralelo.
+// Helpers de persistencia. localStorage e cache local (escrita sincrona pra
+// nao causar layout shift no proximo boot) e PUT /auth/preferencias sincroniza
+// entre dispositivos — debounced em 400ms para suportar toggles rapidos.
+let timerSyncSidebar: ReturnType<typeof setTimeout> | null = null;
 function salvarPreferenciaSidebar(collapsed: boolean) {
   try { localStorage.setItem(PREF_SIDEBAR_KEY, collapsed ? "1" : "0"); } catch {}
-  // TODO(sync-db): quando o endpoint existir, descomentar:
-  // api.salvarPreferencia({ sidebarCollapsed: collapsed }).catch(() => {});
+  if (!getToken()) return;
+  if (timerSyncSidebar) clearTimeout(timerSyncSidebar);
+  timerSyncSidebar = setTimeout(() => {
+    api.salvarPreferencias({ sidebarCollapsed: collapsed }).catch(() => {
+      /* best-effort: localStorage ja persistiu */
+    });
+  }, 400);
 }
 
 function lerPreferenciaSidebar() {
@@ -141,6 +147,19 @@ export default function App() {
     });
   }
 
+  // Aplica preferencias de UI vindas do servidor sobre o cache local.
+  // Chamado apos /auth/me (boot) e apos /auth/login (Login.onSuccess).
+  // Hidratacao silenciosa: nao re-dispara PUT para o backend.
+  function hidratarPreferencias(u: any) {
+    const prefs = u?.preferencias;
+    if (!prefs || typeof prefs !== "object") return;
+    if (prefs.aparencia) hidratarAparenciaDoUser(prefs.aparencia);
+    if (typeof prefs.sidebarCollapsed === "boolean") {
+      try { localStorage.setItem(PREF_SIDEBAR_KEY, prefs.sidebarCollapsed ? "1" : "0"); } catch {}
+      setSidebarCollapsed(prefs.sidebarCollapsed);
+    }
+  }
+
   const sidebarLargura = sidebarCollapsed ? SIDEBAR_W_RECOLHIDA : SIDEBAR_W_EXPANDIDA;
 
   // Wrappers para injetar collapsed em todos os itens da sidebar.
@@ -170,8 +189,11 @@ export default function App() {
       const cached = getUser();
       if (!token) { setCarregando(false); return; }
       try {
-        const u = await api.me();
-        if (ativo) setUser(u);
+        const u: any = await api.me();
+        if (ativo) {
+          setUser(u);
+          hidratarPreferencias(u);
+        }
       } catch {
         clearSession();
         if (ativo && cached) setUser(null);
@@ -284,7 +306,7 @@ export default function App() {
 
   if (!user) return (
     <Suspense fallback={<TelaCarregando />}>
-      <Login onSuccess={setUser} />
+      <Login onSuccess={(u: any) => { setUser(u); hidratarPreferencias(u); }} />
     </Suspense>
   );
 

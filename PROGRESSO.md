@@ -1189,6 +1189,41 @@ Sessão longa de polimento + features pós-MVP. **15 commits no main.**
 3. Próximo deploy do backend instala o cron automaticamente
 4. Verificar em Vercel → projeto backend → Crons que o job apareceu
 
+### Sessão — 2026-05-19 (continuação — sync de preferências de UI entre dispositivos)
+
+Trilha (f) da fila de candidatos: migrar tema/aparência + sidebar collapsed do `localStorage` para o backend, sincronizando entre dispositivos do mesmo usuário. Validação visual dos 11 itens das sessões anteriores (UX PDV + Conversão CRM) foi confirmada **OK** pelo usuário antes de começar.
+
+**Schema** (`backend/prisma/schema.prisma`): novo campo `preferencias Json?` no `User` (intencionalmente flexível — evoluir sem migration por chave). Aplicado via `prisma db push` no Neon.
+
+**Backend** (`backend/src/controllers/authController.js`):
+- `me()` agora inclui `preferencias` no select e no payload.
+- `login()` devolve `preferencias` dentro de `user` (permite hidratar antes mesmo do primeiro `/me`).
+- Novo handler `salvarPreferencias(req, res)` faz **merge raso** (`{...atual, ...body}`) — chamadas parciais (só `{sidebarCollapsed:true}`) preservam outras chaves. Limite 16KB no payload (413). Rejeita array/non-object com 400.
+- `PUT /auth/preferencias` registrado em `backend/src/routes/auth.js`.
+- Adicionado a `ROTAS_IGNORADAS` no middleware de auditoria (preferência de UI não é evento auditável — viraria ruído).
+
+**Frontend:**
+- `src/lib/api.ts`: novo `api.salvarPreferencias(body)`.
+- `src/lib/theme.ts`:
+  - `salvarAparencia(estado)` chama `api.salvarPreferencias({aparencia: estado})` **debounced 500ms** (suporta arrastar sliders sem floodar a rede). Best-effort: falha de rede não bloqueia UI. Respeita `estado.sincronizar` (já existia no estado).
+  - Nova `hidratarAparenciaDoUser(remoto)` aplica preferências do servidor sobre localStorage + chama `aplicarAparencia`. Silencioso — não re-dispara PUT (evita loop entre abas/dispositivos).
+- `src/App.tsx`:
+  - `salvarPreferenciaSidebar(collapsed)` ganhou PUT debounced 400ms (escrita otimista no localStorage).
+  - Nova função `hidratarPreferencias(u)` aplica `aparencia` + `sidebarCollapsed` vindos do servidor.
+  - Chamada após `await api.me()` no boot e dentro do `Login.onSuccess` (cobre os 2 caminhos de chegada do user).
+
+**Smoke-test (rodado contra Neon, autenticado como admin):**
+```
+GET /auth/me                                       → preferencias: null
+PUT /auth/preferencias {aparencia, sidebarCollapsed} → 200, preferencias completas
+GET /auth/me                                       → preferencias persistidas
+PUT /auth/preferencias {sidebarCollapsed:false}   → merge raso preserva aparencia
+PUT /auth/preferencias [1,2,3]                     → 400 (array recusado)
+```
+TypeScript `npx tsc --noEmit` limpo. `npm run build` verde (apenas warnings pré-existentes de chunk size em Relatorios/RelatorioComissoes).
+
+**Consequência prática:** trocar de máquina ou navegador agora preserva tema, acento, densidade, fontSize, radius, reduzirMovimento, sublinharLinks, modoAutomatico e estado da sidebar — antes ficavam todos em `localStorage`. Fechou item (f) da próxima decisão. Lacuna registrada no PROGRESSO ("Preferências de UI no servidor") agora **resolvida**.
+
 ---
 
 ## Onde paramos
@@ -1297,7 +1332,7 @@ Extensão do cadastro de Fornecedores para conformidade NF-e — espelha o que a
 - **Permissões:** quando um vendedor sem `DASHBOARD` é redirecionado pelo `useEffect`, há um flicker breve (mostra a tela errada por ~1 frame). Fix opcional: usar `podeVer(tela)` direto na renderização para evitar render inicial.
 - **Anexos do Financeiro:** ao deletar uma conta (com `prisma.contaPagar.delete`), o cascade do DB remove o registro `Anexo` mas o arquivo físico em `backend/uploads/` fica órfão. Adicionar limpeza do disco antes do delete da conta.
 - **Recorrência:** alterar uma conta-mãe (1/N) não propaga para as filhas. Não há UI para "editar série" nem "cancelar todas as parcelas restantes" — cada parcela é tratada individualmente após a criação.
-- **Preferências de UI no servidor:** tema (`gestao_tema`) e estado da sidebar (`gestao_sidebar_collapsed`) vivem em `localStorage`. Os commits têm TODO explícito para sync via `PUT /auth/preferencias` — endpoint ainda **não existe**. Consequência: ao trocar de máquina/navegador, o usuário perde o tema e a sidebar volta expandida.
+- ~~**Preferências de UI no servidor:** tema (`gestao_tema`) e estado da sidebar (`gestao_sidebar_collapsed`) vivem em `localStorage`. Os commits têm TODO explícito para sync via `PUT /auth/preferencias` — endpoint ainda **não existe**. Consequência: ao trocar de máquina/navegador, o usuário perde o tema e a sidebar volta expandida.~~ ✅ **Resolvido em 2026-05-19** — `User.preferencias Json?` + `PUT /auth/preferencias` com merge raso; frontend hidrata em `me()` e `login()`, sync debounced em `salvarAparencia` (500ms) e `salvarPreferenciaSidebar` (400ms).
 - **Auditoria do Reset Total:** `POST /admin/reset` apaga arquivos físicos de `backend/uploads/` em best-effort, sem log estruturado de "quem executou, quando, quantos registros". Fácil de adicionar (um `console.log` ou tabela `AuditLog`).
 
 ### Próxima decisão (a ser tomada)
@@ -1308,10 +1343,11 @@ Extensão do cadastro de Fornecedores para conformidade NF-e — espelha o que a
 - ✅ UX review completo do PDV (12 itens, 7 commits — codificação cromática F1-F6, busca prominente, atalhos Alt+digit, estado vazio, breakpoints, cards SVC/crítico, aba Histórico, atalhos físicos, ring de foco, WCAG tema claro)
 - ✅ **(a)** Cron automático das automações — `d8b6ba9`. Falta apenas setar `CRON_SECRET` em produção
 - ✅ **(d)** Conversão Oportunidade GANHA → Venda — `6b60104`. Wiring completo, schema já antecipava
+- ✅ Validação visual dos 11 itens das sessões anteriores (UX PDV + Conversão CRM) — usuário confirmou OK
+- ✅ **(f)** Sync de preferências de UI entre dispositivos — `User.preferencias Json?` + `PUT /auth/preferencias` (merge raso); frontend hidrata em `me()`/`login()`, sync debounced em tema (500ms) e sidebar (400ms)
 
 **Próximos candidatos (em ordem de ROI estimado):**
 
-- **(f)** `PUT /auth/preferencias` (campo `User.preferencias Json?`) e migrar tema/sidebar do `localStorage` para a conta — destrava sync entre dispositivos. **Médio esforço, alto valor** (operadores que alternam entre máquinas perdem config hoje).
 - **(b)** Variável `{{linkNps}}` nos templates de mensagem — útil para mandar pesquisa via WhatsApp direto da tela do cliente. **Pequeno esforço, médio valor**. Hoje o link vem da tela NPS.
 - **(c)** Lead scoring no PerfilClienteModal — endpoint `GET /clientes/:id/score` que calcula só para um cliente. **Pequeno esforço, médio valor**. Hoje o score só aparece em Segmentos (cálculo em lote).
 - **(e)** Análise de motivos de perda — agregação `GROUP BY motivoPerda` em Oportunidades. **Pequeno esforço, baixo-médio valor** (já existe no Funil).

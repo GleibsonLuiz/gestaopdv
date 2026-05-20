@@ -147,6 +147,19 @@ d:/gestao-pdv/
 
 ## Histórico de sessões
 
+### Sessão — 2026-05-20 (Chip-cluster de módulos em Funcionários — item (i) da pendência)
+
+Última pendência da fila pós-MVP: a tabela de Funcionários mostrava só `role` (Admin/Gerente/Vendedor), exigindo abrir o modal de edição para ver quais módulos cada funcionário podia acessar. Ruim para auditoria visual rápida.
+
+**Entregue:**
+- [src/Funcionarios.tsx:14-69](src/Funcionarios.tsx#L14-L69) — novo componente `ChipsModulos({ role, permissoes })`:
+  - **ADMIN**: 1 chip único em roxo `★ Acesso total · 17 módulos` com `title` explicativo.
+  - **GERENTE/VENDEDOR sem módulos**: texto itálico discreto `Sem módulos liberados`.
+  - **GERENTE/VENDEDOR com módulos**: até 4 chips com `ícone + label` do `MODULOS` de [src/lib/permissoes.ts](src/lib/permissoes.ts), e se houver mais, chip extra `+N` em accent com `title` listando o restante (ex: `Estoque, Inventário, Compras`).
+- [src/Funcionarios.tsx:163](src/Funcionarios.tsx#L163) — `<ChipsModulos>` plugado abaixo do nome (mesma célula da coluna 1). Grid mantido em 6 colunas; `alignItems: center` cuida do realinhamento vertical das outras células.
+
+Sem mudanças no backend (a lista de `permissoes` já vinha em `listarFuncionarios`). Reaproveita `MODULOS` (label + ícone) que já era source-of-truth do form de permissões. Build OK em 2.9s. Fecha o item **(i)** — última lacuna registrada da lista pós-MVP.
+
 ### Sessão — 2026-05-20 (Auditoria estruturada do Reset Total — item (h) da pendência)
 
 Lacuna registrada desde a sessão de 2026-04-30: `POST /admin/reset` apagava milhares de registros e arquivos físicos sem deixar trilha estruturada. O middleware genérico de auditoria capturava o POST, mas com `acao=CREATE`, `modulo=FUNCIONARIOS`, e `dadosDepois = { confirmacao: "CONFIRMAR_RESET" }` — sem contagens reais. Fechei essa lacuna usando o `LogAuditoria` que já existe (sem nova tabela).
@@ -1532,9 +1545,10 @@ Extensão do cadastro de Fornecedores para conformidade NF-e — espelha o que a
 - ✅ **(g)** Filtro por cliente no Relatório de Vendas (2026-05-20) — `CampoSelectBusca` adicionado entre Forma de pagamento e Vendedor; `clienteId` propagado para `api.relatorioVendas` (backend já aceitava em [relatoriosController.js:35](backend/src/controllers/relatoriosController.js#L35)). Build OK em 3.6s.
 - ✅ **(e)** Análise de motivos de perda CRM — **já estava implementado** no commit `afc85be` (sequência Relatórios CRM 7/7, 2026-05-15). Componente `<RelatorioPerdasCrm>` em [Relatorios.tsx:1499](src/Relatorios.tsx#L1499) cobre 7 KPIs, ranking por motivo/vendedor/origem, evolução mensal, top vazamentos, heatmap motivo×origem e detalhamento, com filtros (período/responsável/origem/busca livre) e export PDF.
 - ✅ **(h)** Auditoria estruturada do Reset Total (2026-05-20) — `registrarEvento(RESET_TOTAL/SISTEMA)` no `adminController` com mensagem + `dadosDepois` (totalRegistros, arquivosRemovidos, breakdown por modelo). `/admin/reset` removido do log automático para evitar duplicação. `Logs.tsx` ganhou badge vermelho-escuro `⚠ RESET_TOTAL`.
+- ✅ **(i)** Chip-cluster de módulos em Funcionários (2026-05-20) — componente `ChipsModulos` abaixo do nome. ADMIN: chip único roxo "Acesso total · N módulos". Outros: até 4 chips `ícone+label` + chip `+N` em accent (tooltip lista o restante).
 
 **Próximos candidatos (em ordem de ROI estimado):**
-- **(i)** Chip-cluster na tabela de Funcionários mostrando módulos. **Pequeno**.
+- Lista esvaziada — todas as pendências da fila pós-MVP foram fechadas. Próximos passos vão depender de novas decisões de produto.
 
 **Ainda pendentes de validação visual** (sessão 2026-05-19 entregou 7 commits de UX no PDV, mas nenhum foi validado no navegador):
 - Abrir `http://localhost:5173`, fazer login, ir pro PDV e percorrer o checklist de 12 pontos da sessão anterior (codificação cromática, busca prominente, atalhos Alt+digit em cards vazios, estado vazio orientativo, cards SERVIÇO/crítico, aba Histórico, atalhos rodapé como teclas, ring de foco com Tab, breakpoints 1024×768, banner de conversão Oportunidade→Venda)

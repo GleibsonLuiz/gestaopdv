@@ -11,6 +11,61 @@ const ROLE_INFO: Record<string, { label: string; cor: string; icone: string }> =
   VENDEDOR: { label: "Vendedor", cor: C.green,  icone: "●" },
 };
 
+const MAPA_MODULOS = new Map(MODULOS.map((m) => [m.id, m]));
+const MAX_CHIPS_VISIVEIS = 4;
+
+const chipBase: CSSProperties = {
+  fontSize: 10, fontWeight: 600, padding: "2px 6px", borderRadius: 4,
+  background: C.surface, color: C.muted, border: `1px solid ${C.border}`,
+  display: "inline-flex", alignItems: "center", gap: 3, lineHeight: 1.4,
+  whiteSpace: "nowrap",
+};
+
+function ChipsModulos({ role, permissoes }: { role: string; permissoes: string[] | null | undefined }) {
+  if (role === "ADMIN") {
+    return (
+      <div style={{ marginTop: 4, display: "flex" }}>
+        <span style={{ ...chipBase, background: C.purple + "22", color: C.purple, border: `1px solid ${C.purple}55` }}
+          title="Admin tem acesso a todos os módulos automaticamente">
+          ★ Acesso total · {MODULOS.length} módulos
+        </span>
+      </div>
+    );
+  }
+  const lista = Array.isArray(permissoes) ? permissoes : [];
+  if (lista.length === 0) {
+    return (
+      <div style={{ marginTop: 4, fontSize: 11, color: C.muted, fontStyle: "italic" }}>
+        Sem módulos liberados
+      </div>
+    );
+  }
+  const visiveis = lista.slice(0, MAX_CHIPS_VISIVEIS);
+  const restante = lista.slice(MAX_CHIPS_VISIVEIS);
+  const tituloRestante = restante
+    .map((id) => MAPA_MODULOS.get(id as any)?.label || id)
+    .join(", ");
+  return (
+    <div style={{ marginTop: 4, display: "flex", flexWrap: "wrap", gap: 4 }}>
+      {visiveis.map((id) => {
+        const m = MAPA_MODULOS.get(id as any);
+        return (
+          <span key={id} style={chipBase} title={m?.label || id}>
+            <span style={{ fontSize: 10 }}>{m?.icone || "•"}</span>
+            {m?.label || id}
+          </span>
+        );
+      })}
+      {restante.length > 0 && (
+        <span style={{ ...chipBase, fontWeight: 700, color: C.accent, borderColor: C.accent + "55" }}
+          title={tituloRestante}>
+          +{restante.length}
+        </span>
+      )}
+    </div>
+  );
+}
+
 const fmtData = (iso: any) => {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("pt-BR");
@@ -159,6 +214,7 @@ export default function Funcionarios({ user }: any) {
                     }}>VOCÊ</span>
                   )}
                 </div>
+                <ChipsModulos role={f.role} permissoes={f.permissoes} />
               </div>
               <div style={{ color: C.muted, fontSize: 12 }}>{f.email}</div>
               <div>

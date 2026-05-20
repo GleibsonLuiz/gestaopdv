@@ -560,6 +560,24 @@ export const api = {
   salvarConfiguracaoImpressora: (dados: unknown) =>
     request("/configuracao-impressora", { method: "PUT", body: dados }),
 
+  // ==================== MERCADO PAGO POINT (MAQUININHA) ====================
+  // GET retorna estado da config (token sempre mascarado). PUT permite
+  // partial update: omitir um campo o preserva, passar "" em mpAccessToken
+  // limpa a credencial. mpAtivo controla se o botao "Cobrar na maquininha"
+  // aparece no PDV.
+  obterConfigMp: () => request("/pagamentos-mp/config"),
+  salvarConfigMp: (dados: {
+    mpAccessToken?: string | null;
+    mpDeviceId?: string | null;
+    mpUserIdMp?: string | null;
+    mpAtivo?: boolean;
+  }) => request("/pagamentos-mp/config", { method: "PUT", body: dados }),
+  cobrarMp: (dados: { tipo: "CREDIT" | "DEBIT" | "PIX"; vendaPayload: unknown }) =>
+    request("/pagamentos-mp/cobrar", { method: "POST", body: dados }),
+  statusMp: (id: string) => request(`/pagamentos-mp/status/${id}`),
+  cancelarMp: (id: string) =>
+    request(`/pagamentos-mp/status/${id}/cancelar`, { method: "POST" }),
+
   // ==================== CAIXA ====================
   obterCaixaAtual: () => request("/caixas/atual"),
   obterPainelPDV: () => request("/pdv/inicio"),

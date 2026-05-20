@@ -39,6 +39,7 @@ import tenantsRoutes from "./routes/tenants.js";
 import empresaRoutes from "./routes/empresa.js";
 import adminMasterRoutes from "./routes/admin-master.js";
 import notificacoesRoutes from "./routes/notificacoes.js";
+import pagamentosMpRoutes from "./routes/pagamentos-mp.js";
 import { auditoria } from "./middlewares/auditoria.js";
 
 dotenv.config();
@@ -115,6 +116,7 @@ app.use("/nps", npsRoutes);
 app.use("/comissoes", comissoesRoutes);
 app.use("/tarefas", tarefasRoutes);
 app.use("/fidelidade", fidelidadeRoutes);
+app.use("/pagamentos-mp", pagamentosMpRoutes);
 app.use("/logs", logsRoutes);
 // Cron endpoints — auth via header Bearer ${CRON_SECRET}, fora do middleware
 // authRequired/permissoes. Pensado pra Vercel Cron / scheduler externo.

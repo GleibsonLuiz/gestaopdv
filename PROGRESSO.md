@@ -147,6 +147,54 @@ d:/gestao-pdv/
 
 ## Histórico de sessões
 
+### Sessão — 2026-05-19 (Mercado Pago Point — integração com maquininha física)
+
+Nova feature de produto (fora das 13 etapas originais): cobrança via maquininha física do Mercado Pago (API Point / Modo PDV). Decisões de produto confirmadas via `AskUserQuestion`: token cifrado AES-256-GCM no banco, venda criada apenas após aprovação no webhook (sem novo status na enum), polling no PDV como fonte de UI (webhook continua sendo verdade), tipos CREDIT/DEBIT/PIX.
+
+**Entregue:**
+
+- **Schema (`backend/prisma/schema.prisma` + migration `20260519010000_pagamento_mercado_pago`):**
+  - 5 campos novos em `ConfiguracaoEmpresa`: `mpAccessTokenEnc` (token cifrado), `mpDeviceId`, `mpUserIdMp`, `mpWebhookSecret`, `mpAtivo`.
+  - 2 enums novos: `StatusIntencaoMP` (PENDING/APPROVED/REJECTED/CANCELED/ERROR), `TipoPagamentoMP` (CREDIT/DEBIT/PIX).
+  - 1 tabela nova: `IntencaoPagamentoMP` (id, status, tipo, valor em centavos, intentId, deviceId, vendaPayloadJson, vendaId opcional, detalhe, rawWebhook, userId, caixaId opcional, tenantId). Indexada por `(tenantId, status)` e `(tenantId, createdAt)`.
+  - `IntencaoPagamentoMP` adicionada a `MODELOS_COM_TENANT` em `backend/src/lib/prisma.js` (isolamento multi-tenant automático).
+
+- **Backend libs:**
+  - [backend/src/lib/cripto.js](backend/src/lib/cripto.js) — AES-256-GCM com IV aleatório + auth tag, formato `iv:tag:ciphertext` hex. Helper `mascarar()` para retornar token em GETs sem expor o valor inteiro. Exige env `CRIPTO_SECRET` (32 bytes hex).
+  - [backend/src/lib/mercadoPago.js](backend/src/lib/mercadoPago.js) — wrapper HTTP da API Point (POST `/devices/{id}/payment-intents`, GET `/payment-intents/{id}`, DELETE `/devices/{id}/payment-intents/{id}`, GET `/payments/{id}`). Usa `fetch` nativo (Node 18+, sem dependência nova). Classe `MercadoPagoError` com status e body.
+
+- **Backend controller + rotas:**
+  - [backend/src/controllers/pagamentoMpController.js](backend/src/controllers/pagamentoMpController.js) — 6 funções: `obterConfig`, `salvarConfig` (partial update; "" limpa, omitido preserva), `cobrar` (sobrescreve `pagamentos[]` mapeando tipo→forma CARTAO_CREDITO/CARTAO_DEBITO/PIX), `obterStatus` (com fallback de polling direto no MP), `cancelar`, `webhook` (rota pública, resolve tenant por `external_reference`).
+  - Webhook chama `vendaController.criar` com req/res falsos dentro de `tenantStorage.run({ tenantId })` — Venda real só é gerada quando MP retorna approved. Idempotente: se intent já não está PENDING, ignora.
+  - [backend/src/routes/pagamentos-mp.js](backend/src/routes/pagamentos-mp.js) — webhook ANTES de `authRequired`. Mutações: ADMIN/GERENTE em `/config`, `requirePermissao("PDV")` em `/cobrar` `/status` `/cancelar`.
+  - [backend/src/server.js](backend/src/server.js) — `app.use("/pagamentos-mp", pagamentosMpRoutes)`.
+
+- **Frontend:**
+  - [src/lib/api.ts](src/lib/api.ts) — 5 endpoints novos: `obterConfigMp`, `salvarConfigMp`, `cobrarMp`, `statusMp`, `cancelarMp`.
+  - [src/components/MaquininhaMpModal.tsx](src/components/MaquininhaMpModal.tsx) — componente novo (~360 linhas), 2 telas: seleção de tipo + acompanhar com polling a cada 2s. Estados APPROVED/REJECTED/CANCELED/ERROR com mensagens contextuais. Esc bloqueado enquanto PENDING (evita fechar modal com maquininha cobrando).
+  - [src/PDV.tsx](src/PDV.tsx) — 4 mudanças cirúrgicas: import do modal, estado `configMp`/`mpAberto`, fetch de config no mount, botão "📲 Maquininha MP" no rodapé do modal de pagamento (só visível se `mpAtivo && configurada && total>0`), render do modal com payload completo + callback `onConcluido` que limpa carrinho e atualiza estoques locais (mesmo padrão do `confirmarPagamento`).
+  - [src/Configuracoes.tsx](src/Configuracoes.tsx) — novo bloco `<BlocoMaquininhaMP>` fora do form principal. Inputs para ACCESS_TOKEN (password, placeholder mostra mascarado quando já configurado), DEVICE_ID, USER_ID (opcional), checkbox "Ativa". Botões "Remover credenciais" + "Salvar". Card informativo com 5 passos para configurar pela 1ª vez quando ainda não configurada.
+
+**Arquitetura escolhida (em desvio à proposta inicial):**
+
+Em vez de adicionar `AGUARDANDO_PAGAMENTO` em `StatusVenda` (mudança de enum em DB de produção, impacta filtros), preferi tabela separada `IntencaoPagamentoMP` que armazena o `vendaPayloadJson`. Vantagens: (a) `vendas.status = CONCLUIDA` mantém o mesmo significado em todos os relatórios sem ajuste; (b) tentativas rejeitadas ficam auditadas mas não viram "venda cancelada" no relatório; (c) `vendaController.criar` permanece intocado — reusado via objeto req/res falso dentro de `tenantStorage.run`. Trade-off: caso o webhook nunca chegue, o operador precisa intervir manualmente — mitigado por fallback de polling direto no MP a cada chamada de `/status`.
+
+**Pendências de operação (para o usuário):**
+
+1. Fechar o backend dev (algum processo segurou o `query_engine-windows.dll.node` durante a sessão) e rodar:
+   ```
+   cd backend && npx prisma generate && npx prisma migrate deploy
+   ```
+2. Adicionar `CRIPTO_SECRET` no `.env` do backend (32 bytes hex). Gerar com:
+   ```
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   ```
+3. Em produção, configurar webhook no painel MP apontando para `https://SEU-BACKEND/pagamentos-mp/webhook` (eventos `payment`). Em dev, o polling do PDV já cobre o caso de webhook não chegar.
+
+**Validação local:** `npm run build` (frontend) passou em 2.6s; `tsc --noEmit` (frontend) limpo; typecheck do backend só tem erros pré-existentes em `inventarioController.ts` (sem relação com MP).
+
+---
+
 ### Sessão — 2026-05-16 (Admin Master — ETAPA 13: Limites por plano com enforcement)
 
 Fechamento da onda admin-master. ETAPAs 10-12 já tinham introduzido o conceito de plano (TRIAL/FREE/STARTER/PRO/ENTERPRISE) e expiraEm no model `Empresa`, mas só como metadado — nada bloqueava o uso real. ETAPA 13 fecha o ciclo: **limites por plano efetivamente aplicados** + **snapshot de uso visível pro tenant**.
@@ -1334,9 +1382,11 @@ TypeScript `tsc --noEmit` limpo, `npm run build` verde.
 
 ## Onde paramos
 
-**🎉 Projeto completo — 14/14 etapas MVP + 10 melhorias pós-MVP + 10 prioridades CRM + 9/9 etapas Multi-Tenant + 13/13 etapas Admin Master entregues.**
+**🎉 Projeto completo — 14/14 etapas MVP + 10 melhorias pós-MVP + 10 prioridades CRM + 9/9 etapas Multi-Tenant + 13/13 etapas Admin Master + integração Mercado Pago Point entregues.**
 
-**Sessão 2026-05-19 entregou:** 7 commits de UX no PDV (review técnico completo) + 1 commit de feature CRM (Conversão Oportunidade→Venda) + 1 commit de automação (Cron diário Vercel). 15 commits em main, todos com typecheck+build verdes.
+**Sessão 2026-05-19 (Mercado Pago Point):** primeira integração com hardware de pagamento. Schema + migration + 2 libs (cripto AES-256-GCM + cliente HTTP MP) + 1 controller (6 funções) + 1 rota (com webhook público) + 5 endpoints na api.ts + 1 componente novo `MaquininhaMpModal.tsx` + bloco de config em Configuracoes + 4 mudanças cirúrgicas no PDV. Build do frontend OK em 2.6s. Pendente para o usuário: rodar `npx prisma generate && npx prisma migrate deploy` com o backend dev fechado, e setar `CRIPTO_SECRET` no `.env`.
+
+**Sessão anterior (2026-05-19) entregou:** 7 commits de UX no PDV (review técnico completo) + 1 commit de feature CRM (Conversão Oportunidade→Venda) + 1 commit de automação (Cron diário Vercel). 15 commits em main, todos com typecheck+build verdes.
 
 Em 2026-05-16, **Fornecedores NF-e ready**: extensão do cadastro de fornecedores espelhando o que a ETAPA 14 fez em Produto. 16 campos novos no schema (nomeFantasia, tipoPessoa, endereço segregado completo com códigos IBGE, ie+ieIsenta, im, indIEDest 1/2/9, crt 1/2/3, emailNFe). Migration aplicada no Neon. Controller valida regras SEFAZ (indIEDest=1 exige IE; indIEDest=2 exige IE nula). Form refatorado em 3 seções (Dados básicos / Fiscais / Endereço), toggle PF↔PJ que troca a máscara do documento, ViaCEP estendido para popular código IBGE do município, tabela estática de 27 UFs para código IBGE da UF. Stub `consultarCnpjCadastral` deixado pronto para futura integração com BrasilAPI.
 

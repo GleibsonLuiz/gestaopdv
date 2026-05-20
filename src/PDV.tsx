@@ -14,6 +14,7 @@ import { GerenciarFormasModal } from "./Financeiro";
 import { useModalKeys } from "./lib/modalKeys";
 import ActionsMenu from "./components/ActionsMenu";
 import SelectBusca from "./components/SelectBusca";
+import MaquininhaMpModal from "./components/MaquininhaMpModal";
 
 function urlImagem(imagem) {
   if (!imagem) return null;
@@ -358,7 +359,12 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
 
   const [abrirCaixaAberto, setAbrirCaixaAberto] = useState(false);
 
-  const algumaModalAberta = pagamentoAberto || cancelarAberto || !!reciboAberto || !!qtdModalProduto || abrirCaixaAberto;
+  // Mercado Pago Point (maquininha fisica). configMp = null ate carregar.
+  // mpAberto controla a visibilidade do modal de cobranca.
+  const [configMp, setConfigMp] = useState(null);
+  const [mpAberto, setMpAberto] = useState(false);
+
+  const algumaModalAberta = pagamentoAberto || cancelarAberto || !!reciboAberto || !!qtdModalProduto || abrirCaixaAberto || mpAberto;
   const semCaixa = !caixaCarregando && !caixaAtual;
 
   // Reordena FORMAS por uso real (ultimos 90 dias) e reatribui os atalhos
@@ -430,6 +436,12 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
     recarregarPainel();
     recarregarFormasCustom();
     api.obterConfiguracaoFidelidade().then(setConfigFidelidade).catch(() => {});
+    // Carrega config Mercado Pago Point. Em erro (sem config ainda, 403 sem
+    // permissao) cai pro estado "nao configurada" — botao da maquininha
+    // simplesmente nao aparece.
+    api.obterConfigMp()
+      .then(setConfigMp)
+      .catch(() => setConfigMp({ configurada: false, mpAtivo: false }));
   }, [recarregarCaixa, recarregarPainel, recarregarFormasCustom]);
 
   useEffect(() => {
@@ -1908,6 +1920,21 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
               >
                 Cancelar <span className="pdv-kbd is-warn">Esc</span>
               </button>
+              {/* Cobrar na maquininha Mercado Pago — visivel so quando a empresa
+                  configurou o device (Configuracoes > Maquininha). Substitui o
+                  fluxo manual de pagamentos: cobra o TOTAL da venda via Point e
+                  a venda real e criada automaticamente quando o pagamento aprovar. */}
+              {configMp?.mpAtivo && configMp?.configurada && total > 0 && !salvando && (
+                <button
+                  type="button"
+                  onClick={() => setMpAberto(true)}
+                  className="pdv-btn-ghost"
+                  style={{ borderColor: C.green + "55", color: C.green }}
+                  title="Cobrar o total da venda na maquininha Mercado Pago"
+                >
+                  📲 Maquininha MP
+                </button>
+              )}
               <button
                 ref={finalizarRef}
                 onClick={confirmarPagamento}
@@ -1934,6 +1961,67 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
           valorRecebido={reciboAberto.valorRecebido}
           troco={reciboAberto.troco}
           onFechar={() => { setReciboAberto(null); focarBusca(); }}
+        />
+      )}
+
+      {mpAberto && (
+        <MaquininhaMpModal
+          totalReais={total}
+          // Payload de venda — backend re-executa vendaController.criar quando
+          // o webhook aprovar. Para MP usamos pagamento UNICO com a forma que
+          // mapeia para o tipo escolhido (decidido dentro do modal).
+          vendaPayload={{
+            clienteId: clienteId || null,
+            // pagamentos[]: 1 linha com o tipo final do MP. O modal sabe o tipo
+            // que o cliente escolheu — backend usa CARTAO_CREDITO/CARTAO_DEBITO/PIX
+            // como forma para que relatorios/caixa registrem corretamente.
+            // Aqui passamos placeholder PIX; o backend NAO usa este campo —
+            // o modal sobrescreve via "tipo" no body do /pagamentos-mp/cobrar
+            // e o webhook handler aplica a forma correta no payload guardado.
+            // Para o efeito de criar a venda apos aprovar, montamos pagamento
+            // unico igual ao total — split nao e suportado nesta v1 do MP.
+            pagamentos: [{
+              forma: "CARTAO_CREDITO", // o modal substituira pelo tipo escolhido
+              valor: Math.round(total * 100) / 100,
+            }],
+            desconto: descontoNum,
+            observacoes: observacoes ? observacoes.toUpperCase() : null,
+            itens: carrinho.map(it => ({
+              produtoId: it.produtoId,
+              quantidade: it.quantidade,
+              precoUnitario: it.precoUnitario,
+            })),
+            ...(clienteId && parseInt(pontosResgatando, 10) > 0
+              ? { pontosResgatar: parseInt(pontosResgatando, 10) }
+              : {}),
+            ...(oportunidadeConvertendo?.id
+              ? { oportunidadeId: oportunidadeConvertendo.id }
+              : {}),
+          }}
+          onFechar={() => setMpAberto(false)}
+          onConcluido={({ vendaNumero, valor }) => {
+            // Aprovado pela maquininha: backend ja criou a Venda. Aqui so
+            // limpamos o estado local. Como nao temos o objeto Venda completo
+            // pra abrir o ReciboModal sem outra request, simplesmente fechamos
+            // o modal e disparamos um refetch do painel — o operador inicia
+            // uma nova venda. (futuro: GET /vendas/:id e abrir recibo)
+            setMpAberto(false);
+            setPagamentoAberto(false);
+            if (oportunidadeConvertendo) setOportunidadeConvertendo(null);
+            // Atualiza estoques locais (mesmo padrao de confirmarPagamento).
+            setProdutos(prev => prev.map(p => {
+              const it = carrinho.find(c => c.produtoId === p.id);
+              if (!it) return p;
+              const novoEstoque = Math.round((Number(p.estoque) - Number(it.quantidade)) * 1000) / 1000;
+              return { ...p, estoque: novoEstoque };
+            }));
+            limparCarrinho({ refocar: false });
+            recarregarCaixa();
+            recarregarPainel();
+            // Feedback visual rapido: alerta nativo + foco volta para busca.
+            alert(`✅ Pagamento aprovado · Venda #${vendaNumero || "—"} · ${fmtBRL(valor)}`);
+            focarBusca();
+          }}
         />
       )}
 

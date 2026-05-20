@@ -448,9 +448,327 @@ export default function Configuracoes({ user }: ConfiguracoesProps) {
           </div>
         </div>
       </form>
+
+      {/* MAQUININHA MERCADO PAGO POINT — card separado com submit proprio
+          (PUT /pagamentos-mp/config). Encapsulado em <BlocoMaquininhaMP> para
+          nao inflar este componente. */}
+      <BlocoMaquininhaMP podeEditar={podeEditar} />
     </div>
   );
 }
+
+// ============ MAQUININHA MERCADO PAGO POINT ============
+//
+// Guarda credenciais MP (ACCESS_TOKEN + device_id) por tenant. O token vai
+// cifrado pelo backend (AES-256-GCM) e o GET sempre devolve mascarado.
+// Quando ativado, o PDV passa a exibir o botao "Cobrar na maquininha".
+
+interface ConfigMpResposta {
+  configurada: boolean;
+  mpAtivo: boolean;
+  mpDeviceId: string | null;
+  mpUserIdMp: string | null;
+  mpAccessTokenMascarado: string | null;
+}
+
+interface BlocoMaquininhaMPProps {
+  podeEditar: boolean;
+}
+
+function BlocoMaquininhaMP({ podeEditar }: BlocoMaquininhaMPProps) {
+  const [carregando, setCarregando] = useState(true);
+  const [cfg, setCfg] = useState<ConfigMpResposta | null>(null);
+  // tokenInput vazio significa "manter o atual" — so envia se o usuario digitar
+  // algo novo. Para LIMPAR a credencial usa o botao "Remover credencial".
+  const [tokenInput, setTokenInput] = useState("");
+  const [deviceInput, setDeviceInput] = useState("");
+  const [userInput, setUserInput] = useState("");
+  const [ativo, setAtivo] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+  const [msg, setMsg] = useState("");
+
+  function carregar() {
+    setCarregando(true);
+    api.obterConfigMp()
+      .then((raw) => {
+        const c = raw as ConfigMpResposta;
+        setCfg(c);
+        setDeviceInput(c?.mpDeviceId || "");
+        setUserInput(c?.mpUserIdMp || "");
+        setAtivo(!!c?.mpAtivo);
+      })
+      .catch((err: Error) => setErro(err.message))
+      .finally(() => setCarregando(false));
+  }
+
+  useEffect(() => { carregar(); }, []);
+
+  function flash(t: string) {
+    setMsg(t);
+    setTimeout(() => setMsg(""), 2500);
+  }
+
+  async function salvar() {
+    setErro("");
+    setSalvando(true);
+    try {
+      const body: Record<string, unknown> = {
+        mpDeviceId: deviceInput.trim() || null,
+        mpUserIdMp: userInput.trim() || null,
+        mpAtivo: ativo,
+      };
+      if (tokenInput.trim()) {
+        body.mpAccessToken = tokenInput.trim();
+      }
+      const resp = await api.salvarConfigMp(body) as ConfigMpResposta;
+      setCfg(resp);
+      setTokenInput("");
+      setAtivo(resp.mpAtivo);
+      flash("Configuração da maquininha salva");
+    } catch (err) {
+      setErro((err as Error).message);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function removerCredencial() {
+    if (!confirm("Remover credenciais da maquininha? O PDV deixará de oferecer cobrança via Mercado Pago.")) return;
+    setSalvando(true);
+    try {
+      const resp = await api.salvarConfigMp({
+        mpAccessToken: "",
+        mpDeviceId: null,
+        mpUserIdMp: null,
+        mpAtivo: false,
+      }) as ConfigMpResposta;
+      setCfg(resp);
+      setTokenInput("");
+      setDeviceInput("");
+      setUserInput("");
+      setAtivo(false);
+      flash("Credenciais removidas");
+    } catch (err) {
+      setErro((err as Error).message);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  if (carregando) {
+    return (
+      <div className="mt-5 p-5 rounded-xl border" style={{ background: C.card, borderColor: C.border }}>
+        <div className="text-gp-muted text-[12px]">Carregando configuração da maquininha…</div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="mt-5 p-5 rounded-xl border"
+      style={{ background: C.card, borderColor: C.border }}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <div className="text-gp-white font-extrabold text-[15px] flex items-center gap-2">
+            📲 MAQUININHA MERCADO PAGO POINT
+            {cfg?.configurada && cfg?.mpAtivo && (
+              <span style={{
+                fontSize: 10, padding: "2px 8px", borderRadius: 999,
+                background: C.green + "22", color: C.green, border: `1px solid ${C.green}55`,
+              }}>ATIVA</span>
+            )}
+            {cfg?.configurada && !cfg?.mpAtivo && (
+              <span style={{
+                fontSize: 10, padding: "2px 8px", borderRadius: 999,
+                background: C.yellow + "22", color: C.yellow, border: `1px solid ${C.yellow}55`,
+              }}>CONFIGURADA · PAUSADA</span>
+            )}
+            {!cfg?.configurada && (
+              <span style={{
+                fontSize: 10, padding: "2px 8px", borderRadius: 999,
+                background: C.muted + "22", color: C.muted, border: `1px solid ${C.muted}55`,
+              }}>NÃO CONFIGURADA</span>
+            )}
+          </div>
+          <div className="text-gp-muted text-[12px] mt-[2px]">
+            Integração com maquininha física do Mercado Pago (API Point).
+            Quando ativa, o PDV exibe um botão para cobrar na maquininha
+            sem precisar digitar a forma de pagamento manualmente.
+          </div>
+        </div>
+      </div>
+
+      {msg && <div style={mpAlert(C.green)}>{msg}</div>}
+      {erro && <div style={mpAlert(C.red)}>{erro}</div>}
+
+      <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr" }}>
+        <div>
+          <label className="block text-gp-muted text-[11px] mb-1 font-semibold">
+            ACCESS_TOKEN (chave de produção)
+          </label>
+          <input
+            type="password"
+            value={tokenInput}
+            onChange={(e) => setTokenInput(e.target.value)}
+            disabled={!podeEditar}
+            placeholder={cfg?.mpAccessTokenMascarado
+              ? `Atual: ${cfg.mpAccessTokenMascarado}`
+              : "APP_USR-... (não preencha para manter o atual)"}
+            autoComplete="off"
+            style={mpInput(podeEditar)}
+          />
+          <div className="text-gp-muted text-[10px] mt-1">
+            Obtido em <b>Mercado Pago &gt; Suas integrações &gt; Credenciais</b>.
+            O token é guardado cifrado (AES-256-GCM) e nunca volta para o navegador.
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-gp-muted text-[11px] mb-1 font-semibold">
+            DEVICE_ID (identificador da maquininha)
+          </label>
+          <input
+            value={deviceInput}
+            onChange={(e) => setDeviceInput(e.target.value)}
+            disabled={!podeEditar}
+            placeholder="Ex.: PAX_A910__SMART... ou GERTEC_MP35P..."
+            style={mpInput(podeEditar)}
+          />
+          <div className="text-gp-muted text-[10px] mt-1">
+            Encontrado em <b>Mercado Pago &gt; Maquininhas &gt; Configurar dispositivo</b>.
+            Cada empresa tem 1 device nesta versão.
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 mt-3" style={{ gridTemplateColumns: "1fr 1fr" }}>
+        <div>
+          <label className="block text-gp-muted text-[11px] mb-1 font-semibold">
+            USER_ID Mercado Pago (opcional)
+          </label>
+          <input
+            value={userInput}
+            onChange={(e) => setUserInput(e.target.value)}
+            disabled={!podeEditar}
+            placeholder="Ex.: 123456789"
+            style={mpInput(podeEditar)}
+          />
+          <div className="text-gp-muted text-[10px] mt-1">
+            Acelera o roteamento de webhooks quando o MP envia o user_id.
+          </div>
+        </div>
+
+        <label className="flex items-center gap-2 mt-6" style={{
+          opacity: podeEditar ? 1 : 0.6,
+          cursor: podeEditar ? "pointer" : "not-allowed",
+        }}>
+          <input
+            type="checkbox"
+            checked={ativo}
+            onChange={(e) => setAtivo(e.target.checked)}
+            disabled={!podeEditar}
+            style={{ width: 18, height: 18 }}
+          />
+          <span style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>
+            Ativa para cobrança no PDV
+          </span>
+        </label>
+      </div>
+
+      {podeEditar && (
+        <div className="flex justify-end gap-2 mt-4">
+          {cfg?.configurada && (
+            <button
+              type="button"
+              onClick={removerCredencial}
+              disabled={salvando}
+              style={mpBtnPerigo}
+            >
+              Remover credenciais
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={salvar}
+            disabled={salvando}
+            style={{
+              ...mpBtnPrimario,
+              background: salvando ? C.muted : `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+              cursor: salvando ? "default" : "pointer",
+            }}
+          >
+            {salvando ? "Salvando…" : "💾 Salvar maquininha"}
+          </button>
+        </div>
+      )}
+
+      {!cfg?.configurada && (
+        <div
+          className="mt-4 p-3 rounded-[10px]"
+          style={{ background: C.accent + "11", border: `1px solid ${C.accent}33`, fontSize: 12, color: C.text, lineHeight: 1.5 }}
+        >
+          <b style={{ color: C.accent }}>Como configurar pela primeira vez:</b>
+          <ol style={{ marginTop: 6, paddingLeft: 18 }}>
+            <li>Entre em <b>Mercado Pago &gt; Suas integrações</b> e crie um aplicativo do tipo "Pagamentos in-person / Point".</li>
+            <li>Copie o <b>ACCESS_TOKEN</b> de produção (começa com <code>APP_USR-</code>).</li>
+            <li>No app Mercado Pago, vá em <b>Maquininhas</b> e ative o <b>Modo PDV / Integração</b> — anote o DEVICE_ID exibido.</li>
+            <li>Cole os dois aqui, marque "Ativa" e salve.</li>
+            <li>Configure o webhook em <b>MP &gt; Webhooks</b> apontando para <code>https://SEU-BACKEND/pagamentos-mp/webhook</code> (eventos: <i>payment</i>).</li>
+          </ol>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function mpInput(habilitado: boolean): CSSProperties {
+  return {
+    width: "100%",
+    background: habilitado ? C.surface : C.bg,
+    border: `1px solid ${C.border}`,
+    borderRadius: 8,
+    padding: "9px 12px",
+    color: habilitado ? C.text : C.muted,
+    fontSize: 13,
+    outline: "none",
+    boxSizing: "border-box",
+    cursor: habilitado ? "text" : "not-allowed",
+  };
+}
+
+function mpAlert(cor: string): CSSProperties {
+  return {
+    marginBottom: 12,
+    padding: "10px 14px",
+    borderRadius: 8,
+    background: cor + "22",
+    border: `1px solid ${cor}55`,
+    color: cor,
+    fontSize: 13,
+  };
+}
+
+const mpBtnPrimario: CSSProperties = {
+  color: "#fff",
+  border: "none",
+  borderRadius: 8,
+  padding: "10px 20px",
+  fontWeight: 700,
+  fontSize: 13,
+};
+
+const mpBtnPerigo: CSSProperties = {
+  background: "transparent",
+  border: `1px solid ${C.red}55`,
+  color: C.red,
+  borderRadius: 8,
+  padding: "10px 18px",
+  fontWeight: 600,
+  fontSize: 13,
+  cursor: "pointer",
+};
 
 function Secao({ titulo, children }: { titulo: string; children: ReactNode }) {
   return (

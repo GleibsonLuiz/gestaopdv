@@ -25,6 +25,27 @@ enum StatusVenda {
   EM_EDICAO
 }
 
+// Ciclo de vida de uma intencao de cobranca enviada para a maquininha do
+// Mercado Pago (API Point). PENDING = enviada e aguardando, APPROVED =
+// MP confirmou via webhook (gera Venda real), REJECTED = recusada pelo
+// emissor, CANCELED = cancelada pelo operador ou expirou no device,
+// ERROR = falha ao comunicar com a API antes de chegar no device.
+enum StatusIntencaoMP {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELED
+  ERROR
+}
+
+// Tipo de pagamento que o operador escolheu antes de enviar para a maquininha.
+// Mapeia para o body { payment.type, payment.installments } do Point API.
+enum TipoPagamentoMP {
+  CREDIT
+  DEBIT
+  PIX
+}
+
 enum StatusConta {
   PENDENTE
   PAGA
@@ -307,6 +328,7 @@ model Empresa {
   notificacoesRecebidas  Notificacao[]
   inventarios            Inventario[]
   inventarioItens        InventarioItem[]
+  intencoesPagamentoMP   IntencaoPagamentoMP[]
 
   @@map("empresas")
 }
@@ -375,6 +397,7 @@ model User {
   notificacoesCriadas      Notificacao[]           @relation("NotificacaoCriador")
   notificacoesLidas        NotificacaoLida[]
   inventarios              Inventario[]
+  intencoesPagamentoMP     IntencaoPagamentoMP[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -990,6 +1013,7 @@ model Caixa {
 
   vendas        Venda[]
   movimentacoes MovimentacaoCaixa[]
+  intencoesMP   IntencaoPagamentoMP[]
 
   @@unique([tenantId, numero])
   @@index([userId, status])
@@ -1017,6 +1041,21 @@ model ConfiguracaoEmpresa {
   logotipo     String?
   observacoes  String?
   tipoCaixa    TipoCaixa @default(INDEPENDENTE)
+
+  // ============ MERCADO PAGO POINT ============
+  // Credenciais da maquininha fisica (1 device por tenant — para multiplos
+  // devices basta replicar este modelo no futuro). mpAccessTokenEnc guarda o
+  // token PROD do MP cifrado com AES-256-GCM (lib/cripto.js). NUNCA expor
+  // valor decifrado em GETs do frontend — sempre retornar mascarado.
+  // mpWebhookSecret e gerado pelo backend no momento de salvar a config e
+  // serve para validar autenticidade dos webhooks (header x-signature do MP
+  // alem do tenant resolvido pelo external_reference).
+  mpAccessTokenEnc String?
+  mpDeviceId       String?
+  mpUserIdMp       String?
+  mpWebhookSecret  String?
+  mpAtivo          Boolean @default(false)
+
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -1637,6 +1676,65 @@ model Notificacao {
   @@index([ativa, createdAt(sort: Desc)])
   @@index([destinoTenantId])
   @@map("notificacoes")
+}
+
+// ============ INTENCAO DE PAGAMENTO MERCADO PAGO (API POINT) ============
+//
+// Cada vez que o operador clica em "Cobrar na maquininha", o PDV cria uma
+// IntencaoPagamentoMP com o payload completo da venda (itens, cliente,
+// pagamentos, observacoes) serializado em `vendaPayloadJson`. O backend
+// envia uma payment-intent para a maquininha via API Point e guarda o
+// `intentId` retornado.
+//
+// O PDV ja NAO cria a Venda real nesse momento — ela so e criada quando o
+// webhook do MP confirma APPROVED (entao executamos vendaController.criar
+// com o payload salvo, dentro do tenantStorage correto). Se REJECTED ou
+// CANCELED, a venda nunca existe — sem necessidade de estorno.
+//
+// O frontend faz polling em GET /pagamentos-mp/status/:id ate ver um status
+// final (APPROVED/REJECTED/CANCELED/ERROR), entao limpa o carrinho.
+
+model IntencaoPagamentoMP {
+  id        String           @id @default(uuid())
+  status    StatusIntencaoMP @default(PENDING)
+  tipo      TipoPagamentoMP
+  // Valor enviado para a maquininha em CENTAVOS (formato exigido pelo MP).
+  // Tipo Int evita float drift quando o webhook reconcilia.
+  valor     Int
+  // Identificador da intent no Mercado Pago. Preenchido apos a chamada
+  // POST /devices/{id}/payment-intents. Null se a chamada falhar antes
+  // de chegar no MP (status = ERROR).
+  intentId  String?  @unique
+  deviceId  String
+  // Payload completo da venda (clienteId, itens[], pagamentos[], desconto,
+  // observacoes, pontosResgatar, gerarContaReceber). Re-executado pelo
+  // webhook handler via vendaController.criar quando aprovado.
+  vendaPayloadJson Json
+  // Quando aprovado, aponta para a Venda gerada. Permite o GET de status
+  // devolver o numero da venda criada para o PDV exibir.
+  vendaId    String?  @unique
+  // Mensagem livre: motivo de recusa do MP, erro de comunicacao, ou nota
+  // do cancelamento manual. Exibida no modal de status.
+  detalhe   String?
+  // Snapshot do payload bruto da notificacao do MP (ultimo polling do
+  // payment). Util para debug e auditoria.
+  rawWebhook Json?
+
+  createdAt   DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  caixaId String?
+  caixa   Caixa?  @relation(fields: [caixaId], references: [id])
+
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+  @@map("intencoes_pagamento_mp")
 }
 
 model NotificacaoLida {

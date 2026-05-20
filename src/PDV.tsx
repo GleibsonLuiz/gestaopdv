@@ -814,18 +814,19 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
   useEffect(() => { topProdutosRef.current = painel.topProdutos; }, [painel.topProdutos]);
   useEffect(() => { adicionarPagamentoFormaRef.current = adicionarPagamentoForma; });
 
-  function abrirPagamento() {
+  function abrirPagamento(formaInicial = "DINHEIRO", seedOpts = {}) {
     setErro("");
     if (semCaixa) { flashErro("Abra um caixa antes de finalizar uma venda."); return; }
     if (carrinho.length === 0) { flashErro("Adicione ao menos um item"); return; }
     if (descontoNum > subtotal) { flashErro("Desconto não pode ser maior que o subtotal"); return; }
     setPagamentoAberto(true);
-    // Caso comum: 1 forma so. Semeia o split com DINHEIRO cobrindo o total —
-    // se o operador quiser dividir, ajusta o valor e adiciona outras formas.
+    // Caso comum: 1 forma so. Semeia o split com a forma escolhida cobrindo o
+    // total — F10 sem argumento usa DINHEIRO; clique nos cards F1-F6 do painel
+    // principal passa a forma do card pra evitar dupla entrada (DINHEIRO + forma).
     if (pagamentos.length === 0) {
       dispatchPagamentos({
         type: "add",
-        pagamento: criarPagamento("DINHEIRO", total),
+        pagamento: criarPagamento(formaInicial, total, seedOpts),
       });
     }
     setTimeout(() => {
@@ -1323,7 +1324,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
                 return (
                   <button
                     key={f.id} type="button"
-                    onClick={() => { abrirPagamento(); adicionarPagamentoForma(f.id); }}
+                    onClick={() => abrirPagamento(f.id)}
                     title={`${f.atalho} • ${f.label}`}
                     className={`pdv-pay-btn ${cor}`}
                   >
@@ -1345,7 +1346,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
                     return (
                       <button
                         key={c.id} type="button"
-                        onClick={() => { abrirPagamento(); adicionarPagamentoCustom(c); }}
+                        onClick={() => abrirPagamento(c.baseFormaPagamento, { formaCustomId: c.id, formaCustomNome: c.nome })}
                         title={`${c.nome} (${c.baseFormaPagamento})`}
                         className={`pdv-pay-btn ${cor}`}
                       >

@@ -5,7 +5,7 @@ import { api } from "./lib/api";
 type AcaoLog =
   | "CREATE" | "UPDATE" | "DELETE"
   | "LOGIN" | "LOGOUT" | "LOGIN_FALHO"
-  | "TROCA_SENHA" | "OUTRA"
+  | "TROCA_SENHA" | "RESET_TOTAL" | "OUTRA"
   | string;
 
 interface DiffEntry { antes: unknown; depois: unknown }
@@ -75,6 +75,7 @@ const CORES_ACAO: Record<string, CoresAcao> = {
   LOGOUT:      { bg: "#64748b22", fg: "#94a3b8", icone: "←" },
   LOGIN_FALHO: { bg: "#f59e0b22", fg: "#f59e0b", icone: "!" },
   TROCA_SENHA: { bg: "#a855f722", fg: "#a855f7", icone: "🔑" },
+  RESET_TOTAL: { bg: "#dc262622", fg: "#dc2626", icone: "⚠" },
   OUTRA:       { bg: "#64748b22", fg: "#94a3b8", icone: "•" },
 };
 

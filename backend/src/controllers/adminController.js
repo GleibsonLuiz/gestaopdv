@@ -1,6 +1,7 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import prisma from "../lib/prisma.js";
+import { registrarEvento } from "../middlewares/auditoria.js";
 
 const PALAVRA_CHAVE = "CONFIRMAR_RESET";
 const PASTA_UPLOADS = path.resolve("uploads");
@@ -162,6 +163,22 @@ export async function resetarSistema(req, res, next) {
         } catch { /* pasta inexistente — sem problema */ }
       }
     }
+
+    const totalRegistros = Object.values(removidos).reduce((soma, n) => soma + (Number(n) || 0), 0);
+
+    await registrarEvento({
+      acao: "RESET_TOTAL",
+      modulo: "SISTEMA",
+      usuarioId: req.user?.sub || null,
+      usuarioNome: req.user?.nome || null,
+      usuarioEmail: req.user?.email || null,
+      sucesso: true,
+      mensagem: `Reset total executado. ${totalRegistros} registros removidos + ${arquivosRemovidos} arquivos.`,
+      dadosDepois: { totalRegistros, arquivosRemovidos, breakdown: removidos },
+      statusCode: 200,
+      req,
+      tenantId: req.tenantId || req.user?.tid || null,
+    });
 
     res.json({ ok: true, removidos, arquivosRemovidos });
   } catch (err) {

@@ -147,6 +147,20 @@ d:/gestao-pdv/
 
 ## Histórico de sessões
 
+### Sessão — 2026-05-20 (Auditoria estruturada do Reset Total — item (h) da pendência)
+
+Lacuna registrada desde a sessão de 2026-04-30: `POST /admin/reset` apagava milhares de registros e arquivos físicos sem deixar trilha estruturada. O middleware genérico de auditoria capturava o POST, mas com `acao=CREATE`, `modulo=FUNCIONARIOS`, e `dadosDepois = { confirmacao: "CONFIRMAR_RESET" }` — sem contagens reais. Fechei essa lacuna usando o `LogAuditoria` que já existe (sem nova tabela).
+
+**Entregue:**
+- [backend/src/middlewares/auditoria.js:17-22](backend/src/middlewares/auditoria.js#L17-L22) — `/admin/reset` adicionado a `ROTAS_IGNORADAS` (mesmo padrão de `/auth/login` que tem log explícito no controller).
+- [backend/src/middlewares/auditoria.js:191-222](backend/src/middlewares/auditoria.js#L191-L222) — `registrarEvento(...)` ganhou parâmetros `dadosDepois` e `statusCode` (antes só `mensagem` ficava preenchido — `dadosDepois` era exclusivo do middleware automático).
+- [backend/src/controllers/adminController.js:139-153](backend/src/controllers/adminController.js#L139-L153) — após o reset bem-sucedido, registra `acao: "RESET_TOTAL"`, `modulo: "SISTEMA"`, mensagem `"Reset total executado. N registros removidos + M arquivos."`, e `dadosDepois: { totalRegistros, arquivosRemovidos, breakdown: removidos }` (breakdown = contagem por modelo).
+- [src/Logs.tsx:9](src/Logs.tsx#L9) + [src/Logs.tsx:78](src/Logs.tsx#L78) — `RESET_TOTAL` no union de `AcaoLog` + badge vermelho-escuro `⚠` (`#dc2626`) destacado do DELETE comum.
+
+Reaproveitou-se infra existente: a tela `Logs.jsx` já mostra `dadosDepois` no expansor de cada linha, então o operador vê o breakdown completo sem nova UI. `dadosDepois` passa por `sanitizar(...)` (mesmo helper do middleware) por segurança.
+
+Sem migrations. Build OK em 3.1s; `node --check` nos 2 arquivos JS do backend OK.
+
 ### Sessão — 2026-05-20 (Filtro por cliente no Relatório de Vendas — item (g) da pendência)
 
 Item trivial mas registrado como lacuna desde a ETAPA 13: o backend já aceitava `clienteId` em `GET /relatorios/vendas` ([relatoriosController.js:35](backend/src/controllers/relatoriosController.js#L35)), mas a UI da aba Vendas só expunha forma de pagamento e vendedor. Padrão idêntico ao que o Relatório Financeiro (aba Receber) e Compras (fornecedor) já fazem.
@@ -1516,10 +1530,10 @@ Extensão do cadastro de Fornecedores para conformidade NF-e — espelha o que a
 - ✅ **(c)** Lead scoring no PerfilClienteModal — `GET /clientes/:id/score` reusa `calcularScore` com mediaTotal global de 365d; `<CardLeadScore>` no topo da AbaResumo com breakdown R/F/M/Bônus
 - ✅ Impressão da folha de contagem cega (Inventário) — `src/lib/folhaCegaPdf.ts` + botão "🖨 Imprimir folha cega" no ActionsMenu (status ABERTO)
 - ✅ **(g)** Filtro por cliente no Relatório de Vendas (2026-05-20) — `CampoSelectBusca` adicionado entre Forma de pagamento e Vendedor; `clienteId` propagado para `api.relatorioVendas` (backend já aceitava em [relatoriosController.js:35](backend/src/controllers/relatoriosController.js#L35)). Build OK em 3.6s.
+- ✅ **(e)** Análise de motivos de perda CRM — **já estava implementado** no commit `afc85be` (sequência Relatórios CRM 7/7, 2026-05-15). Componente `<RelatorioPerdasCrm>` em [Relatorios.tsx:1499](src/Relatorios.tsx#L1499) cobre 7 KPIs, ranking por motivo/vendedor/origem, evolução mensal, top vazamentos, heatmap motivo×origem e detalhamento, com filtros (período/responsável/origem/busca livre) e export PDF.
+- ✅ **(h)** Auditoria estruturada do Reset Total (2026-05-20) — `registrarEvento(RESET_TOTAL/SISTEMA)` no `adminController` com mensagem + `dadosDepois` (totalRegistros, arquivosRemovidos, breakdown por modelo). `/admin/reset` removido do log automático para evitar duplicação. `Logs.tsx` ganhou badge vermelho-escuro `⚠ RESET_TOTAL`.
 
 **Próximos candidatos (em ordem de ROI estimado):**
-- **(e)** Análise de motivos de perda — agregação `GROUP BY motivoPerda` em Oportunidades. **Pequeno esforço, baixo-médio valor** (já existe no Funil).
-- **(h)** Auditoria estruturada do Reset Total — log de execuções. **Pequeno**.
 - **(i)** Chip-cluster na tabela de Funcionários mostrando módulos. **Pequeno**.
 
 **Ainda pendentes de validação visual** (sessão 2026-05-19 entregou 7 commits de UX no PDV, mas nenhum foi validado no navegador):

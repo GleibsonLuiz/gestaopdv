@@ -17,6 +17,10 @@ const ROTAS_IGNORADAS = [
   "/auth/logout",
   "/auth/trocar-senha",
   "/auth/preferencias",
+  // /admin/reset tem log explicito no controller (registrarEvento com
+  // contagens reais por modelo + total geral). O middleware so veria
+  // { confirmacao: "..." } no body, sem o resultado da operacao.
+  "/admin/reset",
 ];
 
 // Mapeia primeiro segmento da rota -> { modulo, modelo (chave em prisma) }.
@@ -191,7 +195,7 @@ export async function auditoria(req, res, next) {
 export async function registrarEvento({
   acao, modulo = "AUTH", usuarioId = null, usuarioNome = null,
   usuarioEmail = null, sucesso = true, mensagem = null, req = null,
-  tenantId = undefined,
+  tenantId = undefined, dadosDepois = null, statusCode = null,
 }) {
   try {
     const finalTenantId = tenantId !== undefined
@@ -210,7 +214,8 @@ export async function registrarEvento({
         userAgent: req ? (req.headers["user-agent"] || "").slice(0, 500) : null,
         rota: req ? (req.originalUrl || req.path || "").slice(0, 500) : null,
         metodo: req?.method || null,
-        statusCode: null,
+        statusCode,
+        dadosDepois: dadosDepois ? sanitizar(dadosDepois) : null,
         tenantId: finalTenantId,
       },
     });

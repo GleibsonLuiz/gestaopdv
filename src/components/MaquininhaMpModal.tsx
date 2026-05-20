@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { C } from "../lib/theme";
-import { api } from "../lib/api";
+import { api, ApiError } from "../lib/api";
 import { useModalKeys } from "../lib/modalKeys";
 
 // ============ MAQUININHA MERCADO PAGO ============
@@ -113,7 +113,7 @@ export default function MaquininhaMpModal({
       }) as IntencaoResposta;
       setIntencao(resp);
     } catch (err) {
-      setErro((err as Error).message);
+      setErro(extrairMensagemErro(err));
     } finally {
       setEnviando(false);
     }
@@ -129,10 +129,22 @@ export default function MaquininhaMpModal({
       const atualizada = await api.statusMp(intencao.id) as IntencaoResposta;
       setIntencao(atualizada);
     } catch (err) {
-      setErro((err as Error).message);
+      setErro(extrairMensagemErro(err));
     } finally {
       setCancelando(false);
     }
+  }
+
+  // Concatena message + detalhe (quando a resposta do backend trouxe um
+  // detalhe estruturado, ex: "[MP 401] invalid_access_token"). Sem isso o
+  // operador so ve "Falha ao enviar cobranca" e nao tem como diagnosticar.
+  function extrairMensagemErro(err: unknown): string {
+    const base = (err as Error)?.message || "Erro desconhecido";
+    if (err instanceof ApiError) {
+      const data = err.data as { detalhe?: string } | null;
+      if (data?.detalhe) return `${base} — ${data.detalhe}`;
+    }
+    return base;
   }
 
   // ============ RENDER ============

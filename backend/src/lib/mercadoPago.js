@@ -78,12 +78,21 @@ export async function criarPaymentIntent({
 }) {
   let payment;
   if (tipo === "CREDIT") {
-    payment = { installments: 1, type: "credit_card", installments_cost: "buyer" };
+    // installments_cost: "seller" — o lojista absorve eventual custo de
+    // parcelamento. Como nesta v1 todas as cobrancas sao "1x a vista",
+    // nao ha juros de fato; precisa do campo so para satisfazer o schema
+    // do MP. O valor "buyer" e recusado pela API com erro 400.
+    payment = { installments: 1, type: "credit_card", installments_cost: "seller" };
   } else if (tipo === "DEBIT") {
-    payment = { installments: 1, type: "debit_card", installments_cost: "buyer" };
+    // Debito via Point API exige habilitacao da conta MP (alguns sellers tem
+    // so credit habilitado por default — precisa pedir ativacao no suporte
+    // MP). Se a conta nao tiver, a API responde 400 com mensagem confusa
+    // tipo "payment.type does not match credit_card".
+    payment = { installments: 1, type: "debit_card", installments_cost: "seller" };
   } else if (tipo === "PIX") {
-    // Para PIX, o type segue o padrao "pix" — quando o device suporta
-    // dynamic_qr_code ele exibe QR no display.
+    // PIX via Point Integration NAO e suportado por todos os devices.
+    // Quando o device aceita, type "pix" exibe um QR Code dinamico no
+    // display. Se nao aceitar, a API responde indicando os tipos validos.
     payment = { type: "pix" };
   } else {
     throw new MercadoPagoError(`Tipo de pagamento MP invalido: ${tipo}`, 400, null);

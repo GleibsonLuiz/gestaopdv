@@ -147,6 +147,19 @@ d:/gestao-pdv/
 
 ## Histórico de sessões
 
+### Sessão — 2026-05-20 (Operacional Mercado Pago — encerramento das pendências da sessão 2026-05-19)
+
+Limpeza das pendências operacionais que ficaram em aberto desde a integração com a maquininha MP Point:
+
+- **Migrations:** `npx prisma migrate status` confirmou **43/43 migrations aplicadas** no Neon, incluindo `20260519010000_pagamento_mercado_pago`. A pendência registrada em PROGRESSO de "rodar `prisma migrate deploy` com o backend dev fechado" **já estava resolvida** — provavelmente foi feita em alguma sessão intermediária.
+- **`backend/.env.example`:** documentado o `CRIPTO_SECRET` (estava faltando) com instrução de geração e aviso de não-rotacionar pós-uso. Commitado.
+- **`backend/.env` local:** `CRIPTO_SECRET` definido com chave AES-256 gerada via `crypto.randomBytes(32).toString("hex")`. Smoke-test rodou cifra→decifra→mascara com `APP_USR-1234567890-fake-token-test` e voltou idêntico (`roundtrip OK: true`). Arquivo segue ignorado pelo `backend/.gitignore`.
+
+**Pendentes apenas em produção (Vercel):**
+- `CRIPTO_SECRET` em Settings > Environment Variables (gerar nova chave separada de dev — não reutilizar).
+- `CRON_SECRET` para ativar o cron de automações.
+- Webhook do MP no painel `https://SEU-BACKEND/pagamentos-mp/webhook` (eventos `payment`).
+
 ### Sessão — 2026-05-20 (Chip-cluster de módulos em Funcionários — item (i) da pendência)
 
 Última pendência da fila pós-MVP: a tabela de Funcionários mostrava só `role` (Admin/Gerente/Vendedor), exigindo abrir o modal de edição para ver quais módulos cada funcionário podia acessar. Ruim para auditoria visual rápida.

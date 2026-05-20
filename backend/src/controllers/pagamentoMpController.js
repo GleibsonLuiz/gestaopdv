@@ -7,6 +7,8 @@ import {
   obterPaymentIntent,
   cancelarPaymentIntent,
   obterPayment,
+  criarPagamentoPix,
+  cancelarPagamento,
 } from "../lib/mercadoPago.js";
 import { criar as criarVendaController } from "./vendaController.js";
 
@@ -30,15 +32,21 @@ function somarPagamentos(pagamentos) {
 }
 
 // Recupera config + valida que esta configurada. Lanca 412 se nao.
-async function obterConfigInterna() {
+// exigirDevice=false relaxa a checagem do mpDeviceId — usado pelo PIX que
+// nao precisa de maquininha (cobra via /v1/payments).
+async function obterConfigInterna({ exigirDevice = true } = {}) {
   const cfg = await prisma.configuracaoEmpresa.findFirst({
     select: {
       id: true, mpAccessTokenEnc: true, mpDeviceId: true,
       mpUserIdMp: true, mpAtivo: true, mpWebhookSecret: true, tenantId: true,
     },
   });
-  if (!cfg || !cfg.mpAtivo || !cfg.mpAccessTokenEnc || !cfg.mpDeviceId) {
-    const e = new Error("Maquininha Mercado Pago nao configurada. Acesse Configuracoes > Maquininha.");
+  const faltaDevice = exigirDevice && !cfg?.mpDeviceId;
+  if (!cfg || !cfg.mpAtivo || !cfg.mpAccessTokenEnc || faltaDevice) {
+    const msg = exigirDevice
+      ? "Maquininha Mercado Pago nao configurada. Acesse Configuracoes > Maquininha."
+      : "Mercado Pago nao configurado. Acesse Configuracoes > Maquininha e ative.";
+    const e = new Error(msg);
     e.status = 412;
     throw e;
   }
@@ -199,7 +207,10 @@ export async function cobrar(req, res, next) {
       delete payload.gerarContaReceber;
     }
 
-    const { cfg, accessToken } = await obterConfigInterna();
+    // PIX usa /v1/payments — nao precisa de maquininha. Os demais (CREDIT/
+    // DEBIT) usam Point Integration e portanto precisam do mpDeviceId.
+    const ehPix = tipo === "PIX";
+    const { cfg, accessToken } = await obterConfigInterna({ exigirDevice: !ehPix });
 
     // Caixa atual (apenas para auditoria — nao bloqueia se nao houver,
     // mas em geral o vendaController.criar ja exige caixa aberto).
@@ -217,7 +228,9 @@ export async function cobrar(req, res, next) {
         status: "PENDING",
         tipo,
         valor: amountCents,
-        deviceId: cfg.mpDeviceId,
+        // Para PIX guardamos string vazia em deviceId (campo NOT NULL).
+        // Nao usamos esse campo para PIX em lugar nenhum.
+        deviceId: cfg.mpDeviceId || "PIX_VIRTUAL",
         vendaPayloadJson: payload,
         userId: req.user.sub,
         caixaId: caixaIdAtual,
@@ -225,6 +238,69 @@ export async function cobrar(req, res, next) {
       },
       select: { id: true, status: true, tipo: true, valor: true, createdAt: true },
     });
+
+    if (ehPix) {
+      let paymentMp;
+      try {
+        // Email do cliente quando disponivel (melhora a UX no app do banco).
+        // Buscamos via clienteId do payload — opcional.
+        let payerEmail = null;
+        const cid = payload.clienteId;
+        if (cid) {
+          const cli = await prisma.cliente.findUnique({
+            where: { id: String(cid) },
+            select: { email: true },
+          });
+          payerEmail = cli?.email || null;
+        }
+        paymentMp = await criarPagamentoPix({
+          accessToken,
+          amountCents,
+          description: `Venda GestaoPRO #${intencao.id.slice(0, 8)}`,
+          externalReference: intencao.id,
+          payerEmail,
+          idempotencyKey: intencao.id,
+        });
+      } catch (errMp) {
+        const detalhe = errMp instanceof MercadoPagoError
+          ? `[MP ${errMp.status}] ${errMp.message}`
+          : `[MP] ${errMp.message}`;
+        await prisma.intencaoPagamentoMP.update({
+          where: { id: intencao.id },
+          data: { status: "ERROR", detalhe },
+        });
+        return res.status(502).json({
+          erro: "Falha ao gerar PIX no Mercado Pago",
+          detalhe,
+          intencaoId: intencao.id,
+        });
+      }
+
+      // Extrai QR Code dos campos retornados pelo MP. Em /v1/payments PIX,
+      // os dados ficam em point_of_interaction.transaction_data.
+      const td = paymentMp?.point_of_interaction?.transaction_data || {};
+      const qrCode = td.qr_code || null;
+      const qrCodeBase64 = td.qr_code_base64 || null;
+      const paymentId = String(paymentMp?.id || "");
+
+      await prisma.intencaoPagamentoMP.update({
+        where: { id: intencao.id },
+        data: { intentId: paymentId, qrCode, qrCodeBase64 },
+      });
+
+      return res.json({
+        id: intencao.id,
+        status: "PENDING",
+        tipo: intencao.tipo,
+        valor: intencao.valor,
+        intentId: paymentId,
+        qrCode,
+        qrCodeBase64,
+        mensagem: "Escaneie o QR Code no app do banco para pagar.",
+      });
+    }
+
+    // ============ CREDIT/DEBIT (Point Integration) ============
 
     let intentMp;
     try {
@@ -302,7 +378,9 @@ export async function obterStatus(req, res, next) {
     const idadeMs = agora - new Date(intencao.createdAt).getTime();
     if (intencao.status === "PENDING" && intencao.intentId && idadeMs > 4000) {
       try {
-        const intent = await consultarStatusViaApi(intencao);
+        const intent = intencao.tipo === "PIX"
+          ? await consultarPaymentPix(intencao)
+          : await consultarStatusViaApi(intencao);
         if (intent && intent.processouAlgo) {
           // Recarrega depois do processamento
           const recarregada = await prisma.intencaoPagamentoMP.findUnique({
@@ -328,8 +406,34 @@ export async function obterStatus(req, res, next) {
       detalhe: intencao.detalhe,
       vendaId: intencao.vendaId,
       vendaNumero: venda?.numero || null,
+      qrCode: intencao.qrCode || null,
+      qrCodeBase64: intencao.qrCodeBase64 || null,
     });
   } catch (err) { next(err); }
+}
+
+// Fallback de polling para PIX: consulta /v1/payments/:id e, se o status
+// virou approved/rejected/cancelled, processa como se o webhook tivesse
+// chegado. Idempotente — se a intencao ja foi processada, no-op.
+async function consultarPaymentPix(intencao) {
+  const { cfg, accessToken } = await obterConfigInterna({ exigirDevice: false });
+  let payment;
+  try {
+    payment = await obterPayment({ accessToken, paymentId: intencao.intentId });
+  } catch {
+    return { processouAlgo: false };
+  }
+  const status = String(payment?.status || "").toLowerCase();
+  if (!status || status === "pending" || status === "in_process") {
+    return { processouAlgo: false };
+  }
+  // Reusa o mesmo handler do webhook — garante mesma logica de criar venda.
+  await processarPaymentNotificacao({
+    tenantId: cfg.tenantId,
+    paymentId: intencao.intentId,
+    accessToken,
+  });
+  return { processouAlgo: true };
 }
 
 // Consulta o MP pelo intent + processa o pagamento se ja existe.
@@ -381,23 +485,33 @@ export async function cancelar(req, res, next) {
       return res.status(409).json({ erro: `Intencao ja esta em status ${intencao.status}` });
     }
 
-    const { cfg, accessToken } = await obterConfigInterna();
+    const ehPix = intencao.tipo === "PIX";
+    const { cfg, accessToken } = await obterConfigInterna({ exigirDevice: !ehPix });
 
     if (intencao.intentId) {
       try {
-        await cancelarPaymentIntent({
-          accessToken,
-          deviceId: cfg.mpDeviceId,
-          intentId: intencao.intentId,
-        });
+        if (ehPix) {
+          // PIX: cancela o /v1/payments via PUT status=cancelled.
+          await cancelarPagamento({
+            accessToken,
+            paymentId: intencao.intentId,
+          });
+        } else {
+          // Point Integration (CREDIT/DEBIT): cancela a payment-intent no device.
+          await cancelarPaymentIntent({
+            accessToken,
+            deviceId: cfg.mpDeviceId,
+            intentId: intencao.intentId,
+          });
+        }
       } catch (err) {
         // Mesmo se MP recusar cancel (ex: ja finalizou), prosseguimos
         // marcando como CANCELED localmente — o webhook eventual vai
         // corrigir o status se aprovar de fato.
-        if (err instanceof MercadoPagoError && err.status === 409) {
-          // Conflict: ja finalizou. Devolve 409 pro front consultar status.
+        if (err instanceof MercadoPagoError && (err.status === 409 || err.status === 400)) {
+          // Conflict / bad_request: PIX ja aprovado nao deixa cancelar.
           return res.status(409).json({
-            erro: "Intencao ja finalizou no Mercado Pago. Aguarde o status final.",
+            erro: "Pagamento ja finalizou no Mercado Pago. Aguarde o status final.",
           });
         }
       }

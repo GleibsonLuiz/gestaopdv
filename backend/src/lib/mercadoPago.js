@@ -137,3 +137,56 @@ export async function obterPayment({ accessToken, paymentId }) {
     accessToken,
   );
 }
+
+// Cria um pagamento PIX via /v1/payments. Diferente do Point Integration,
+// o PIX nao vai para a maquininha — o MP retorna um QR Code dinamico que o
+// PDV exibe na tela do operador. O cliente paga pelo app do banco; o webhook
+// chega exatamente no mesmo endpoint dos cartoes.
+//
+// Campos retornados que importam para o PDV (em point_of_interaction):
+//   - qr_code        — codigo EMV (copia e cola)
+//   - qr_code_base64 — imagem PNG do QR Code em base64
+//   - ticket_url     — URL alternativa do MP para abrir em outra tela
+//
+// payerEmail e obrigatorio no schema do MP. Quando o cliente da venda nao
+// tem email, usamos um placeholder (o MP aceita endereco generico ja que
+// PIX nao envia confirmacao para o pagador via email).
+export async function criarPagamentoPix({
+  accessToken,
+  amountCents,
+  description,
+  externalReference,
+  payerEmail,
+  idempotencyKey,
+}) {
+  const body = {
+    transaction_amount: Math.round(Number(amountCents)) / 100,
+    description: String(description || "Venda").slice(0, 256),
+    payment_method_id: "pix",
+    external_reference: String(externalReference),
+    payer: {
+      // MP recusa TLDs nao-publicos (.local). Quando o cliente da venda nao
+      // tem email cadastrado, usamos um placeholder com TLD .com.br valido.
+      email: payerEmail || "cliente-pdv@gestaopro.com.br",
+    },
+  };
+  return http(
+    "POST",
+    "/v1/payments",
+    accessToken,
+    body,
+    idempotencyKey ? { "X-Idempotency-Key": String(idempotencyKey) } : {},
+  );
+}
+
+// Cancela um pagamento PIX (status: cancelled). Usado quando o operador
+// desiste antes do cliente pagar. Se ja aprovou no banco, a API responde
+// 400 — tratamos como "ja finalizou" e deixamos o webhook fechar o ciclo.
+export async function cancelarPagamento({ accessToken, paymentId }) {
+  return http(
+    "PUT",
+    `/v1/payments/${encodeURIComponent(paymentId)}`,
+    accessToken,
+    { status: "cancelled" },
+  );
+}

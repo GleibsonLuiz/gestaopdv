@@ -1720,6 +1720,12 @@ model IntencaoPagamentoMP {
   // payment). Util para debug e auditoria.
   rawWebhook Json?
 
+  // PIX: codigo EMV (copia e cola) e imagem base64 do QR Code dinamico.
+  // Populados apenas quando tipo=PIX e a chamada a /v1/payments retornou
+  // os dados de point_of_interaction. Null para CREDIT/DEBIT.
+  qrCode       String?
+  qrCodeBase64 String?
+
   createdAt   DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 

@@ -18,7 +18,11 @@ import { useModalKeys } from "../lib/modalKeys";
 // O componente NAO conhece o conceito de Venda — quem chama (PDV) recebe
 // onConcluido(vendaNumero) e cuida de exibir recibo, limpar carrinho etc.
 
-export type TipoMaquininha = "CREDIT" | "DEBIT" | "PIX";
+// PIX foi removido daqui — agora tem modal proprio (PixQrCodeModal) que
+// usa /v1/payments em vez da Point API. O Point PAX_Q92 nao suporta PIX
+// via integration api, e mesmo nos devices que suportam o QR Code fica
+// mais visivel no PDV do que no display da maquininha.
+export type TipoMaquininha = "CREDIT" | "DEBIT";
 export type StatusIntencao = "PENDING" | "APPROVED" | "REJECTED" | "CANCELED" | "ERROR";
 
 interface IntencaoResposta {
@@ -48,7 +52,6 @@ interface MaquininhaMpModalProps {
 const TIPOS: { id: TipoMaquininha; label: string; icone: string; cor: string }[] = [
   { id: "CREDIT", label: "Crédito à vista", icone: "💳", cor: C.yellow },
   { id: "DEBIT",  label: "Débito",          icone: "💳", cor: C.accent },
-  { id: "PIX",    label: "PIX",             icone: "⚡", cor: "#06b6d4" },
 ];
 
 const fmtBRL = (v: number) =>
@@ -207,7 +210,7 @@ function SelecionarTipo({ valor, onMudar, onConfirmar, enviando }: SelecionarTip
       <div style={{ color: C.muted, fontSize: 12, marginBottom: 10 }}>
         Selecione como o cliente vai pagar. A maquininha vai exibir o valor e processar.
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         {TIPOS.map((t) => {
           const ativo = valor === t.id;
           return (

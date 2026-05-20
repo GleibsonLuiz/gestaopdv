@@ -15,6 +15,7 @@ import { useModalKeys } from "./lib/modalKeys";
 import ActionsMenu from "./components/ActionsMenu";
 import SelectBusca from "./components/SelectBusca";
 import MaquininhaMpModal from "./components/MaquininhaMpModal";
+import PixQrCodeModal from "./components/PixQrCodeModal";
 
 function urlImagem(imagem) {
   if (!imagem) return null;
@@ -360,11 +361,14 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
   const [abrirCaixaAberto, setAbrirCaixaAberto] = useState(false);
 
   // Mercado Pago Point (maquininha fisica). configMp = null ate carregar.
-  // mpAberto controla a visibilidade do modal de cobranca.
+  // mpAberto controla a visibilidade do modal de cobranca (CREDITO/DEBITO).
+  // pixAberto e um modal SEPARADO que mostra QR Code na propria tela do PDV
+  // (PIX usa /v1/payments, nao a Point API — funciona em qualquer device).
   const [configMp, setConfigMp] = useState(null);
   const [mpAberto, setMpAberto] = useState(false);
+  const [pixAberto, setPixAberto] = useState(false);
 
-  const algumaModalAberta = pagamentoAberto || cancelarAberto || !!reciboAberto || !!qtdModalProduto || abrirCaixaAberto || mpAberto;
+  const algumaModalAberta = pagamentoAberto || cancelarAberto || !!reciboAberto || !!qtdModalProduto || abrirCaixaAberto || mpAberto || pixAberto;
   const semCaixa = !caixaCarregando && !caixaAtual;
 
   // Reordena FORMAS por uso real (ultimos 90 dias) e reatribui os atalhos
@@ -1933,6 +1937,19 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
                   📲 Maquininha MP
                 </button>
               )}
+              {/* PIX nao precisa de maquininha — gera QR Code via /v1/payments
+                  e mostra na propria tela do PDV. Bastam credenciais MP ativas. */}
+              {configMp?.mpAtivo && total > 0 && !salvando && (
+                <button
+                  type="button"
+                  onClick={() => setPixAberto(true)}
+                  className="pdv-btn-ghost"
+                  style={{ borderColor: "#06b6d455", color: "#06b6d4" }}
+                  title="Gerar QR Code PIX para o cliente pagar pelo app do banco"
+                >
+                  ⚡ PIX
+                </button>
+              )}
               <button
                 ref={finalizarRef}
                 onClick={confirmarPagamento}
@@ -2018,6 +2035,46 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
             recarregarPainel();
             // Feedback visual rapido: alerta nativo + foco volta para busca.
             alert(`✅ Pagamento aprovado · Venda #${vendaNumero || "—"} · ${fmtBRL(valor)}`);
+            focarBusca();
+          }}
+        />
+      )}
+
+      {pixAberto && (
+        <PixQrCodeModal
+          totalReais={total}
+          vendaPayload={{
+            clienteId: clienteId || null,
+            pagamentos: [{ forma: "PIX", valor: Math.round(total * 100) / 100 }],
+            desconto: descontoNum,
+            observacoes: observacoes ? observacoes.toUpperCase() : null,
+            itens: carrinho.map(it => ({
+              produtoId: it.produtoId,
+              quantidade: it.quantidade,
+              precoUnitario: it.precoUnitario,
+            })),
+            ...(clienteId && parseInt(pontosResgatando, 10) > 0
+              ? { pontosResgatar: parseInt(pontosResgatando, 10) }
+              : {}),
+            ...(oportunidadeConvertendo?.id
+              ? { oportunidadeId: oportunidadeConvertendo.id }
+              : {}),
+          }}
+          onFechar={() => setPixAberto(false)}
+          onConcluido={({ vendaNumero, valor }) => {
+            setPixAberto(false);
+            setPagamentoAberto(false);
+            if (oportunidadeConvertendo) setOportunidadeConvertendo(null);
+            setProdutos(prev => prev.map(p => {
+              const it = carrinho.find(c => c.produtoId === p.id);
+              if (!it) return p;
+              const novoEstoque = Math.round((Number(p.estoque) - Number(it.quantidade)) * 1000) / 1000;
+              return { ...p, estoque: novoEstoque };
+            }));
+            limparCarrinho({ refocar: false });
+            recarregarCaixa();
+            recarregarPainel();
+            alert(`✅ PIX aprovado · Venda #${vendaNumero || "—"} · ${fmtBRL(valor)}`);
             focarBusca();
           }}
         />

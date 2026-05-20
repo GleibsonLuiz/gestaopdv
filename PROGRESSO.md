@@ -1269,6 +1269,37 @@ Gap identificado pela inspeção: o módulo de Inventário tinha tela web de con
 
 **Smoke-test:** TypeScript limpo, build verde. Validação visual depende do usuário (não gera PDF via CLI).
 
+### Sessão — 2026-05-19 (continuação — múltiplas formas de pagamento por venda) ✨
+
+**Feature**: split de pagamento no PDV — uma venda agora pode ser quitada com 1..N formas (ex: R$ 100 = R$ 50 PIX + R$ 30 CRÉDITO + R$ 20 DINHEIRO).
+
+**Backend**:
+- Novo model `VendaPagamento` no schema.prisma (vendaId, forma, valor, formaCustomNome?, ordem). Migration `20260519000000_venda_pagamentos_split` com **backfill de 1 pagamento por venda histórica** (462 vendas → 462 pagamentos, soma == total bate em todas).
+- `Venda.formaPagamento` (legado) **mantido** — passa a refletir a forma de **MAIOR valor** do split (preserva filtros/relatórios existentes sem reescrita).
+- `vendaController.normalizarPagamentos(body, total)`: helper que valida split (soma == total ± 0.005), retorna `{pagamentos, formaPrincipal, valorAPrazo}` ou lança 400.
+- `criar`, `refinalizar`, `reabrir`, `cancelar` refatorados:
+  - Aceitam `pagamentos[] {forma, valor, formaCustomNome?}` no body (com fallback compat para `formaPagamento` singular legado)
+  - **ContaReceber gerada SOBRE `valorAPrazo`** (soma das formas em FORMAS_GERA_RECEBER), NÃO sobre o total
+  - **Caixa**: 1 movimentação POR forma do split (só DINHEIRO afeta saldo)
+  - Estorno (reabrir/cancelar) também itera por forma
+
+**Frontend (PDV.tsx)**:
+- `pagamentosReducer` (useReducer) substitui o tripé antigo `forma + formaCustomId + valorRecebido`
+- Modal de finalização redesenhado:
+  - Botões F1–F6 **ADICIONAM** um pagamento com `valor = restante` (auto-fill), em vez de selecionar única forma
+  - Cada pagamento no card permite ajustar `valor`; DINHEIRO tem campo extra `Recebi` que gera **troco visual**
+  - Resumo Total / Pago / Falta-receber / Troco
+  - Bloco "Conta a receber" **só aparece se `valorAPrazo > 0`** (mostra o valor exato a prazo)
+  - Botão Finalizar só libera com `|pago − total| < 0.01`
+- `ReciboModal`, `DetalheVendaModal` e `CupomVenda` listam o split quando `pagamentos.length > 1` (linha por forma + dot colorido)
+- `RefinalizarVendaModal` ganhou a mesma UX de split
+
+**Validação**: typecheck (`tsc --noEmit`) limpo + build `npm run build` verde (PDV bundle 88.92 KB → 20.03 KB gz). Sanity Prisma confirmou backfill consistente (462 vendas = 462 pagamentos).
+
+**Commit**: `b2898c8` em `origin/main`.
+
+---
+
 ### Sessão — 2026-05-19 (continuação — lead scoring no PerfilClienteModal)
 
 Trilha (c) da fila. Hoje o lead score (0-100, FRIO/MORNO/QUENTE/VIP) só aparece em `📊 Segmentos`, calculado em lote para todos os clientes ativos. Quando o operador abre o perfil de um cliente específico, não tem ideia do score — precisa voltar pra Segmentos e procurar. Trazido para o `PerfilClienteModal`.

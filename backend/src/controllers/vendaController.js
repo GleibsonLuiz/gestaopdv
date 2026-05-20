@@ -14,6 +14,85 @@ const FORMAS_VALIDAS = new Set([
 // gerarContaReceber no payload.
 const FORMAS_GERA_RECEBER = new Set(["CARTAO_CREDITO", "BOLETO", "CREDIARIO"]);
 
+// Tolerancia de comparacao monetaria (1 centavo). Evita rejeitar pagamentos
+// por arredondamento de Decimal em parcelas (ex: 1/3 de 10.00 = 3.33+3.33+3.34).
+const EPS_CENTAVO = 0.005;
+
+// Normaliza/valida o array de pagamentos (split de pagamento). Aceita:
+//   1) body.pagamentos[] com [{forma, valor, formaCustomNome?, ordem?}]
+//   2) Legado: body.formaPagamento + valor implicito = total (split de 1)
+// Retorna { pagamentos, formaPrincipal, valorAPrazo } ou lanca {status, message}.
+//
+// Regras:
+//   - soma dos valores ~= total (tolerancia 1 centavo)
+//   - cada valor > 0 e forma valida
+//   - formaPrincipal = forma do pagamento de MAIOR valor (gravada em
+//     Venda.formaPagamento por compat com filtros/relatorios existentes)
+//   - valorAPrazo = soma dos valores cuja forma esta em FORMAS_GERA_RECEBER
+function normalizarPagamentos(body, total) {
+  let lista = [];
+  if (Array.isArray(body?.pagamentos) && body.pagamentos.length > 0) {
+    lista = body.pagamentos;
+  } else if (body?.formaPagamento) {
+    // Legado: 1 forma so. Continua funcionando para clientes externos
+    // (API publica) e para o proprio frontend antes de migrar.
+    lista = [{ forma: body.formaPagamento, valor: total }];
+  } else {
+    const e = new Error("Informe ao menos uma forma de pagamento"); e.status = 400; throw e;
+  }
+
+  if (lista.length > 10) {
+    const e = new Error("Maximo de 10 formas de pagamento por venda"); e.status = 400; throw e;
+  }
+
+  const pagamentos = [];
+  let soma = 0;
+  let valorAPrazo = 0;
+  let formaPrincipal = null;
+  let maiorValor = -1;
+
+  for (let i = 0; i < lista.length; i++) {
+    const p = lista[i] || {};
+    const idx = i + 1;
+    const forma = String(p.forma || p.formaPagamento || "").trim();
+    if (!forma || !FORMAS_VALIDAS.has(forma)) {
+      const e = new Error(`Pagamento ${idx}: forma "${forma}" invalida`); e.status = 400; throw e;
+    }
+    const valor = toNumber(p.valor);
+    if (valor === null || Number.isNaN(valor) || valor <= 0) {
+      const e = new Error(`Pagamento ${idx}: valor deve ser > 0`); e.status = 400; throw e;
+    }
+    const valorR = Math.round(valor * 100) / 100;
+    const formaCustomNome = p.formaCustomNome
+      ? String(p.formaCustomNome).trim().toUpperCase().slice(0, 60) || null
+      : null;
+    pagamentos.push({
+      forma,
+      valor: valorR,
+      formaCustomNome,
+      ordem: Number.isFinite(p.ordem) ? Number(p.ordem) : i,
+    });
+    soma += valorR;
+    if (FORMAS_GERA_RECEBER.has(forma)) valorAPrazo += valorR;
+    if (valorR > maiorValor) { maiorValor = valorR; formaPrincipal = forma; }
+  }
+
+  const somaR = Math.round(soma * 100) / 100;
+  const totalR = Math.round(total * 100) / 100;
+  if (Math.abs(somaR - totalR) > EPS_CENTAVO) {
+    const e = new Error(
+      `Soma dos pagamentos (${somaR.toFixed(2)}) nao bate com o total da venda (${totalR.toFixed(2)})`
+    );
+    e.status = 400; throw e;
+  }
+
+  return {
+    pagamentos,
+    formaPrincipal,
+    valorAPrazo: Math.round(valorAPrazo * 100) / 100,
+  };
+}
+
 const INCLUDE_LISTA = {
   cliente: { select: { id: true, nome: true, cpfCnpj: true } },
   user: { select: { id: true, nome: true } },
@@ -27,6 +106,10 @@ const INCLUDE_DETALHE = {
     include: {
       produto: { select: { id: true, codigo: true, nome: true, unidade: true } },
     },
+  },
+  pagamentos: {
+    select: { id: true, forma: true, valor: true, formaCustomNome: true, ordem: true },
+    orderBy: { ordem: "asc" },
   },
   contasReceber: {
     select: {
@@ -101,7 +184,7 @@ export async function obter(req, res, next) {
 
 export async function criar(req, res, next) {
   try {
-    const { clienteId, formaPagamento, observacoes, itens, gerarContaReceber, oportunidadeId } = req.body;
+    const { clienteId, observacoes, itens, gerarContaReceber, oportunidadeId } = req.body;
     const desconto = req.body.desconto !== undefined ? toNumber(req.body.desconto) : 0;
     const pontosResgatarRaw = parseInt(req.body.pontosResgatar, 10);
     const pontosResgatar = Number.isFinite(pontosResgatarRaw) && pontosResgatarRaw > 0 ? pontosResgatarRaw : 0;
@@ -129,9 +212,6 @@ export async function criar(req, res, next) {
       }
     }
 
-    if (!formaPagamento || !FORMAS_VALIDAS.has(formaPagamento)) {
-      return res.status(400).json({ erro: "Forma de pagamento invalida" });
-    }
     if (!Array.isArray(itens) || itens.length === 0) {
       return res.status(400).json({ erro: "Informe ao menos um item" });
     }
@@ -141,15 +221,12 @@ export async function criar(req, res, next) {
       return res.status(400).json({ erro: "Desconto invalido" });
     }
 
-    // Validacao do bloco financeiro (ContaReceber automatica). Feita ANTES
-    // da transacao para falhar rapido sem precisar reverter a venda.
+    // Validacao basica do bloco financeiro (ContaReceber automatica). A
+    // validacao do valor a prazo (baseada no split de pagamentos) acontece
+    // depois de calcular o total — feita ANTES da transacao para falhar
+    // rapido sem precisar reverter a venda.
     let configConta = null;
     if (gerarContaReceber) {
-      if (!FORMAS_GERA_RECEBER.has(formaPagamento)) {
-        return res.status(400).json({
-          erro: "Forma de pagamento nao permite gerar conta a receber",
-        });
-      }
       const venc = parseDate(gerarContaReceber.vencimento);
       if (!venc) return res.status(400).json({ erro: "Vencimento da conta a receber invalido" });
       const parcelas = parseInt(gerarContaReceber.parcelas, 10) || 1;
@@ -216,6 +293,27 @@ export async function criar(req, res, next) {
 
     const total = Math.max(0, subtotal - desconto - descontoFidelidade);
 
+    // Normaliza/valida o split de pagamentos. Lanca erro 400 se algum
+    // pagamento for invalido ou se a soma nao bater com o total.
+    let splitPagamentos;
+    try {
+      splitPagamentos = normalizarPagamentos(req.body, total);
+    } catch (err) {
+      if (err.status) return res.status(err.status).json({ erro: err.message });
+      throw err;
+    }
+    const { pagamentos: pagamentosNorm, formaPrincipal, valorAPrazo } = splitPagamentos;
+
+    // Conta a receber so e gerada se HOUVER pagamento em forma a prazo no
+    // split (e o usuario tiver enviado config). O valor da conta e o
+    // valorAPrazo, NAO o total — ex: R$ 60 PIX + R$ 40 CREDIARIO gera conta
+    // de R$ 40.
+    if (configConta && valorAPrazo <= 0) {
+      return res.status(400).json({
+        erro: "Nenhuma forma de pagamento do split permite gerar conta a receber",
+      });
+    }
+
     try {
       // Defesa explicita: nao deixa registrar venda sem caixa aberto.
       const caixaAtivo = await exigirCaixaAberto(req.user.sub);
@@ -251,6 +349,8 @@ export async function criar(req, res, next) {
         }
 
         // Numero sequencial por tenant (ETAPA 8). Retry em race condition.
+        // Venda.formaPagamento (legado) recebe a forma de MAIOR valor do
+        // split — preserva filtros/relatorios existentes.
         const vendaCriada = await criarComNumeroRetry(tx.venda, req.tenantId, (numero) =>
           tx.venda.create({
             data: {
@@ -258,7 +358,7 @@ export async function criar(req, res, next) {
               clienteId: clienteId || null,
               userId: req.user.sub,
               caixaId: caixaAtivo.id,
-              formaPagamento,
+              formaPagamento: formaPrincipal,
               status: "CONCLUIDA",
               desconto,
               total,
@@ -271,20 +371,33 @@ export async function criar(req, res, next) {
                   subtotal: it.quantidade * it.precoUnitario,
                 })),
               },
+              pagamentos: {
+                create: pagamentosNorm.map(p => ({
+                  forma: p.forma,
+                  valor: p.valor,
+                  formaCustomNome: p.formaCustomNome,
+                  ordem: p.ordem,
+                })),
+              },
             },
             include: INCLUDE_DETALHE,
           })
         );
 
-        // Registra a venda no extrato do caixa (todas as formas — saldo so
-        // muda quando DINHEIRO).
-        await registrarNoCaixaAberto(tx, req.user.sub, {
-          tipo: "VENDA",
-          formaPagamento,
-          valor: total,
-          descricao: `VENDA #${vendaCriada.numero}${clienteId ? "" : " — CONSUMIDOR"}`,
-          vendaId: vendaCriada.id,
-        });
+        // Registra a venda no extrato do caixa: 1 movimentacao POR pagamento
+        // do split (cada forma vira uma linha — apenas DINHEIRO afeta saldo,
+        // logica do registrarNoCaixaAberto). Permite ver no extrato a
+        // composicao real do recebimento.
+        for (const p of pagamentosNorm) {
+          const sufixoForma = pagamentosNorm.length > 1 ? ` (${p.forma})` : "";
+          await registrarNoCaixaAberto(tx, req.user.sub, {
+            tipo: "VENDA",
+            formaPagamento: p.forma,
+            valor: p.valor,
+            descricao: `VENDA #${vendaCriada.numero}${clienteId ? "" : " — CONSUMIDOR"}${sufixoForma}`,
+            vendaId: vendaCriada.id,
+          });
+        }
 
         // Conversao Oportunidade -> Venda: vincula vendaId. updateMany com
         // where defensivo (etapa GANHO + vendaId null) cobre race condition:
@@ -406,7 +519,8 @@ export async function criar(req, res, next) {
         }
 
         // ContaReceber automatica: gera 1+ parcelas vinculadas a venda.
-        // Reaproveita o helper de recorrencia do financeiro.
+        // O VALOR e o valorAPrazo (soma das formas a prazo no split), NAO
+        // o total da venda. Ex: R$ 60 PIX + R$ 40 CREDIARIO -> conta de R$ 40.
         if (configConta) {
           const nomeCliente = vendaCriada.cliente?.nome
             ? vendaCriada.cliente.nome.toUpperCase()
@@ -414,7 +528,7 @@ export async function criar(req, res, next) {
           const descricao = configConta.descricaoCustom
             || `VENDA #${vendaCriada.numero} - ${nomeCliente}`;
           const calc = calcularValores({
-            valorBruto: total, juros: 0, multa: 0, desconto: 0,
+            valorBruto: valorAPrazo, juros: 0, multa: 0, desconto: 0,
           });
           if (!calc.ok) { const e = new Error(calc.erro); e.status = 400; throw e; }
           const serie = gerarSerieRecorrencia({
@@ -468,7 +582,7 @@ export async function reabrir(req, res, next) {
       const venda = await prisma.$transaction(async (tx) => {
         const atual = await tx.venda.findUnique({
           where: { id },
-          include: { contasReceber: true },
+          include: { contasReceber: true, pagamentos: true },
         });
         if (!atual) {
           const e = new Error("Venda nao encontrada"); e.status = 404; throw e;
@@ -499,30 +613,39 @@ export async function reabrir(req, res, next) {
           });
         }
 
-        // Estorno no caixa: so reverte se o caixa de origem ainda esta aberto.
+        // Estorno no caixa: 1 movimentacao POR pagamento do split (so DINHEIRO
+        // afeta saldo). Fallback usa formaPagamento legado se nao houver
+        // pagamentos (vendas pre-migracao tem backfill, entao raramente cai aqui).
+        const splitEstorno = atual.pagamentos.length > 0
+          ? atual.pagamentos.map(p => ({ forma: p.forma, valor: Number(p.valor) }))
+          : [{ forma: atual.formaPagamento, valor: Number(atual.total) }];
+
         if (atual.caixaId) {
           const caixaVenda = await tx.caixa.findUnique({
             where: { id: atual.caixaId },
             select: { status: true, saldoInicial: true },
           });
           if (caixaVenda?.status === "ABERTO") {
-            const totais = await calcularTotaisCaixa(atual.caixaId, Number(caixaVenda.saldoInicial), tx);
-            const saldoAntes = Math.round(totais.saldoEsperadoDinheiro * 100) / 100;
-            const ehDinheiro = atual.formaPagamento === "DINHEIRO";
-            const saldoDepois = Math.round((saldoAntes - (ehDinheiro ? Number(atual.total) : 0)) * 100) / 100;
-            await tx.movimentacaoCaixa.create({
-              data: {
-                caixaId: atual.caixaId,
-                userId: req.user.sub,
-                tipo: "ESTORNO_VENDA",
-                formaPagamento: atual.formaPagamento,
-                valor: Number(atual.total),
-                descricao: `REABERTURA VENDA #${atual.numero} (TROCA DE FORMA)`,
-                saldoAntes,
-                saldoDepois,
-                vendaId: atual.id,
-              },
-            });
+            for (const p of splitEstorno) {
+              const totais = await calcularTotaisCaixa(atual.caixaId, Number(caixaVenda.saldoInicial), tx);
+              const saldoAntes = Math.round(totais.saldoEsperadoDinheiro * 100) / 100;
+              const ehDinheiro = p.forma === "DINHEIRO";
+              const saldoDepois = Math.round((saldoAntes - (ehDinheiro ? p.valor : 0)) * 100) / 100;
+              const sufixoForma = splitEstorno.length > 1 ? ` (${p.forma})` : "";
+              await tx.movimentacaoCaixa.create({
+                data: {
+                  caixaId: atual.caixaId,
+                  userId: req.user.sub,
+                  tipo: "ESTORNO_VENDA",
+                  formaPagamento: p.forma,
+                  valor: p.valor,
+                  descricao: `REABERTURA VENDA #${atual.numero} (TROCA DE FORMA)${sufixoForma}`,
+                  saldoAntes,
+                  saldoDepois,
+                  vendaId: atual.id,
+                },
+              });
+            }
           }
         }
 
@@ -550,7 +673,7 @@ export async function reabrir(req, res, next) {
 export async function refinalizar(req, res, next) {
   try {
     const id = req.params.id;
-    const { formaPagamento, gerarContaReceber } = req.body;
+    const { gerarContaReceber } = req.body;
 
     try {
       await exigirAutorizacaoGerencial(req);
@@ -559,17 +682,8 @@ export async function refinalizar(req, res, next) {
       throw err;
     }
 
-    if (!formaPagamento || !FORMAS_VALIDAS.has(formaPagamento)) {
-      return res.status(400).json({ erro: "Forma de pagamento invalida" });
-    }
-
     let configConta = null;
     if (gerarContaReceber) {
-      if (!FORMAS_GERA_RECEBER.has(formaPagamento)) {
-        return res.status(400).json({
-          erro: "Forma de pagamento nao permite gerar conta a receber",
-        });
-      }
       const venc = parseDate(gerarContaReceber.vencimento);
       if (!venc) return res.status(400).json({ erro: "Vencimento da conta a receber invalido" });
       const parcelas = parseInt(gerarContaReceber.parcelas, 10) || 1;
@@ -604,35 +718,67 @@ export async function refinalizar(req, res, next) {
           e.status = 400; throw e;
         }
 
+        // Normaliza o split de pagamentos com base no total ja existente da
+        // venda (refinalizar nao recalcula itens/desconto — so a forma de
+        // pagamento). Lanca 400 se invalido.
+        const split = normalizarPagamentos(req.body, Number(atual.total));
+        const { pagamentos: pagamentosNorm, formaPrincipal, valorAPrazo } = split;
+
+        if (configConta && valorAPrazo <= 0) {
+          const e = new Error("Nenhuma forma de pagamento do split permite gerar conta a receber");
+          e.status = 400; throw e;
+        }
+
+        // Substitui o split antigo pelo novo. Como VendaPagamento esta com
+        // onDelete: Cascade no FK de Venda, o deleteMany simples ja basta.
+        await tx.vendaPagamento.deleteMany({ where: { vendaId: id } });
+        // createMany nao passa pelo helper de propagacao de tenantId em
+        // nested writes — usamos create em loop para garantir injeção.
+        for (const p of pagamentosNorm) {
+          await tx.vendaPagamento.create({
+            data: {
+              vendaId: id,
+              forma: p.forma,
+              valor: p.valor,
+              formaCustomNome: p.formaCustomNome,
+              ordem: p.ordem,
+            },
+          });
+        }
+
         const atualizada = await tx.venda.update({
           where: { id },
-          data: { formaPagamento, status: "CONCLUIDA" },
+          data: { formaPagamento: formaPrincipal, status: "CONCLUIDA" },
         });
 
-        // Re-registra a venda no caixa de origem se ele ainda esta aberto.
+        // Re-registra a venda no caixa de origem se ele ainda esta aberto:
+        // 1 movimentacao POR pagamento do split (so DINHEIRO afeta saldo).
         if (atual.caixaId) {
           const caixaVenda = await tx.caixa.findUnique({
             where: { id: atual.caixaId },
             select: { status: true, saldoInicial: true },
           });
           if (caixaVenda?.status === "ABERTO") {
-            const totais = await calcularTotaisCaixa(atual.caixaId, Number(caixaVenda.saldoInicial), tx);
-            const saldoAntes = Math.round(totais.saldoEsperadoDinheiro * 100) / 100;
-            const ehDinheiro = formaPagamento === "DINHEIRO";
-            const saldoDepois = Math.round((saldoAntes + (ehDinheiro ? Number(atual.total) : 0)) * 100) / 100;
-            await tx.movimentacaoCaixa.create({
-              data: {
-                caixaId: atual.caixaId,
-                userId: req.user.sub,
-                tipo: "VENDA",
-                formaPagamento,
-                valor: Number(atual.total),
-                descricao: `REFINALIZACAO VENDA #${atual.numero} (NOVA FORMA)`,
-                saldoAntes,
-                saldoDepois,
-                vendaId: atual.id,
-              },
-            });
+            for (const p of pagamentosNorm) {
+              const totais = await calcularTotaisCaixa(atual.caixaId, Number(caixaVenda.saldoInicial), tx);
+              const saldoAntes = Math.round(totais.saldoEsperadoDinheiro * 100) / 100;
+              const ehDinheiro = p.forma === "DINHEIRO";
+              const saldoDepois = Math.round((saldoAntes + (ehDinheiro ? p.valor : 0)) * 100) / 100;
+              const sufixoForma = pagamentosNorm.length > 1 ? ` (${p.forma})` : "";
+              await tx.movimentacaoCaixa.create({
+                data: {
+                  caixaId: atual.caixaId,
+                  userId: req.user.sub,
+                  tipo: "VENDA",
+                  formaPagamento: p.forma,
+                  valor: p.valor,
+                  descricao: `REFINALIZACAO VENDA #${atual.numero} (NOVA FORMA)${sufixoForma}`,
+                  saldoAntes,
+                  saldoDepois,
+                  vendaId: atual.id,
+                },
+              });
+            }
           }
         }
 
@@ -643,7 +789,7 @@ export async function refinalizar(req, res, next) {
           const descricao = configConta.descricaoCustom
             || `VENDA #${atual.numero} - ${nomeCliente}`;
           const calc = calcularValores({
-            valorBruto: Number(atual.total), juros: 0, multa: 0, desconto: 0,
+            valorBruto: valorAPrazo, juros: 0, multa: 0, desconto: 0,
           });
           if (!calc.ok) { const e = new Error(calc.erro); e.status = 400; throw e; }
           const serie = gerarSerieRecorrencia({
@@ -687,7 +833,7 @@ export async function cancelar(req, res, next) {
       const venda = await prisma.$transaction(async (tx) => {
         const atual = await tx.venda.findUnique({
           where: { id },
-          include: { itens: true, contasReceber: true },
+          include: { itens: true, contasReceber: true, pagamentos: true },
         });
         if (!atual) {
           const e = new Error("Venda nao encontrada"); e.status = 404; throw e;
@@ -725,33 +871,39 @@ export async function cancelar(req, res, next) {
           include: INCLUDE_DETALHE,
         });
 
-        // Estorno no caixa: so reverte se a venda estava vinculada a um caixa
-        // que AINDA esta aberto. Se o caixa ja foi fechado, a divergencia fica
-        // como "ajuste pos-fechamento" no proprio extrato (sera vista no
-        // historico, mas nao mexe em saldo de caixa fechado).
+        // Estorno no caixa: 1 movimentacao POR pagamento do split (so DINHEIRO
+        // afeta saldo). Se o caixa ja foi fechado, a divergencia fica como
+        // "ajuste pos-fechamento" no proprio extrato.
+        const splitEstorno = atual.pagamentos.length > 0
+          ? atual.pagamentos.map(p => ({ forma: p.forma, valor: Number(p.valor) }))
+          : [{ forma: atual.formaPagamento, valor: Number(atual.total) }];
+
         if (atual.caixaId) {
           const caixaVenda = await tx.caixa.findUnique({
             where: { id: atual.caixaId },
             select: { status: true, userId: true, saldoInicial: true },
           });
           if (caixaVenda?.status === "ABERTO") {
-            const totais = await calcularTotaisCaixa(atual.caixaId, Number(caixaVenda.saldoInicial), tx);
-            const saldoAntes = Math.round(totais.saldoEsperadoDinheiro * 100) / 100;
-            const ehDinheiro = atual.formaPagamento === "DINHEIRO";
-            const saldoDepois = Math.round((saldoAntes - (ehDinheiro ? Number(atual.total) : 0)) * 100) / 100;
-            await tx.movimentacaoCaixa.create({
-              data: {
-                caixaId: atual.caixaId,
-                userId: req.user.sub,
-                tipo: "ESTORNO_VENDA",
-                formaPagamento: atual.formaPagamento,
-                valor: Number(atual.total),
-                descricao: `ESTORNO VENDA #${atual.numero}`,
-                saldoAntes,
-                saldoDepois,
-                vendaId: atual.id,
-              },
-            });
+            for (const p of splitEstorno) {
+              const totais = await calcularTotaisCaixa(atual.caixaId, Number(caixaVenda.saldoInicial), tx);
+              const saldoAntes = Math.round(totais.saldoEsperadoDinheiro * 100) / 100;
+              const ehDinheiro = p.forma === "DINHEIRO";
+              const saldoDepois = Math.round((saldoAntes - (ehDinheiro ? p.valor : 0)) * 100) / 100;
+              const sufixoForma = splitEstorno.length > 1 ? ` (${p.forma})` : "";
+              await tx.movimentacaoCaixa.create({
+                data: {
+                  caixaId: atual.caixaId,
+                  userId: req.user.sub,
+                  tipo: "ESTORNO_VENDA",
+                  formaPagamento: p.forma,
+                  valor: p.valor,
+                  descricao: `ESTORNO VENDA #${atual.numero}${sufixoForma}`,
+                  saldoAntes,
+                  saldoDepois,
+                  vendaId: atual.id,
+                },
+              });
+            }
           }
         }
 

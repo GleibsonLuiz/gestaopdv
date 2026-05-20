@@ -275,6 +275,7 @@ model Empresa {
   categorias             Categoria[]
   produtos               Produto[]
   vendas                 Venda[]
+  vendaPagamentos        VendaPagamento[]
   itensVenda             ItemVenda[]
   compras                Compra[]
   itensCompra            ItemCompra[]
@@ -658,6 +659,7 @@ model Venda {
   tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   itens               ItemVenda[]
+  pagamentos          VendaPagamento[]
   movimentacoesCaixa  MovimentacaoCaixa[]
   orcamento           Orcamento?
   contasReceber       ContaReceber[]
@@ -669,6 +671,33 @@ model Venda {
   @@index([caixaId])
   @@index([tenantId])
   @@map("vendas")
+}
+
+// Split de pagamento: cada Venda pode ter 1..N pagamentos (DINHEIRO + PIX +
+// CARTAO, etc.). A soma dos valores == Venda.total (excedente em DINHEIRO
+// vira troco e nao entra como pagamento). Venda.formaPagamento (legado)
+// continua existindo e refletindo a forma de MAIOR valor para manter
+// filtros/relatorios existentes funcionando sem reescrita.
+model VendaPagamento {
+  id              String         @id @default(uuid())
+  forma           FormaPagamento
+  valor           Decimal        @db.Decimal(10, 2)
+  // Snapshot textual da forma personalizada (ex: "Cartao Banco do Brasil").
+  // Sem FK pra FormaPagamentoCustom — preserva nome historico se a custom
+  // for desativada/renomeada depois.
+  formaCustomNome String?
+  ordem           Int            @default(0)
+  createdAt       DateTime       @default(now())
+
+  vendaId String
+  venda   Venda  @relation(fields: [vendaId], references: [id], onDelete: Cascade)
+
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([vendaId])
+  @@index([tenantId])
+  @@map("venda_pagamentos")
 }
 
 model ItemVenda {

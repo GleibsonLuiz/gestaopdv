@@ -3,7 +3,7 @@
 // recibo com auto-print, historico). Tipar tudo de uma vez seria arriscado
 // — manter @ts-nocheck e refinar em etapa propria, ja com o sistema
 // inteiro em TS pra apoiar o type narrowing.
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback, useReducer } from "react";
 import { C } from "./lib/theme";
 import { api, BASE_URL } from "./lib/api";
 import { useConfiguracaoEmpresa, formatarEndereco } from "./HeaderRelatorio";
@@ -259,6 +259,51 @@ function PDVHeader({ user, aba, setAba, onSair, sairConta }) {
 }
 
 
+// ==================== SPLIT DE PAGAMENTO (reducer) ====================
+// Estado dos pagamentos do modal de fechamento. O reducer mantem apenas a
+// lista — derivados (pago, restante, troco, valorAPrazo) ficam em useMemo
+// do componente, garantindo estado minimo.
+//
+// Por pagamento:
+//   - id              chave estavel (crypto.randomUUID — n unique por modal)
+//   - forma           FormaPagamento enum
+//   - formaCustomId   id de FormaPagamentoCustom (se variante personalizada)
+//   - formaCustomNome snapshot textual da forma custom (envia ao backend)
+//   - valor           o que efetivamente entra na venda (== vai no payload)
+//   - valorEntregue   so DINHEIRO: o que o cliente entregou (default = valor);
+//                     se > valor, vira troco — exibido na UI mas NAO persiste
+function pagamentosReducer(state, action) {
+  switch (action.type) {
+    case "add":
+      return [...state, action.pagamento];
+    case "remove":
+      return state.filter(p => p.id !== action.id);
+    case "update":
+      return state.map(p => p.id === action.id ? { ...p, ...action.patch } : p);
+    case "reset":
+      return [];
+    default:
+      return state;
+  }
+}
+
+const novoId = () =>
+  (typeof crypto !== "undefined" && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : `p${Date.now()}${Math.random().toString(36).slice(2, 8)}`;
+
+function criarPagamento(forma, valor, opts = {}) {
+  const ehDinheiro = forma === "DINHEIRO";
+  return {
+    id: novoId(),
+    forma,
+    formaCustomId: opts.formaCustomId || null,
+    formaCustomNome: opts.formaCustomNome || null,
+    valor: Math.max(0, Number(valor) || 0),
+    valorEntregue: ehDinheiro ? Math.max(0, Number(valor) || 0) : undefined,
+  };
+}
+
 // ==================== NOVA VENDA ====================
 
 function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
@@ -272,7 +317,11 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
   // a finalizacao da venda passa `oportunidadeId` no payload pro backend
   // vincular automaticamente. Limpo ao cancelar conversao ou apos sucesso.
   const [oportunidadeConvertendo, setOportunidadeConvertendo] = useState(null);
-  const [forma, setForma] = useState("DINHEIRO");
+  // Split de pagamento: array de pagamentos via useReducer (substitui o
+  // estado antigo "forma + valorRecebido + formaCustomId" que so suportava 1
+  // forma). Soma dos pagamentos.valor == total da venda; entregue extra em
+  // DINHEIRO vira troco. Ver pagamentosReducer().
+  const [pagamentos, dispatchPagamentos] = useReducer(pagamentosReducer, []);
   const [desconto, setDesconto] = useState("0");
   const [observacoes, setObservacoes] = useState("");
   const [salvando, setSalvando] = useState(false);
@@ -280,7 +329,6 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
   const [reciboAberto, setReciboAberto] = useState(null);
   const [pagamentoAberto, setPagamentoAberto] = useState(false);
   const [cancelarAberto, setCancelarAberto] = useState(false);
-  const [valorRecebido, setValorRecebido] = useState("");
   const [destacado, setDestacado] = useState(null); // produtoId recém-adicionado (para flash)
   const [caixaAtual, setCaixaAtual] = useState(null);
   const [tipoCaixa, setTipoCaixa] = useState("INDEPENDENTE");
@@ -291,7 +339,6 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
   const [qtdModalProduto, setQtdModalProduto] = useState(null); // produto p/ modal de qtd
   const [qtdModalValor, setQtdModalValor] = useState("1");
   const [formasCustom, setFormasCustom] = useState([]);
-  const [formaCustomId, setFormaCustomId] = useState(null); // null = padrao; id = custom
   const [gerenciarFormasAberto, setGerenciarFormasAberto] = useState(false);
   // Bloco financeiro (gera ContaReceber) — visivel apenas para BOLETO/CREDITO/
   // CREDIARIO. Default: 30 dias a frente, 1 parcela.
@@ -303,7 +350,9 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
   const [painelPontosAberto, setPainelPontosAberto] = useState(false);
   const buscaRef = useRef(null);
   const finalizarRef = useRef(null);
-  const valorRecebidoRef = useRef(null);
+  // Foca dinamicamente o input "Recebi" do PRIMEIRO pagamento DINHEIRO no
+  // split (substitui o ref antigo unico para forma==DINHEIRO).
+  const dinheiroInputRef = useRef(null);
   const qtdInputRef = useRef(null);
   const qtdConfirmarRef = useRef(null);
 
@@ -603,26 +652,13 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
     setClienteId("");
     setDesconto("0");
     setObservacoes("");
-    setForma("DINHEIRO");
-    setFormaCustomId(null);
+    dispatchPagamentos({ type: "reset" });
     setErro("");
-    setValorRecebido("");
     setBusca("");
     setPontosResgatando(0);
     setPainelPontosAberto(false);
     setSaldoPontos(null);
     if (refocar) focarBusca();
-  }
-
-  // Selecao de forma de pagamento — separa default vs custom para ser
-  // possivel destacar visualmente qual variante esta ativa.
-  function selecionarFormaPadrao(enumId) {
-    setForma(enumId);
-    setFormaCustomId(null);
-  }
-  function selecionarFormaCustom(custom) {
-    setForma(custom.baseFormaPagamento);
-    setFormaCustomId(custom.id);
   }
 
   const subtotal = useMemo(
@@ -641,13 +677,59 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
   }, [pontosResgatando, configFidelidade]);
   const total = Math.max(0, subtotal - descontoNum - descontoFidelidade);
 
-  const valorRecebidoNum = useMemo(() => {
-    const n = parseFloat(String(valorRecebido).replace(",", "."));
-    return Number.isFinite(n) && n >= 0 ? n : 0;
-  }, [valorRecebido]);
-  const troco = Math.max(0, valorRecebidoNum - total);
-  const trocoFalta = Math.max(0, total - valorRecebidoNum);
-  const mostrarTroco = forma === "DINHEIRO" && total > 0;
+  // ===== Derivados do split de pagamento =====
+  // Cada pagamento.valor entra na soma (jamais o valorEntregue — esse so
+  // serve para calcular troco visual do DINHEIRO).
+  const pagoNum = useMemo(
+    () => pagamentos.reduce((acc, p) => acc + (Number(p.valor) || 0), 0),
+    [pagamentos]
+  );
+  const pago = Math.round(pagoNum * 100) / 100;
+  const restanteNum = Math.max(0, total - pago);
+  const restante = Math.round(restanteNum * 100) / 100;
+  // Troco: para cada pagamento DINHEIRO, max(0, valorEntregue - valor).
+  // Sem dinheiro no split, troco e sempre 0.
+  const troco = useMemo(() => {
+    const t = pagamentos
+      .filter(p => p.forma === "DINHEIRO")
+      .reduce((acc, p) => acc + Math.max(0, (Number(p.valorEntregue) || 0) - (Number(p.valor) || 0)), 0);
+    return Math.round(t * 100) / 100;
+  }, [pagamentos]);
+  const temDinheiro = useMemo(
+    () => pagamentos.some(p => p.forma === "DINHEIRO"),
+    [pagamentos]
+  );
+  const valorAPrazo = useMemo(() => {
+    const t = pagamentos
+      .filter(p => FORMAS_GERA_RECEBER.has(p.forma))
+      .reduce((acc, p) => acc + (Number(p.valor) || 0), 0);
+    return Math.round(t * 100) / 100;
+  }, [pagamentos]);
+  const podeFinalizar = total > 0 && Math.abs(pago - total) < 0.01;
+
+  // Helper: adiciona um pagamento padrao (com valor preenchido = restante).
+  // Bloqueia se ja nao ha o que receber. Foca o input apos adicionar para
+  // permitir ajuste rapido do valor.
+  function adicionarPagamentoForma(formaId, opts = {}) {
+    if (restante <= 0 && pago >= total) {
+      flashErro("Total ja esta totalmente coberto pelos pagamentos");
+      return;
+    }
+    const valorSugerido = restante > 0 ? restante : 0;
+    dispatchPagamentos({
+      type: "add",
+      pagamento: criarPagamento(formaId, valorSugerido, opts),
+    });
+    if (formaId === "DINHEIRO") {
+      setTimeout(() => dinheiroInputRef.current?.focus(), 30);
+    }
+  }
+  function adicionarPagamentoCustom(custom) {
+    adicionarPagamentoForma(custom.baseFormaPagamento, {
+      formaCustomId: custom.id,
+      formaCustomNome: custom.nome,
+    });
+  }
 
   // Atalhos globais:
   //   F1-F6   forma de pagamento
@@ -676,11 +758,11 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
       const mapa = formaPorTeclaRef.current || {};
       if (mapa[e.key]) {
         e.preventDefault();
-        const formaId = mapa[e.key];
-        selecionarFormaPadrao(formaId);
-        if (formaId === "DINHEIRO" && pagamentoAberto) {
-          setTimeout(() => valorRecebidoRef.current?.focus(), 0);
-        }
+        // F1-F6: so adiciona pagamento se o modal de fechamento estiver
+        // aberto (caso contrario o atalho nao tem significado e poderia
+        // interferir com edicao livre fora do modal).
+        if (!pagamentoAbertoRef.current) return;
+        adicionarPagamentoFormaRef.current?.(mapa[e.key]);
         return;
       }
       if (e.key === "F8") {
@@ -709,10 +791,12 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
   const pagamentoAbertoRef = useRef(pagamentoAberto);
   const abrirPagamentoRef = useRef(null);
   const confirmarPagamentoRef = useRef(null);
+  const adicionarPagamentoFormaRef = useRef(null);
   const topProdutosRef = useRef(painel.topProdutos);
   useEffect(() => { carrinhoRef.current = carrinho; }, [carrinho]);
   useEffect(() => { pagamentoAbertoRef.current = pagamentoAberto; }, [pagamentoAberto]);
   useEffect(() => { topProdutosRef.current = painel.topProdutos; }, [painel.topProdutos]);
+  useEffect(() => { adicionarPagamentoFormaRef.current = adicionarPagamentoForma; });
 
   function abrirPagamento() {
     setErro("");
@@ -720,8 +804,16 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
     if (carrinho.length === 0) { flashErro("Adicione ao menos um item"); return; }
     if (descontoNum > subtotal) { flashErro("Desconto não pode ser maior que o subtotal"); return; }
     setPagamentoAberto(true);
+    // Caso comum: 1 forma so. Semeia o split com DINHEIRO cobrindo o total —
+    // se o operador quiser dividir, ajusta o valor e adiciona outras formas.
+    if (pagamentos.length === 0) {
+      dispatchPagamentos({
+        type: "add",
+        pagamento: criarPagamento("DINHEIRO", total),
+      });
+    }
     setTimeout(() => {
-      if (forma === "DINHEIRO") valorRecebidoRef.current?.focus();
+      if (dinheiroInputRef.current) dinheiroInputRef.current.focus();
       else finalizarRef.current?.focus();
     }, 50);
   }
@@ -732,8 +824,15 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
     setErro("");
     if (carrinho.length === 0) { setErro("Adicione ao menos um item"); return; }
     if (descontoNum > subtotal) { setErro("Desconto não pode ser maior que o subtotal"); return; }
+    if (pagamentos.length === 0) { setErro("Adicione ao menos uma forma de pagamento"); return; }
+    if (!podeFinalizar) {
+      setErro(restante > 0
+        ? `Falta receber ${fmtBRL(restante)} para fechar o total`
+        : `Soma dos pagamentos (${fmtBRL(pago)}) excede o total. Ajuste o valor antes de finalizar.`);
+      return;
+    }
 
-    const geraReceber = FORMAS_GERA_RECEBER.has(forma) && !formaCustomId;
+    const geraReceber = valorAPrazo > 0;
     if (geraReceber) {
       if (!contaVencimento) { setErro("Informe o vencimento da conta a receber"); return; }
       const p = parseInt(contaParcelas, 10);
@@ -746,7 +845,13 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
     try {
       const payload = {
         clienteId: clienteId || null,
-        formaPagamento: forma,
+        // Backend deriva Venda.formaPagamento como a forma do pagamento de
+        // MAIOR valor — nao precisamos enviar formaPagamento singular.
+        pagamentos: pagamentos.map(p => ({
+          forma: p.forma,
+          valor: Math.round((Number(p.valor) || 0) * 100) / 100,
+          formaCustomNome: p.formaCustomNome || undefined,
+        })),
         desconto: descontoNum,
         observacoes: observacoes ? observacoes.toUpperCase() : null,
         itens: carrinho.map(it => ({
@@ -783,9 +888,16 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
         return { ...p, estoque: novoEstoque };
       }));
       setPagamentoAberto(false);
-      const recebido = forma === "DINHEIRO" ? valorRecebidoNum : 0;
-      const trocoPago = forma === "DINHEIRO" ? troco : 0;
-      setReciboAberto({ venda, valorRecebido: recebido, troco: trocoPago });
+      // Para o recibo: somatorio do que foi entregue em dinheiro e troco
+      // total. ReciboModal ainda mostra resumo "Valor recebido / Troco".
+      const recebidoDinheiro = pagamentos
+        .filter(p => p.forma === "DINHEIRO")
+        .reduce((acc, p) => acc + (Number(p.valorEntregue) || Number(p.valor) || 0), 0);
+      setReciboAberto({
+        venda,
+        valorRecebido: Math.round(recebidoDinheiro * 100) / 100,
+        troco,
+      });
       // Não refocar busca — o ReciboModal vai roubar foco para "Nova Venda".
       limparCarrinho({ refocar: false });
       recarregarCaixa();
@@ -1529,7 +1641,9 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
 
               <div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <label className="pdv-field-label" style={{ marginBottom: 0 }}>Forma de pagamento</label>
+                  <label className="pdv-field-label" style={{ marginBottom: 0 }}>
+                    Adicionar pagamento <span style={{ color: "var(--pdv-t3)", fontWeight: 400 }}>(F1–F6)</span>
+                  </label>
                   <button
                     type="button"
                     onClick={() => setGerenciarFormasAberto(true)}
@@ -1543,12 +1657,15 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
                 </div>
                 <div className="pdv-pay-grid">
                   {FORMAS_ORDENADAS.map(f => {
-                    const ativo = forma === f.id && !formaCustomId;
                     const cor = FORMA_COR_CLASSE[f.id] || "pdv-pay-c-emerald";
+                    const desabilitado = restante <= 0 && pagamentos.length > 0;
                     return (
                       <button
-                        key={f.id} onClick={() => selecionarFormaPadrao(f.id)} type="button"
-                        className={`pdv-pay-btn ${cor} ${ativo ? "is-active" : ""}`}
+                        key={f.id} onClick={() => adicionarPagamentoForma(f.id)} type="button"
+                        disabled={desabilitado}
+                        className={`pdv-pay-btn ${cor}`}
+                        title={desabilitado ? "Total ja coberto — remova um pagamento antes" : `Adicionar ${f.label}`}
+                        style={desabilitado ? { opacity: 0.4, cursor: "not-allowed" } : undefined}
                       >
                         <div className="pay-row">
                           <div className="pay-icon">{f.icone}</div>
@@ -1564,12 +1681,14 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
                     <div className="pdv-shortcuts-label" style={{ marginTop: 12 }}>Personalizadas</div>
                     <div className="pdv-pay-grid">
                       {formasCustom.map(c => {
-                        const ativo = formaCustomId === c.id;
                         const cor = FORMA_COR_CLASSE[c.baseFormaPagamento] || "pdv-pay-c-violet";
+                        const desabilitado = restante <= 0 && pagamentos.length > 0;
                         return (
                           <button
-                            key={c.id} onClick={() => selecionarFormaCustom(c)} type="button"
-                            className={`pdv-pay-btn ${cor} ${ativo ? "is-active" : ""}`}
+                            key={c.id} onClick={() => adicionarPagamentoCustom(c)} type="button"
+                            disabled={desabilitado}
+                            className={`pdv-pay-btn ${cor}`}
+                            style={desabilitado ? { opacity: 0.4, cursor: "not-allowed" } : undefined}
                           >
                             <div className="pay-row">
                               <div className="pay-icon">{c.icone || "•"}</div>
@@ -1584,26 +1703,141 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
                 )}
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div>
-                  <label className="pdv-field-label">Desconto (R$)</label>
-                  <input type="number" step="0.01" min="0" value={desconto}
-                    onChange={e => setDesconto(e.target.value)} className="pdv-field-input" />
-                </div>
-                {forma === "DINHEIRO" && (
-                  <div>
-                    <label className="pdv-field-label">Valor recebido (R$)</label>
-                    <input
-                      ref={valorRecebidoRef}
-                      type="number" step="0.01" min="0"
-                      value={valorRecebido}
-                      onChange={e => setValorRecebido(e.target.value)}
-                      placeholder="0,00"
-                      className="pdv-field-input"
-                      autoFocus
-                    />
+              {pagamentos.length > 0 && (
+                <div style={{
+                  display: "flex", flexDirection: "column", gap: 8,
+                  padding: 10, borderRadius: 10,
+                  background: "var(--pdv-surf-2)",
+                  border: "1px solid var(--pdv-line)",
+                }}>
+                  <div style={{
+                    color: "var(--pdv-t3)", fontSize: 10.5, fontWeight: 500,
+                    letterSpacing: ".06em", textTransform: "uppercase",
+                  }}>
+                    Pagamentos ({pagamentos.length})
                   </div>
-                )}
+                  {pagamentos.map((p, idx) => {
+                    const ehDinheiro = p.forma === "DINHEIRO";
+                    const trocoDoPagamento = ehDinheiro
+                      ? Math.max(0, (Number(p.valorEntregue) || 0) - (Number(p.valor) || 0))
+                      : 0;
+                    const corBorda = FORMA_COR_VAR[p.forma] || "var(--pdv-accent)";
+                    const primeiroDinheiroIdx = pagamentos.findIndex(x => x.forma === "DINHEIRO");
+                    const ehPrimeiroDinheiro = ehDinheiro && idx === primeiroDinheiroIdx;
+                    return (
+                      <div key={p.id} style={{
+                        display: "grid",
+                        gridTemplateColumns: ehDinheiro ? "auto 1fr 1fr auto" : "auto 1fr auto",
+                        gap: 8, alignItems: "center",
+                        padding: "8px 10px", borderRadius: 8,
+                        background: "var(--pdv-surf-1)",
+                        borderLeft: `3px solid ${corBorda}`,
+                      }}>
+                        <div style={{
+                          display: "flex", flexDirection: "column", minWidth: 80,
+                        }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--pdv-t1)" }}>
+                            {p.formaCustomNome || FORMA_LABEL[p.forma] || p.forma}
+                          </span>
+                          {p.formaCustomNome && (
+                            <span style={{ fontSize: 10, color: "var(--pdv-t3)" }}>
+                              {FORMA_LABEL[p.forma]}
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          <label style={{ display: "block", fontSize: 10, color: "var(--pdv-t3)", marginBottom: 2 }}>
+                            {ehDinheiro ? "Vai pagar (R$)" : "Valor (R$)"}
+                          </label>
+                          <input
+                            type="number" step="0.01" min="0"
+                            value={p.valor}
+                            onChange={e => {
+                              const v = parseFloat(e.target.value.replace(",", ".")) || 0;
+                              dispatchPagamentos({
+                                type: "update", id: p.id,
+                                patch: ehDinheiro
+                                  ? { valor: v, valorEntregue: Math.max(v, Number(p.valorEntregue) || 0) }
+                                  : { valor: v },
+                              });
+                            }}
+                            className="pdv-field-input"
+                            style={{ padding: "6px 8px", fontSize: 13 }}
+                          />
+                        </div>
+                        {ehDinheiro && (
+                          <div>
+                            <label style={{ display: "block", fontSize: 10, color: "var(--pdv-t3)", marginBottom: 2 }}>
+                              Recebi (R$) {trocoDoPagamento > 0 && (
+                                <span style={{ color: "var(--pdv-accent)" }}> → troco {fmtBRL(trocoDoPagamento)}</span>
+                              )}
+                            </label>
+                            <input
+                              ref={ehPrimeiroDinheiro ? dinheiroInputRef : null}
+                              type="number" step="0.01" min={0}
+                              value={p.valorEntregue ?? p.valor}
+                              onChange={e => {
+                                const v = parseFloat(e.target.value.replace(",", ".")) || 0;
+                                dispatchPagamentos({
+                                  type: "update", id: p.id,
+                                  patch: { valorEntregue: v },
+                                });
+                              }}
+                              className="pdv-field-input"
+                              style={{ padding: "6px 8px", fontSize: 13 }}
+                            />
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => dispatchPagamentos({ type: "remove", id: p.id })}
+                          title="Remover este pagamento"
+                          style={{
+                            background: "transparent", border: "none", color: "var(--pdv-t3)",
+                            fontSize: 18, cursor: "pointer", padding: "0 4px",
+                            alignSelf: "end", lineHeight: 1,
+                          }}
+                        >×</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div style={{
+                display: "grid", gap: 6,
+                gridTemplateColumns: "1fr 1fr",
+                padding: "10px 12px", borderRadius: 10,
+                background: restante > 0
+                  ? "rgba(245,158,11,.08)"
+                  : "color-mix(in oklab, var(--pdv-accent) 14%, var(--pdv-surf-2))",
+                border: `1px solid ${restante > 0 ? "rgba(245,158,11,.30)" : "var(--pdv-accent-glow)"}`,
+              }}>
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                  <span style={{ color: "var(--pdv-t3)", fontSize: 10.5, fontWeight: 500, textTransform: "uppercase", letterSpacing: ".06em" }}>Total</span>
+                  <span style={{ color: "var(--pdv-t1)", fontSize: 17, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtBRL(total)}</span>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                  <span style={{ color: "var(--pdv-t3)", fontSize: 10.5, fontWeight: 500, textTransform: "uppercase", letterSpacing: ".06em" }}>Pago</span>
+                  <span style={{ color: "var(--pdv-t1)", fontSize: 17, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtBRL(pago)}</span>
+                </div>
+                {restante > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gridColumn: "1 / -1" }}>
+                    <span style={{ color: "var(--pdv-c-amber)", fontSize: 10.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em" }}>Falta receber</span>
+                    <span style={{ color: "var(--pdv-c-amber)", fontSize: 20, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmtBRL(restante)}</span>
+                  </div>
+                ) : troco > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gridColumn: "1 / -1" }}>
+                    <span style={{ color: "var(--pdv-accent)", fontSize: 10.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em" }}>Troco</span>
+                    <span style={{ color: "var(--pdv-accent)", fontSize: 22, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmtBRL(troco)}</span>
+                  </div>
+                ) : null}
+              </div>
+
+              <div>
+                <label className="pdv-field-label">Desconto (R$)</label>
+                <input type="number" step="0.01" min="0" value={desconto}
+                  onChange={e => setDesconto(e.target.value)} className="pdv-field-input" />
               </div>
 
               <div>
@@ -1612,7 +1846,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
                   placeholder="Opcional" className="pdv-field-input" />
               </div>
 
-              {FORMAS_GERA_RECEBER.has(forma) && !formaCustomId && (
+              {valorAPrazo > 0 && (
                 <div style={{
                   padding: "12px 14px", borderRadius: 10,
                   background: "color-mix(in oklab, var(--pdv-c-violet) 10%, var(--pdv-surf-2))",
@@ -1623,7 +1857,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
                     color: "var(--pdv-c-violet)", fontSize: 11, fontWeight: 600,
                     letterSpacing: ".06em", textTransform: "uppercase",
                   }}>
-                    Conta a receber será gerada
+                    Conta a receber será gerada · {fmtBRL(valorAPrazo)} a prazo
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                     <div>
@@ -1647,9 +1881,9 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
                       />
                     </div>
                   </div>
-                  {total > 0 && contaVencimento && (
+                  {contaVencimento && (
                     <div style={{ fontSize: 12, color: "var(--pdv-t2)" }}>
-                      ✓ {contaParcelas}× {fmtBRL(total / Math.max(1, parseInt(contaParcelas, 10) || 1))}
+                      ✓ {contaParcelas}× {fmtBRL(valorAPrazo / Math.max(1, parseInt(contaParcelas, 10) || 1))}
                       {parseInt(contaParcelas, 10) > 1 ? (
                         <> — vencendo no dia {new Date(contaVencimento + "T12:00:00").getDate()} de cada mês a partir de {new Date(contaVencimento + "T12:00:00").toLocaleDateString("pt-BR")}</>
                       ) : (
@@ -1658,37 +1892,6 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
                     </div>
                   )}
                 </div>
-              )}
-
-              {mostrarTroco && valorRecebidoNum > 0 && (
-                trocoFalta > 0 ? (
-                  <div style={{
-                    display: "flex", justifyContent: "space-between", alignItems: "center",
-                    padding: "12px 14px", borderRadius: 10,
-                    background: "rgba(245,158,11,.10)", border: "1px solid rgba(245,158,11,.35)",
-                  }}>
-                    <div style={{ color: "var(--pdv-c-amber)", fontSize: 11, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase" }}>
-                      Falta receber
-                    </div>
-                    <div style={{ color: "var(--pdv-c-amber)", fontSize: 20, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-                      {fmtBRL(trocoFalta)}
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{
-                    display: "flex", justifyContent: "space-between", alignItems: "center",
-                    padding: "12px 14px", borderRadius: 10,
-                    background: "color-mix(in oklab, var(--pdv-accent) 14%, var(--pdv-surf-2))",
-                    border: "1px solid var(--pdv-accent-glow)",
-                  }}>
-                    <div style={{ color: "var(--pdv-accent)", fontSize: 11, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase" }}>
-                      Troco
-                    </div>
-                    <div style={{ color: "var(--pdv-accent)", fontSize: 22, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-                      {fmtBRL(troco)}
-                    </div>
-                  </div>
-                )
               )}
 
               {erro && (
@@ -1708,9 +1911,14 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
               <button
                 ref={finalizarRef}
                 onClick={confirmarPagamento}
-                disabled={salvando}
+                disabled={salvando || !podeFinalizar}
                 className="pdv-btn-finalize"
-                style={{ flex: 1 }}
+                style={{ flex: 1, opacity: (salvando || !podeFinalizar) ? 0.55 : 1 }}
+                title={!podeFinalizar
+                  ? (restante > 0
+                      ? `Falta ${fmtBRL(restante)} para fechar`
+                      : "Soma dos pagamentos excede o total — ajuste")
+                  : undefined}
               >
                 {salvando ? "Confirmando…" : <>Confirmar pagamento · {fmtBRL(total)}</>}
                 {!salvando && <span className="pdv-kbd">F10</span>}
@@ -2179,7 +2387,11 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpr
               <div className="pdv-success-mark">✓</div>
               <div className="pdv-success-title">Venda concluída</div>
               <div className="pdv-success-sub">
-                {fmtBRL(venda.total)} via {FORMA_LABEL[venda.formaPagamento]} · #{venda.numero}
+                {fmtBRL(venda.total)} via {
+                  Array.isArray(venda.pagamentos) && venda.pagamentos.length > 1
+                    ? `${venda.pagamentos.length} formas`
+                    : (FORMA_LABEL[venda.pagamentos?.[0]?.forma || venda.formaPagamento] || venda.formaPagamento)
+                } · #{venda.numero}
               </div>
             </div>
           ) : (
@@ -2218,10 +2430,35 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpr
               background: "var(--pdv-surf-2)", border: "1px solid var(--pdv-line)",
               borderRadius: 12, padding: 14, marginBottom: 16,
             }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6 }}>
-                <span style={{ color: "var(--pdv-t3)" }}>Forma de pagamento</span>
-                <span style={{ color: "var(--pdv-t1)", fontWeight: 500 }}>{FORMA_LABEL[venda.formaPagamento]}</span>
-              </div>
+              {Array.isArray(venda.pagamentos) && venda.pagamentos.length > 1 ? (
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ color: "var(--pdv-t3)", fontSize: 11, marginBottom: 6, fontWeight: 500 }}>
+                    Pagamentos ({venda.pagamentos.length})
+                  </div>
+                  {venda.pagamentos.map(p => (
+                    <div key={p.id} style={{
+                      display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4,
+                      paddingLeft: 10, borderLeft: `3px solid ${FORMA_COR_VAR[p.forma] || "var(--pdv-accent)"}`,
+                    }}>
+                      <span style={{ color: "var(--pdv-t2)" }}>
+                        {p.formaCustomNome || FORMA_LABEL[p.forma] || p.forma}
+                      </span>
+                      <span style={{ color: "var(--pdv-t1)", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>
+                        {fmtBRL(p.valor)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6 }}>
+                  <span style={{ color: "var(--pdv-t3)" }}>Forma de pagamento</span>
+                  <span style={{ color: "var(--pdv-t1)", fontWeight: 500 }}>
+                    {venda.pagamentos?.[0]?.formaCustomNome
+                      || FORMA_LABEL[venda.pagamentos?.[0]?.forma || venda.formaPagamento]
+                      || venda.formaPagamento}
+                  </span>
+                </div>
+              )}
               {Number(venda.desconto) > 0 && (
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6 }}>
                   <span style={{ color: "var(--pdv-t3)" }}>Desconto</span>
@@ -2715,10 +2952,35 @@ function DetalheVendaModal({ venda, onFechar, onCancelar, onReimprimir, onReabri
             background: "var(--pdv-surf-2)", border: "1px solid var(--pdv-line)",
             borderRadius: 12, padding: 14,
           }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6 }}>
-              <span style={{ color: "var(--pdv-t3)" }}>Forma de pagamento</span>
-              <span style={{ color: "var(--pdv-t1)", fontWeight: 500 }}>{FORMA_LABEL[venda.formaPagamento]}</span>
-            </div>
+            {Array.isArray(venda.pagamentos) && venda.pagamentos.length > 1 ? (
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ color: "var(--pdv-t3)", fontSize: 11, marginBottom: 6, fontWeight: 500 }}>
+                  Pagamentos ({venda.pagamentos.length})
+                </div>
+                {venda.pagamentos.map(p => (
+                  <div key={p.id} style={{
+                    display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4,
+                    paddingLeft: 10, borderLeft: `3px solid ${FORMA_COR_VAR[p.forma] || "var(--pdv-accent)"}`,
+                  }}>
+                    <span style={{ color: "var(--pdv-t2)" }}>
+                      {p.formaCustomNome || FORMA_LABEL[p.forma] || p.forma}
+                    </span>
+                    <span style={{ color: "var(--pdv-t1)", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>
+                      {fmtBRL(p.valor)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6 }}>
+                <span style={{ color: "var(--pdv-t3)" }}>Forma de pagamento</span>
+                <span style={{ color: "var(--pdv-t1)", fontWeight: 500 }}>
+                  {venda.pagamentos?.[0]?.formaCustomNome
+                    || FORMA_LABEL[venda.pagamentos?.[0]?.forma || venda.formaPagamento]
+                    || venda.formaPagamento}
+                </span>
+              </div>
+            )}
             {Number(venda.desconto) > 0 && (
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 6 }}>
                 <span style={{ color: "var(--pdv-t3)" }}>Desconto</span>
@@ -2772,7 +3034,13 @@ function DetalheVendaModal({ venda, onFechar, onCancelar, onReimprimir, onReabri
 }
 
 function RefinalizarVendaModal({ venda, onFechar, onAplicar }) {
-  const [forma, setForma] = useState(venda.formaPagamento);
+  const total = Number(venda.total);
+  // Mesmo reducer do modal de nova venda — split de pagamentos.
+  const [pagamentos, dispatchPagamentos] = useReducer(
+    pagamentosReducer,
+    [],
+    () => [criarPagamento(venda.formaPagamento || "DINHEIRO", total)]
+  );
   const [gerarConta, setGerarConta] = useState(false);
   const [vencimento, setVencimento] = useState(dataDaqui(30));
   const [parcelas, setParcelas] = useState(1);
@@ -2780,19 +3048,45 @@ function RefinalizarVendaModal({ venda, onFechar, onAplicar }) {
   const [observacoesConta, setObservacoesConta] = useState("");
   const [salvando, setSalvando] = useState(false);
 
-  const aPrazo = FORMAS_GERA_RECEBER.has(forma);
+  const pago = useMemo(
+    () => Math.round(pagamentos.reduce((a, p) => a + (Number(p.valor) || 0), 0) * 100) / 100,
+    [pagamentos]
+  );
+  const restante = Math.max(0, Math.round((total - pago) * 100) / 100);
+  const valorAPrazo = useMemo(
+    () => Math.round(
+      pagamentos.filter(p => FORMAS_GERA_RECEBER.has(p.forma))
+        .reduce((a, p) => a + (Number(p.valor) || 0), 0) * 100
+    ) / 100,
+    [pagamentos]
+  );
+  const podeFinalizar = total > 0 && Math.abs(pago - total) < 0.01;
 
   useEffect(() => {
-    if (!aPrazo && gerarConta) setGerarConta(false);
-  }, [aPrazo, gerarConta]);
+    if (valorAPrazo <= 0 && gerarConta) setGerarConta(false);
+  }, [valorAPrazo, gerarConta]);
 
   useModalKeys(true, { onClose: onFechar });
 
+  function adicionar(formaId) {
+    if (restante <= 0) return;
+    dispatchPagamentos({
+      type: "add",
+      pagamento: criarPagamento(formaId, restante),
+    });
+  }
+
   async function aplicar() {
-    if (!forma) return;
+    if (!podeFinalizar) return;
     setSalvando(true);
-    const payload = { formaPagamento: forma };
-    if (aPrazo && gerarConta) {
+    const payload = {
+      pagamentos: pagamentos.map(p => ({
+        forma: p.forma,
+        valor: Math.round((Number(p.valor) || 0) * 100) / 100,
+        formaCustomNome: p.formaCustomNome || undefined,
+      })),
+    };
+    if (valorAPrazo > 0 && gerarConta) {
       payload.gerarContaReceber = {
         vencimento,
         parcelas: Number(parcelas) || 1,
@@ -2809,7 +3103,7 @@ function RefinalizarVendaModal({ venda, onFechar, onAplicar }) {
 
   return (
     <div onClick={onFechar} className="pdv-modal-bg">
-      <div onClick={e => e.stopPropagation()} className="pdv-modal" style={{ width: "min(560px, calc(100vw - 32px))" }}>
+      <div onClick={e => e.stopPropagation()} className="pdv-modal" style={{ width: "min(620px, calc(100vw - 32px))" }}>
         <div className="pdv-modal-hd">
           <div>
             <div className="pdv-modal-title">Refinalizar venda #{venda.numero}</div>
@@ -2820,41 +3114,103 @@ function RefinalizarVendaModal({ venda, onFechar, onAplicar }) {
           <button type="button" onClick={onFechar} className="pdv-modal-x">×</button>
         </div>
 
-        <div className="pdv-modal-body" style={{ paddingBottom: 14 }}>
-          <div style={{ marginBottom: 14 }}>
+        <div className="pdv-modal-body" style={{ paddingBottom: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+          <div>
             <div style={{ color: "var(--pdv-t3)", fontSize: 10.5, fontWeight: 500, marginBottom: 8, textTransform: "uppercase", letterSpacing: ".06em" }}>
-              Nova forma de pagamento
+              Adicionar pagamento
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-              {FORMAS.map(f => (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => setForma(f.id)}
-                  className="pdv-btn-ghost"
-                  style={{
-                    padding: "12px 10px",
-                    display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
-                    background: forma === f.id ? "color-mix(in oklab, var(--pdv-accent) 16%, transparent)" : undefined,
-                    borderColor: forma === f.id ? "var(--pdv-accent-glow)" : undefined,
-                    color: forma === f.id ? "var(--pdv-accent)" : "var(--pdv-t2)",
-                  }}
-                >
-                  <span style={{ fontSize: 18 }}>{f.icone}</span>
-                  <span style={{ fontSize: 12, fontWeight: 500 }}>{f.label}</span>
-                </button>
-              ))}
+              {FORMAS.map(f => {
+                const desabilitado = restante <= 0;
+                return (
+                  <button
+                    key={f.id} type="button"
+                    onClick={() => adicionar(f.id)}
+                    disabled={desabilitado}
+                    className="pdv-btn-ghost"
+                    style={{
+                      padding: "10px 8px",
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+                      opacity: desabilitado ? 0.4 : 1,
+                      cursor: desabilitado ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    <span style={{ fontSize: 18 }}>{f.icone}</span>
+                    <span style={{ fontSize: 12, fontWeight: 500 }}>{f.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {aPrazo && (
+          {pagamentos.length > 0 && (
+            <div style={{
+              display: "flex", flexDirection: "column", gap: 6,
+              padding: 8, borderRadius: 8,
+              background: "var(--pdv-surf-2)", border: "1px solid var(--pdv-line)",
+            }}>
+              {pagamentos.map(p => {
+                const corBorda = FORMA_COR_VAR[p.forma] || "var(--pdv-accent)";
+                return (
+                  <div key={p.id} style={{
+                    display: "grid", gridTemplateColumns: "1fr 140px auto",
+                    gap: 8, alignItems: "center", padding: "6px 8px",
+                    background: "var(--pdv-surf-1)", borderRadius: 6,
+                    borderLeft: `3px solid ${corBorda}`,
+                  }}>
+                    <span style={{ fontSize: 12, color: "var(--pdv-t1)", fontWeight: 500 }}>
+                      {FORMA_LABEL[p.forma]}
+                    </span>
+                    <input
+                      type="number" step="0.01" min="0"
+                      value={p.valor}
+                      onChange={e => {
+                        const v = parseFloat(e.target.value.replace(",", ".")) || 0;
+                        dispatchPagamentos({ type: "update", id: p.id, patch: { valor: v } });
+                      }}
+                      className="pdv-field-input"
+                      style={{ padding: "6px 8px", fontSize: 13 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => dispatchPagamentos({ type: "remove", id: p.id })}
+                      style={{
+                        background: "transparent", border: "none", color: "var(--pdv-t3)",
+                        fontSize: 16, cursor: "pointer", padding: "0 4px", lineHeight: 1,
+                      }}
+                    >×</button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div style={{
+            display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8,
+            padding: "8px 12px", borderRadius: 8,
+            background: restante > 0 ? "rgba(245,158,11,.08)" : "rgba(34,197,94,.10)",
+            border: `1px solid ${restante > 0 ? "rgba(245,158,11,.30)" : "rgba(34,197,94,.30)"}`,
+            fontSize: 12,
+          }}>
+            <div><span style={{ color: "var(--pdv-t3)" }}>Total:</span> <span style={{ color: "var(--pdv-t1)", fontWeight: 600 }}>{fmtBRL(total)}</span></div>
+            <div><span style={{ color: "var(--pdv-t3)" }}>Pago:</span> <span style={{ color: "var(--pdv-t1)", fontWeight: 600 }}>{fmtBRL(pago)}</span></div>
+            {restante > 0 && (
+              <div style={{ gridColumn: "1 / -1", color: "var(--pdv-c-amber)", fontWeight: 600 }}>
+                Falta {fmtBRL(restante)}
+              </div>
+            )}
+          </div>
+
+          {valorAPrazo > 0 && (
             <div style={{
               background: "var(--pdv-surf-2)", border: "1px solid var(--pdv-line)",
-              borderRadius: 12, padding: 14, marginBottom: 14,
+              borderRadius: 12, padding: 14,
             }}>
               <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13 }}>
                 <input type="checkbox" checked={gerarConta} onChange={e => setGerarConta(e.target.checked)} />
-                <span style={{ color: "var(--pdv-t1)" }}>Gerar conta a receber para a nova forma</span>
+                <span style={{ color: "var(--pdv-t1)" }}>
+                  Gerar conta a receber pelo valor a prazo · {fmtBRL(valorAPrazo)}
+                </span>
               </label>
               {gerarConta && (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
@@ -2884,14 +3240,20 @@ function RefinalizarVendaModal({ venda, onFechar, onAplicar }) {
             border: "1px solid rgba(245,158,11,.30)", borderRadius: 10,
             padding: "10px 14px", fontSize: 12, color: "var(--pdv-t2)",
           }}>
-            ⚠ Ao confirmar, a venda volta para CONCLUIDA com a nova forma e o caixa (se aberto) é re-lançado.
+            ⚠ Ao confirmar, a venda volta para CONCLUIDA com o novo split e o caixa (se aberto) é re-lançado.
           </div>
         </div>
 
         <div className="pdv-modal-foot" style={{ justifyContent: "flex-end", gap: 10 }}>
-          <button onClick={onFechar} disabled={salvando} className="pdv-btn-ghost">Cancelar <span className="pdv-kbd is-warn" style={{ marginLeft: 4 }}>Esc</span></button>
-          <button onClick={aplicar} disabled={salvando || !forma} className="pdv-btn-primary" style={{ padding: "10px 18px" }}>
-            {salvando ? "Aplicando…" : `Confirmar (${FORMA_LABEL[forma] || ""})`}
+          <button type="button" onClick={onFechar} disabled={salvando} className="pdv-btn-ghost">Cancelar <span className="pdv-kbd is-warn" style={{ marginLeft: 4 }}>Esc</span></button>
+          <button
+            type="button"
+            onClick={aplicar}
+            disabled={salvando || !podeFinalizar}
+            className="pdv-btn-primary"
+            style={{ padding: "10px 18px", opacity: (salvando || !podeFinalizar) ? 0.55 : 1 }}
+          >
+            {salvando ? "Aplicando…" : `Confirmar (${fmtBRL(total)})`}
           </button>
         </div>
       </div>

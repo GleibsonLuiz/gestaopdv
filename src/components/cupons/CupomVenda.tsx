@@ -28,12 +28,21 @@ type ItemVenda = {
 type Cliente = { nome?: string | null; cpfCnpj?: string | null };
 type Usuario = { nome?: string | null };
 
+type PagamentoCupom = {
+  id?: string | number;
+  forma: FormaPagamento | string;
+  valor: number | string;
+  formaCustomNome?: string | null;
+  ordem?: number;
+};
+
 export type VendaCupom = {
   numero: number | string;
   createdAt: string | Date;
   total: number | string;
   desconto?: number | string | null;
   formaPagamento?: FormaPagamento | string | null;
+  pagamentos?: PagamentoCupom[] | null;
   observacoes?: string | null;
   cliente?: Cliente | null;
   user?: Usuario | null;
@@ -59,10 +68,13 @@ export default function CupomVenda({
 }: Props) {
   const subtotalCupom = Number(venda.total) + Number(venda.desconto || 0);
   const mostrarRecebidoTroco = Number(valorRecebido) > 0;
-  const forma = venda.formaPagamento;
-  const formaLabel = forma && forma in FORMA_LABEL
-    ? FORMA_LABEL[forma as FormaPagamento]
-    : forma;
+  const pagamentos = Array.isArray(venda.pagamentos) && venda.pagamentos.length > 0
+    ? venda.pagamentos
+    : (venda.formaPagamento
+        ? [{ forma: venda.formaPagamento as FormaPagamento, valor: venda.total }]
+        : []);
+  const labelForma = (f: FormaPagamento | string) =>
+    f && f in FORMA_LABEL ? FORMA_LABEL[f as FormaPagamento] : String(f);
 
   return (
     <>
@@ -119,7 +131,19 @@ export default function CupomVenda({
         <span>{fmtBRL(venda.total)}</span>
       </div>
       <hr className="cupom-divisor" />
-      <div>Pagamento: <span className="cupom-bold">{formaLabel}</span></div>
+      {pagamentos.length === 1 ? (
+        <div>Pagamento: <span className="cupom-bold">{pagamentos[0].formaCustomNome || labelForma(pagamentos[0].forma)}</span></div>
+      ) : (
+        <>
+          <div className="cupom-bold">PAGAMENTOS:</div>
+          {pagamentos.map((p, i) => (
+            <div key={p.id ?? i} className="cupom-linha">
+              <span>{p.formaCustomNome || labelForma(p.forma)}</span>
+              <span>{fmtBRL(p.valor)}</span>
+            </div>
+          ))}
+        </>
+      )}
       {mostrarRecebidoTroco && (
         <>
           <div className="cupom-linha">

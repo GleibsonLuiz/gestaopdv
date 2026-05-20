@@ -147,6 +147,17 @@ d:/gestao-pdv/
 
 ## Histórico de sessões
 
+### Sessão — 2026-05-20 (Filtro por cliente no Relatório de Vendas — item (g) da pendência)
+
+Item trivial mas registrado como lacuna desde a ETAPA 13: o backend já aceitava `clienteId` em `GET /relatorios/vendas` ([relatoriosController.js:35](backend/src/controllers/relatoriosController.js#L35)), mas a UI da aba Vendas só expunha forma de pagamento e vendedor. Padrão idêntico ao que o Relatório Financeiro (aba Receber) e Compras (fornecedor) já fazem.
+
+**Entregue:**
+- [src/Relatorios.tsx:148-169](src/Relatorios.tsx#L148-L169) — `RelatorioVendas` ganhou estado `clienteId` + `clientes`, fetch via `api.listarClientes({ ativo: "true" })` no mount, e `clienteId` no payload de `api.relatorioVendas`.
+- [src/Relatorios.tsx:252](src/Relatorios.tsx#L252) — novo `<CampoSelectBusca label="Cliente">` entre Forma de pagamento e Vendedor.
+- PDF (`exportar`) não precisou mudar: já consome `dados` retornados do backend, que vem pré-filtrado.
+
+Build OK em 3.6s. Sem alterações de backend/migrations. Fecha o item **(g)** da lista de "Próximos candidatos".
+
 ### Sessão — 2026-05-19 (Mercado Pago Point — integração com maquininha física)
 
 Nova feature de produto (fora das 13 etapas originais): cobrança via maquininha física do Mercado Pago (API Point / Modo PDV). Decisões de produto confirmadas via `AskUserQuestion`: token cifrado AES-256-GCM no banco, venda criada apenas após aprovação no webhook (sem novo status na enum), polling no PDV como fonte de UI (webhook continua sendo verdade), tipos CREDIT/DEBIT/PIX.
@@ -1504,10 +1515,10 @@ Extensão do cadastro de Fornecedores para conformidade NF-e — espelha o que a
 - ✅ **(b)** Variável `{{linkNps}}` nos templates de mensagem — `GET /nps/cliente/:clienteId/link-pendente` + `aplicarVariaveis(..., extras)` + `BotoesContatoCliente` resolve o link antes de abrir WhatsApp/Email
 - ✅ **(c)** Lead scoring no PerfilClienteModal — `GET /clientes/:id/score` reusa `calcularScore` com mediaTotal global de 365d; `<CardLeadScore>` no topo da AbaResumo com breakdown R/F/M/Bônus
 - ✅ Impressão da folha de contagem cega (Inventário) — `src/lib/folhaCegaPdf.ts` + botão "🖨 Imprimir folha cega" no ActionsMenu (status ABERTO)
+- ✅ **(g)** Filtro por cliente no Relatório de Vendas (2026-05-20) — `CampoSelectBusca` adicionado entre Forma de pagamento e Vendedor; `clienteId` propagado para `api.relatorioVendas` (backend já aceitava em [relatoriosController.js:35](backend/src/controllers/relatoriosController.js#L35)). Build OK em 3.6s.
 
 **Próximos candidatos (em ordem de ROI estimado):**
 - **(e)** Análise de motivos de perda — agregação `GROUP BY motivoPerda` em Oportunidades. **Pequeno esforço, baixo-médio valor** (já existe no Funil).
-- **(g)** Filtro por cliente no relatório de vendas — backend aceita, UI não expõe. **Trivial**.
 - **(h)** Auditoria estruturada do Reset Total — log de execuções. **Pequeno**.
 - **(i)** Chip-cluster na tabela de Funcionários mostrando módulos. **Pequeno**.
 

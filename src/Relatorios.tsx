@@ -150,23 +150,26 @@ function RelatorioVendas() {
   const [dataFim, setDataFim] = useState("");
   const [formaPagamento, setFormaPagamento] = useState("");
   const [userId, setUserId] = useState("");
+  const [clienteId, setClienteId] = useState("");
   const [usuarios, setUsuarios] = useState([]);
+  const [clientes, setClientes] = useState([]);
   const [dados, setDados] = useState(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
 
   useEffect(() => {
     api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
+    api.listarClientes({ ativo: "true" }).then(setClientes).catch(() => {});
   }, []);
 
   const gerar = useCallback(async () => {
     setCarregando(true); setErro("");
     try {
-      const r = await api.relatorioVendas({ dataInicio, dataFim, formaPagamento, userId });
+      const r = await api.relatorioVendas({ dataInicio, dataFim, formaPagamento, userId, clienteId });
       setDados(r);
     } catch (err) { setErro(err.message); }
     finally { setCarregando(false); }
-  }, [dataInicio, dataFim, formaPagamento, userId]);
+  }, [dataInicio, dataFim, formaPagamento, userId, clienteId]);
 
   async function exportar() {
     if (!dados) return;
@@ -249,6 +252,7 @@ function RelatorioVendas() {
             <option value="">Todas</option>
             {Object.entries(ROTULO_PAGAMENTO).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </CampoSelect>
+          <CampoSelectBusca label="Cliente" opcoes={clientes} value={clienteId} onChange={setClienteId} placeholder="Todos" />
           <CampoSelectBusca label="Vendedor" opcoes={usuarios} value={userId} onChange={setUserId} placeholder="Todos" />
         </>
       }

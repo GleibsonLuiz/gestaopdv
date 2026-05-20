@@ -1315,14 +1315,13 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
             <div className="pdv-shortcuts-label">F1 – F6 forma de pagamento</div>
             <div className="pdv-pay-grid">
               {FORMAS_ORDENADAS.map(f => {
-                const ativo = forma === f.id && !formaCustomId;
                 const cor = FORMA_COR_CLASSE[f.id] || "pdv-pay-c-emerald";
                 return (
                   <button
                     key={f.id} type="button"
-                    onClick={() => selecionarFormaPadrao(f.id)}
+                    onClick={() => { abrirPagamento(); adicionarPagamentoForma(f.id); }}
                     title={`${f.atalho} • ${f.label}`}
-                    className={`pdv-pay-btn ${cor} ${ativo ? "is-active" : ""}`}
+                    className={`pdv-pay-btn ${cor}`}
                   >
                     <div className="pay-row">
                       <div className="pay-icon">{f.icone}</div>
@@ -1338,14 +1337,13 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
                 <div className="pdv-shortcuts-label" style={{ marginTop: 12 }}>Personalizadas</div>
                 <div className="pdv-pay-grid">
                   {formasCustom.map(c => {
-                    const ativo = formaCustomId === c.id;
                     const cor = FORMA_COR_CLASSE[c.baseFormaPagamento] || "pdv-pay-c-violet";
                     return (
                       <button
                         key={c.id} type="button"
-                        onClick={() => selecionarFormaCustom(c)}
+                        onClick={() => { abrirPagamento(); adicionarPagamentoCustom(c); }}
                         title={`${c.nome} (${c.baseFormaPagamento})`}
-                        className={`pdv-pay-btn ${cor} ${ativo ? "is-active" : ""}`}
+                        className={`pdv-pay-btn ${cor}`}
                       >
                         <div className="pay-row">
                           <div className="pay-icon">{c.icone || "•"}</div>

@@ -571,6 +571,7 @@ export const api = {
     mpDeviceId?: string | null;
     mpUserIdMp?: string | null;
     mpAtivo?: boolean;
+    mpPixAtivo?: boolean;
   }) => request("/pagamentos-mp/config", { method: "PUT", body: dados }),
   cobrarMp: (dados: { tipo: "CREDIT" | "DEBIT" | "PIX"; vendaPayload: unknown }) =>
     request("/pagamentos-mp/cobrar", { method: "POST", body: dados }),

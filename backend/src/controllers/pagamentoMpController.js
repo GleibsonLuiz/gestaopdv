@@ -31,21 +31,36 @@ function somarPagamentos(pagamentos) {
   return pagamentos.reduce((acc, p) => acc + (Number(p?.valor) || 0), 0);
 }
 
-// Recupera config + valida que esta configurada. Lanca 412 se nao.
-// exigirDevice=false relaxa a checagem do mpDeviceId — usado pelo PIX que
-// nao precisa de maquininha (cobra via /v1/payments).
-async function obterConfigInterna({ exigirDevice = true } = {}) {
+// Recupera config + valida que esta configurada para a feature pedida.
+// Lanca 412 se a flag correspondente esta desligada ou faltam credenciais.
+//
+//   feature='maquininha' (default) — exige mpAtivo + mpAccessToken + mpDeviceId
+//   feature='pix'                  — exige mpPixAtivo + mpAccessToken
+//   feature='any'                  — usado pelo polling/cancel: aceita config
+//                                     ativa em qualquer um dos modos
+async function obterConfigInterna({ feature = "maquininha" } = {}) {
   const cfg = await prisma.configuracaoEmpresa.findFirst({
     select: {
       id: true, mpAccessTokenEnc: true, mpDeviceId: true,
-      mpUserIdMp: true, mpAtivo: true, mpWebhookSecret: true, tenantId: true,
+      mpUserIdMp: true, mpAtivo: true, mpPixAtivo: true,
+      mpWebhookSecret: true, tenantId: true,
     },
   });
-  const faltaDevice = exigirDevice && !cfg?.mpDeviceId;
-  if (!cfg || !cfg.mpAtivo || !cfg.mpAccessTokenEnc || faltaDevice) {
-    const msg = exigirDevice
-      ? "Maquininha Mercado Pago nao configurada. Acesse Configuracoes > Maquininha."
-      : "Mercado Pago nao configurado. Acesse Configuracoes > Maquininha e ative.";
+
+  let ok = false;
+  let msg = "Mercado Pago nao configurado. Acesse Configuracoes > Maquininha.";
+  if (cfg && cfg.mpAccessTokenEnc) {
+    if (feature === "maquininha") {
+      ok = cfg.mpAtivo && !!cfg.mpDeviceId;
+      msg = "Maquininha Mercado Pago nao configurada/ativa. Acesse Configuracoes > Maquininha.";
+    } else if (feature === "pix") {
+      ok = cfg.mpPixAtivo;
+      msg = "PIX no PDV nao esta ativo. Acesse Configuracoes > Maquininha e ative 'PIX no PDV'.";
+    } else {
+      ok = cfg.mpAtivo || cfg.mpPixAtivo;
+    }
+  }
+  if (!ok) {
     const e = new Error(msg);
     e.status = 412;
     throw e;
@@ -73,12 +88,14 @@ export async function obterConfig(req, res, next) {
         mpDeviceId: true,
         mpUserIdMp: true,
         mpAtivo: true,
+        mpPixAtivo: true,
         mpAccessTokenEnc: true,
       },
     });
     res.json({
       configurada: !!(cfg && cfg.mpAccessTokenEnc && cfg.mpDeviceId),
       mpAtivo: !!cfg?.mpAtivo,
+      mpPixAtivo: !!cfg?.mpPixAtivo,
       mpDeviceId: cfg?.mpDeviceId || null,
       mpUserIdMp: cfg?.mpUserIdMp || null,
       mpAccessTokenMascarado: cfg?.mpAccessTokenEnc
@@ -109,6 +126,7 @@ export async function salvarConfig(req, res, next) {
       if (t === null || t === "") {
         data.mpAccessTokenEnc = null;
         data.mpAtivo = false; // sem token nao tem como ativar
+        data.mpPixAtivo = false;
       } else if (typeof t === "string") {
         const limpo = t.trim();
         if (limpo.length < 20) {
@@ -128,6 +146,9 @@ export async function salvarConfig(req, res, next) {
     }
     if (req.body?.mpAtivo !== undefined) {
       data.mpAtivo = !!req.body.mpAtivo;
+    }
+    if (req.body?.mpPixAtivo !== undefined) {
+      data.mpPixAtivo = !!req.body.mpPixAtivo;
     }
 
     const existente = await prisma.configuracaoEmpresa.findFirst();
@@ -154,6 +175,7 @@ export async function salvarConfig(req, res, next) {
     res.json({
       configurada: !!(cfg.mpAccessTokenEnc && cfg.mpDeviceId),
       mpAtivo: cfg.mpAtivo,
+      mpPixAtivo: cfg.mpPixAtivo,
       mpDeviceId: cfg.mpDeviceId,
       mpUserIdMp: cfg.mpUserIdMp,
       mpAccessTokenMascarado: cfg.mpAccessTokenEnc
@@ -207,10 +229,12 @@ export async function cobrar(req, res, next) {
       delete payload.gerarContaReceber;
     }
 
-    // PIX usa /v1/payments — nao precisa de maquininha. Os demais (CREDIT/
-    // DEBIT) usam Point Integration e portanto precisam do mpDeviceId.
+    // PIX usa /v1/payments — checa mpPixAtivo. CREDIT/DEBIT usam Point
+    // Integration — checa mpAtivo + mpDeviceId.
     const ehPix = tipo === "PIX";
-    const { cfg, accessToken } = await obterConfigInterna({ exigirDevice: !ehPix });
+    const { cfg, accessToken } = await obterConfigInterna({
+      feature: ehPix ? "pix" : "maquininha",
+    });
 
     // Caixa atual (apenas para auditoria — nao bloqueia se nao houver,
     // mas em geral o vendaController.criar ja exige caixa aberto).
@@ -416,7 +440,9 @@ export async function obterStatus(req, res, next) {
 // virou approved/rejected/cancelled, processa como se o webhook tivesse
 // chegado. Idempotente — se a intencao ja foi processada, no-op.
 async function consultarPaymentPix(intencao) {
-  const { cfg, accessToken } = await obterConfigInterna({ exigirDevice: false });
+  // Polling continua funcionando mesmo se o operador desativou PIX depois
+  // de iniciar a cobranca — feature='any' aceita config com qualquer flag.
+  const { cfg, accessToken } = await obterConfigInterna({ feature: "any" });
   let payment;
   try {
     payment = await obterPayment({ accessToken, paymentId: intencao.intentId });
@@ -439,7 +465,9 @@ async function consultarPaymentPix(intencao) {
 // Consulta o MP pelo intent + processa o pagamento se ja existe.
 // Retorna { processouAlgo } para o caller saber se vale a pena recarregar.
 async function consultarStatusViaApi(intencao) {
-  const { cfg, accessToken } = await obterConfigInterna();
+  // feature='any' — polling de CARTAO mas o operador pode ter desativado
+  // a maquininha temporariamente; ainda assim queremos finalizar a intencao.
+  const { cfg, accessToken } = await obterConfigInterna({ feature: "any" });
   // GET intent — quando a intent ja terminou, ela vira um payment.
   let intent;
   try {
@@ -486,7 +514,9 @@ export async function cancelar(req, res, next) {
     }
 
     const ehPix = intencao.tipo === "PIX";
-    const { cfg, accessToken } = await obterConfigInterna({ exigirDevice: !ehPix });
+    // feature='any' — operador deve poder cancelar mesmo se ja desativou
+    // a feature depois de iniciar.
+    const { cfg, accessToken } = await obterConfigInterna({ feature: "any" });
 
     if (intencao.intentId) {
       try {

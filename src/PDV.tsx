@@ -1937,9 +1937,10 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
                   📲 Maquininha MP
                 </button>
               )}
-              {/* PIX nao precisa de maquininha — gera QR Code via /v1/payments
-                  e mostra na propria tela do PDV. Bastam credenciais MP ativas. */}
-              {configMp?.mpAtivo && total > 0 && !salvando && (
+              {/* PIX tem flag propria (mpPixAtivo) — pode ser ligado/desligado
+                  independente da maquininha. Gera QR Code via /v1/payments e
+                  exibe na tela do PDV; nao usa o device fisico. */}
+              {configMp?.mpPixAtivo && total > 0 && !salvando && (
                 <button
                   type="button"
                   onClick={() => setPixAberto(true)}

@@ -1055,6 +1055,10 @@ model ConfiguracaoEmpresa {
   mpUserIdMp       String?
   mpWebhookSecret  String?
   mpAtivo          Boolean @default(false)
+  // PIX via /v1/payments tem flag propria — pode ser ligado sem a maquininha
+  // (e vice-versa). Util para operar so com QR Code quando a Point esta
+  // offline, ou so com maquininha quando o PIX nao e desejado.
+  mpPixAtivo       Boolean @default(false)
 
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

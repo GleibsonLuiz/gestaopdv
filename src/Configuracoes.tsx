@@ -466,6 +466,7 @@ export default function Configuracoes({ user }: ConfiguracoesProps) {
 interface ConfigMpResposta {
   configurada: boolean;
   mpAtivo: boolean;
+  mpPixAtivo: boolean;
   mpDeviceId: string | null;
   mpUserIdMp: string | null;
   mpAccessTokenMascarado: string | null;
@@ -484,6 +485,7 @@ function BlocoMaquininhaMP({ podeEditar }: BlocoMaquininhaMPProps) {
   const [deviceInput, setDeviceInput] = useState("");
   const [userInput, setUserInput] = useState("");
   const [ativo, setAtivo] = useState(false);
+  const [pixAtivo, setPixAtivo] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const [msg, setMsg] = useState("");
@@ -497,6 +499,7 @@ function BlocoMaquininhaMP({ podeEditar }: BlocoMaquininhaMPProps) {
         setDeviceInput(c?.mpDeviceId || "");
         setUserInput(c?.mpUserIdMp || "");
         setAtivo(!!c?.mpAtivo);
+        setPixAtivo(!!c?.mpPixAtivo);
       })
       .catch((err: Error) => setErro(err.message))
       .finally(() => setCarregando(false));
@@ -517,6 +520,7 @@ function BlocoMaquininhaMP({ podeEditar }: BlocoMaquininhaMPProps) {
         mpDeviceId: deviceInput.trim() || null,
         mpUserIdMp: userInput.trim() || null,
         mpAtivo: ativo,
+        mpPixAtivo: pixAtivo,
       };
       if (tokenInput.trim()) {
         body.mpAccessToken = tokenInput.trim();
@@ -525,6 +529,7 @@ function BlocoMaquininhaMP({ podeEditar }: BlocoMaquininhaMPProps) {
       setCfg(resp);
       setTokenInput("");
       setAtivo(resp.mpAtivo);
+      setPixAtivo(resp.mpPixAtivo);
       flash("Configuração da maquininha salva");
     } catch (err) {
       setErro((err as Error).message);
@@ -542,12 +547,14 @@ function BlocoMaquininhaMP({ podeEditar }: BlocoMaquininhaMPProps) {
         mpDeviceId: null,
         mpUserIdMp: null,
         mpAtivo: false,
+        mpPixAtivo: false,
       }) as ConfigMpResposta;
       setCfg(resp);
       setTokenInput("");
       setDeviceInput("");
       setUserInput("");
       setAtivo(false);
+      setPixAtivo(false);
       flash("Credenciais removidas");
     } catch (err) {
       setErro((err as Error).message);
@@ -660,21 +667,44 @@ function BlocoMaquininhaMP({ podeEditar }: BlocoMaquininhaMPProps) {
           </div>
         </div>
 
-        <label className="flex items-center gap-2 mt-6" style={{
-          opacity: podeEditar ? 1 : 0.6,
-          cursor: podeEditar ? "pointer" : "not-allowed",
-        }}>
-          <input
-            type="checkbox"
-            checked={ativo}
-            onChange={(e) => setAtivo(e.target.checked)}
-            disabled={!podeEditar}
-            style={{ width: 18, height: 18 }}
-          />
-          <span style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>
-            Ativa para cobrança no PDV
-          </span>
-        </label>
+        <div className="mt-6 flex flex-col gap-2">
+          <label className="flex items-center gap-2" style={{
+            opacity: podeEditar ? 1 : 0.6,
+            cursor: podeEditar ? "pointer" : "not-allowed",
+          }}>
+            <input
+              type="checkbox"
+              checked={ativo}
+              onChange={(e) => setAtivo(e.target.checked)}
+              disabled={!podeEditar}
+              style={{ width: 18, height: 18 }}
+            />
+            <span style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>
+              Maquininha ativa no PDV
+            </span>
+            <span style={{ color: C.muted, fontSize: 11, marginLeft: 4 }}>
+              (crédito/débito via Point — requer DEVICE_ID)
+            </span>
+          </label>
+          <label className="flex items-center gap-2" style={{
+            opacity: podeEditar ? 1 : 0.6,
+            cursor: podeEditar ? "pointer" : "not-allowed",
+          }}>
+            <input
+              type="checkbox"
+              checked={pixAtivo}
+              onChange={(e) => setPixAtivo(e.target.checked)}
+              disabled={!podeEditar}
+              style={{ width: 18, height: 18 }}
+            />
+            <span style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>
+              PIX ativo no PDV
+            </span>
+            <span style={{ color: C.muted, fontSize: 11, marginLeft: 4 }}>
+              (QR Code na tela — não usa maquininha)
+            </span>
+          </label>
+        </div>
       </div>
 
       {podeEditar && (

@@ -1161,6 +1161,20 @@
               inset 0 0 0 1px color-mix(in oklab, currentColor 20%, transparent);
 }
 .pdv-pay-btn.is-active::before { opacity: 1; width: 4px; }
+/* Flash de atalho: feedback visual quando F1-F6 e pressionado globalmente.
+   currentColor segue a paleta do metodo (emerald/cyan/sky/amber/violet/rose). */
+.pdv-pay-btn--flash {
+  border-color: currentColor !important;
+  background: color-mix(in oklab, currentColor 22%, var(--pdv-surf-2)) !important;
+  box-shadow: 0 0 0 3px color-mix(in oklab, currentColor 45%, transparent),
+              inset 0 0 0 1px color-mix(in oklab, currentColor 30%, transparent);
+  animation: pdv-pay-flash 400ms ease-out;
+}
+@keyframes pdv-pay-flash {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
 .pdv-pay-btn .pay-row { display: flex; align-items: center; gap: 8px; width: 100%; justify-content: space-between; }
 .pdv-pay-btn .pay-icon {
   width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center;

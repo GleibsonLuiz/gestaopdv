@@ -331,6 +331,8 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
   const [reciboAberto, setReciboAberto] = useState(null);
   const [pagamentoAberto, setPagamentoAberto] = useState(false);
   const [cancelarAberto, setCancelarAberto] = useState(false);
+  const [formaAtalhoFlash, setFormaAtalhoFlash] = useState<string | null>(null);
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [destacado, setDestacado] = useState(null); // produtoId recém-adicionado (para flash)
   const [caixaAtual, setCaixaAtual] = useState(null);
   const [tipoCaixa, setTipoCaixa] = useState("INDEPENDENTE");
@@ -748,7 +750,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
   }
 
   // Atalhos globais:
-  //   F1-F6   forma de pagamento
+  //   F1-F6   forma de pagamento (global — abre modal se fechado, ou adiciona linha se aberto)
   //   F8      abre modal "Cancelar Item"
   //   F10     abre modal de pagamento (finalizar venda)
   //   Esc     fecha modais auxiliares e refoca busca
@@ -774,11 +776,23 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
       const mapa = formaPorTeclaRef.current || {};
       if (mapa[e.key]) {
         e.preventDefault();
-        // F1-F6: so adiciona pagamento se o modal de fechamento estiver
-        // aberto (caso contrario o atalho nao tem significado e poderia
-        // interferir com edicao livre fora do modal).
-        if (!pagamentoAbertoRef.current) return;
-        adicionarPagamentoFormaRef.current?.(mapa[e.key]);
+        const forma = mapa[e.key];
+        // Flash visual no botao correspondente (limpa em 400ms)
+        setFormaAtalhoFlash(forma);
+        if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+        flashTimerRef.current = setTimeout(() => setFormaAtalhoFlash(null), 400);
+        // Comportamento global:
+        //   - modal de pagamento ABERTO → adiciona linha com a forma escolhida
+        //   - modal FECHADO            → abre modal ja com a forma escolhida (precisa de carrinho)
+        if (pagamentoAbertoRef.current) {
+          adicionarPagamentoFormaRef.current?.(forma);
+        } else {
+          if (carrinhoRef.current.length === 0) {
+            flashErro("Adicione ao menos um item antes de escolher a forma de pagamento.");
+            return;
+          }
+          abrirPagamentoRef.current?.(forma);
+        }
         return;
       }
       if (e.key === "F8") {
@@ -798,7 +812,10 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
       }
     }
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cancelarAberto, pagamentoAberto]);
 
@@ -1321,12 +1338,13 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
             <div className="pdv-pay-grid">
               {FORMAS_ORDENADAS.map(f => {
                 const cor = FORMA_COR_CLASSE[f.id] || "pdv-pay-c-emerald";
+                const flash = formaAtalhoFlash === f.id;
                 return (
                   <button
                     key={f.id} type="button"
                     onClick={() => abrirPagamento(f.id)}
                     title={`${f.atalho} • ${f.label}`}
-                    className={`pdv-pay-btn ${cor}`}
+                    className={`pdv-pay-btn ${cor}${flash ? " pdv-pay-btn--flash" : ""}`}
                   >
                     <div className="pay-row">
                       <div className="pay-icon">{f.icone}</div>
@@ -1674,11 +1692,12 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
                   {FORMAS_ORDENADAS.map(f => {
                     const cor = FORMA_COR_CLASSE[f.id] || "pdv-pay-c-emerald";
                     const desabilitado = restante <= 0 && pagamentos.length > 0;
+                    const flash = formaAtalhoFlash === f.id;
                     return (
                       <button
                         key={f.id} onClick={() => adicionarPagamentoForma(f.id)} type="button"
                         disabled={desabilitado}
-                        className={`pdv-pay-btn ${cor}`}
+                        className={`pdv-pay-btn ${cor}${flash ? " pdv-pay-btn--flash" : ""}`}
                         title={desabilitado ? "Total ja coberto — remova um pagamento antes" : `Adicionar ${f.label}`}
                         style={desabilitado ? { opacity: 0.4, cursor: "not-allowed" } : undefined}
                       >

@@ -637,6 +637,17 @@ export const api = {
   relatorioComissoes: (filtros: StringDict = {}) =>
     request(`/comissoes/relatorio${qsFrom(filtros)}`),
 
+  // ETAPA#9b: Atendimento Inteligente WhatsApp + IA
+  obterConfigWhatsapp: () => request("/whatsapp/config"),
+  salvarConfigWhatsapp: (dados: unknown) =>
+    request("/whatsapp/config", { method: "PUT", body: dados }),
+  removerConfigWhatsapp: () =>
+    request("/whatsapp/config", { method: "DELETE" }),
+  obterQrCodeWhatsapp: () => request("/whatsapp/qrcode"),
+  obterStatusWhatsapp: () => request("/whatsapp/status"),
+  listarLogsWhatsapp: (filtros: StringDict = {}) =>
+    request(`/whatsapp/logs${qsFrom(filtros)}`),
+
   // ETAPA#8b: Central de Comandas
   listarComandas: (filtros: StringDict = {}) =>
     request(`/comandas${qsFrom(filtros)}`),

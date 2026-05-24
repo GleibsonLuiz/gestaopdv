@@ -355,6 +355,8 @@ model Empresa {
   intencoesPagamentoMP   IntencaoPagamentoMP[]
   comandas               Comanda[]
   itensComanda           ItemComanda[]
+  whatsappSettings       WhatsappSettings?
+  whatsappLogs           WhatsappLog[]
 
   @@map("empresas")
 }
@@ -1862,4 +1864,51 @@ model ItemComanda {
   tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("itens_comanda")
+}
+
+
+// ============ ETAPA#9b: ATENDIMENTO INTELIGENTE (WHATSAPP + IA) ============
+// Conexao com gateway externo (Evolution API, Wuzapi, Z-API etc) +
+// resposta automatica via Claude (Anthropic). 1 instancia por tenant.
+
+model WhatsappSettings {
+  id              String   @id @default(uuid())
+  instanceName    String   // nome amigavel (ex: "papelaria-via-feira")
+  instanceToken   String   // API key do gateway (cifrada com CRIPTO_SECRET)
+  webhookSecret   String?  // segredo opcional pra validar webhook
+  aiSystemPrompt  String?  @db.Text  // instrucoes do agente IA
+  isActive        Boolean  @default(false)  // ativar resposta automatica
+  statusConexao   String?  // CONNECTED, DISCONNECTED, QR_CODE, etc
+  qrCodeUltimo    String?  @db.Text  // base64 do ultimo QR Code gerado
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenantId String  @unique
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  logs WhatsappLog[]
+
+  @@map("whatsapp_settings")
+}
+
+model WhatsappLog {
+  id          String   @id @default(uuid())
+  numero      String   // telefone do cliente (E.164)
+  nomeContato String?  // nome do contato no WhatsApp
+  mensagem    String   @db.Text  // mensagem recebida
+  resposta    String?  @db.Text  // resposta enviada pela IA
+  sucesso     Boolean  @default(true)
+  erro        String?  @db.Text  // se sucesso=false
+  duracaoMs   Int?     // tempo de processamento IA + envio
+  createdAt   DateTime @default(now())
+
+  settingsId String
+  settings   WhatsappSettings @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, numero])
+  @@map("whatsapp_logs")
 }

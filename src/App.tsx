@@ -41,6 +41,7 @@ const PesquisaPublicaNps = lazy(() => import("./PesquisaPublicaNps"));
 const InventarioMobile = lazy(() => import("./InventarioMobile"));
 const PdvVolante = lazy(() => import("./PdvVolante"));
 const PainelComandas = lazy(() => import("./PainelComandas"));
+const Whatsapp = lazy(() => import("./Whatsapp"));
 const Logs = lazy(() => import("./Logs"));
 // Modal de gerencia de formas de pagamento — antes ficava dentro do PDV
 // (botao ⚙ no modal de Finalizar Venda). Movido para a sidebar como entrada
@@ -283,6 +284,7 @@ export default function App() {
     financeiro: "FINANCEIRO", relatorios: "RELATORIOS",
     comissoes: "COMISSOES",
     painelcomandas: "COMANDAS",
+    whatsapp: "WHATSAPP",
     funcionarios: "FUNCIONARIOS",
     tarefas: "CLIENTES",
     fidelidade: "CLIENTES",
@@ -303,7 +305,7 @@ export default function App() {
     if (!user) return;
     if (!podeVer(tela)) {
       const primeira = ["pdv","dashboard","dashboardcrm","caixa","clientes","segmentos","reativacao","tarefas","fidelidade","funil","automacoes","nps","fornecedores","produtos","etiquetas",
-        "estoque","inventario","compras","orcamentos","financeiro","relatorios","comissoes","painelcomandas","funcionarios","projeto","sistema","empresa","impressora"].find(podeVer);
+        "estoque","inventario","compras","orcamentos","financeiro","relatorios","comissoes","painelcomandas","whatsapp","funcionarios","projeto","sistema","empresa","impressora"].find(podeVer);
       if (primeira && primeira !== tela) setTela(primeira);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -565,6 +567,10 @@ export default function App() {
           {/* ETAPA#8b: Central de Comandas (Kanban) */}
           {podeAcessar(user, "COMANDAS") && (
             <Item icone="🍽️" label="Central de Comandas" ativo={tela === "painelcomandas"} onClick={() => navegar("painelcomandas")} />
+          )}
+          {/* ETAPA#9b: Atendimento Inteligente WhatsApp */}
+          {podeAcessar(user, "WHATSAPP") && (
+            <Item icone="💬" label="Atendimento WhatsApp" ativo={tela === "whatsapp"} onClick={() => navegar("whatsapp")} />
           )}
           <Secao>Sistema</Secao>
           {user.role === "ADMIN" && (
@@ -834,6 +840,12 @@ export default function App() {
             <>
               <PageHeader titulo="Central de Comandas" subtitulo="Kanban de pedidos do PDV Volante — aceite, prepare e finalize" />
               <PainelComandas user={user} />
+            </>
+          )}
+          {tela === "whatsapp" && (
+            <>
+              <PageHeader titulo="Atendimento WhatsApp" subtitulo="IA Claude responde clientes automaticamente via Evolution API" />
+              <Whatsapp />
             </>
           )}
           {tela === "funcionarios" && user.role === "ADMIN" && (

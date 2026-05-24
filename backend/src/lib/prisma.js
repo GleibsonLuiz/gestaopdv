@@ -45,6 +45,7 @@ const MODELOS_COM_TENANT = new Set([
   "LogAutomacao", "HistoricoOportunidade", "LogAuditoria",
   "Inventario", "InventarioItem", "IntencaoPagamentoMP",
   "Comanda", "ItemComanda",
+  "WhatsappSettings", "WhatsappLog",
 ]);
 
 function tenantAtual() {

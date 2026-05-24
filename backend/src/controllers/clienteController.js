@@ -543,6 +543,7 @@ export async function criar(req, res, next) {
         email: norm(req.body.email),
         telefone: norm(req.body.telefone),
         endereco: norm(req.body.endereco),
+        bairro: norm(req.body.bairro),
         cidade: norm(req.body.cidade),
         estado: norm(req.body.estado),
         cep: norm(req.body.cep),
@@ -569,7 +570,7 @@ export async function atualizar(req, res, next) {
       if (!n) return res.status(400).json({ erro: "Nome nao pode ser vazio" });
       data.nome = n;
     }
-    for (const campo of ["cpfCnpj", "email", "telefone", "endereco", "cidade", "estado", "cep", "observacoes", "origem"]) {
+    for (const campo of ["cpfCnpj", "email", "telefone", "endereco", "bairro", "cidade", "estado", "cep", "observacoes", "origem"]) {
       if (req.body[campo] !== undefined) data[campo] = norm(req.body[campo]);
     }
     if (req.body.ativo !== undefined) data.ativo = !!req.body.ativo;

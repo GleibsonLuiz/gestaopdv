@@ -56,6 +56,7 @@ interface Cliente {
   email?: string | null;
   telefone?: string | null;
   endereco?: string | null;
+  bairro?: string | null;
   cidade?: string | null;
   estado?: string | null;
   cep?: string | null;
@@ -75,6 +76,7 @@ interface FormCliente {
   endereco: string;
   numero: string;
   complemento: string;
+  bairro: string;
   cidade: string;
   estado: string;
   cep: string;
@@ -86,13 +88,15 @@ interface FormCliente {
 
 interface ViaCepDados {
   endereco: string;
+  bairro: string;
   cidade: string;
   estado: string;
 }
 
 const VAZIO: FormCliente = {
   nome: "", cpfCnpj: "", email: "", telefone: "",
-  endereco: "", numero: "", complemento: "", cidade: "", estado: "", cep: "", observacoes: "",
+  endereco: "", numero: "", complemento: "", bairro: "",
+  cidade: "", estado: "", cep: "", observacoes: "",
   origem: "", statusFunil: "LEAD", dataNascimento: "",
 };
 
@@ -127,7 +131,8 @@ async function buscarCepViaCEP(cepMascarado: string): Promise<ViaCepDados | null
     const j = await r.json();
     if (j.erro) return null;
     return {
-      endereco: [j.logradouro, j.bairro].filter(Boolean).join(", "),
+      endereco: j.logradouro || "",
+      bairro: j.bairro || "",
       cidade: j.localidade || "",
       estado: j.uf || "",
     };
@@ -253,6 +258,7 @@ export default function Clientes({ user }: ClientesProps) {
       endereco,
       numero,
       complemento,
+      bairro: cliente.bairro || "",
       cidade: cliente.cidade || "",
       estado: cliente.estado || "",
       cep: mascararCep(cliente.cep || ""),
@@ -285,6 +291,7 @@ export default function Clientes({ user }: ClientesProps) {
     setForm((prev) => ({
       ...prev,
       endereco: dados.endereco || prev.endereco,
+      bairro: dados.bairro || prev.bairro,
       cidade: dados.cidade || prev.cidade,
       estado: dados.estado || prev.estado,
     }));
@@ -571,6 +578,7 @@ export default function Clientes({ user }: ClientesProps) {
         editando={!!editando}
         erro={erroForm}
         larguraMax={760}
+        compacto
       >
         <Secao legenda="Identificação">
           <Linha cols={1}>
@@ -693,7 +701,16 @@ export default function Clientes({ user }: ClientesProps) {
               />
             </Campo>
           </Linha>
-          <Linha cols={1}>
+          <Linha cols={2}>
+            <Campo label="Bairro">
+              <input
+                className="lux-input"
+                value={form.bairro || ""}
+                onChange={(e) => setForm({ ...form, bairro: e.target.value })}
+                placeholder="Centro, Jardim das Flores…"
+                autoComplete="address-level3"
+              />
+            </Campo>
             <Campo label="Complemento">
               <input
                 className="lux-input"

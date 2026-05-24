@@ -57,6 +57,8 @@ export interface FormularioLuxuosoProps {
   editando?: boolean;
   larguraMax?: number;
   erro?: string;
+  /** Modo compacto: reduz paddings/gaps/heights internos pra caber em 90vh sem scroll. */
+  compacto?: boolean;
   children?: ReactNode;
 }
 
@@ -77,6 +79,7 @@ export function FormularioLuxuoso({
   editando,
   larguraMax = 720,
   erro,
+  compacto = false,
   children,
 }: FormularioLuxuosoProps) {
   useEffect(() => {
@@ -386,6 +389,30 @@ export function FormularioLuxuoso({
           .lux-foot__note { justify-content: center; font-size: 10px; }
           .lux-eyebrow { display: none; }
         }
+        /* Modo compacto: solicitado via prop compacto=true (ex: modal Novo Cliente
+           — ETAPA#2). Reduz paddings/gaps/heights internos pra caber em ~90vh
+           sem scroll vertical. Eyebrow + subtitulo escondidos. */
+        .lux-overlay--compact { padding: 4vh clamp(8px, 1.6vw, 16px); }
+        .lux-stage--compact { max-height: 92vh; }
+        .lux-stage--compact .lux-eyebrow { display: none; }
+        .lux-stage--compact .lux-sub { display: none; }
+        .lux-stage--compact .lux-head {
+          padding-top: 14px; padding-bottom: 0; gap: 12px;
+        }
+        .lux-stage--compact .lux-title { font-size: clamp(20px, 2.3vw, 26px); }
+        .lux-stage--compact .lux-progress { margin-top: 6px; }
+        .lux-stage--compact .lux-body {
+          padding-top: 10px; padding-bottom: 10px; gap: 10px;
+        }
+        .lux-stage--compact .lux-fieldset { gap: 6px; }
+        .lux-stage--compact .lux-row { gap: 8px; }
+        .lux-stage--compact .lux-field { gap: 3px; }
+        .lux-stage--compact .lux-input,
+        .lux-stage--compact .lux-select { height: 32px; padding: 5px 10px; font-size: 13px; }
+        .lux-stage--compact .lux-textarea { min-height: 44px; max-height: 56px; height: 48px; }
+        .lux-stage--compact .lux-foot {
+          padding: 8px clamp(18px, 2.8vw, 28px) 10px; gap: 10px;
+        }
         /* Telas curtas (notebook 13'' / PDV legado): textarea/sub mais
            compactos, eyebrow oculto pra liberar altura. */
         @media (max-height: 720px) {
@@ -404,8 +431,8 @@ export function FormularioLuxuoso({
         }
       `}</style>
 
-      <div className="lux-overlay" onClick={() => !salvando && onFechar?.()}>
-        <div className="lux-stage" onClick={(e) => e.stopPropagation()}>
+      <div className={`lux-overlay${compacto ? " lux-overlay--compact" : ""}`} onClick={() => !salvando && onFechar?.()}>
+        <div className={`lux-stage${compacto ? " lux-stage--compact" : ""}`} onClick={(e) => e.stopPropagation()}>
           {(eyebrow || numeroLote || data) && (
             <div className="lux-eyebrow" aria-hidden="true">
               <span className="dot" />

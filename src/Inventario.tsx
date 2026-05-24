@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, lazy, Suspense, type CSSProperties, t
 import { C } from "./lib/theme";
 import { api, type SessionUser } from "./lib/api";
 import ActionsMenu from "./components/ActionsMenu";
+import QrMobileModal from "./components/QrMobileModal";
 import { gerarFolhaCegaPdf, type FolhaCegaPayload, type EmpresaParaCabecalho } from "./lib/folhaCegaPdf";
 
 // Lazy: a folha de contagem so e carregada quando o usuario clica em
@@ -82,6 +83,7 @@ export default function Inventario({ user }: InventarioProps) {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [novoAberto, setNovoAberto] = useState(false);
   const [mensagem, setMensagem] = useState("");
+  const [qrAberto, setQrAberto] = useState(false);
   // Se setado, renderiza a folha de contagem em vez da listagem.
   const [contandoId, setContandoId] = useState<string | null>(null);
   // Se setado, renderiza o detalhe do gestor em vez da listagem.
@@ -215,16 +217,26 @@ export default function Inventario({ user }: InventarioProps) {
         style={{ background: C.accent + "12", border: `1px solid ${C.accent}55`, color: C.text }}
       >
         <div>
-          📱 <b>Inventário no celular?</b> Abra <code style={{ background: C.surface, padding: "1px 6px", borderRadius: 4 }}>?mobile=inventario</code> em um navegador mobile e instale como PWA. Funciona offline, com leitor de código de barras.
+          📱 <b>Inventário no celular?</b> Escaneie o QR Code com o celular ou instale como PWA. Funciona offline, com leitor de código de barras.
         </div>
-        <a
-          href="?mobile=inventario"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs font-bold no-underline"
-          style={{ color: C.accent, padding: "4px 10px", border: `1px solid ${C.accent}55`, borderRadius: 6 }}
-        >Abrir</a>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setQrAberto(true)}
+            className="text-xs font-bold"
+            style={{ color: C.white, background: C.accent, padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer" }}
+          >📱 QR Code</button>
+          <a
+            href="?mobile=inventario"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-bold no-underline"
+            style={{ color: C.accent, padding: "5px 10px", border: `1px solid ${C.accent}55`, borderRadius: 6 }}
+          >Abrir aqui</a>
+        </div>
       </div>
+
+      <QrMobileModal aberto={qrAberto} onFechar={() => setQrAberto(false)} />
 
       {mensagem && (
         <div

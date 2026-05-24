@@ -209,6 +209,23 @@ export default function Inventario({ user }: InventarioProps) {
         )}
       </div>
 
+      {/* ETAPA#1: aviso da versao mobile (PWA) — operador pode contar no celular */}
+      <div
+        className="mb-3 px-[14px] py-[10px] rounded-lg text-[12.5px] flex items-center justify-between gap-3 flex-wrap"
+        style={{ background: C.accent + "12", border: `1px solid ${C.accent}55`, color: C.text }}
+      >
+        <div>
+          📱 <b>Inventário no celular?</b> Abra <code style={{ background: C.surface, padding: "1px 6px", borderRadius: 4 }}>?mobile=inventario</code> em um navegador mobile e instale como PWA. Funciona offline, com leitor de código de barras.
+        </div>
+        <a
+          href="?mobile=inventario"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs font-bold no-underline"
+          style={{ color: C.accent, padding: "4px 10px", border: `1px solid ${C.accent}55`, borderRadius: 6 }}
+        >Abrir</a>
+      </div>
+
       {mensagem && (
         <div
           className="mb-3 px-[14px] py-[10px] rounded-lg text-[13px] text-gp-green"

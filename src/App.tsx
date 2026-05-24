@@ -38,6 +38,7 @@ const DashboardCrm = lazy(() => import("./DashboardCrm"));
 const Reativacao = lazy(() => import("./Reativacao"));
 const Nps = lazy(() => import("./Nps"));
 const PesquisaPublicaNps = lazy(() => import("./PesquisaPublicaNps"));
+const InventarioMobile = lazy(() => import("./InventarioMobile"));
 const Logs = lazy(() => import("./Logs"));
 // Modal de gerencia de formas de pagamento — antes ficava dentro do PDV
 // (botao ⚙ no modal de Finalizar Venda). Movido para a sidebar como entrada
@@ -104,6 +105,16 @@ function getNpsToken() {
   } catch { return null; }
 }
 
+// ETAPA#1: rota mobile dedicada para inventario fisico. URL com
+// ?mobile=inventario abre direto a UI mobile-first (PWA), aproveitando
+// o JWT ja salvo em localStorage de uma sessao web previa.
+function ehModoMobileInventario() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("mobile") === "inventario";
+  } catch { return false; }
+}
+
 // Fallback de Suspense usado em todos os pontos onde uma tela lazy entra
 // em cena. Mantem aparencia consistente com a tela inicial de carregamento.
 function TelaCarregando({ alturaMin = "100vh" }: { alturaMin?: string }) {
@@ -123,6 +134,9 @@ export default function App() {
   // Bypass de auth para pesquisa publica de NPS. Calculado uma vez via
   // useState para nao re-renderizar a cada update.
   const [npsToken] = useState(() => getNpsToken());
+  // ETAPA#1: bypass do shell desktop pra ir direto na UI mobile do inventario.
+  // Mantem a sessao JWT do usuario logado (auth normal continua aplicando).
+  const [modoMobileInv] = useState(() => ehModoMobileInventario());
 
   const [user, setUser] = useState<any>(null);
   const [carregando, setCarregando] = useState(true);
@@ -294,6 +308,15 @@ export default function App() {
   if (npsToken) return (
     <Suspense fallback={<TelaCarregando />}>
       <PesquisaPublicaNps token={npsToken} />
+    </Suspense>
+  );
+
+  // ETAPA#1: modo mobile do Inventario. Precisa ter usuario logado;
+  // se nao tiver, cai pra tela normal de login (que aparece logo apos
+  // o gate de auth abaixo).
+  if (modoMobileInv && user) return (
+    <Suspense fallback={<TelaCarregando />}>
+      <InventarioMobile />
     </Suspense>
   );
 

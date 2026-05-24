@@ -165,8 +165,11 @@ export default function InventarioMobile() {
 
   async function sincronizar() {
     const locais = lerContagensLocais(inventarioId);
+    // O backend (POST /inventarios/:id/contagens) espera { itemId, quantidadeContada }.
+    // O storage local usa o nome inventarioItemId — mapeamos aqui para nao
+    // mexer no formato persistido (compatibilidade com contagens ja gravadas).
     const lote = Object.values(locais).map(c => ({
-      inventarioItemId: c.inventarioItemId,
+      itemId: c.inventarioItemId,
       quantidadeContada: c.quantidadeContada,
     }));
     if (lote.length === 0) {
@@ -181,7 +184,7 @@ export default function InventarioMobile() {
       setFolha(f);
       // Remove do localStorage apenas o que foi aceito (mantemos todos
       // por simplicidade — backend e idempotente: re-enviar nao quebra).
-      lote.forEach(l => removerContagemLocal(inventarioId, l.inventarioItemId));
+      lote.forEach(l => removerContagemLocal(inventarioId, l.itemId));
       if (totalPendentesLocal(inventarioId) === 0) limparSessaoLocal(inventarioId);
       setPendentes(totalPendentesLocal(inventarioId));
       flashOk(`✓ ${lote.length} contagem${lote.length !== 1 ? "s" : ""} sincronizada${lote.length !== 1 ? "s" : ""}`);

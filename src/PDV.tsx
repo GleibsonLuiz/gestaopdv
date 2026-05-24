@@ -15,6 +15,10 @@ import ActionsMenu from "./components/ActionsMenu";
 import SelectBusca from "./components/SelectBusca";
 import MaquininhaMpModal from "./components/MaquininhaMpModal";
 import PixQrCodeModal from "./components/PixQrCodeModal";
+// ETAPA#8a: impressao termica direta via Web Bluetooth (alternativa ao window.print()).
+import { gerarComandosPedido } from "./lib/escposPedido";
+import { imprimirViaBluetooth, bluetoothDisponivel } from "./lib/webBluetoothPrint";
+import { getEmpresa } from "./lib/api";
 
 function urlImagem(imagem) {
   if (!imagem) return null;
@@ -2464,6 +2468,51 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpr
     window.print();
   }
 
+  // ETAPA#8a: impressao termica via Web Bluetooth (impressora portatil
+  // pareada). Layout muda conforme empresa.segmento (OEM em auto-pecas,
+  // lote/validade em farmacia). Mostra o botao so se navegador suporta.
+  const [imprimindoBT, setImprimindoBT] = useState(false);
+  async function imprimirBT() {
+    if (imprimindoBT) return;
+    setImprimindoBT(true);
+    try {
+      const segmento = (getEmpresa()?.segmento) || "GERAL";
+      const formaLabel = Array.isArray(venda.pagamentos) && venda.pagamentos.length === 1
+        ? (venda.pagamentos[0].formaCustomNome || FORMA_LABEL[venda.pagamentos[0].forma] || venda.pagamentos[0].forma)
+        : null;
+      const cmds = gerarComandosPedido(
+        {
+          numero: venda.numero,
+          createdAt: venda.createdAt,
+          total: venda.total,
+          desconto: venda.desconto,
+          cliente: venda.cliente,
+          user: venda.user,
+          itens: venda.itens,
+          observacoes: venda.observacoes,
+          formaPagamentoLabel: formaLabel,
+        },
+        {
+          nome: empresa?.nome,
+          cnpj: empresa?.cnpj,
+          endereco: empresa ? formatarEndereco(empresa) : null,
+          telefone: empresa?.telefone,
+        },
+        {
+          larguraMm: cfgImp?.largura === "MM_58" ? 58 : 80,
+          abrirGavetaDinheiro: cfgImp?.abrirGavetaDinheiro && (venda.formaPagamento === "DINHEIRO"),
+          segmento: segmento as any,
+          cortarPapel: true,
+        },
+      );
+      await imprimirViaBluetooth(cmds);
+    } catch (err) {
+      alert("Falha na impressao Bluetooth:\n" + (err as Error).message);
+    } finally {
+      setImprimindoBT(false);
+    }
+  }
+
   return (
     <>
       <style>{`
@@ -2585,6 +2634,19 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpr
             <button onClick={imprimir} className="pdv-btn-ghost" style={{ flex: 1, justifyContent: "center" }}>
               🖨️ Imprimir cupom
             </button>
+            {/* ETAPA#8a: impressao direta via Bluetooth — so aparece se o
+                navegador suporta Web Bluetooth (Chromium-based em HTTPS). */}
+            {bluetoothDisponivel() && (
+              <button
+                onClick={imprimirBT}
+                disabled={imprimindoBT}
+                className="pdv-btn-ghost"
+                style={{ justifyContent: "center", padding: "0 14px" }}
+                title="Imprimir via impressora Bluetooth pareada (ESC/POS)"
+              >
+                {imprimindoBT ? "..." : "🔌 BT"}
+              </button>
+            )}
             <button
               ref={novaVendaBtnRef}
               onClick={onFechar}

@@ -104,7 +104,9 @@ const INCLUDE_DETALHE = {
   user: { select: { id: true, nome: true, role: true } },
   itens: {
     include: {
-      produto: { select: { id: true, codigo: true, nome: true, unidade: true } },
+      // ETAPA#8a: camposSegmento exposto para que o cupom (HTML ou ESC/POS)
+      // renderize OEM/lote/validade quando a empresa for AUTO_PECAS/FARMACIA.
+      produto: { select: { id: true, codigo: true, nome: true, unidade: true, camposSegmento: true } },
     },
   },
   pagamentos: {

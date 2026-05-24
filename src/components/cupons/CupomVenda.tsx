@@ -15,6 +15,17 @@ type ProdutoItem = {
   codigo?: string | number | null;
   nome?: string | null;
   unidade?: string | null;
+  // ETAPA#8a: campos extras por segmento (auto-pecas: OEM/marca/compat;
+  // farmacia: lote/validade). Vem do JSON Produto.camposSegmento.
+  camposSegmento?: {
+    codigoOEM?: string;
+    marcaPeca?: string;
+    compatibilidade?: string[];
+    lote?: string;
+    validade?: string;
+    registroAnvisa?: string;
+    pmc?: number;
+  } | null;
 };
 
 type ItemVenda = {
@@ -105,15 +116,25 @@ export default function CupomVenda({
         <span>VALOR</span>
       </div>
       <hr className="cupom-divisor" />
-      {venda.itens?.map(it => (
-        <div key={it.id} style={{ marginBottom: 4 }}>
-          <div>{it.produto?.codigo} {it.produto?.nome}</div>
-          <div className="cupom-linha">
-            <span>{fmtQtd(it.quantidade)} {it.produto?.unidade || ""} x {fmtBRL(it.precoUnitario)}</span>
-            <span>{fmtBRL(it.subtotal)}</span>
+      {venda.itens?.map(it => {
+        const seg = it.produto?.camposSegmento;
+        return (
+          <div key={it.id} style={{ marginBottom: 4 }}>
+            <div>{it.produto?.codigo} {it.produto?.nome}</div>
+            {/* ETAPA#8a: linhas extras por segmento (so se preenchidas) */}
+            {seg?.codigoOEM && (
+              <div className="cupom-mini">OEM: {seg.codigoOEM}{seg.marcaPeca ? ` · ${seg.marcaPeca}` : ""}</div>
+            )}
+            {seg?.lote && (
+              <div className="cupom-mini">Lote: {seg.lote}{seg.validade ? ` · Val. ${seg.validade}` : ""}</div>
+            )}
+            <div className="cupom-linha">
+              <span>{fmtQtd(it.quantidade)} {it.produto?.unidade || ""} x {fmtBRL(it.precoUnitario)}</span>
+              <span>{fmtBRL(it.subtotal)}</span>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
       <hr className="cupom-divisor" />
       <div className="cupom-linha">
         <span>Subtotal:</span>

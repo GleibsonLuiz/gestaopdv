@@ -39,6 +39,7 @@ const Reativacao = lazy(() => import("./Reativacao"));
 const Nps = lazy(() => import("./Nps"));
 const PesquisaPublicaNps = lazy(() => import("./PesquisaPublicaNps"));
 const InventarioMobile = lazy(() => import("./InventarioMobile"));
+const PdvVolante = lazy(() => import("./PdvVolante"));
 const Logs = lazy(() => import("./Logs"));
 // Modal de gerencia de formas de pagamento — antes ficava dentro do PDV
 // (botao ⚙ no modal de Finalizar Venda). Movido para a sidebar como entrada
@@ -105,14 +106,16 @@ function getNpsToken() {
   } catch { return null; }
 }
 
-// ETAPA#1: rota mobile dedicada para inventario fisico. URL com
-// ?mobile=inventario abre direto a UI mobile-first (PWA), aproveitando
-// o JWT ja salvo em localStorage de uma sessao web previa.
-function ehModoMobileInventario() {
+// ETAPA#1 / #7: rotas mobile dedicadas via query string (mesmo padrao
+// do ?nps=token). Cada modulo mobile e um chunk separado, carregado
+// so quando ?mobile=<id> esta presente.
+function detectarModoMobile(): "inventario" | "pdv-volante" | null {
   try {
     const params = new URLSearchParams(window.location.search);
-    return params.get("mobile") === "inventario";
-  } catch { return false; }
+    const v = params.get("mobile");
+    if (v === "inventario" || v === "pdv-volante") return v;
+    return null;
+  } catch { return null; }
 }
 
 // Fallback de Suspense usado em todos os pontos onde uma tela lazy entra
@@ -134,9 +137,9 @@ export default function App() {
   // Bypass de auth para pesquisa publica de NPS. Calculado uma vez via
   // useState para nao re-renderizar a cada update.
   const [npsToken] = useState(() => getNpsToken());
-  // ETAPA#1: bypass do shell desktop pra ir direto na UI mobile do inventario.
-  // Mantem a sessao JWT do usuario logado (auth normal continua aplicando).
-  const [modoMobileInv] = useState(() => ehModoMobileInventario());
+  // ETAPA#1 / #7: bypass do shell desktop pra ir direto em uma UI mobile
+  // (Inventario ou PDV Volante). Mantem a sessao JWT do usuario logado.
+  const [modoMobile] = useState(() => detectarModoMobile());
 
   const [user, setUser] = useState<any>(null);
   const [carregando, setCarregando] = useState(true);
@@ -311,12 +314,16 @@ export default function App() {
     </Suspense>
   );
 
-  // ETAPA#1: modo mobile do Inventario. Precisa ter usuario logado;
-  // se nao tiver, cai pra tela normal de login (que aparece logo apos
-  // o gate de auth abaixo).
-  if (modoMobileInv && user) return (
+  // ETAPA#1 / #7: modos mobile dedicados. Precisam de usuario logado;
+  // se nao houver, cai na tela de login normal (gate abaixo).
+  if (modoMobile === "inventario" && user) return (
     <Suspense fallback={<TelaCarregando />}>
       <InventarioMobile />
+    </Suspense>
+  );
+  if (modoMobile === "pdv-volante" && user) return (
+    <Suspense fallback={<TelaCarregando />}>
+      <PdvVolante />
     </Suspense>
   );
 
@@ -567,6 +574,12 @@ export default function App() {
               ⚙ Gerenciar dentro do modal de Finalizar Venda do PDV. */}
           {(user.role === "ADMIN" || user.role === "GERENTE") && (
             <Item icone="💳" label="Formas de pagamento" ativo={false} onClick={() => setGerenciarFormasAberto(true)} />
+          )}
+          {/* ETAPA#7: link rapido para a versao mobile do PDV (PWA).
+              Abre em nova aba para preservar a sessao desktop atual. */}
+          {podeAcessar(user, "PDV") && (
+            <Item icone="📱" label="PDV Volante (mobile)" ativo={false}
+              onClick={() => window.open("?mobile=pdv-volante", "_blank")} />
           )}
           <Item icone="📋" label="Projeto" ativo={tela === "projeto"} onClick={() => navegar("projeto")} />
           {user.role === "ADMIN" && (

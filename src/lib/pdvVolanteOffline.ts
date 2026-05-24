@@ -1,0 +1,108 @@
+// =====================================================================
+// ETAPA#7 — Estado local do PDV Volante Mobile.
+//
+// 1. Carrinho atual (com 1 sessao por aba/dispositivo): localStorage.
+// 2. Fila de vendas pendentes (sync quando online): localStorage com
+//    array de payloads. retry automatico ao detectar evento "online".
+// =====================================================================
+
+const CARRINHO_KEY = "gestaopro_pdvvol_carrinho";
+const FILA_VENDAS_KEY = "gestaopro_pdvvol_fila";
+const CACHE_PRODUTOS_KEY = "gestaopro_pdvvol_produtos";
+
+export interface ItemCarrinhoVol {
+  produtoId: string;
+  codigo: string;
+  nome: string;
+  unidade?: string | null;
+  precoUnitario: number;
+  quantidade: number;
+  // Estoque visto no momento da adicao — para mostrar warn no offline.
+  estoque?: number;
+}
+
+export interface VendaPendente {
+  /** ID local — UUID gerado no cliente para evitar duplicacao em retry. */
+  idLocal: string;
+  /** Payload completo aceito por POST /vendas. */
+  payload: unknown;
+  /** Quando foi enfileirada. */
+  ts: number;
+  /** Tentativas de envio. */
+  tentativas: number;
+  /** Ultima mensagem de erro do servidor (se houver). */
+  ultimoErro?: string | null;
+}
+
+function lerJson<T>(chave: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(chave);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch { return fallback; }
+}
+
+function escreverJson(chave: string, valor: unknown): void {
+  try { localStorage.setItem(chave, JSON.stringify(valor)); } catch {}
+}
+
+// ============ CARRINHO ============
+
+export function lerCarrinho(): ItemCarrinhoVol[] {
+  return lerJson(CARRINHO_KEY, []);
+}
+
+export function salvarCarrinho(itens: ItemCarrinhoVol[]): void {
+  escreverJson(CARRINHO_KEY, itens);
+}
+
+export function limparCarrinho(): void {
+  try { localStorage.removeItem(CARRINHO_KEY); } catch {}
+}
+
+// ============ CACHE DE PRODUTOS (offline-first) ============
+
+interface CacheProdutos<T> {
+  ts: number;
+  produtos: T[];
+}
+
+export function lerCacheProdutos<T>(): { ts: number; produtos: T[] } | null {
+  return lerJson<CacheProdutos<T> | null>(CACHE_PRODUTOS_KEY, null);
+}
+
+export function salvarCacheProdutos<T>(produtos: T[]): void {
+  escreverJson(CACHE_PRODUTOS_KEY, { ts: Date.now(), produtos });
+}
+
+// ============ FILA DE VENDAS PENDENTES ============
+
+export function lerFila(): VendaPendente[] {
+  return lerJson(FILA_VENDAS_KEY, []);
+}
+
+export function enfileirarVenda(payload: unknown): VendaPendente {
+  const fila = lerFila();
+  const idLocal = String(Date.now()) + "-" + Math.random().toString(36).slice(2, 8);
+  const item: VendaPendente = { idLocal, payload, ts: Date.now(), tentativas: 0, ultimoErro: null };
+  fila.push(item);
+  escreverJson(FILA_VENDAS_KEY, fila);
+  return item;
+}
+
+export function removerDaFila(idLocal: string): void {
+  const fila = lerFila().filter(v => v.idLocal !== idLocal);
+  escreverJson(FILA_VENDAS_KEY, fila);
+}
+
+export function marcarFalha(idLocal: string, mensagem: string): void {
+  const fila = lerFila();
+  const idx = fila.findIndex(v => v.idLocal === idLocal);
+  if (idx === -1) return;
+  fila[idx].tentativas += 1;
+  fila[idx].ultimoErro = mensagem;
+  escreverJson(FILA_VENDAS_KEY, fila);
+}
+
+export function totalPendentesFila(): number {
+  return lerFila().length;
+}

@@ -13,18 +13,21 @@ import { C } from "../lib/theme";
 interface QrMobileModalProps {
   aberto: boolean;
   onFechar: () => void;
+  inventarioId?: string;
   inventarioNumero?: number;
 }
 
-export default function QrMobileModal({ aberto, onFechar, inventarioNumero }: QrMobileModalProps) {
+export default function QrMobileModal({ aberto, onFechar, inventarioId, inventarioNumero }: QrMobileModalProps) {
   const [dataUrl, setDataUrl] = useState<string>("");
   const [copiado, setCopiado] = useState(false);
   const overlayRef = useRef<HTMLDivElement | null>(null);
 
   // URL absoluta: o QR precisa apontar pra dominio acessivel do celular.
   // window.location.origin pega o host atual (funciona em LAN e producao).
+  // Se um inventario especifico for passado, embute o UUID — assim a tela
+  // mobile pula o passo de digitar ID e carrega direto a folha certa.
   const url = typeof window !== "undefined"
-    ? `${window.location.origin}/?mobile=inventario`
+    ? `${window.location.origin}/?mobile=inventario${inventarioId ? `&inv=${encodeURIComponent(inventarioId)}` : ""}`
     : "";
 
   useEffect(() => {
@@ -89,6 +92,7 @@ export default function QrMobileModal({ aberto, onFechar, inventarioNumero }: Qr
             ) : null}
           </div>
           <button
+            type="button"
             onClick={onFechar}
             aria-label="Fechar"
             className="text-2xl leading-none px-2"
@@ -114,11 +118,14 @@ export default function QrMobileModal({ aberto, onFechar, inventarioNumero }: Qr
           <input
             readOnly
             value={url}
+            aria-label="URL do inventário mobile"
+            placeholder="URL do inventário mobile"
             className="flex-1 px-3 py-2 rounded-lg text-[12px] font-mono"
             style={{ background: C.bg, border: `1px solid ${C.border}`, color: C.text }}
             onFocus={(e) => e.currentTarget.select()}
           />
           <button
+            type="button"
             onClick={copiarUrl}
             className="px-3 py-2 rounded-lg text-[12px] font-bold"
             style={{
@@ -141,6 +148,7 @@ export default function QrMobileModal({ aberto, onFechar, inventarioNumero }: Qr
             Abrir em nova aba
           </a>
           <button
+            type="button"
             onClick={onFechar}
             className="flex-1 py-2.5 rounded-lg text-[13px] font-bold"
             style={{ background: C.accent, color: "#ffffff" }}

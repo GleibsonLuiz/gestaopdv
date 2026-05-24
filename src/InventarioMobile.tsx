@@ -49,10 +49,22 @@ interface Folha {
 
 type Tela = "entrada" | "lista" | "scanner" | "contar";
 
+// Le UUID do inventario passado via query string. O QR Code gerado por
+// linha na lista de inventarios (desktop) embute esse parametro — assim o
+// operador nao precisa digitar nada ao escanear.
+function lerInvDaUrl(): string {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("inv") || "";
+  } catch { return ""; }
+}
+
 export default function InventarioMobile() {
   const [tela, setTela] = useState<Tela>("entrada");
   const [inventarioId, setInventarioId] = useState<string>(() => {
-    // Persiste o ultimo inventario aberto pra nao perder ao recarregar.
+    // Prioridade: ?inv=<uuid> da URL (QR Code) > ultimo aberto (localStorage).
+    const fromUrl = lerInvDaUrl();
+    if (fromUrl) return fromUrl;
     try { return localStorage.getItem("gestaopro_mobile_inv_id") || ""; } catch { return ""; }
   });
   const [folha, setFolha] = useState<Folha | null>(null);
@@ -85,6 +97,14 @@ export default function InventarioMobile() {
   useEffect(() => {
     if (inventarioId) setPendentes(totalPendentesLocal(inventarioId));
   }, [inventarioId]);
+
+  // Se chegou aqui via QR Code (?inv=<uuid>), carrega automaticamente sem
+  // exigir digitacao. Roda uma unica vez no mount.
+  useEffect(() => {
+    const fromUrl = lerInvDaUrl();
+    if (fromUrl) carregarFolha(fromUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const flashOk = (msg: string) => {
     setFlash({ msg, tipo: "ok" });
@@ -247,7 +267,32 @@ export default function InventarioMobile() {
         {/* LISTA */}
         <div className="flex-1 overflow-y-auto">
           {itensFiltrados.length === 0 ? (
-            <div className="p-8 text-center text-slate-500 text-sm">Nenhum item encontrado.</div>
+            <div className="p-8 text-center text-slate-500 text-sm">
+              {(folha?.itens?.length ?? 0) === 0 ? (
+                <>
+                  <div className="text-4xl mb-3">⚠️</div>
+                  <div className="font-bold text-amber-400 mb-2">Folha vazia</div>
+                  <div className="mb-3">
+                    O inventário <b className="text-slate-300">#{folha?.numero}</b> não tem itens.
+                  </div>
+                  <div className="text-xs text-slate-600 mb-4">
+                    Possíveis causas: <br />
+                    • Sua sessão está em outra empresa (logout/login) <br />
+                    • O inventário foi aberto sem produtos no filtro <br />
+                    • Você abriu pelo ID errado
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setFolha(null); setTela("entrada"); }}
+                    className="px-4 py-2 bg-emerald-500 text-white text-sm font-bold rounded-lg"
+                  >
+                    Voltar e tentar outro ID
+                  </button>
+                </>
+              ) : (
+                "Nenhum item bate com a busca."
+              )}
+            </div>
           ) : (
             itensFiltrados.map(item => {
               const local = contagensLocais[item.id];

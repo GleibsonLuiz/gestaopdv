@@ -84,6 +84,7 @@ export default function Inventario({ user }: InventarioProps) {
   const [novoAberto, setNovoAberto] = useState(false);
   const [mensagem, setMensagem] = useState("");
   const [qrAberto, setQrAberto] = useState(false);
+  const [qrInv, setQrInv] = useState<{ id: string; numero: number } | null>(null);
   // Se setado, renderiza a folha de contagem em vez da listagem.
   const [contandoId, setContandoId] = useState<string | null>(null);
   // Se setado, renderiza o detalhe do gestor em vez da listagem.
@@ -237,6 +238,12 @@ export default function Inventario({ user }: InventarioProps) {
       </div>
 
       <QrMobileModal aberto={qrAberto} onFechar={() => setQrAberto(false)} />
+      <QrMobileModal
+        aberto={qrInv !== null}
+        onFechar={() => setQrInv(null)}
+        inventarioId={qrInv?.id}
+        inventarioNumero={qrInv?.numero}
+      />
 
       {mensagem && (
         <div
@@ -323,6 +330,12 @@ export default function Inventario({ user }: InventarioProps) {
                           icon: "🖨",
                           color: C.muted,
                           onClick: () => imprimirFolha(inv),
+                        },
+                        {
+                          label: "QR para contagem mobile",
+                          icon: "📱",
+                          color: C.accent,
+                          onClick: () => setQrInv({ id: inv.id, numero: inv.numero }),
                         },
                         ...(podeGerir
                           ? [

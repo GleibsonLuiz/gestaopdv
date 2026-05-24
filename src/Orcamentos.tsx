@@ -1728,7 +1728,11 @@ function gerarHTMLImpressao(orc: Orcamento, empresa: ConfiguracaoEmpresa | null)
   .obs { font-size: 12px; padding: 8px; background: #f6f6f6; border-radius: 4px; margin-top: 12px; }
   .rodape { margin-top: 18px; padding: 8px; text-align: center; font-style: italic; color: #b00; font-size: 12px; }
   .status { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; background: #eee; }
-  @media print { body { margin: 0; } .empresa { background: transparent; } }
+  @media print {
+    @page { margin: 0; }
+    body { margin: 0; padding: 12mm; }
+    .empresa { background: transparent; }
+  }
 </style></head><body>
   ${empresaHTML}
   <h1>${tipoLabel} Nº ${orc.numero} ${orc.via === 2 ? "<small>(2ª via)</small>" : ""}</h1>

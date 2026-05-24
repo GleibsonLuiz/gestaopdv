@@ -40,13 +40,20 @@ export default function CupomEnvelope({ cfg, children, preview = false }: Props)
     <>
       <style>{`
         @media print {
-          @page { size: ${paginaCss}; margin: ${margem}mm; }
+          /* @page com margin: 0 instrui o navegador a NAO injetar
+             cabecalho (URL/titulo) e rodape (data/paginacao). A margem
+             fisica do cupom passa a ser controlada pelo padding interno
+             do .cupom-imprimivel — preservando o recuo configurado em
+             ConfiguracaoImpressora.margemMm. */
+          @page { size: ${paginaCss}; margin: 0; }
           body * { visibility: hidden !important; }
           .cupom-imprimivel, .cupom-imprimivel * { visibility: visible !important; }
           .cupom-imprimivel {
             position: absolute !important;
             left: 0 !important; top: 0 !important;
             width: 100% !important;
+            padding: ${margem}mm !important;
+            box-sizing: border-box !important;
             background: white !important;
             color: black !important;
             box-shadow: none !important;

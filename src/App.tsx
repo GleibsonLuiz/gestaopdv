@@ -39,6 +39,10 @@ const Reativacao = lazy(() => import("./Reativacao"));
 const Nps = lazy(() => import("./Nps"));
 const PesquisaPublicaNps = lazy(() => import("./PesquisaPublicaNps"));
 const Logs = lazy(() => import("./Logs"));
+// Modal de gerencia de formas de pagamento — antes ficava dentro do PDV
+// (botao ⚙ no modal de Finalizar Venda). Movido para a sidebar como entrada
+// global em "Sistema" — ETAPA#3.
+const GerenciarFormasModal = lazy(() => import("./Financeiro").then(m => ({ default: m.GerenciarFormasModal })));
 
 
 const SIDEBAR_W_EXPANDIDA = 240;
@@ -137,6 +141,7 @@ export default function App() {
   const [trocarSenhaAberto, setTrocarSenhaAberto] = useState(false);
   const [sidebarAberta, setSidebarAberta] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => lerPreferenciaSidebar());
+  const [gerenciarFormasAberto, setGerenciarFormasAberto] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   function alternarColapso() {
@@ -535,6 +540,11 @@ export default function App() {
           {(user.role === "ADMIN" || user.role === "GERENTE") && (
             <Item icone="🖨️" label="Impressora" ativo={tela === "impressora"} onClick={() => navegar("impressora")} />
           )}
+          {/* Formas de pagamento — abre modal global. Antes ficava como botao
+              ⚙ Gerenciar dentro do modal de Finalizar Venda do PDV. */}
+          {(user.role === "ADMIN" || user.role === "GERENTE") && (
+            <Item icone="💳" label="Formas de pagamento" ativo={false} onClick={() => setGerenciarFormasAberto(true)} />
+          )}
           <Item icone="📋" label="Projeto" ativo={tela === "projeto"} onClick={() => navegar("projeto")} />
           {user.role === "ADMIN" && (
             <Item icone="📜" label="Logs" ativo={tela === "logs"} onClick={() => navegar("logs")} />
@@ -816,6 +826,14 @@ export default function App() {
       {trocarSenhaAberto && (
         <Suspense fallback={null}>
           <TrocarSenhaModal onFechar={() => setTrocarSenhaAberto(false)} />
+        </Suspense>
+      )}
+      {gerenciarFormasAberto && (
+        <Suspense fallback={null}>
+          <GerenciarFormasModal
+            podeExcluir={user.role === "ADMIN"}
+            onFechar={() => setGerenciarFormasAberto(false)}
+          />
         </Suspense>
       )}
     </div>

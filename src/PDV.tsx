@@ -10,7 +10,6 @@ import { useConfiguracaoEmpresa, formatarEndereco } from "./HeaderRelatorio";
 import { obterConfigImpressora, devePrintar } from "./lib/impressora";
 import CupomEnvelope from "./components/cupons/CupomEnvelope";
 import CupomVenda from "./components/cupons/CupomVenda";
-import { GerenciarFormasModal } from "./Financeiro";
 import { useModalKeys } from "./lib/modalKeys";
 import ActionsMenu from "./components/ActionsMenu";
 import SelectBusca from "./components/SelectBusca";
@@ -325,7 +324,6 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
   // DINHEIRO vira troco. Ver pagamentosReducer().
   const [pagamentos, dispatchPagamentos] = useReducer(pagamentosReducer, []);
   const [desconto, setDesconto] = useState("0");
-  const [observacoes, setObservacoes] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const [reciboAberto, setReciboAberto] = useState(null);
@@ -343,7 +341,6 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
   const [qtdModalProduto, setQtdModalProduto] = useState(null); // produto p/ modal de qtd
   const [qtdModalValor, setQtdModalValor] = useState("1");
   const [formasCustom, setFormasCustom] = useState([]);
-  const [gerenciarFormasAberto, setGerenciarFormasAberto] = useState(false);
   // Bloco financeiro (gera ContaReceber) — visivel apenas para BOLETO/CREDITO/
   // CREDIARIO. Default: 30 dias a frente, 1 parcela.
   const [contaVencimento, setContaVencimento] = useState(() => dataDaqui(30));
@@ -669,7 +666,6 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
     setCarrinho([]);
     setClienteId("");
     setDesconto("0");
-    setObservacoes("");
     dispatchPagamentos({ type: "reset" });
     setErro("");
     setBusca("");
@@ -887,7 +883,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
           formaCustomNome: p.formaCustomNome || undefined,
         })),
         desconto: descontoNum,
-        observacoes: observacoes ? observacoes.toUpperCase() : null,
+        observacoes: null,
         itens: carrinho.map(it => ({
           produtoId: it.produtoId,
           quantidade: it.quantidade,
@@ -1559,7 +1555,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
         >
           <div
             onClick={e => e.stopPropagation()}
-            className="pdv-modal"
+            className="pdv-modal pdv-modal--compact"
             style={{ width: "min(560px, calc(100vw - 32px))" }}
           >
             <div className="pdv-modal-hd">
@@ -1576,7 +1572,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
               >×</button>
             </div>
 
-            <div className="pdv-modal-body" style={{ display: "flex", flexDirection: "column", gap: 14, paddingBottom: 16 }}>
+            <div className="pdv-modal-body pdv-modal-body--compact" style={{ display: "flex", flexDirection: "column", gap: 10, paddingBottom: 12 }}>
               <div className="pdv-modal-amount" style={{ margin: 0 }}>
                 <div>
                   <div className="pdv-modal-amount-lbl">Total a receber</div>
@@ -1672,70 +1668,20 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
                 </div>
               )}
 
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <label className="pdv-field-label" style={{ marginBottom: 0 }}>
-                    Adicionar pagamento <span style={{ color: "var(--pdv-t3)", fontWeight: 400 }}>(F1–F6)</span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setGerenciarFormasAberto(true)}
-                    title="Cadastrar/editar formas de pagamento"
-                    style={{
-                      background: "transparent", border: "none", color: "var(--pdv-accent)",
-                      fontSize: 11.5, fontWeight: 500, cursor: "pointer", padding: 0,
-                      fontFamily: "inherit",
-                    }}
-                  >⚙ Gerenciar</button>
+              {/* ETAPA#3: bloco visual de selecao de pagamentos (F1-F6 + personalizadas
+                  + botao ⚙ Gerenciar) foi REMOVIDO do modal. Os atalhos F1-F6 continuam
+                  funcionando globalmente (ver listener em useEffect acima — ETAPA#5).
+                  Gerenciar formas de pagamento agora fica na sidebar (Sistema > Formas
+                  de pagamento). Dica textual minimalista substitui o grid de botoes. */}
+              {pagamentos.length === 0 && (
+                <div style={{
+                  padding: "8px 12px", borderRadius: 8,
+                  background: "var(--pdv-surf-2)", border: "1px dashed var(--pdv-line)",
+                  color: "var(--pdv-t3)", fontSize: 12, textAlign: "center",
+                }}>
+                  Pressione <span className="pdv-kbd">F1</span>–<span className="pdv-kbd">F6</span> para adicionar forma de pagamento
                 </div>
-                <div className="pdv-pay-grid">
-                  {FORMAS_ORDENADAS.map(f => {
-                    const cor = FORMA_COR_CLASSE[f.id] || "pdv-pay-c-emerald";
-                    const desabilitado = restante <= 0 && pagamentos.length > 0;
-                    const flash = formaAtalhoFlash === f.id;
-                    return (
-                      <button
-                        key={f.id} onClick={() => adicionarPagamentoForma(f.id)} type="button"
-                        disabled={desabilitado}
-                        className={`pdv-pay-btn ${cor}${flash ? " pdv-pay-btn--flash" : ""}`}
-                        title={desabilitado ? "Total ja coberto — remova um pagamento antes" : `Adicionar ${f.label}`}
-                        style={desabilitado ? { opacity: 0.4, cursor: "not-allowed" } : undefined}
-                      >
-                        <div className="pay-row">
-                          <div className="pay-icon">{f.icone}</div>
-                          <span className="pay-key">{f.atalho}</span>
-                        </div>
-                        <div className="pay-lbl">{f.label}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-                {formasCustom.length > 0 && (
-                  <>
-                    <div className="pdv-shortcuts-label" style={{ marginTop: 12 }}>Personalizadas</div>
-                    <div className="pdv-pay-grid">
-                      {formasCustom.map(c => {
-                        const cor = FORMA_COR_CLASSE[c.baseFormaPagamento] || "pdv-pay-c-violet";
-                        const desabilitado = restante <= 0 && pagamentos.length > 0;
-                        return (
-                          <button
-                            key={c.id} onClick={() => adicionarPagamentoCustom(c)} type="button"
-                            disabled={desabilitado}
-                            className={`pdv-pay-btn ${cor}`}
-                            style={desabilitado ? { opacity: 0.4, cursor: "not-allowed" } : undefined}
-                          >
-                            <div className="pay-row">
-                              <div className="pay-icon">{c.icone || "•"}</div>
-                              <span className="pay-key">CST</span>
-                            </div>
-                            <div className="pay-lbl">{c.nome}</div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-              </div>
+              )}
 
               {pagamentos.length > 0 && (
                 <div style={{
@@ -1872,12 +1818,6 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
                 <label className="pdv-field-label">Desconto (R$)</label>
                 <input type="number" step="0.01" min="0" value={desconto}
                   onChange={e => setDesconto(e.target.value)} className="pdv-field-input" />
-              </div>
-
-              <div>
-                <label className="pdv-field-label">Observações</label>
-                <input value={observacoes} onChange={e => setObservacoes(e.target.value)}
-                  placeholder="Opcional" className="pdv-field-input" />
               </div>
 
               {valorAPrazo > 0 && (
@@ -2021,7 +1961,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
               valor: Math.round(total * 100) / 100,
             }],
             desconto: descontoNum,
-            observacoes: observacoes ? observacoes.toUpperCase() : null,
+            observacoes: null,
             itens: carrinho.map(it => ({
               produtoId: it.produtoId,
               quantidade: it.quantidade,
@@ -2068,7 +2008,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
             clienteId: clienteId || null,
             pagamentos: [{ forma: "PIX", valor: Math.round(total * 100) / 100 }],
             desconto: descontoNum,
-            observacoes: observacoes ? observacoes.toUpperCase() : null,
+            observacoes: null,
             itens: carrinho.map(it => ({
               produtoId: it.produtoId,
               quantidade: it.quantidade,
@@ -2105,16 +2045,6 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
         <DetalheVendaModal
           venda={vendaDetalheAberta}
           onFechar={() => { setVendaDetalheAberta(null); focarBusca(); }}
-        />
-      )}
-
-      {gerenciarFormasAberto && (
-        <GerenciarFormasModal
-          podeExcluir={user.role === "ADMIN"}
-          onFechar={async () => {
-            setGerenciarFormasAberto(false);
-            await recarregarFormasCustom();
-          }}
         />
       )}
 

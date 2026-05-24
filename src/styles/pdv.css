@@ -1433,6 +1433,29 @@
 .pdv-field-input:focus,
 .pdv-field-select:focus { border-color: var(--pdv-line-3); }
 
+/* ETAPA#3 — variante compacta do modal de Finalizar Venda: inputs e labels
+   menores (~34px de altura efetiva) + headers mais magros, pra caber 100%
+   na tela sem scroll vertical. So afeta o modal de pagamento. */
+.pdv-modal-body--compact .pdv-field-input,
+.pdv-modal-body--compact .pdv-field-select {
+  padding: 7px 12px; font-size: 12.5px; border-radius: 8px;
+}
+.pdv-modal-body--compact .pdv-field-label {
+  font-size: 10.5px; margin-bottom: 4px;
+}
+.pdv-modal-body--compact .pdv-modal-amount {
+  padding: 12px 14px;
+}
+.pdv-modal-body--compact .pdv-modal-amount-num {
+  font-size: 28px;
+}
+.pdv-modal--compact .pdv-modal-hd { padding: 16px 22px 10px; }
+.pdv-modal--compact .pdv-modal-body { padding-left: 22px; padding-right: 22px; }
+.pdv-modal--compact .pdv-modal-foot { padding: 14px 22px 16px; }
+.pdv-modal--compact .pdv-modal-title { font-size: 16px; }
+.pdv-modal--compact .pdv-modal-sub { font-size: 11.5px; margin-top: 2px; }
+.pdv-modal--compact { max-height: 90vh; }
+
 /* Quantity modal (numero grande) */
 .pdv-qty-input {
   width: 100%; background: var(--pdv-surf-2);

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef, useMemo, type CSSProperties, type ChangeEvent, type DragEvent, type FormEvent, type ReactNode } from "react";
 import { C } from "./lib/theme";
-import { api, BASE_URL, type SessionUser } from "./lib/api";
+import { api, BASE_URL, getEmpresa, type SessionUser, type SegmentoEmpresa } from "./lib/api";
 import MovimentarEstoqueModal from "./MovimentarEstoqueModal";
 import ActionsMenu from "./components/ActionsMenu";
 import EtiquetaPrecoModal from "./components/EtiquetaPrecoModal";
@@ -108,6 +108,14 @@ interface FormProduto {
   codBeneficioFiscal: string;
   pesoLiquido: string;
   pesoBruto: string;
+  // ETAPA#6: campos extras por segmento de empresa (renderizados condicionalmente)
+  codigoOEM: string;       // AUTO_PECAS
+  marcaPeca: string;       // AUTO_PECAS
+  compatibilidade: string; // AUTO_PECAS (textarea: 1 modelo por linha)
+  lote: string;            // FARMACIA
+  validade: string;        // FARMACIA (YYYY-MM-DD)
+  registroAnvisa: string;  // FARMACIA
+  pmc: string;             // FARMACIA (Preco Maximo ao Consumidor)
 }
 
 interface Markup {
@@ -132,6 +140,8 @@ const VAZIO: FormProduto = {
   cstCofins: "", aliquotaCofins: "",
   codBeneficioFiscal: "",
   pesoLiquido: "", pesoBruto: "",
+  codigoOEM: "", marcaPeca: "", compatibilidade: "",
+  lote: "", validade: "", registroAnvisa: "", pmc: "",
 };
 
 const MARKUP_VAZIO: Markup = { impostos: "", taxasCartao: "", margemLucro: "" };
@@ -174,6 +184,33 @@ function proximoCodigoSugerido(produtos: Produto[]): string {
   return String(proximo).padStart(len, "0");
 }
 
+// ETAPA#6: monta o objeto camposSegmento conforme segmento da empresa.
+// Retorna null se nao houver nenhum campo extra preenchido (backend grava NULL).
+function montarCamposSegmento(form: FormProduto, segmento: SegmentoEmpresa | undefined): Record<string, unknown> | null {
+  if (!segmento || segmento === "GERAL" || segmento === "PAPELARIA") return null;
+  const out: Record<string, unknown> = {};
+  if (segmento === "AUTO_PECAS") {
+    if (form.codigoOEM.trim()) out.codigoOEM = form.codigoOEM.trim();
+    if (form.marcaPeca.trim()) out.marcaPeca = form.marcaPeca.trim();
+    const compat = form.compatibilidade
+      .split(/\r?\n/)
+      .map(s => s.trim())
+      .filter(Boolean)
+      .slice(0, 50);
+    if (compat.length) out.compatibilidade = compat;
+  }
+  if (segmento === "FARMACIA") {
+    if (form.lote.trim()) out.lote = form.lote.trim();
+    if (form.validade.trim()) out.validade = form.validade.trim();
+    if (form.registroAnvisa.trim()) out.registroAnvisa = form.registroAnvisa.trim();
+    if (form.pmc.trim()) {
+      const n = Number(form.pmc.replace(",", "."));
+      if (Number.isFinite(n) && n >= 0) out.pmc = n;
+    }
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 // ============ COMPONENTE PRINCIPAL ============
 
 interface ProdutosProps {
@@ -181,6 +218,9 @@ interface ProdutosProps {
 }
 
 export default function Produtos({ user }: ProdutosProps) {
+  // ETAPA#6: segmento da empresa (vem do localStorage, populado no login/me).
+  // Default GERAL se nao definido (compatibilidade com sessoes antigas).
+  const segmentoEmpresa: SegmentoEmpresa = (getEmpresa()?.segmento as SegmentoEmpresa) || "GERAL";
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
@@ -322,6 +362,15 @@ export default function Produtos({ user }: ProdutosProps) {
       codBeneficioFiscal: p.codBeneficioFiscal || "",
       pesoLiquido: p.pesoLiquido != null ? String(p.pesoLiquido) : "",
       pesoBruto: p.pesoBruto != null ? String(p.pesoBruto) : "",
+      // ETAPA#6: campos extras por segmento (vem do JSON camposSegmento)
+      codigoOEM: (p as any).camposSegmento?.codigoOEM || "",
+      marcaPeca: (p as any).camposSegmento?.marcaPeca || "",
+      compatibilidade: Array.isArray((p as any).camposSegmento?.compatibilidade)
+        ? (p as any).camposSegmento.compatibilidade.join("\n") : "",
+      lote: (p as any).camposSegmento?.lote || "",
+      validade: (p as any).camposSegmento?.validade || "",
+      registroAnvisa: (p as any).camposSegmento?.registroAnvisa || "",
+      pmc: (p as any).camposSegmento?.pmc != null ? String((p as any).camposSegmento.pmc) : "",
     });
     setErroForm("");
     setNovaCategoria("");
@@ -417,6 +466,9 @@ export default function Produtos({ user }: ProdutosProps) {
         codBeneficioFiscal: form.codBeneficioFiscal || null,
         pesoLiquido: form.pesoLiquido === "" ? null : form.pesoLiquido,
         pesoBruto: form.pesoBruto === "" ? null : form.pesoBruto,
+        // ETAPA#6: monta camposSegmento conforme o segmento da empresa.
+        // O backend sanitiza/descarta chaves que nao baterem com a whitelist.
+        camposSegmento: montarCamposSegmento(form, segmentoEmpresa),
       };
       const produtoSalvo = (editando
         ? await api.atualizarProduto(editando.id, payload)
@@ -732,10 +784,19 @@ export default function Produtos({ user }: ProdutosProps) {
           abas={[
             { id: "gerais",  icone: "📋", label: "Dados Gerais" },
             { id: "classif", icone: "🏷️", label: "Classificacao" },
+            ...(segmentoEmpresa === "AUTO_PECAS"
+              ? [{ id: "segmento", icone: "🔧", label: "Auto-Peças" }]
+              : segmentoEmpresa === "FARMACIA"
+                ? [{ id: "segmento", icone: "💊", label: "Farmácia" }]
+                : []),
             { id: "fiscal",  icone: "📊", label: "Tributacao / NF-e" },
           ]}
         >
-          {(ativa: number) => (
+          {(ativa: number) => {
+            const temAbaSegmento = segmentoEmpresa === "AUTO_PECAS" || segmentoEmpresa === "FARMACIA";
+            const idxSegmento = temAbaSegmento ? 2 : -1;
+            const idxFiscal = temAbaSegmento ? 3 : 2;
+            return (
             <>
               {ativa === 0 && (
                 <>
@@ -945,9 +1006,63 @@ export default function Produtos({ user }: ProdutosProps) {
                 </Secao>
               )}
 
-              {ativa === 2 && <AbaFiscal form={form} setForm={setForm} />}
+              {/* ETAPA#6: aba do segmento renderizada condicionalmente */}
+              {ativa === idxSegmento && segmentoEmpresa === "AUTO_PECAS" && (
+                <Secao legenda="Dados de auto-peca">
+                  <Linha cols={2}>
+                    <CampoLux label="Código OEM" hint="Numero original do fabricante">
+                      <input className="lux-input" value={form.codigoOEM}
+                        onChange={(e) => setForm({ ...form, codigoOEM: e.target.value.toUpperCase().slice(0, 60) })}
+                        placeholder="Ex: 90919-01184" />
+                    </CampoLux>
+                    <CampoLux label="Marca da peça">
+                      <input className="lux-input" value={form.marcaPeca}
+                        onChange={(e) => setForm({ ...form, marcaPeca: e.target.value.slice(0, 60) })}
+                        placeholder="Bosch, NGK, Mahle…" />
+                    </CampoLux>
+                  </Linha>
+                  <Linha cols={1}>
+                    <CampoLux label="Compatibilidade" hint="Um modelo/aplicação por linha (até 50)">
+                      <textarea className="lux-textarea" value={form.compatibilidade}
+                        onChange={(e) => setForm({ ...form, compatibilidade: e.target.value.slice(0, 2000) })}
+                        placeholder={"Toyota Corolla 2014-2019\nHonda Civic 2016-2020"}
+                        rows={5} />
+                    </CampoLux>
+                  </Linha>
+                </Secao>
+              )}
+              {ativa === idxSegmento && segmentoEmpresa === "FARMACIA" && (
+                <Secao legenda="Dados de medicamento">
+                  <Linha cols={2}>
+                    <CampoLux label="Lote">
+                      <input className="lux-input" value={form.lote}
+                        onChange={(e) => setForm({ ...form, lote: e.target.value.toUpperCase().slice(0, 30) })}
+                        placeholder="L20260512A" />
+                    </CampoLux>
+                    <CampoLux label="Validade">
+                      <input className="lux-input" type="date" value={form.validade}
+                        onChange={(e) => setForm({ ...form, validade: e.target.value })} />
+                    </CampoLux>
+                  </Linha>
+                  <Linha cols={2}>
+                    <CampoLux label="Registro Anvisa" hint="13 digitos sem formatacao">
+                      <input className="lux-input" value={form.registroAnvisa}
+                        onChange={(e) => setForm({ ...form, registroAnvisa: e.target.value.replace(/\D/g, "").slice(0, 13) })}
+                        placeholder="1234567890123" inputMode="numeric" />
+                    </CampoLux>
+                    <CampoLux label="PMC (R$)" hint="Preço Máximo ao Consumidor">
+                      <input className="lux-input" type="number" step="0.01" min="0"
+                        value={form.pmc}
+                        onChange={(e) => setForm({ ...form, pmc: e.target.value })}
+                        placeholder="0,00" />
+                    </CampoLux>
+                  </Linha>
+                </Secao>
+              )}
+              {ativa === idxFiscal && <AbaFiscal form={form} setForm={setForm} />}
             </>
-          )}
+            );
+          }}
         </Abas>
       </FormularioLuxuoso>
     </div>

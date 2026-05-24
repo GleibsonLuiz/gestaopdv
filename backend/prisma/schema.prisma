@@ -222,6 +222,16 @@ enum Plano {
   ENTERPRISE
 }
 
+// ETAPA#6: Segmento de negocio da empresa. Define se o cadastro de produto
+// exibe campos extras (OEM/Marca para Auto-Pecas; Lote/Validade/Anvisa/PMC
+// para Farmacia). Default GERAL nao expande nada.
+enum Segmento {
+  GERAL
+  AUTO_PECAS
+  FARMACIA
+  PAPELARIA
+}
+
 // ETAPA 12: tipo da notificacao define cor e icone no banner do usuario.
 enum TipoNotificacao {
   INFO
@@ -284,6 +294,8 @@ model Empresa {
   plano            Plano     @default(TRIAL)
   expiraEm         DateTime?
   observacoesPlano String?
+  // ETAPA#6: segmento de negocio. So super-admin altera (via admin-master).
+  segmento         Segmento  @default(GERAL)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -631,6 +643,13 @@ model Produto {
   // recomenda — usados em notas de transporte e auditoria fiscal.
   pesoLiquido Decimal? @db.Decimal(10, 3)
   pesoBruto   Decimal? @db.Decimal(10, 3)
+
+  // ETAPA#6: campos extras por segmento (auto-pecas, farmacia, etc).
+  // Estrutura flexivel via JSON:
+  //   AUTO_PECAS: { codigoOEM, marcaPeca, compatibilidade: string[] }
+  //   FARMACIA:   { lote, validade, registroAnvisa, pmc }
+  // Renderizado condicionalmente no form de produto conforme Empresa.segmento.
+  camposSegmento Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

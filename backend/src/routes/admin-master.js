@@ -3,7 +3,7 @@ import { authRequired, requireSuperAdmin } from "../middlewares/auth.js";
 import {
   listarEmpresas, estatisticasGlobais, criarEmpresa, alterarStatus,
   resetarEmpresa, listarUsers, alterarSuperAdmin, impersonate,
-  logsGlobal, metricas, alterarPlano, exportarEmpresa,
+  logsGlobal, metricas, alterarPlano, alterarSegmento, exportarEmpresa,
   financeiroDashboard,
 } from "../controllers/adminMasterController.js";
 import {
@@ -33,6 +33,10 @@ router.get("/metricas", metricas);
 // ETAPA 12 — plano + notificacoes + export
 router.patch("/empresas/:id/plano", alterarPlano);
 router.get("/empresas/:id/export", exportarEmpresa);
+
+// ETAPA#6 — segmento de negocio (define se cadastro de produto exibe
+// campos extras para Auto-Pecas / Farmacia / Papelaria).
+router.patch("/empresas/:id/segmento", alterarSegmento);
 router.get("/notificacoes", listarTodasNotificacoes);
 router.post("/notificacoes", criarNotificacao);
 router.patch("/notificacoes/:id", alterarAtivaNotificacao);

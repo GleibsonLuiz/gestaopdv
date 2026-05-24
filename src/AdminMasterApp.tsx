@@ -1629,6 +1629,9 @@ function ModalPlano({ empresa, onCancelar, onSalva }: any) {
     empresa.expiraEm ? empresa.expiraEm.slice(0, 10) : em30.toISOString().slice(0, 10)
   );
   const [observacoes, setObservacoes] = useState(empresa.observacoesPlano || "");
+  // ETAPA#6: segmento de negocio (alterar requer endpoint proprio)
+  const segmentoOriginal = empresa.segmento || "GERAL";
+  const [segmento, setSegmento] = useState(segmentoOriginal);
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
 
@@ -1641,6 +1644,9 @@ function ModalPlano({ empresa, onCancelar, onSalva }: any) {
         expiraEm: expiraEm || null,
         observacoes: observacoes.trim() || null,
       });
+      if (segmento !== segmentoOriginal) {
+        await api.adminMasterAlterarSegmento(empresa.id, segmento);
+      }
       onSalva();
     } catch (err) {
       setErro(err.message);
@@ -1684,6 +1690,18 @@ function ModalPlano({ empresa, onCancelar, onSalva }: any) {
           onChange={e => setExpiraEm(e.target.value)} style={inputStyle} />
         <div style={{ color: C.muted, fontSize: 10, marginTop: 4 }}>
           Deixe vazio pra plano sem expiração (ex: Enterprise vitalício).
+        </div>
+
+        <label style={{ ...labelStyle, marginTop: 12 }}>Segmento (ETAPA#6)</label>
+        <select value={segmento} onChange={e => setSegmento(e.target.value)}
+          style={inputStyle} title="Segmento de negocio">
+          <option value="GERAL">Geral</option>
+          <option value="AUTO_PECAS">Auto-Peças</option>
+          <option value="FARMACIA">Farmácia</option>
+          <option value="PAPELARIA">Papelaria</option>
+        </select>
+        <div style={{ color: C.muted, fontSize: 10, marginTop: 4 }}>
+          Define os campos extras no cadastro de produto do cliente.
         </div>
 
         <label style={{ ...labelStyle, marginTop: 12 }}>Observações (interno)</label>
@@ -2125,6 +2143,8 @@ const btnAcao = (cor: any) => ({
 function ModalCriarEmpresa({ onCancelar, onCriada }: any) {
   const [form, setForm] = useState({
     nomeEmpresa: "", cnpj: "", nomeAdmin: "", email: "", senha: "",
+    // ETAPA#6: segmento define os campos extras no cadastro de produto.
+    segmento: "GERAL",
   });
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
@@ -2144,6 +2164,7 @@ function ModalCriarEmpresa({ onCancelar, onCriada }: any) {
         nomeAdmin: form.nomeAdmin.trim(),
         email: form.email.trim().toLowerCase(),
         senha: form.senha,
+        segmento: form.segmento,
       });
       onCriada();
     } catch (err) {
@@ -2181,6 +2202,18 @@ function ModalCriarEmpresa({ onCancelar, onCriada }: any) {
         <label style={{ ...labelStyle, marginTop: 10 }}>CNPJ (opcional)</label>
         <input value={form.cnpj} onChange={e => up("cnpj", e.target.value)}
           inputMode="numeric" style={inputStyle} placeholder="00.000.000/0000-00" />
+
+        <label style={{ ...labelStyle, marginTop: 10 }}>Segmento * (ETAPA#6)</label>
+        <select value={form.segmento} onChange={e => up("segmento", e.target.value)}
+          required style={inputStyle} title="Segmento de negocio">
+          <option value="GERAL">Geral</option>
+          <option value="AUTO_PECAS">Auto-Peças</option>
+          <option value="FARMACIA">Farmácia</option>
+          <option value="PAPELARIA">Papelaria</option>
+        </select>
+        <div style={{ color: C.muted, fontSize: 10.5, marginTop: 4 }}>
+          Define quais campos extras o cliente vê no cadastro de produto.
+        </div>
 
         <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginTop: 18, marginBottom: 6 }}>
           Administrador inicial

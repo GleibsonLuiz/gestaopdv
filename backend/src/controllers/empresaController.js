@@ -49,6 +49,9 @@ export async function obter(req, res, next) {
       expiraEm: planoInfo.expiraEm,
       limites: planoInfo.limites,
       uso: planoInfo.uso,
+      // ETAPA#6: segmento e read-only para usuario comum (so super-admin altera).
+      // Frontend usa pra renderizar campos extras no cadastro de produto.
+      segmento: empresa.segmento,
     });
   } catch (err) {
     next(err);

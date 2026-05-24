@@ -284,6 +284,29 @@ export default function Empresa({ user }: EmpresaProps) {
         />
       )}
 
+      {/* ETAPA#6: segmento de negocio — read-only, alterado so pelo super-admin */}
+      {(dados as any).segmento && (
+        <div className="bg-gp-card border border-gp-border rounded-xl p-3 mb-5"
+             style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div>
+            <div className="text-gp-white text-sm font-bold">
+              🏷️ Segmento de negócio: <span style={{ color: C.accent }}>{
+                ({
+                  GERAL: "Geral",
+                  AUTO_PECAS: "Auto-Peças",
+                  FARMACIA: "Farmácia",
+                  PAPELARIA: "Papelaria",
+                } as Record<string, string>)[(dados as any).segmento] || (dados as any).segmento
+              }</span>
+            </div>
+            <div className="text-gp-muted text-xs mt-[2px]">
+              Define quais campos extras aparecem no cadastro de produto.
+              Alteração só pelo administrador da plataforma.
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ============ BLOCO 3: DADOS FISCAIS (CONFIGURACAO EMPRESA) ============ */}
       <div className="bg-gp-card border border-gp-border rounded-xl p-1 mb-5">
         <div className="px-4 py-3 border-b border-gp-border">

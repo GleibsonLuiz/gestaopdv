@@ -28,6 +28,38 @@ function toInt(v, fallback = 0) {
   return Number.isFinite(n) ? n : NaN;
 }
 
+// ETAPA#6: sanitiza camposSegmento (JSON livre) em formato seguro.
+// Aceita apenas as chaves conhecidas dos segmentos suportados; descarta o resto.
+// Strings limitadas a 120 chars; arrays a 50 itens; numbers passam puros.
+function sanitizarCamposSegmento(input) {
+  if (input === undefined) return undefined;
+  if (input === null || input === "") return null;
+  if (typeof input !== "object" || Array.isArray(input)) return null;
+  const chavesPermitidas = new Set([
+    // AUTO_PECAS
+    "codigoOEM", "marcaPeca", "compatibilidade",
+    // FARMACIA
+    "lote", "validade", "registroAnvisa", "pmc",
+  ]);
+  const lim = (s, max = 120) => (typeof s === "string" ? s.trim().slice(0, max) : "");
+  const out = {};
+  let temAlgo = false;
+  for (const [k, v] of Object.entries(input)) {
+    if (!chavesPermitidas.has(k)) continue;
+    if (v === null || v === "" || v === undefined) continue;
+    if (Array.isArray(v)) {
+      const arr = v.slice(0, 50).map(x => lim(String(x))).filter(Boolean);
+      if (arr.length) { out[k] = arr; temAlgo = true; }
+    } else if (typeof v === "number" && Number.isFinite(v)) {
+      out[k] = v; temAlgo = true;
+    } else {
+      const s = lim(v);
+      if (s) { out[k] = s; temAlgo = true; }
+    }
+  }
+  return temAlgo ? out : null;
+}
+
 // Estoque vira Decimal(12,3) — arredonda para 3 casas para casar com o banco.
 function toQtd(v, fallback = 0) {
   if (v === undefined || v === null || v === "") return fallback;
@@ -189,6 +221,8 @@ export async function criar(req, res, next) {
         codBeneficioFiscal: norm(req.body.codBeneficioFiscal),
         pesoLiquido: toNumber(req.body.pesoLiquido),
         pesoBruto: toNumber(req.body.pesoBruto),
+        // ETAPA#6: campos extras por segmento (OEM/Lote/etc).
+        camposSegmento: sanitizarCamposSegmento(req.body.camposSegmento),
       },
       include: INCLUDE_REL,
     });
@@ -346,6 +380,9 @@ export async function atualizar(req, res, next) {
     if (req.body.codBeneficioFiscal !== undefined) data.codBeneficioFiscal = norm(req.body.codBeneficioFiscal);
     if (req.body.pesoLiquido !== undefined) data.pesoLiquido = toNumber(req.body.pesoLiquido);
     if (req.body.pesoBruto !== undefined) data.pesoBruto = toNumber(req.body.pesoBruto);
+    if (req.body.camposSegmento !== undefined) {
+      data.camposSegmento = sanitizarCamposSegmento(req.body.camposSegmento);
+    }
 
     const produto = await prisma.produto.update({
       where: { id: req.params.id },

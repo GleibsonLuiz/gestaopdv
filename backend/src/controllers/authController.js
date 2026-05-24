@@ -21,6 +21,7 @@ export async function login(req, res, next) {
             id: true, nome: true, cnpj: true, ativo: true,
             motivoSuspensao: true, suspensaEm: true,
             plano: true, expiraEm: true,
+            segmento: true,
           },
         },
       },
@@ -125,6 +126,7 @@ export async function login(req, res, next) {
         id: user.tenant.id,
         nome: user.tenant.nome,
         cnpj: user.tenant.cnpj,
+        segmento: user.tenant.segmento,
       },
     });
   } catch (err) {
@@ -141,14 +143,14 @@ export async function me(req, res, next) {
         superAdmin: true,
         preferencias: true,
         tenantId: true,
-        tenant: { select: { id: true, nome: true, cnpj: true, ativo: true } },
+        tenant: { select: { id: true, nome: true, cnpj: true, ativo: true, segmento: true } },
       },
     });
     if (!user) return res.status(404).json({ erro: "Usuario nao encontrado" });
     const { tenant, ...rest } = user;
     res.json({
       ...rest,
-      empresa: tenant ? { id: tenant.id, nome: tenant.nome, cnpj: tenant.cnpj } : null,
+      empresa: tenant ? { id: tenant.id, nome: tenant.nome, cnpj: tenant.cnpj, segmento: tenant.segmento } : null,
     });
   } catch (err) {
     next(err);

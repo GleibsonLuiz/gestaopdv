@@ -39,6 +39,7 @@ export async function listarEmpresas(req, res, next) {
         e.cnpj,
         e.ativo,
         e.plano,
+        e.segmento,
         e."expiraEm" AS expira_em,
         e."observacoesPlano" AS observacoes_plano,
         e."createdAt" AS criada_em,
@@ -66,6 +67,7 @@ export async function listarEmpresas(req, res, next) {
       cnpj: l.cnpj,
       ativo: l.ativo,
       plano: l.plano,
+      segmento: l.segmento,
       expiraEm: l.expira_em,
       observacoesPlano: l.observacoes_plano,
       criadaEm: l.criada_em,
@@ -201,10 +203,16 @@ function preencherUltimos12Meses(linhas) {
 // Mesma logica do antigo signup publico, agora exclusivo do super-admin.
 export async function criarEmpresa(req, res, next) {
   try {
-    const { nomeEmpresa, cnpj, nomeAdmin, email, senha } = req.body || {};
+    const { nomeEmpresa, cnpj, nomeAdmin, email, senha, segmento } = req.body || {};
 
     if (!nomeEmpresa || String(nomeEmpresa).trim().length < 3) {
       return res.status(400).json({ erro: "Nome da empresa e obrigatorio (min 3 caracteres)" });
+    }
+    // ETAPA#6: segmento e obrigatorio na criacao (default GERAL se nao enviado).
+    const SEGMENTOS_VALIDOS = new Set(["GERAL", "AUTO_PECAS", "FARMACIA", "PAPELARIA"]);
+    const segmentoLimpo = segmento ? String(segmento).toUpperCase() : "GERAL";
+    if (!SEGMENTOS_VALIDOS.has(segmentoLimpo)) {
+      return res.status(400).json({ erro: "Segmento invalido (use GERAL/AUTO_PECAS/FARMACIA/PAPELARIA)" });
     }
     if (String(nomeEmpresa).trim().length > 120) {
       return res.status(400).json({ erro: "Nome da empresa muito longo (max 120)" });
@@ -245,6 +253,7 @@ export async function criarEmpresa(req, res, next) {
         data: {
           nome: lim(nomeEmpresa, 120),
           cnpj: cnpjLimpo,
+          segmento: segmentoLimpo,
           ativo: true,
         },
       });
@@ -276,6 +285,7 @@ export async function criarEmpresa(req, res, next) {
         id: resultado.empresa.id,
         nome: resultado.empresa.nome,
         cnpj: resultado.empresa.cnpj,
+        segmento: resultado.empresa.segmento,
         ativo: resultado.empresa.ativo,
         criadaEm: resultado.empresa.createdAt,
       },
@@ -636,6 +646,41 @@ export async function alterarPlano(req, res, next) {
         observacoesPlano: atualizada.observacoesPlano,
       },
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ETAPA#6: PATCH /admin-master/empresas/:id/segmento — altera segmento de
+// negocio da empresa (GERAL/AUTO_PECAS/FARMACIA/PAPELARIA). So super-admin.
+const SEGMENTOS = new Set(["GERAL", "AUTO_PECAS", "FARMACIA", "PAPELARIA"]);
+export async function alterarSegmento(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { segmento } = req.body || {};
+    if (!segmento || !SEGMENTOS.has(String(segmento).toUpperCase())) {
+      return res.status(400).json({
+        erro: `Segmento invalido. Use: ${[...SEGMENTOS].join(", ")}`,
+      });
+    }
+    const atualizada = await prismaRaw.empresa.update({
+      where: { id },
+      data: { segmento: String(segmento).toUpperCase() },
+    }).catch(err => {
+      if (err.code === "P2025") return null;
+      throw err;
+    });
+    if (!atualizada) return res.status(404).json({ erro: "Empresa nao encontrada" });
+
+    registrarEvento({
+      acao: "SEGMENTO_ALTERADO", modulo: "ADMIN_MASTER", sucesso: true,
+      usuarioId: req.user.sub, usuarioNome: req.user.nome,
+      tenantId: id,
+      mensagem: `Segmento alterado para ${atualizada.segmento}`,
+      req,
+    });
+
+    res.json({ ok: true, empresa: { id: atualizada.id, segmento: atualizada.segmento } });
   } catch (err) {
     next(err);
   }

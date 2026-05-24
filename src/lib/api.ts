@@ -28,11 +28,14 @@ export interface SessionUser {
   [extra: string]: unknown;
 }
 
+export type SegmentoEmpresa = "GERAL" | "AUTO_PECAS" | "FARMACIA" | "PAPELARIA";
+
 export interface SessionEmpresa {
   id: string;
   nome: string;
   cnpj?: string;
   plano?: string;
+  segmento?: SegmentoEmpresa;
   [extra: string]: unknown;
 }
 
@@ -226,6 +229,9 @@ export const api = {
   // ETAPA 12
   adminMasterAlterarPlano: (id: string, dados: unknown) =>
     request(`/admin-master/empresas/${id}/plano`, { method: "PATCH", body: dados }),
+  // ETAPA#6: segmento de negocio (super-admin only)
+  adminMasterAlterarSegmento: (id: string, segmento: SegmentoEmpresa) =>
+    request(`/admin-master/empresas/${id}/segmento`, { method: "PATCH", body: { segmento } }),
   adminMasterExportEmpresaUrl: (id: string) =>
     `${BASE_URL}/admin-master/empresas/${id}/export`,
   adminMasterListarNotificacoes: () =>

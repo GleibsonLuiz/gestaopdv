@@ -17,6 +17,7 @@ export type ModuloId =
   | "FINANCEIRO"
   | "RELATORIOS"
   | "COMISSOES"
+  | "COMANDAS"
   | "FUNCIONARIOS";
 
 export type Role = "ADMIN" | "GERENTE" | "VENDEDOR";
@@ -49,6 +50,7 @@ export const MODULOS: readonly Modulo[] = [
   { id: "FINANCEIRO",    label: "Financeiro",     icone: "💰" },
   { id: "RELATORIOS",    label: "Relatórios",     icone: "📑" },
   { id: "COMISSOES",     label: "Comissões",      icone: "🏆" },
+  { id: "COMANDAS",      label: "Central de Comandas", icone: "🍽️" },
   { id: "FUNCIONARIOS",  label: "Funcionários",   icone: "🧑‍💼" },
 ];
 
@@ -69,7 +71,7 @@ export function permissoesPadrao(role: Role): ModuloId[] {
   if (role === "GERENTE") {
     return ["PDV","DASHBOARD","CAIXA","CLIENTES","FORNECEDORES","PRODUTOS",
             "ESTOQUE","INVENTARIO","COMPRAS","ORCAMENTOS","OPORTUNIDADES","AUTOMACOES","NPS",
-            "FINANCEIRO","RELATORIOS","COMISSOES"];
+            "FINANCEIRO","RELATORIOS","COMISSOES","COMANDAS"];
   }
-  return ["PDV","CAIXA","CLIENTES","PRODUTOS","ORCAMENTOS","OPORTUNIDADES"];
+  return ["PDV","CAIXA","CLIENTES","PRODUTOS","ORCAMENTOS","OPORTUNIDADES","COMANDAS"];
 }

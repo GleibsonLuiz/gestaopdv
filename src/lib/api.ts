@@ -637,6 +637,20 @@ export const api = {
   relatorioComissoes: (filtros: StringDict = {}) =>
     request(`/comissoes/relatorio${qsFrom(filtros)}`),
 
+  // ETAPA#8b: Central de Comandas
+  listarComandas: (filtros: StringDict = {}) =>
+    request(`/comandas${qsFrom(filtros)}`),
+  obterComanda: (id: string) => request(`/comandas/${id}`),
+  criarComanda: (data: unknown) =>
+    request("/comandas", { method: "POST", body: data }),
+  aceitarComanda: (id: string) =>
+    request(`/comandas/${id}/aceitar`, { method: "PATCH" }),
+  cancelarComanda: (id: string, motivo?: string) =>
+    request(`/comandas/${id}/cancelar`, { method: "PATCH", body: { motivo } }),
+  finalizarComanda: (id: string, dados: { formaPagamento: string; idTransacao?: string }) =>
+    request(`/comandas/${id}/finalizar`, { method: "POST", body: dados }),
+  resumoComandas: () => request("/comandas/resumo"),
+
   // Logout server-side. Best-effort: limpa sessao local mesmo se falhar.
   logout: () => request("/auth/logout", { method: "POST" }).catch(() => null),
 

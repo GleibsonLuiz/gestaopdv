@@ -232,6 +232,18 @@ enum Segmento {
   PAPELARIA
 }
 
+// ETAPA#8b: status da comanda na Central de Comandas (Kanban).
+// NOVO: chegou da mobile e aguarda aceite.
+// EM_PREPARACAO: vendedor aceitou e esta montando.
+// CONCLUIDA: foi paga/finalizada (gera Venda, baixa estoque).
+// CANCELADA: descartada (nao gera venda nem baixa estoque).
+enum StatusComanda {
+  NOVO
+  EM_PREPARACAO
+  CONCLUIDA
+  CANCELADA
+}
+
 // ETAPA 12: tipo da notificacao define cor e icone no banner do usuario.
 enum TipoNotificacao {
   INFO
@@ -341,6 +353,8 @@ model Empresa {
   inventarios            Inventario[]
   inventarioItens        InventarioItem[]
   intencoesPagamentoMP   IntencaoPagamentoMP[]
+  comandas               Comanda[]
+  itensComanda           ItemComanda[]
 
   @@map("empresas")
 }
@@ -410,6 +424,7 @@ model User {
   notificacoesLidas        NotificacaoLida[]
   inventarios              Inventario[]
   intencoesPagamentoMP     IntencaoPagamentoMP[]
+  comandas                 Comanda[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -475,6 +490,7 @@ model Cliente {
   tags                ClienteTag[]
   contatos            Contato[]
   pesquisasNps        PesquisaNps[]
+  comandas            Comanda[]
 
   @@unique([tenantId, cpfCnpj])
   @@index([tenantId])
@@ -668,6 +684,7 @@ model Produto {
   itensOrcamento  ItemOrcamento[]
   movimentacoes   MovimentacaoEstoque[]
   inventarioItens InventarioItem[]
+  itensComanda    ItemComanda[]
 
   @@unique([tenantId, codigo])
   @@unique([tenantId, codigoBarras])
@@ -709,6 +726,7 @@ model Venda {
   movimentacoesPontos MovimentacaoPontos[]
   oportunidade        Oportunidade?
   pesquisaNps         PesquisaNps?
+  comandas            Comanda[]
 
   @@unique([tenantId, numero])
   @@index([caixaId])
@@ -1779,4 +1797,69 @@ model NotificacaoLida {
   @@id([notificacaoId, userId])
   @@index([userId])
   @@map("notificacoes_lidas")
+}
+
+
+// ============ ETAPA#8b: CENTRAL DE COMANDAS ============
+// Comandas chegam do PDV Volante Mobile e ficam no Kanban da Central
+// /painel-comandas. Timer persistente baseado em criadoEm (resiste a F5).
+
+model Comanda {
+  id          String        @id @default(uuid())
+  // Numero sequencial por tenant (calculado no controller via MAX+1).
+  numero      Int
+  status      StatusComanda @default(NOVO)
+  mesa        String?       // identificador livre (mesa 12, balcao 3, etc)
+  observacoes String?
+
+  total       Decimal       @db.Decimal(10, 2)
+  desconto    Decimal?      @db.Decimal(10, 2)
+
+  // Timestamps do fluxo — usados pelo timer persistente do Kanban.
+  criadoEm    DateTime      @default(now())
+  aceitoEm    DateTime?     // movido para EM_PREPARACAO
+  concluidoEm DateTime?     // finalizado (pago)
+  canceladaEm DateTime?
+
+  // ETAPA#9a: dados de fechamento de venda na mesa.
+  formaPagamento String?    // "DINHEIRO" | "PIX" | "CARTAO_CREDITO" | ... (informativo)
+  idTransacao    String?    // codigo da maquininha (conciliacao manual)
+  pago           Boolean    @default(false)
+  vendaId        String?    // Venda gerada apos checkout (FK opcional)
+  venda          Venda?     @relation(fields: [vendaId], references: [id], onDelete: SetNull)
+
+  itens   ItemComanda[]
+
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, numero])
+  @@index([tenantId, status])
+  @@index([tenantId, criadoEm])
+  @@map("comandas")
+}
+
+model ItemComanda {
+  id            String  @id @default(uuid())
+  quantidade    Decimal @db.Decimal(12, 3)
+  precoUnitario Decimal @db.Decimal(10, 2)
+  subtotal      Decimal @db.Decimal(10, 2)
+  observacoes   String?
+
+  comandaId String
+  comanda   Comanda @relation(fields: [comandaId], references: [id], onDelete: Cascade)
+
+  produtoId String?
+  produto   Produto? @relation(fields: [produtoId], references: [id])
+
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("itens_comanda")
 }

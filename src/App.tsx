@@ -40,6 +40,7 @@ const Nps = lazy(() => import("./Nps"));
 const PesquisaPublicaNps = lazy(() => import("./PesquisaPublicaNps"));
 const InventarioMobile = lazy(() => import("./InventarioMobile"));
 const PdvVolante = lazy(() => import("./PdvVolante"));
+const PainelComandas = lazy(() => import("./PainelComandas"));
 const Logs = lazy(() => import("./Logs"));
 // Modal de gerencia de formas de pagamento — antes ficava dentro do PDV
 // (botao ⚙ no modal de Finalizar Venda). Movido para a sidebar como entrada
@@ -281,6 +282,7 @@ export default function App() {
     nps: "NPS",
     financeiro: "FINANCEIRO", relatorios: "RELATORIOS",
     comissoes: "COMISSOES",
+    painelcomandas: "COMANDAS",
     funcionarios: "FUNCIONARIOS",
     tarefas: "CLIENTES",
     fidelidade: "CLIENTES",
@@ -301,7 +303,7 @@ export default function App() {
     if (!user) return;
     if (!podeVer(tela)) {
       const primeira = ["pdv","dashboard","dashboardcrm","caixa","clientes","segmentos","reativacao","tarefas","fidelidade","funil","automacoes","nps","fornecedores","produtos","etiquetas",
-        "estoque","inventario","compras","orcamentos","financeiro","relatorios","comissoes","funcionarios","projeto","sistema","empresa","impressora"].find(podeVer);
+        "estoque","inventario","compras","orcamentos","financeiro","relatorios","comissoes","painelcomandas","funcionarios","projeto","sistema","empresa","impressora"].find(podeVer);
       if (primeira && primeira !== tela) setTela(primeira);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -559,6 +561,10 @@ export default function App() {
           )}
           {podeAcessar(user, "COMISSOES") && (
             <Item icone="🏆" label="Comissões" ativo={tela === "comissoes"} onClick={() => navegar("comissoes")} />
+          )}
+          {/* ETAPA#8b: Central de Comandas (Kanban) */}
+          {podeAcessar(user, "COMANDAS") && (
+            <Item icone="🍽️" label="Central de Comandas" ativo={tela === "painelcomandas"} onClick={() => navegar("painelcomandas")} />
           )}
           <Secao>Sistema</Secao>
           {user.role === "ADMIN" && (
@@ -822,6 +828,12 @@ export default function App() {
             <>
               <PageHeader titulo="Comissões" subtitulo="Configure como cada vendedor é remunerado por venda e meta" />
               <Comissoes user={user} />
+            </>
+          )}
+          {tela === "painelcomandas" && (
+            <>
+              <PageHeader titulo="Central de Comandas" subtitulo="Kanban de pedidos do PDV Volante — aceite, prepare e finalize" />
+              <PainelComandas user={user} />
             </>
           )}
           {tela === "funcionarios" && user.role === "ADMIN" && (

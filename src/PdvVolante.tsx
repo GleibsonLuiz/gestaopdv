@@ -188,7 +188,8 @@ export default function PdvVolante() {
     if (fila.length === 0) return;
     for (const v of fila) {
       try {
-        await api.criarVenda(v.payload);
+        // Fila guarda payloads de COMANDA — sync usa o mesmo endpoint.
+        await api.criarComanda(v.payload);
         removerDaFila(v.idLocal);
       } catch (err) {
         marcarFalha(v.idLocal, (err as Error).message);
@@ -205,9 +206,10 @@ export default function PdvVolante() {
     }
     setEnviando(true);
     try {
+      // ETAPA#8b: PDV Volante envia COMANDA (nao venda direto) — o pedido
+      // entra no Kanban da Central, onde o vendedor aceita, prepara e
+      // fecha (gera Venda real com baixa de estoque no checkout).
       const payload = {
-        formaPagamento: "DINHEIRO", // PDV volante simplificado: vendedor confirma no balcao
-        pagamentos: [{ forma: "DINHEIRO", valor: total }],
         observacoes: null,
         itens: carrinho.map(i => ({
           produtoId: i.produtoId,
@@ -217,10 +219,10 @@ export default function PdvVolante() {
       };
       if (online) {
         try {
-          await api.criarVenda(payload);
+          await api.criarComanda(payload);
           setCarrinho([]);
           limparCarrinho();
-          flashOk(`✓ Pedido enviado — ${fmtBRL(total)}`);
+          flashOk(`✓ Comanda enviada — ${fmtBRL(total)}`);
           setTela("produtos");
           return;
         } catch (err) {
@@ -229,7 +231,7 @@ export default function PdvVolante() {
           setPendentes(totalPendentesFila());
           setCarrinho([]);
           limparCarrinho();
-          flashErro("Servidor offline — pedido salvo na fila");
+          flashErro("Servidor offline — comanda salva na fila");
           setTela("produtos");
           return;
         }
@@ -239,7 +241,7 @@ export default function PdvVolante() {
       setPendentes(totalPendentesFila());
       setCarrinho([]);
       limparCarrinho();
-      flashOk("Pedido enfileirado — envia quando voltar a rede");
+      flashOk("Comanda enfileirada — envia quando voltar a rede");
       setTela("produtos");
     } finally {
       setEnviando(false);

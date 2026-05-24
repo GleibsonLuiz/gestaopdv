@@ -44,6 +44,7 @@ const MODELOS_COM_TENANT = new Set([
   "Contato", "PesquisaNps", "TemplateMensagem", "RegraAutomacao",
   "LogAutomacao", "HistoricoOportunidade", "LogAuditoria",
   "Inventario", "InventarioItem", "IntencaoPagamentoMP",
+  "Comanda", "ItemComanda",
 ]);
 
 function tenantAtual() {

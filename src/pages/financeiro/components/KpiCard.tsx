@@ -36,19 +36,32 @@ const TONES: Record<KpiTone, ToneMeta> = {
 
 interface KpiCardProps {
   kpi: KpiData;
+  active?: boolean;
+  onClick?: () => void;
 }
 
-export default function KpiCard({ kpi }: KpiCardProps) {
+export default function KpiCard({ kpi, active, onClick }: KpiCardProps) {
   const tone = TONES[kpi.tone as KpiTone] || TONES.iris;
+  const interactive = !!onClick;
 
-  const cardBg =
-    kpi.tone === "coral"
+  const cardBg = active
+    ? `radial-gradient(120% 100% at 0% 0%, ${tone.bg}, transparent 65%), linear-gradient(180deg, oklch(1 0 0 / .04), oklch(1 0 0 / 0)), var(--surface-2)`
+    : kpi.tone === "coral"
       ? "radial-gradient(120% 100% at 0% 0%, oklch(0.32 0.10 22 / .22), transparent 55%), linear-gradient(180deg, oklch(1 0 0 / .035), oklch(1 0 0 / 0)), var(--surface)"
       : "linear-gradient(180deg, oklch(1 0 0 / .025), oklch(1 0 0 / 0)), var(--surface)";
 
+  const Tag = interactive ? "button" : "div";
+
   return (
-    <div
-      className="relative rounded-card p-[18px_20px_16px] border border-hairline-soft shadow-card overflow-hidden isolate"
+    <Tag
+      type={interactive ? "button" : undefined}
+      onClick={onClick}
+      aria-pressed={interactive ? !!active : undefined}
+      className={[
+        "relative w-full text-left rounded-card p-[18px_20px_16px] border shadow-card overflow-hidden isolate transition",
+        active ? "border-iris/55" : "border-hairline-soft",
+        interactive ? "hover:border-iris/40 hover:brightness-105 cursor-pointer focus:outline-none focus:ring-2 focus:ring-iris/40" : "",
+      ].join(" ")}
       style={{ background: cardBg }}
     >
       <div className="flex items-center justify-between mb-[22px]">
@@ -96,7 +109,7 @@ export default function KpiCard({ kpi }: KpiCardProps) {
           </div>
         )}
       </div>
-    </div>
+    </Tag>
   );
 }
 

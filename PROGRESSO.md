@@ -147,6 +147,38 @@ d:/gestao-pdv/
 
 ## Histórico de sessões
 
+### Sessão — 2026-05-25 (Tela Financeiro — refator visual em 4 ondas)
+
+Análise UX/dev sênior da tela Financeiro identificou 9 atritos de legibilidade/fluidez. Refator em 4 ondas, validado com screenshots Playwright antes/depois e build/typecheck limpos.
+
+**Onda 1 — Limpeza visual:**
+- [src/pages/financeiro/components/PageHeader.tsx](src/pages/financeiro/components/PageHeader.tsx) — título "Financeiro" à esquerda com subtítulo dinâmico por aba (era um título solto "Contas a pagar & receber" flutuando à direita, desconectado do breadcrumb).
+- [src/pages/financeiro/components/Topbar.tsx](src/pages/financeiro/components/Topbar.tsx) — slim sem breadcrumb redundante (TabsBar abaixo já contextualiza).
+- [src/pages/financeiro/FinanceiroPage.tsx](src/pages/financeiro/FinanceiroPage.tsx) — removido `<CompositionStrip>` (duplicava os 4 KPIs com uma barra de 2px). Liberou ~50px verticais pra tabela.
+- [src/pages/financeiro/components/DueCell.tsx](src/pages/financeiro/components/DueCell.tsx) — texto relativo ("178 dias atrasada") agora monocromático em `text-fg-faint`. Antes brigava com o pill colorido da coluna Status logo ao lado (info duplicada).
+- [src/pages/financeiro/components/StatusPill.tsx](src/pages/financeiro/components/StatusPill.tsx) — adicionado caso `canceled` (era bug pré-existente: contas canceladas caíam no fallback "Pendente"). Aceita `paidLabel` pra "Recebida" no contexto a receber.
+- [src/pages/financeiro/components/BillsTable.tsx](src/pages/financeiro/components/BillsTable.tsx) — avatar OKLCH gradient do fornecedor removido (5 cores distraíam do que importa: valor/vencimento). Fornecedor vira texto simples. Total filtrado movido pro header da tabela (antes ficava no rodapé, longe do número de contas). Empty state mais informativo. Skeleton rows no carregamento.
+
+**Onda 2 — Agrupamento + ações em lote:**
+- Buckets dinâmicos no `BillsTable`: **Vencidas / Vence hoje / Esta semana / Próximas 30d / Futuras / Concluídas**. Cada grupo tem header colapsável com contagem + subtotal R$. Concluídas inicia colapsada por default.
+- `Bill` ganhou campos `bucket: BillBucket` e `amountNum: number`. `bucketDe(conta)` calcula via `diasDiff(vencimento)`.
+- Checkbox por linha + checkbox de grupo (com indeterminate ARIA correto). Linhas selecionáveis bloqueiam paga/cancelada.
+- Barra flutuante `<BarraSelecao>` no rodapé quando há ≥1 selecionada — mostra contagem + total R$, botões "Pagar/Receber selecionadas" e "Cancelar contas". Lote processa sequencialmente; mostra alerta se algumas falharem.
+- Seleção sobrevive à mudança de filtros (mantém apenas IDs ainda visíveis).
+
+**Onda 3 — KPIs interativos:**
+- `KpiCard` aceita `active` + `onClick`. Renderiza como `<button>` quando interativo, com `aria-pressed`, ring focus iris, e fundo destacado quando ativo.
+- Estado `kpiFiltro` em `ContasView`: Pendentes/Atrasadas/Pagas usam filtro backend (`status` query param). "Vencendo em 7 dias" é client-side (filtra contas PENDENTE com `diasDiff <= 7`).
+- Toggle: clicar no mesmo KPI limpa o filtro.
+- [src/pages/financeiro/components/FiltersBar.tsx](src/pages/financeiro/components/FiltersBar.tsx) — removido segmentado redundante "Todos/Pendentes/Atrasadas/Pagas" (brigava visualmente com TabsBar acima). FiltersBar agora mostra chip "Filtrado por X" quando há KPI ativo + botão "Limpar filtros".
+
+**Onda 4 — Modais legacy → design novo:**
+- Novo [src/pages/financeiro/components/ModalShell.tsx](src/pages/financeiro/components/ModalShell.tsx) — overlay com blur, header sticky, ESC fecha (configurável via `bloquearEsc`), trava scroll do body. Helpers exportados: `Campo`/`Input`/`Select`/`Textarea`/`BtnPrimario`/`BtnSecundario`/`Alerta`.
+- Novos [ContaModal.tsx](src/pages/financeiro/components/ContaModal.tsx), [PagarReceberModal.tsx](src/pages/financeiro/components/PagarReceberModal.tsx), [AnexosModal.tsx](src/pages/financeiro/components/AnexosModal.tsx) — reproduzem 100% da lógica dos modais legacy de `src/Financeiro.tsx`, agora com tokens/Tailwind consistentes com o resto da tela. PagarReceberModal ainda lazy-importa `GerenciarFormasModal` do legacy (que é reusado em PDV/Compras — não vale duplicar).
+- `FinanceiroPage` agora importa os modais novos. Legacy em `src/Financeiro.tsx` permanece intacto (continua sendo source para `GerenciarFormasModal` + retrocompatibilidade).
+
+**Validação:** `tsc --noEmit` limpo, `vite build` em 6.41s, screenshots em todas as ondas comparando antes/depois (login via reset temporário admin@gestaopro.local → admin123, script temp deletado depois). Banco intocado.
+
 ### Sessão — 2026-05-25 (Tipos de comanda MESA/VIAGEM/DELIVERY + estados PRONTO/SERVINDO/EM_ENTREGA)
 
 Refatoração do fluxo de status da Central de Comandas pra separar **produção** (cozinha pronta?) de **comercial** (cliente pagou?). Hoje o fluxo `NOVO→EM_PREPARACAO→CONCLUIDA` colava as duas coisas: comida saía da cozinha e ficava sumida até alguém pagar. Agora a comanda **inteira** muda de status (não item-por-item — decisão explícita do usuário pra começar simples) e a Central tem 3 modos de operação visualmente separados.

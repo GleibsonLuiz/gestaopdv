@@ -5,15 +5,12 @@ import PageHeader from "./components/PageHeader";
 import TabsBar, { type TabDef } from "./components/TabsBar";
 import KpiCard, { type KpiData, type KpiTone } from "./components/KpiCard";
 import FiltersBar from "./components/FiltersBar";
-import BillsTable, { type Bill } from "./components/BillsTable";
-import CompositionStrip from "./components/CompositionStrip";
+import BillsTable, { type Bill, type BillBucket } from "./components/BillsTable";
 import { api } from "../../lib/api";
 import type { SessionUser } from "../../lib/api";
-import {
-  ContaModal,
-  PagarReceberModal,
-  AnexosModal,
-} from "../../Financeiro";
+import ContaModal from "./components/ContaModal";
+import PagarReceberModal from "./components/PagarReceberModal";
+import AnexosModal from "./components/AnexosModal";
 
 type TipoConta = "pagar" | "receber";
 type StatusConta = "PENDENTE" | "PAGA" | "ATRASADA" | "CANCELADA";
@@ -157,6 +154,16 @@ function dueRel(c: Conta, ehPagar: boolean): string {
   return `em ${d} dia${d === 1 ? "" : "s"}`;
 }
 
+function bucketDe(c: Conta): BillBucket {
+  if (c.status === "PAGA" || c.status === "CANCELADA") return "concluidas";
+  const d = diasDiff(c.vencimento);
+  if (d < 0) return "atrasadas";
+  if (d === 0) return "hoje";
+  if (d <= 7) return "semana";
+  if (d <= 30) return "mes";
+  return "futuras";
+}
+
 function billFromConta(c: Conta, ehPagar: boolean): Bill & { raw: Conta } {
   const ent = ehPagar ? c.fornecedor : c.cliente;
   const nome = ent?.nome || "";
@@ -182,8 +189,10 @@ function billFromConta(c: Conta, ehPagar: boolean): Bill & { raw: Conta } {
     dueState: dueStateUI(c),
     amount,
     cents,
+    amountNum: Number(c.valor) || 0,
     status: statusUI(c),
     attachments: c.anexos?.length || 0,
+    bucket: bucketDe(c),
   };
 }
 
@@ -254,11 +263,18 @@ export default function FinanceiroPage({ user }: FinanceiroPageProps) {
     setContagens(prev => (prev[tipo] === n ? prev : { ...prev, [tipo]: n }));
   }
 
+  const subtituloPorAba: Record<string, string> = {
+    pagar:   "Contas a pagar — vencimentos, parcelas, anexos e baixas.",
+    receber: "Contas a receber — recebimentos por cliente, parcelas e quitação.",
+    fluxo:   "Fluxo de caixa projetado — entradas e saídas em ordem cronológica.",
+    concil:  "Conciliação — baixas agrupadas por data e forma de pagamento.",
+  };
+
   return (
     <div className="financeiro-bg min-h-screen text-fg font-sans antialiased tracking-tightish -mx-6 -my-6">
       <div className="max-w-[1320px] mx-auto px-8 pt-7 pb-20">
         <Topbar user={user?.nome} initials={iniciaisDe(user?.nome)} />
-        <PageHeader />
+        <PageHeader subtitulo={subtituloPorAba[aba]} />
 
         <FinanceiroTabs
           aba={aba}
@@ -367,29 +383,34 @@ interface ContasViewProps {
   onContas?: (lista: Conta[]) => void;
 }
 
+type KpiFiltro = "pendentes" | "atrasadas" | "vencendo" | "pagas" | "";
+
 function ContasView({ tipo, podeEditar, onContas }: ContasViewProps) {
   const ehPagar = tipo === "pagar";
   const [contas, setContas] = useState<Conta[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
   const [entidadeId, setEntidadeId] = useState("");
-  const [vencidas, setVencidas] = useState(false);
   const [entidades, setEntidades] = useState<Entidade[]>([]);
+  const [kpiFiltro, setKpiFiltro] = useState<KpiFiltro>("");
 
   const [editando, setEditando] = useState<Conta | null>(null);
   const [pagando, setPagando] = useState<Conta | null>(null);
   const [anexando, setAnexando] = useState<Conta | null>(null);
+  const [selecionadas, setSelecionadas] = useState<Set<string>>(() => new Set());
+  const [processandoLote, setProcessandoLote] = useState(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true); setErro("");
     try {
-      const args: Record<string, string> = {
-        search,
-        status,
-        vencidas: vencidas ? "true" : "",
-      };
+      const args: Record<string, string> = { search };
+      if (kpiFiltro === "pendentes") args.status = "PENDENTE";
+      else if (kpiFiltro === "atrasadas") { args.status = "ATRASADA"; args.vencidas = "true"; }
+      else if (kpiFiltro === "pagas") args.status = "PAGA";
+      // "vencendo" é client-side; carregamos pendentes do backend.
+      else if (kpiFiltro === "vencendo") args.status = "PENDENTE";
+
       if (ehPagar) args.fornecedorId = entidadeId;
       else args.clienteId = entidadeId;
       const data = ehPagar
@@ -403,7 +424,7 @@ function ContasView({ tipo, podeEditar, onContas }: ContasViewProps) {
     } finally {
       setCarregando(false);
     }
-  }, [ehPagar, search, status, entidadeId, vencidas, onContas]);
+  }, [ehPagar, search, kpiFiltro, entidadeId, onContas]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -424,37 +445,44 @@ function ContasView({ tipo, podeEditar, onContas }: ContasViewProps) {
   }, [tipo, carregar]);
 
   const kpis = useMemo(() => calcularKpis(contas, ehPagar), [contas, ehPagar]);
-  const bills = useMemo(() => contas.map(c => billFromConta(c, ehPagar)), [contas, ehPagar]);
 
-  const totais = useMemo(() => {
-    let pendente = 0, atrasado = 0, pago = 0, vencendo = 0, vencendoQtd = 0;
-    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
-    const em7 = new Date(hoje); em7.setDate(em7.getDate() + 7);
-    for (const c of contas) {
-      if (c.status === "CANCELADA") continue;
-      const v = Number(c.valor) || 0;
-      const ef = statusEfetivo(c);
-      if (ef === "PAGA") pago += v;
-      else if (ef === "ATRASADA") atrasado += v;
-      else if (ef === "PENDENTE") {
-        pendente += v;
-        const dv = new Date(c.vencimento);
-        if (dv <= em7) { vencendo += v; vencendoQtd++; }
-      }
-    }
-    return { pendente, atrasado, pago, vencendo, vencendoQtd };
-  }, [contas]);
+  const contasVisiveis = useMemo(() => {
+    if (kpiFiltro !== "vencendo") return contas;
+    // "Vencendo em 7 dias" é client-side: pendentes não-atrasadas que vencem em até 7 dias.
+    return contas.filter(c => {
+      if (c.status !== "PENDENTE") return false;
+      const d = diasDiff(c.vencimento);
+      return d >= 0 && d <= 7;
+    });
+  }, [contas, kpiFiltro]);
+
+  const bills = useMemo(
+    () => contasVisiveis.map(c => billFromConta(c, ehPagar)),
+    [contasVisiveis, ehPagar]
+  );
 
   const totalFiltrado = useMemo(() => {
-    const sum = contas
+    const sum = contasVisiveis
       .filter(c => c.status !== "CANCELADA")
       .reduce((acc, c) => acc + (Number(c.valor) || 0), 0);
     return fmtBRL(sum);
-  }, [contas]);
+  }, [contasVisiveis]);
 
   function limpar() {
-    setSearch(""); setStatus(""); setEntidadeId(""); setVencidas(false);
+    setSearch(""); setEntidadeId(""); setKpiFiltro("");
   }
+
+  function toggleKpi(id: KpiFiltro) {
+    setKpiFiltro(prev => (prev === id ? "" : id));
+  }
+
+  const KPI_LABELS: Record<KpiFiltro, string> = {
+    "":          "",
+    pendentes:   "Pendentes",
+    atrasadas:   "Atrasadas",
+    vencendo:    "Vencendo em 7 dias",
+    pagas:       ehPagar ? "Pagas" : "Recebidas",
+  };
 
   async function executarPagar(payload: Record<string, unknown> | string | Date | null) {
     if (!pagando) return;
@@ -490,29 +518,118 @@ function ContasView({ tipo, podeEditar, onContas }: ContasViewProps) {
     }
   }
 
+  // Seleção em lote ----------------------------------------------------------
+  function toggleSelecionada(id: string) {
+    setSelecionadas(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function setSelecionarTodas(ids: string[]) {
+    setSelecionadas(prev => {
+      const next = new Set(prev);
+      const todasJaIn = ids.length > 0 && ids.every(id => next.has(id));
+      if (todasJaIn) ids.forEach(id => next.delete(id));
+      else ids.forEach(id => next.add(id));
+      return next;
+    });
+  }
+
+  function limparSelecao() { setSelecionadas(new Set()); }
+
+  const contasSelecionadas = useMemo(
+    () => contas.filter(c => selecionadas.has(c.id)),
+    [contas, selecionadas]
+  );
+  const totalSelecionado = contasSelecionadas.reduce((s, c) => s + (Number(c.valor) || 0), 0);
+
+  // Reseta seleção quando muda filtros / aba (contas array muda)
+  useEffect(() => {
+    setSelecionadas(prev => {
+      if (prev.size === 0) return prev;
+      const idsValidos = new Set(contas.map(c => c.id));
+      const next = new Set<string>();
+      prev.forEach(id => { if (idsValidos.has(id)) next.add(id); });
+      return next.size === prev.size ? prev : next;
+    });
+  }, [contas]);
+
+  async function executarLotePagar() {
+    if (contasSelecionadas.length === 0) return;
+    const ok = confirm(
+      `${ehPagar ? "Pagar" : "Receber"} ${contasSelecionadas.length} ${contasSelecionadas.length === 1 ? "conta" : "contas"} com data de hoje? ` +
+      `Total: ${fmtBRL(totalSelecionado)}.`
+    );
+    if (!ok) return;
+    setProcessandoLote(true);
+    const hoje = new Date().toISOString().slice(0, 10);
+    const payload: Record<string, unknown> = ehPagar ? { pagamento: hoje } : { recebimento: hoje };
+    let sucessos = 0;
+    let falhas = 0;
+    for (const c of contasSelecionadas) {
+      try {
+        if (ehPagar) await api.pagarConta(c.id, payload);
+        else await api.receberConta(c.id, payload);
+        sucessos++;
+      } catch {
+        falhas++;
+      }
+    }
+    setProcessandoLote(false);
+    limparSelecao();
+    carregar();
+    if (falhas > 0) alert(`${sucessos} processadas, ${falhas} falharam. Verifique e tente novamente.`);
+  }
+
+  async function executarLoteCancelar() {
+    if (contasSelecionadas.length === 0) return;
+    const ok = confirm(
+      `Cancelar ${contasSelecionadas.length} ${contasSelecionadas.length === 1 ? "conta" : "contas"}? ` +
+      `Esta ação não pode ser desfeita facilmente.`
+    );
+    if (!ok) return;
+    setProcessandoLote(true);
+    let sucessos = 0;
+    let falhas = 0;
+    for (const c of contasSelecionadas) {
+      try {
+        if (ehPagar) await api.cancelarContaPagar(c.id);
+        else await api.cancelarContaReceber(c.id);
+        sucessos++;
+      } catch {
+        falhas++;
+      }
+    }
+    setProcessandoLote(false);
+    limparSelecao();
+    carregar();
+    if (falhas > 0) alert(`${sucessos} processadas, ${falhas} falharam.`);
+  }
+
   return (
     <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-3.5">
-        {kpis.map(k => <KpiCard key={k.id} kpi={k} />)}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
+        {kpis.map(k => (
+          <KpiCard
+            key={k.id}
+            kpi={k}
+            active={kpiFiltro === k.id}
+            onClick={() => toggleKpi(k.id as KpiFiltro)}
+          />
+        ))}
       </div>
-
-      <CompositionStrip
-        pendente={totais.pendente}
-        atrasado={totais.atrasado}
-        pago={totais.pago}
-        vencendo={totais.vencendo}
-        vencendoQtd={totais.vencendoQtd}
-        ehPagar={ehPagar}
-      />
 
       <FiltersBar
         search={search} onSearch={setSearch}
-        status={status} onStatus={setStatus}
         entidadeId={entidadeId} onEntidade={setEntidadeId}
-        vencidas={vencidas} onVencidas={setVencidas}
         entidades={entidades}
         entidadeLabel={ehPagar ? "fornecedores" : "clientes"}
         onLimpar={limpar}
+        kpiAtivo={kpiFiltro}
+        kpiLabel={KPI_LABELS[kpiFiltro]}
       />
 
       <BillsTable
@@ -522,12 +639,27 @@ function ContasView({ tipo, podeEditar, onContas }: ContasViewProps) {
         carregando={carregando}
         erro={erro}
         totalFiltrado={totalFiltrado}
+        selecionadas={podeEditar ? selecionadas : undefined}
+        onToggleSelecionada={podeEditar ? toggleSelecionada : undefined}
+        onSelecionarTodas={podeEditar ? setSelecionarTodas : undefined}
         onPay={(b) => setPagando((b as Bill & { raw: Conta }).raw)}
         onEdit={(b) => setEditando((b as Bill & { raw: Conta }).raw)}
         onAttach={(b) => setAnexando((b as Bill & { raw: Conta }).raw)}
         onReabrir={(b) => executarReabrir((b as Bill & { raw: Conta }).raw)}
         onCancelar={(b) => executarCancelar((b as Bill & { raw: Conta }).raw)}
       />
+
+      {selecionadas.size > 0 && (
+        <BarraSelecao
+          qtd={selecionadas.size}
+          total={fmtBRL(totalSelecionado)}
+          ehPagar={ehPagar}
+          processando={processandoLote}
+          onPagar={executarLotePagar}
+          onCancelar={executarLoteCancelar}
+          onLimpar={limparSelecao}
+        />
+      )}
 
       {editando && (
         <ContaModal
@@ -853,5 +985,61 @@ function ThSimple({ children, align = "left", last }: ThSimpleProps) {
     >
       {children}
     </th>
+  );
+}
+
+interface BarraSelecaoProps {
+  qtd: number;
+  total: string;
+  ehPagar: boolean;
+  processando: boolean;
+  onPagar: () => void;
+  onCancelar: () => void;
+  onLimpar: () => void;
+}
+
+function BarraSelecao({ qtd, total, ehPagar, processando, onPagar, onCancelar, onLimpar }: BarraSelecaoProps) {
+  return (
+    <div
+      className="fixed left-1/2 -translate-x-1/2 bottom-6 z-40 flex items-center gap-4 px-4 py-3 rounded-card border border-iris/40 bg-surface/95 backdrop-blur-md shadow-[0_20px_60px_-10px_rgba(0,0,0,.65)]"
+    >
+      <div className="flex items-center gap-2 text-[13px] text-fg-soft font-medium">
+        <span className="w-6 h-6 inline-flex items-center justify-center rounded-full bg-iris/20 text-iris font-mono text-[11px]">{qtd}</span>
+        selecionada{qtd === 1 ? "" : "s"}
+        <span className="text-fg-faint">·</span>
+        <span className="font-mono tnum text-fg">{total}</span>
+      </div>
+      <button
+        type="button"
+        disabled={processando}
+        onClick={onPagar}
+        className="h-9 px-4 inline-flex items-center gap-2 rounded-[9px] font-semibold text-[13px] transition hover:brightness-110 disabled:opacity-50"
+        style={{
+          background: ehPagar
+            ? "linear-gradient(180deg, oklch(0.74 0.14 22), oklch(0.55 0.16 22))"
+            : "linear-gradient(180deg, oklch(0.80 0.13 158), oklch(0.55 0.14 158))",
+          color: "oklch(0.12 0.02 22)",
+        }}
+      >
+        {processando ? "Processando…" : (ehPagar ? "Pagar selecionadas" : "Receber selecionadas")}
+      </button>
+      <button
+        type="button"
+        disabled={processando}
+        onClick={onCancelar}
+        className="h-9 px-3 inline-flex items-center gap-2 rounded-[9px] text-[12.5px] text-fg-muted hover:text-coral hover:bg-coral/10 border border-hairline-soft transition disabled:opacity-50"
+      >
+        Cancelar contas
+      </button>
+      <button
+        type="button"
+        disabled={processando}
+        onClick={onLimpar}
+        title="Limpar seleção"
+        className="h-9 w-9 inline-flex items-center justify-center rounded-[9px] text-fg-muted hover:text-fg hover:bg-white/[.05] transition disabled:opacity-50"
+      >
+        ✕
+      </button>
+    </div>
   );
 }

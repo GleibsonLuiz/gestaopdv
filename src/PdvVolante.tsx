@@ -68,6 +68,19 @@ export default function PdvVolante() {
   const [pendentes, setPendentes] = useState(() => totalPendentesFila());
   const [flash, setFlash] = useState<{ msg: string; tipo: "ok" | "erro" } | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [observacoes, setObservacoes] = useState("");
+  const [mesa, setMesa] = useState<string>(() => {
+    try { return localStorage.getItem("gestaopro_pdvvol_mesa") || ""; } catch { return ""; }
+  });
+  const [editandoMesa, setEditandoMesa] = useState(false);
+  const [mesaRascunho, setMesaRascunho] = useState("");
+
+  useEffect(() => {
+    try {
+      if (mesa) localStorage.setItem("gestaopro_pdvvol_mesa", mesa);
+      else localStorage.removeItem("gestaopro_pdvvol_mesa");
+    } catch {}
+  }, [mesa]);
 
   const segmento: SegmentoEmpresa = (getEmpresa()?.segmento as SegmentoEmpresa) || "GERAL";
 
@@ -210,39 +223,38 @@ export default function PdvVolante() {
       // entra no Kanban da Central, onde o vendedor aceita, prepara e
       // fecha (gera Venda real com baixa de estoque no checkout).
       const payload = {
-        observacoes: null,
+        mesa: mesa.trim() || null,
+        observacoes: observacoes.trim() || null,
         itens: carrinho.map(i => ({
           produtoId: i.produtoId,
           quantidade: i.quantidade,
           precoUnitario: i.precoUnitario,
         })),
       };
+      const finalizar = (msg: string, ok: boolean) => {
+        setCarrinho([]);
+        limparCarrinho();
+        setObservacoes("");
+        // mesa NAO e' limpa de proposito: vendedor de balcao costuma
+        // repetir varias comandas no mesmo local.
+        if (ok) flashOk(msg); else flashErro(msg);
+        setTela("produtos");
+      };
       if (online) {
         try {
           await api.criarComanda(payload);
-          setCarrinho([]);
-          limparCarrinho();
-          flashOk(`✓ Comanda enviada — ${fmtBRL(total)}`);
-          setTela("produtos");
+          finalizar(`✓ Comanda enviada — ${fmtBRL(total)}`, true);
           return;
-        } catch (err) {
-          // falhou online — cai pra fila
+        } catch {
           enfileirarVenda(payload);
           setPendentes(totalPendentesFila());
-          setCarrinho([]);
-          limparCarrinho();
-          flashErro("Servidor offline — comanda salva na fila");
-          setTela("produtos");
+          finalizar("Servidor offline — comanda salva na fila", false);
           return;
         }
       }
-      // offline
       enfileirarVenda(payload);
       setPendentes(totalPendentesFila());
-      setCarrinho([]);
-      limparCarrinho();
-      flashOk("Comanda enfileirada — envia quando voltar a rede");
-      setTela("produtos");
+      finalizar("Comanda enfileirada — envia quando voltar a rede", true);
     } finally {
       setEnviando(false);
     }
@@ -266,8 +278,11 @@ export default function PdvVolante() {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
         <header className="sticky top-0 bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center gap-2">
-          <button onClick={() => setTela("produtos")} className="text-slate-400 text-2xl px-2">←</button>
-          <div className="flex-1 font-bold">Carrinho · {totalItens} {totalItens === 1 ? "item" : "itens"}</div>
+          <button type="button" onClick={() => setTela("produtos")} className="text-slate-400 text-2xl px-2">←</button>
+          <div className="flex-1 min-w-0">
+            <div className="font-bold truncate">Carrinho · {totalItens} {totalItens === 1 ? "item" : "itens"}</div>
+            {mesa && <div className="text-[11px] text-emerald-300 truncate">📍 {mesa}</div>}
+          </div>
         </header>
         <div className="flex-1 overflow-y-auto">
           {carrinho.length === 0 ? (
@@ -291,11 +306,25 @@ export default function PdvVolante() {
           ))}
         </div>
         <footer className="sticky bottom-0 bg-slate-900 border-t border-slate-800 px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))]">
+          <div className="mb-3">
+            <label htmlFor="pdvvol-obs" className="block text-[11px] uppercase tracking-wide text-slate-400 mb-1">
+              Observação do pedido <span className="normal-case text-slate-500">({observacoes.length}/500)</span>
+            </label>
+            <textarea
+              id="pdvvol-obs"
+              value={observacoes}
+              onChange={(e) => setObservacoes(e.target.value.slice(0, 500))}
+              rows={2}
+              placeholder="Ex.: sem cebola · embrulhar pra presente · entregar 14h · fiado pro João"
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm focus:border-emerald-500 focus:outline-none resize-none placeholder:text-slate-600"
+            />
+          </div>
           <div className="flex items-baseline justify-between mb-3">
             <span className="text-slate-400 text-sm">Total</span>
             <span className="text-3xl font-bold text-emerald-400">{fmtBRL(total)}</span>
           </div>
           <button
+            type="button"
             onClick={enviarPedido}
             disabled={enviando || carrinho.length === 0}
             className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 disabled:opacity-50 text-white font-bold text-lg rounded-xl">
@@ -313,9 +342,9 @@ export default function PdvVolante() {
       <header className="sticky top-0 z-10 bg-slate-900 border-b border-slate-800 px-3 py-3">
         <div className="flex items-center gap-2 mb-2">
           <div className="text-2xl">🛍️</div>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <div className="text-xs text-slate-400">PDV Volante</div>
-            <div className="font-bold text-sm">{getEmpresa()?.nome || "Estabelecimento"}</div>
+            <div className="font-bold text-sm truncate">{getEmpresa()?.nome || "Estabelecimento"}</div>
           </div>
           <div className={`text-[10px] font-bold px-2 py-1 rounded ${online ? "bg-emerald-500/20 text-emerald-300" : "bg-red-500/20 text-red-300"}`}>
             {online ? "ONLINE" : "OFFLINE"}
@@ -325,6 +354,30 @@ export default function PdvVolante() {
               FILA: {pendentes}
             </div>
           )}
+        </div>
+        <div className="mb-2">
+          <button
+            type="button"
+            onClick={() => { setMesaRascunho(mesa); setEditandoMesa(true); }}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+              mesa
+                ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
+                : "bg-slate-800 border-slate-700 text-slate-400"
+            }`}
+            title="Identificar mesa, balcão ou comanda"
+          >
+            <span className="text-sm leading-none">📍</span>
+            {mesa ? <span className="truncate max-w-[180px]">{mesa}</span> : <span>Adicionar mesa / balcão</span>}
+            {mesa && (
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => { e.stopPropagation(); setMesa(""); }}
+                className="ml-1 px-1 text-emerald-300/70 hover:text-white"
+                aria-label="Remover mesa"
+              >×</span>
+            )}
+          </button>
         </div>
         <div className="flex gap-2">
           <input
@@ -378,6 +431,18 @@ export default function PdvVolante() {
       </footer>
 
       {flash && <FlashView {...flash} />}
+      {editandoMesa && (
+        <MesaModal
+          valor={mesaRascunho}
+          onChange={setMesaRascunho}
+          onCancelar={() => setEditandoMesa(false)}
+          onSalvar={() => {
+            setMesa(mesaRascunho.trim().slice(0, 80));
+            setEditandoMesa(false);
+          }}
+          onLimpar={() => { setMesa(""); setEditandoMesa(false); }}
+        />
+      )}
     </div>
   );
 }
@@ -440,6 +505,68 @@ function FlashView({ msg, tipo }: { msg: string; tipo: "ok" | "erro" }) {
       tipo === "ok" ? "bg-emerald-500 text-white" : "bg-red-500 text-white"
     }`}>
       {msg}
+    </div>
+  );
+}
+
+// =====================================================================
+// MesaModal — identifica mesa/balcao/comanda fisica do pedido.
+// Persistido em localStorage para sobreviver entre comandas (vendedor
+// de balcao costuma repetir o mesmo "Balcao 3" varias rodadas).
+// =====================================================================
+function MesaModal({ valor, onChange, onCancelar, onSalvar, onLimpar }: {
+  valor: string;
+  onChange: (v: string) => void;
+  onCancelar: () => void;
+  onSalvar: () => void;
+  onLimpar: () => void;
+}) {
+  const sugestoes = ["Balcão", "Mesa 1", "Mesa 2", "Delivery", "Retirada"];
+  return (
+    <div
+      className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-3"
+      onClick={onCancelar}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-4 shadow-2xl pb-[max(16px,env(safe-area-inset-bottom))]"
+      >
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-xl">📍</span>
+          <h2 className="font-bold flex-1">Identificar mesa / balcão</h2>
+          <button type="button" onClick={onCancelar} className="text-slate-400 text-2xl px-2" aria-label="Fechar">×</button>
+        </div>
+        <input
+          autoFocus
+          value={valor}
+          onChange={(e) => onChange(e.target.value.slice(0, 80))}
+          onKeyDown={(e) => { if (e.key === "Enter") onSalvar(); }}
+          placeholder="Ex.: Mesa 5, Balcão Azul, Comanda 12…"
+          className="w-full px-3 py-3 bg-slate-800 border border-slate-700 rounded-lg text-sm focus:border-emerald-500 focus:outline-none mb-3"
+        />
+        <div className="flex flex-wrap gap-2 mb-4">
+          {sugestoes.map(s => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => onChange(s)}
+              className="text-xs px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-slate-300 hover:border-emerald-500/50"
+            >{s}</button>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onLimpar}
+            className="px-4 py-2.5 rounded-lg bg-slate-800 text-slate-300 text-sm font-medium border border-slate-700"
+          >Limpar</button>
+          <button
+            type="button"
+            onClick={onSalvar}
+            className="flex-1 px-4 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-sm"
+          >Salvar</button>
+        </div>
+      </div>
     </div>
   );
 }

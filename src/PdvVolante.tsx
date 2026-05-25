@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, memo } from "react";
+import { useEffect, useState, useCallback, useMemo, memo, useRef } from "react";
 import { List as VirtualList, type RowComponentProps } from "react-window";
 import { Html5Qrcode } from "html5-qrcode";
 import { api, getEmpresa, type SegmentoEmpresa } from "./lib/api";
@@ -104,6 +104,26 @@ export default function PdvVolante() {
   const [mostrandoHistorico, setMostrandoHistorico] = useState(false);
   const [historico, setHistorico] = useState<ComandaHistorico[]>(() => lerHistorico());
 
+  // Pull-to-refresh manual (sem libs). Funciona no wrapper que envolve a
+  // lista virtualizada — react-window tem seu proprio scroller interno,
+  // entao subimos pela arvore ate achar o elemento com overflow rolavel.
+  const scrollWrapRef = useRef<HTMLDivElement>(null);
+  const pullStateRef = useRef<{ ativo: boolean; y0: number; scrollEl: HTMLElement | null }>({
+    ativo: false, y0: 0, scrollEl: null,
+  });
+  const [pullDistance, setPullDistance] = useState(0);
+  const pullDistanceRef = useRef(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshingRef = useRef(false);
+  const setPull = useCallback((v: number) => {
+    pullDistanceRef.current = v;
+    setPullDistance(v);
+  }, []);
+  const setRefr = useCallback((v: boolean) => {
+    refreshingRef.current = v;
+    setRefreshing(v);
+  }, []);
+
   useEffect(() => {
     try {
       if (mesa) localStorage.setItem("gestaopro_pdvvol_mesa", mesa);
@@ -183,6 +203,82 @@ export default function PdvVolante() {
   }, []);
 
   useEffect(() => { carregarProdutos(); }, [carregarProdutos]);
+
+  // ====== pull-to-refresh ======
+  // Threshold (60px) e maximo (100px) com resistencia /2: usuario puxa
+  // 200px na tela pra deslocar 100 visualmente — sensacao "elastica".
+  useEffect(() => {
+    if (tela !== "produtos") return;
+    const wrap = scrollWrapRef.current;
+    if (!wrap) return;
+
+    const PULL_THRESHOLD = 60;
+    const PULL_MAX = 100;
+
+    const findScrollEl = (start: EventTarget | null): HTMLElement | null => {
+      let el = start as HTMLElement | null;
+      while (el && el !== wrap.parentElement) {
+        const s = window.getComputedStyle(el);
+        if (/(auto|scroll)/.test(s.overflowY) && el.scrollHeight > el.clientHeight) return el;
+        el = el.parentElement;
+      }
+      return wrap.querySelector<HTMLElement>("[style*='overflow']") || null;
+    };
+
+    const onStart = (e: TouchEvent) => {
+      if (refreshingRef.current) return;
+      const el = findScrollEl(e.target);
+      if (!el || el.scrollTop > 0) {
+        pullStateRef.current = { ativo: false, y0: 0, scrollEl: null };
+        return;
+      }
+      pullStateRef.current = { ativo: true, y0: e.touches[0].clientY, scrollEl: el };
+    };
+
+    const onMove = (e: TouchEvent) => {
+      const s = pullStateRef.current;
+      if (!s.ativo || !s.scrollEl) return;
+      if (s.scrollEl.scrollTop > 0) {
+        s.ativo = false;
+        setPull(0);
+        return;
+      }
+      const dy = e.touches[0].clientY - s.y0;
+      if (dy <= 0) { setPull(0); return; }
+      const dist = Math.min(PULL_MAX, dy / 2);
+      setPull(dist);
+      if (dist > 5 && e.cancelable) e.preventDefault(); // bloqueia bounce nativo iOS
+    };
+
+    const onEnd = () => {
+      const s = pullStateRef.current;
+      if (!s.ativo) { setPull(0); return; }
+      const dispara = pullDistanceRef.current >= PULL_THRESHOLD;
+      pullStateRef.current = { ativo: false, y0: 0, scrollEl: null };
+      if (dispara && !refreshingRef.current) {
+        setRefr(true);
+        vibrar(30);
+        carregarProdutos().finally(() => {
+          setRefr(false);
+          setPull(0);
+        });
+      } else {
+        setPull(0);
+      }
+    };
+
+    wrap.addEventListener("touchstart", onStart, { passive: true });
+    wrap.addEventListener("touchmove", onMove, { passive: false });
+    wrap.addEventListener("touchend", onEnd, { passive: true });
+    wrap.addEventListener("touchcancel", onEnd, { passive: true });
+
+    return () => {
+      wrap.removeEventListener("touchstart", onStart);
+      wrap.removeEventListener("touchmove", onMove);
+      wrap.removeEventListener("touchend", onEnd);
+      wrap.removeEventListener("touchcancel", onEnd);
+    };
+  }, [tela, vibrar, carregarProdutos, setPull, setRefr]);
 
   // ====== debounce de busca (200ms) ======
   useEffect(() => {
@@ -680,21 +776,33 @@ export default function PdvVolante() {
         <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">Carregando produtos…</div>
       ) : erro && produtos.length === 0 ? (
         <div className="flex-1 flex items-center justify-center p-6 text-red-300 text-sm text-center">{erro}</div>
-      ) : produtosFiltrados.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">Nenhum produto encontrado.</div>
       ) : (
-        // react-window v2 virtualiza — 5000 itens sem lag perceptivel.
-        // API nova: rowComponent + rowProps em vez de itemData/itemSize.
-        <div style={{ flex: 1, minHeight: 0 }}>
-          <VirtualList
-            rowCount={produtosFiltrados.length}
-            rowHeight={84}
-            // Cast: o slot da v2 espera funcao concreta com ReactElement|null;
-            // como nosso component sempre retorna JSX, e seguro forcar o tipo.
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            rowComponent={LinhaProduto as any}
-            rowProps={{ lista: produtosFiltrados, onAdd: adicionar, segmento }}
-          />
+        <div
+          ref={scrollWrapRef}
+          style={{
+            flex: 1,
+            minHeight: 0,
+            position: "relative",
+            transform: `translateY(${refreshing ? 50 : pullDistance}px)`,
+            transition: pullStateRef.current.ativo ? "none" : "transform 200ms ease-out",
+          }}
+        >
+          <PullIndicator distance={pullDistance} refreshing={refreshing} threshold={60} />
+          {produtosFiltrados.length === 0 ? (
+            <div className="h-full flex items-center justify-center text-slate-500 text-sm">Nenhum produto encontrado.</div>
+          ) : (
+            // react-window v2 virtualiza — 5000 itens sem lag perceptivel.
+            // API nova: rowComponent + rowProps em vez de itemData/itemSize.
+            <VirtualList
+              rowCount={produtosFiltrados.length}
+              rowHeight={84}
+              // Cast: o slot da v2 espera funcao concreta com ReactElement|null;
+              // como nosso component sempre retorna JSX, e seguro forcar o tipo.
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              rowComponent={LinhaProduto as any}
+              rowProps={{ lista: produtosFiltrados, onAdd: adicionar, segmento }}
+            />
+          )}
         </div>
       )}
 
@@ -739,6 +847,48 @@ export default function PdvVolante() {
           onLimpar={() => { limparHistorico(); setHistorico([]); setMostrandoHistorico(false); }}
         />
       )}
+    </div>
+  );
+}
+
+// =====================================================================
+// PullIndicator — bolha acima da lista que aparece com o gesto pull-to-refresh.
+// Acompanha 3 estados: arrastando abaixo do threshold, pronto pra disparar,
+// e atualizando (spinner). O wrapper pai e' quem translaciona — esse componente
+// so renderiza o "label" flutuante no offset negativo.
+// =====================================================================
+function PullIndicator({ distance, refreshing, threshold }: {
+  distance: number;
+  refreshing: boolean;
+  threshold: number;
+}) {
+  if (!refreshing && distance <= 0) return null;
+  const pronto = distance >= threshold;
+  return (
+    <div
+      className="absolute left-0 right-0 flex items-center justify-center pointer-events-none"
+      style={{ top: -44, height: 44 }}
+    >
+      <div
+        className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${
+          refreshing
+            ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
+            : pronto
+              ? "bg-emerald-500 border-emerald-500 text-white"
+              : "bg-slate-800 border-slate-700 text-slate-400"
+        }`}
+      >
+        {refreshing ? (
+          <span className="inline-flex items-center gap-2">
+            <span className="inline-block w-3 h-3 rounded-full border-2 border-emerald-300 border-t-transparent animate-spin" />
+            Atualizando…
+          </span>
+        ) : pronto ? (
+          "↑ Solte para atualizar"
+        ) : (
+          "↓ Puxe para atualizar"
+        )}
+      </div>
     </div>
   );
 }

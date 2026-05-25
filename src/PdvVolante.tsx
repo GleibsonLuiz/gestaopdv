@@ -89,6 +89,10 @@ export default function PdvVolante() {
   const [obsItemAlvo, setObsItemAlvo] = useState<string | null>(null);
   const [obsItemRascunho, setObsItemRascunho] = useState("");
 
+  // Edicao direta de quantidade (teclado numerico).
+  const [qtdAlvo, setQtdAlvo] = useState<string | null>(null);
+  const [qtdRascunho, setQtdRascunho] = useState("");
+
   useEffect(() => {
     try {
       if (mesa) localStorage.setItem("gestaopro_pdvvol_mesa", mesa);
@@ -200,6 +204,18 @@ export default function PdvVolante() {
       if (nova === 0) return prev.filter((_, i) => i !== idx);
       const novo = prev.slice();
       novo[idx] = { ...novo[idx], quantidade: nova };
+      return novo;
+    });
+  }, []);
+
+  const definirQtd = useCallback((produtoId: string, nova: number) => {
+    setCarrinho(prev => {
+      const idx = prev.findIndex(i => i.produtoId === produtoId);
+      if (idx < 0) return prev;
+      const segura = Math.max(0, Math.min(99999, Number(nova) || 0));
+      if (segura === 0) return prev.filter((_, i) => i !== idx);
+      const novo = prev.slice();
+      novo[idx] = { ...novo[idx], quantidade: segura };
       return novo;
     });
   }, []);
@@ -346,7 +362,15 @@ export default function PdvVolante() {
                 <div className="flex items-center gap-2">
                   <button type="button" onClick={() => ajustarQtd(it.produtoId, -1)}
                     className="w-10 h-10 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-lg text-lg font-bold">−</button>
-                  <div className="min-w-[40px] text-center font-bold">{it.quantidade}</div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQtdRascunho(String(it.quantidade).replace(".", ","));
+                      setQtdAlvo(it.produtoId);
+                    }}
+                    className="min-w-[44px] h-10 px-2 text-center font-bold rounded-lg bg-slate-800/60 hover:bg-slate-700 active:bg-slate-600 border border-slate-700"
+                    title="Editar quantidade"
+                  >{it.quantidade}</button>
                   <button type="button" onClick={() => ajustarQtd(it.produtoId, 1)}
                     className="w-10 h-10 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 rounded-lg text-lg font-bold">+</button>
                   <button type="button" onClick={() => removerDoCarrinho(it.produtoId)}
@@ -394,6 +418,29 @@ export default function PdvVolante() {
           </button>
         </footer>
         {flash && <FlashView {...flash} />}
+        {obsItemAlvo && (
+          <ObsItemModal
+            valor={obsItemRascunho}
+            onChange={setObsItemRascunho}
+            onCancelar={() => setObsItemAlvo(null)}
+            onSalvar={() => {
+              definirObsItem(obsItemAlvo, obsItemRascunho);
+              setObsItemAlvo(null);
+            }}
+          />
+        )}
+        {qtdAlvo && (
+          <QtdModal
+            valor={qtdRascunho}
+            onChange={setQtdRascunho}
+            onCancelar={() => setQtdAlvo(null)}
+            onSalvar={() => {
+              const n = Number(qtdRascunho.replace(",", ".").trim());
+              if (!Number.isNaN(n)) definirQtd(qtdAlvo, n);
+              setQtdAlvo(null);
+            }}
+          />
+        )}
       </div>
     );
   }
@@ -556,17 +603,6 @@ export default function PdvVolante() {
           onCancelar={() => setBuscandoCliente(false)}
           onSelecionar={(c) => { setCliente(c); setBuscandoCliente(false); }}
           onLimpar={() => { setCliente(null); setBuscandoCliente(false); }}
-        />
-      )}
-      {obsItemAlvo && (
-        <ObsItemModal
-          valor={obsItemRascunho}
-          onChange={setObsItemRascunho}
-          onCancelar={() => setObsItemAlvo(null)}
-          onSalvar={() => {
-            definirObsItem(obsItemAlvo, obsItemRascunho);
-            setObsItemAlvo(null);
-          }}
         />
       )}
     </div>
@@ -732,6 +768,64 @@ function ClienteModal({ atual, onCancelar, onSelecionar, onLimpar }: {
             className="mt-3 px-4 py-2.5 rounded-lg bg-slate-800 text-slate-300 text-sm font-medium border border-slate-700"
           >Desvincular cliente atual ({atual.nome})</button>
         )}
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// QtdModal — entrada direta de quantidade no carrinho.
+// Aceita decimal (kg/litros) via virgula ou ponto. 0 ou vazio = remove.
+// =====================================================================
+function QtdModal({ valor, onChange, onCancelar, onSalvar }: {
+  valor: string;
+  onChange: (v: string) => void;
+  onCancelar: () => void;
+  onSalvar: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-3"
+      onClick={onCancelar}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-4 shadow-2xl pb-[max(16px,env(safe-area-inset-bottom))]"
+      >
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-xl">#️⃣</span>
+          <h2 className="font-bold flex-1">Quantidade</h2>
+          <button type="button" onClick={onCancelar} className="text-slate-400 text-2xl px-2" aria-label="Fechar">×</button>
+        </div>
+        <input
+          autoFocus
+          value={valor}
+          onChange={(e) => {
+            // Aceita digitos, virgula ou ponto. Bloqueia o resto.
+            const limpo = e.target.value.replace(/[^0-9.,]/g, "").slice(0, 8);
+            onChange(limpo);
+          }}
+          onFocus={(e) => e.target.select()}
+          onKeyDown={(e) => { if (e.key === "Enter") onSalvar(); }}
+          inputMode="decimal"
+          placeholder="Ex.: 12 · 2,5 · 0,750"
+          className="w-full px-3 py-4 bg-slate-800 border border-slate-700 rounded-lg text-3xl font-bold text-center focus:border-emerald-500 focus:outline-none mb-3"
+        />
+        <div className="text-[11px] text-slate-500 mb-4 text-center">
+          Use vírgula para decimais (peso, metragem etc.). Zero remove o item.
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onCancelar}
+            className="px-4 py-2.5 rounded-lg bg-slate-800 text-slate-300 text-sm font-medium border border-slate-700"
+          >Cancelar</button>
+          <button
+            type="button"
+            onClick={onSalvar}
+            className="flex-1 px-4 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-sm"
+          >Salvar</button>
+        </div>
       </div>
     </div>
   );

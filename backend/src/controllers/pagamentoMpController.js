@@ -394,12 +394,24 @@ export async function cobrar(req, res, next) {
       const detalhe = errMp instanceof MercadoPagoError
         ? `[MP ${errMp.status}] ${errMp.message}`
         : `[MP] ${errMp.message}`;
+      // MP retorna mensagem confusa "payment.type does not match: credit_card"
+      // quando a conta nao tem debito habilitado via Point Integration. O
+      // payload esta correto — falta ativar no suporte MP. Traduzimos para
+      // algo acionavel pelo lojista.
+      const debitoSemHabilitacao =
+        tipo === "DEBIT" &&
+        errMp instanceof MercadoPagoError &&
+        errMp.status === 400 &&
+        /payment\.type/i.test(errMp.message || "");
+      const erroAmigavel = debitoSemHabilitacao
+        ? "Débito não habilitado nesta conta Mercado Pago. Ligue para o suporte MP e peça a ativação de débito via Point Integration. Use crédito enquanto isso."
+        : "Falha ao enviar cobranca para a maquininha";
       await prisma.intencaoPagamentoMP.update({
         where: { id: intencao.id },
         data: { status: "ERROR", detalhe },
       });
       return res.status(502).json({
-        erro: "Falha ao enviar cobranca para a maquininha",
+        erro: erroAmigavel,
         detalhe,
         intencaoId: intencao.id,
       });

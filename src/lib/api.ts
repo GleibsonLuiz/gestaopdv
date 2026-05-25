@@ -579,6 +579,7 @@ export const api = {
     mpAtivo?: boolean;
     mpPixAtivo?: boolean;
   }) => request("/pagamentos-mp/config", { method: "PUT", body: dados }),
+  listarDevicesMp: () => request("/pagamentos-mp/devices"),
   cobrarMp: (dados: { tipo: "CREDIT" | "DEBIT" | "PIX"; vendaPayload: unknown }) =>
     request("/pagamentos-mp/cobrar", { method: "POST", body: dados }),
   statusMp: (id: string) => request(`/pagamentos-mp/status/${id}`),

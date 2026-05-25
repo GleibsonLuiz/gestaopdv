@@ -114,6 +114,21 @@ export async function criarPaymentIntent({
   );
 }
 
+// Lista os dispositivos Point vinculados a conta MP. Util para a UI de
+// configuracao descobrir o DEVICE_ID exato (formato MODELO__SERIAL com
+// dois underscores) — esse e o unico jeito 100% confiavel de obter o id,
+// ja que o painel web do MP nao expoe ele montado dessa forma.
+//
+// Resposta tipica:
+//   { devices: [{ id, operating_mode, store_id, ... }], paging: { ... } }
+export async function listarDevices({ accessToken }) {
+  return http(
+    "GET",
+    "/point/integration-api/devices",
+    accessToken,
+  );
+}
+
 export async function obterPaymentIntent({ accessToken, intentId }) {
   return http(
     "GET",

@@ -9,6 +9,7 @@ import {
   obterPayment,
   criarPagamentoPix,
   cancelarPagamento,
+  listarDevices,
 } from "../lib/mercadoPago.js";
 import { criar as criarVendaController } from "./vendaController.js";
 
@@ -181,6 +182,58 @@ export async function salvarConfig(req, res, next) {
       mpAccessTokenMascarado: cfg.mpAccessTokenEnc
         ? mascarar(safeDecifrarPrefixo(cfg.mpAccessTokenEnc))
         : null,
+    });
+  } catch (err) { next(err); }
+}
+
+// GET /pagamentos-mp/devices
+// Lista os dispositivos Point disponiveis na conta MP do tenant. Usado pela
+// tela de Configuracoes para o usuario clicar e preencher o DEVICE_ID sem
+// risco de errar o formato (MODELO__SERIAL com dois underscores).
+//
+// Requer apenas mpAccessToken configurado — NAO exige mpAtivo, ja que o
+// proposito do endpoint e justamente ajudar o usuario a configurar pela
+// primeira vez (descobrir o id antes de ativar).
+export async function listarDispositivos(req, res, next) {
+  try {
+    const cfg = await prisma.configuracaoEmpresa.findFirst({
+      select: { mpAccessTokenEnc: true },
+    });
+    if (!cfg?.mpAccessTokenEnc) {
+      return res.status(412).json({
+        erro: "Salve o ACCESS_TOKEN do Mercado Pago antes de buscar os dispositivos.",
+      });
+    }
+    let accessToken;
+    try {
+      accessToken = decifrar(cfg.mpAccessTokenEnc);
+    } catch {
+      return res.status(500).json({
+        erro: "Falha ao decifrar credencial MP. Refaca a configuracao.",
+      });
+    }
+
+    let resp;
+    try {
+      resp = await listarDevices({ accessToken });
+    } catch (errMp) {
+      const detalhe = errMp instanceof MercadoPagoError
+        ? `[MP ${errMp.status}] ${errMp.message}`
+        : `[MP] ${errMp.message}`;
+      return res.status(502).json({
+        erro: "Falha ao consultar dispositivos no Mercado Pago",
+        detalhe,
+      });
+    }
+
+    const devices = Array.isArray(resp?.devices) ? resp.devices : [];
+    res.json({
+      devices: devices.map(d => ({
+        id: d?.id || "",
+        operatingMode: d?.operating_mode || null,
+        storeId: d?.store_id || null,
+        posId: d?.pos_id || null,
+      })).filter(d => d.id),
     });
   } catch (err) { next(err); }
 }

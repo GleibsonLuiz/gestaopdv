@@ -7,6 +7,7 @@ import {
   obterStatus,
   cancelar,
   webhook,
+  listarDispositivos,
 } from "../controllers/pagamentoMpController.js";
 
 const router = Router();
@@ -24,6 +25,7 @@ router.use(authRequired);
 // disponivel para todos os autenticados pra UI conferir o estado).
 router.get("/config", obterConfig);
 router.put("/config", requireRole("ADMIN", "GERENTE"), salvarConfig);
+router.get("/devices", requireRole("ADMIN", "GERENTE"), listarDispositivos);
 
 // Operacao da maquininha — exige permissao PDV (mesmo guard das vendas).
 router.post("/cobrar", requirePermissao("PDV"), cobrar);

@@ -476,6 +476,13 @@ interface BlocoMaquininhaMPProps {
   podeEditar: boolean;
 }
 
+interface DispositivoMp {
+  id: string;
+  operatingMode: string | null;
+  storeId: string | null;
+  posId: string | null;
+}
+
 function BlocoMaquininhaMP({ podeEditar }: BlocoMaquininhaMPProps) {
   const [carregando, setCarregando] = useState(true);
   const [cfg, setCfg] = useState<ConfigMpResposta | null>(null);
@@ -489,6 +496,9 @@ function BlocoMaquininhaMP({ podeEditar }: BlocoMaquininhaMPProps) {
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const [msg, setMsg] = useState("");
+  const [buscandoDevs, setBuscandoDevs] = useState(false);
+  const [devicesMp, setDevicesMp] = useState<DispositivoMp[] | null>(null);
+  const [erroDevs, setErroDevs] = useState("");
 
   function carregar() {
     setCarregando(true);
@@ -536,6 +546,27 @@ function BlocoMaquininhaMP({ podeEditar }: BlocoMaquininhaMPProps) {
     } finally {
       setSalvando(false);
     }
+  }
+
+  async function buscarDispositivos() {
+    setErroDevs("");
+    setBuscandoDevs(true);
+    try {
+      const resp = await api.listarDevicesMp() as { devices: DispositivoMp[] };
+      setDevicesMp(resp.devices || []);
+    } catch (err) {
+      setErroDevs((err as Error).message);
+      setDevicesMp([]);
+    } finally {
+      setBuscandoDevs(false);
+    }
+  }
+
+  function escolherDispositivo(id: string) {
+    setDeviceInput(id);
+    setDevicesMp(null);
+    setErroDevs("");
+    flash("DEVICE_ID preenchido. Clique em Salvar para aplicar.");
   }
 
   async function removerCredencial() {
@@ -636,17 +667,94 @@ function BlocoMaquininhaMP({ podeEditar }: BlocoMaquininhaMPProps) {
           <label className="block text-gp-muted text-[11px] mb-1 font-semibold">
             DEVICE_ID (identificador da maquininha)
           </label>
-          <input
-            value={deviceInput}
-            onChange={(e) => setDeviceInput(e.target.value)}
-            disabled={!podeEditar}
-            placeholder="Ex.: PAX_A910__SMART... ou GERTEC_MP35P..."
-            style={mpInput(podeEditar)}
-          />
-          <div className="text-gp-muted text-[10px] mt-1">
-            Encontrado em <b>Mercado Pago &gt; Maquininhas &gt; Configurar dispositivo</b>.
-            Cada empresa tem 1 device nesta versão.
+          <div style={{ display: "flex", gap: 6 }}>
+            <input
+              value={deviceInput}
+              onChange={(e) => setDeviceInput(e.target.value)}
+              disabled={!podeEditar}
+              placeholder="Ex.: PAX_A910__SMART... ou GERTEC_MP35P..."
+              style={{ ...mpInput(podeEditar), flex: 1 }}
+            />
+            <button
+              type="button"
+              onClick={buscarDispositivos}
+              disabled={!podeEditar || buscandoDevs || !cfg?.mpAccessTokenMascarado}
+              title={!cfg?.mpAccessTokenMascarado
+                ? "Salve o ACCESS_TOKEN antes para conseguir listar"
+                : "Lista os dispositivos vinculados a esta conta MP"}
+              style={{
+                padding: "0 12px",
+                borderRadius: 8,
+                border: `1px solid ${C.accent}55`,
+                background: C.accent + "22",
+                color: C.accent,
+                fontWeight: 700,
+                fontSize: 12,
+                cursor: (!podeEditar || buscandoDevs || !cfg?.mpAccessTokenMascarado) ? "not-allowed" : "pointer",
+                opacity: (!podeEditar || !cfg?.mpAccessTokenMascarado) ? 0.55 : 1,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {buscandoDevs ? "Buscando…" : "🔎 Buscar"}
+            </button>
           </div>
+          <div className="text-gp-muted text-[10px] mt-1">
+            Clique em <b>Buscar</b> para listar as maquininhas da sua conta MP,
+            ou cole manualmente o ID no formato <code>MODELO__SERIAL</code>.
+          </div>
+
+          {erroDevs && (
+            <div style={{
+              marginTop: 8, padding: "6px 10px", borderRadius: 6,
+              background: C.red + "22", border: `1px solid ${C.red}55`,
+              color: C.red, fontSize: 11,
+            }}>{erroDevs}</div>
+          )}
+
+          {devicesMp && (
+            <div style={{
+              marginTop: 8, padding: 8, borderRadius: 8,
+              background: C.surface, border: `1px solid ${C.border}`,
+            }}>
+              {devicesMp.length === 0 && (
+                <div style={{ color: C.muted, fontSize: 12, padding: "4px 6px" }}>
+                  Nenhum dispositivo encontrado nesta conta MP.
+                </div>
+              )}
+              {devicesMp.map((d) => (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => escolherDispositivo(d.id)}
+                  style={{
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                    width: "100%", padding: "8px 10px", marginBottom: 4,
+                    border: `1px solid ${deviceInput === d.id ? C.accent : C.border}`,
+                    background: deviceInput === d.id ? C.accent + "11" : C.card,
+                    borderRadius: 6, cursor: "pointer", textAlign: "left",
+                  }}
+                >
+                  <span style={{ fontFamily: "monospace", fontSize: 12, color: C.text }}>
+                    {d.id}
+                  </span>
+                  {d.operatingMode && (
+                    <span style={{
+                      fontSize: 10, padding: "2px 6px", borderRadius: 999,
+                      background: C.muted + "22", color: C.muted,
+                    }}>{d.operatingMode}</span>
+                  )}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => { setDevicesMp(null); setErroDevs(""); }}
+                style={{
+                  marginTop: 4, fontSize: 11, color: C.muted,
+                  background: "transparent", border: "none", cursor: "pointer",
+                }}
+              >fechar</button>
+            </div>
+          )}
         </div>
       </div>
 

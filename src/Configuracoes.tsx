@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { C } from "./lib/theme";
 import { api, BASE_URL, type SessionUser } from "./lib/api";
+import { invalidarCacheConfiguracao } from "./HeaderRelatorio";
 
 export type TipoCaixa = "INDEPENDENTE" | "COMPARTILHADO";
 
@@ -152,6 +153,7 @@ export default function Configuracoes({ user }: ConfiguracoesProps) {
       if (logoPreview?.startsWith("blob:")) URL.revokeObjectURL(logoPreview);
       setLogoPreview(null);
       if (inputLogoRef.current) inputLogoRef.current.value = "";
+      invalidarCacheConfiguracao();
       flash("Logotipo removido");
     } catch (err) {
       setErro((err as Error).message);
@@ -173,11 +175,15 @@ export default function Configuracoes({ user }: ConfiguracoesProps) {
           setLogoFile(null);
           if (inputLogoRef.current) inputLogoRef.current.value = "";
         } catch (errLogo) {
+          invalidarCacheConfiguracao();
           flash(`Dados salvos, mas o logotipo falhou: ${(errLogo as Error).message}`);
           setSalvando(false);
           return;
         }
       }
+      // Header/cupom/PDFs leem config via cache de 30s — invalida para refletir
+      // qualquer mudanca (nome, endereco, logo) imediatamente.
+      invalidarCacheConfiguracao();
       flash("Configurações salvas");
     } catch (err) {
       setErro((err as Error).message);

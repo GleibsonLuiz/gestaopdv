@@ -11,6 +11,7 @@
 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { urlLogotipo } from "../Configuracoes";
 
 // As respostas de /inventarios/:id/folha e /empresa nao estao tipadas
 // estritamente no api.ts — usamos shapes locais com os campos que usamos.
@@ -38,7 +39,20 @@ export interface EmpresaParaCabecalho {
   nomeFantasia?: string | null;
   razaoSocial?: string | null;
   cnpj?: string | null;
+  logotipo?: string | null;
   [extra: string]: unknown;
+}
+
+async function carregarImagemDataUrl(url: string): Promise<string> {
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error("imagem nao acessivel");
+  const blob = await resp.blob();
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 }
 
 function fmtDataHora(iso: string | null | undefined): string {
@@ -67,20 +81,38 @@ function ordenarParaContagem(itens: ItemFolha[]): ItemFolha[] {
 // Gera o PDF da folha cega e dispara o download. Layout paisagem A4 para
 // caber Codigo + Cod.Barras + Produto + Unidade + Categoria + 2 colunas
 // largas de Qtd Contada/Obs sem espremer.
-export function gerarFolhaCegaPdf(folha: FolhaCegaPayload, empresa: EmpresaParaCabecalho | null): void {
+export async function gerarFolhaCegaPdf(folha: FolhaCegaPayload, empresa: EmpresaParaCabecalho | null): Promise<void> {
   const doc = new jsPDF({ orientation: "l", unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const marginX = 12;
 
+  // ---- Logo (quando ha) ----
+  // urlLogotipo trata absoluta (Vercel Blob) vs relativa (/uploads em dev).
+  let xTexto = marginX;
+  if (empresa?.logotipo) {
+    try {
+      const urlLogo = urlLogotipo(empresa.logotipo);
+      if (urlLogo) {
+        const dataUrl = await carregarImagemDataUrl(urlLogo);
+        const ext = (empresa.logotipo.split(".").pop() || "png").toLowerCase();
+        const formato = ext === "jpg" || ext === "jpeg" ? "JPEG" : "PNG";
+        doc.addImage(dataUrl, formato, marginX, 8, 18, 18);
+        xTexto = marginX + 22;
+      }
+    } catch {
+      // logo falhou — segue sem
+    }
+  }
+
   // ---- Cabecalho ----
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
-  doc.text(empresa?.nomeFantasia || empresa?.razaoSocial || "Empresa", marginX, 14);
+  doc.text(empresa?.nomeFantasia || empresa?.razaoSocial || "Empresa", xTexto, 14);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(100, 100, 100);
-  if (empresa?.cnpj) doc.text(`CNPJ ${empresa.cnpj}`, marginX, 19);
+  if (empresa?.cnpj) doc.text(`CNPJ ${empresa.cnpj}`, xTexto, 19);
 
   doc.setFontSize(16);
   doc.setFont("helvetica", "bold");

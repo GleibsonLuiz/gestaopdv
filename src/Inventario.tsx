@@ -4,6 +4,7 @@ import { api, type SessionUser } from "./lib/api";
 import ActionsMenu from "./components/ActionsMenu";
 import QrMobileModal from "./components/QrMobileModal";
 import { gerarFolhaCegaPdf, type FolhaCegaPayload, type EmpresaParaCabecalho } from "./lib/folhaCegaPdf";
+import { obterConfiguracaoCache } from "./HeaderRelatorio";
 
 // Lazy: a folha de contagem so e carregada quando o usuario clica em
 // "Contar". Mesmo principio vale para o detalhe (gestor) — mantem o
@@ -133,11 +134,13 @@ export default function Inventario({ user }: InventarioProps) {
   async function imprimirFolha(inv: Inventario) {
     try {
       flash(`Gerando folha #${inv.numero}…`);
+      // ConfiguracaoEmpresa traz razaoSocial/nomeFantasia/cnpj/logotipo
+      // — /empresa (tenant) nao tem logotipo, entao usamos o cache de config.
       const [folha, empresa] = await Promise.all([
         api.folhaInventario(inv.id) as Promise<FolhaCegaPayload>,
-        api.obterEmpresa().catch(() => null) as Promise<EmpresaParaCabecalho | null>,
+        obterConfiguracaoCache() as Promise<EmpresaParaCabecalho | null>,
       ]);
-      gerarFolhaCegaPdf(folha, empresa);
+      await gerarFolhaCegaPdf(folha, empresa);
     } catch (err) {
       alert(`Falha ao gerar folha: ${(err as Error).message}`);
     }

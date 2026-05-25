@@ -6,7 +6,8 @@ import { C } from "./lib/theme";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { api, BASE_URL } from "./lib/api";
-import { formatarEndereco, obterConfiguracaoCache } from "./HeaderRelatorio.jsx";
+import HeaderRelatorio, { formatarEndereco, obterConfiguracaoCache } from "./HeaderRelatorio.jsx";
+import { urlLogotipo } from "./Configuracoes";
 import SelectBusca from "./components/SelectBusca.jsx";
 
 
@@ -77,6 +78,9 @@ export default function Relatorios() {
 
   return (
     <div>
+      <div style={{ marginBottom: 14 }}>
+        <HeaderRelatorio />
+      </div>
       <div style={{
         display: "flex", gap: 4, padding: 4, marginBottom: 18,
         background: C.surface, border: `1px solid ${C.border}`,
@@ -3287,9 +3291,12 @@ async function criarPDF(titulo) {
   let xTexto = 14;
 
   // Logo (quando ha — carrega via fetch + dataURL pra jsPDF.addImage).
+  // urlLogotipo trata absoluta (Vercel Blob em prod) vs relativa (/uploads em dev).
   if (empresa?.logotipo) {
     try {
-      const dataUrl = await carregarImagemDataUrl(`${BASE_URL}${empresa.logotipo}`);
+      const urlLogo = urlLogotipo(empresa.logotipo);
+      if (!urlLogo) throw new Error("logo sem url");
+      const dataUrl = await carregarImagemDataUrl(urlLogo);
       const ext = (empresa.logotipo.split(".").pop() || "png").toLowerCase();
       const formato = ext === "jpg" || ext === "jpeg" ? "JPEG" : "PNG";
       doc.addImage(dataUrl, formato, 14, 10, 22, 22);

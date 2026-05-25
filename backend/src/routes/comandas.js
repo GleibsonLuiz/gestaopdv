@@ -3,6 +3,7 @@ import { authRequired, requireRole, requirePermissao } from "../middlewares/auth
 import {
   listar, obter, criar, aceitar, cancelar, finalizar, resumo, stream,
   adicionarItens, listarAbertas,
+  marcarPronto, marcarServindo, marcarEmEntrega,
 } from "../controllers/comandaController.js";
 
 const router = Router();
@@ -27,6 +28,9 @@ router.post("/", criar);
 router.post("/:id/itens", adicionarItens);
 
 router.patch("/:id/aceitar", aceitar);
+router.patch("/:id/pronto", marcarPronto);
+router.patch("/:id/servindo", marcarServindo);
+router.patch("/:id/em-entrega", marcarEmEntrega);
 router.patch("/:id/cancelar", cancelar);
 // finalizar gera Venda real — restrito a ADMIN/GERENTE/VENDEDOR (todos
 // que possam vender — controlado pela permissao COMANDAS + PDV).

@@ -661,6 +661,12 @@ export const api = {
     request(`/comandas/${id}/itens`, { method: "POST", body: data }),
   aceitarComanda: (id: string) =>
     request(`/comandas/${id}/aceitar`, { method: "PATCH" }),
+  prontoComanda: (id: string) =>
+    request(`/comandas/${id}/pronto`, { method: "PATCH" }),
+  servindoComanda: (id: string) =>
+    request(`/comandas/${id}/servindo`, { method: "PATCH" }),
+  emEntregaComanda: (id: string, entregadorNome?: string) =>
+    request(`/comandas/${id}/em-entrega`, { method: "PATCH", body: entregadorNome ? { entregadorNome } : undefined }),
   cancelarComanda: (id: string, motivo?: string) =>
     request(`/comandas/${id}/cancelar`, { method: "PATCH", body: { motivo } }),
   finalizarComanda: (id: string, dados: { formaPagamento: string; idTransacao?: string }) =>

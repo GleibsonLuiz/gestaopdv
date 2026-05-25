@@ -88,6 +88,44 @@ export default function PdvVolante() {
   const [editandoMesa, setEditandoMesa] = useState(false);
   const [mesaRascunho, setMesaRascunho] = useState("");
 
+  // Tipo da comanda: MESA (default), VIAGEM ou DELIVERY. Cada um habilita
+  // campos diferentes no envio (mesa so em MESA, endereco/telefone em
+  // VIAGEM/DELIVERY). Persiste entre comandas pro vendedor de delivery
+  // nao precisar selecionar a cada pedido.
+  type TipoComandaVol = "MESA" | "VIAGEM" | "DELIVERY";
+  const [tipoComanda, setTipoComanda] = useState<TipoComandaVol>(() => {
+    try {
+      const t = localStorage.getItem("gestaopro_pdvvol_tipo");
+      return (t === "MESA" || t === "VIAGEM" || t === "DELIVERY") ? t : "MESA";
+    } catch { return "MESA"; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("gestaopro_pdvvol_tipo", tipoComanda); } catch {}
+  }, [tipoComanda]);
+
+  // Campos especificos por tipo. Persistidos so se faz sentido reaproveitar
+  // (endereco/telefone do delivery ficam — geralmente entregador opera com
+  // a mesma rua/area; entregadorNome NAO persiste — varia entre pedidos).
+  const [enderecoEntrega, setEnderecoEntrega] = useState<string>(() => {
+    try { return localStorage.getItem("gestaopro_pdvvol_endereco") || ""; } catch { return ""; }
+  });
+  const [telefoneContato, setTelefoneContato] = useState<string>(() => {
+    try { return localStorage.getItem("gestaopro_pdvvol_telefone") || ""; } catch { return ""; }
+  });
+  const [entregadorNome, setEntregadorNome] = useState<string>("");
+  useEffect(() => {
+    try {
+      if (enderecoEntrega) localStorage.setItem("gestaopro_pdvvol_endereco", enderecoEntrega);
+      else localStorage.removeItem("gestaopro_pdvvol_endereco");
+    } catch {}
+  }, [enderecoEntrega]);
+  useEffect(() => {
+    try {
+      if (telefoneContato) localStorage.setItem("gestaopro_pdvvol_telefone", telefoneContato);
+      else localStorage.removeItem("gestaopro_pdvvol_telefone");
+    } catch {}
+  }, [telefoneContato]);
+
   const [filtroTipo, setFiltroTipo] = useState<"TODOS" | "PRODUTOS" | "SERVICOS">("TODOS");
 
   const [cliente, setCliente] = useState<{ id: string; nome: string } | null>(() => {
@@ -238,7 +276,8 @@ export default function PdvVolante() {
         setComandaAlvo(null);
       }
     }
-    if (!mesaLimpa) {
+    // So busca comanda aberta no modo MESA — VIAGEM/DELIVERY nao usam mesa.
+    if (!mesaLimpa || tipoComanda !== "MESA") {
       setComandasAbertasMesa([]);
       return;
     }
@@ -258,9 +297,9 @@ export default function PdvVolante() {
     }, 300);
     return () => { cancelado = true; clearTimeout(t); };
     // comandaAlvo/comandasAbertasMesa nao podem entrar no deps senao loop;
-    // o efeito so precisa rodar quando mesa muda.
+    // o efeito so precisa rodar quando mesa ou tipo muda.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mesa]);
+  }, [mesa, tipoComanda]);
 
   // ====== pull-to-refresh ======
   // Threshold (60px) e maximo (100px) com resistencia /2: usuario puxa
@@ -529,6 +568,9 @@ export default function PdvVolante() {
         setObservacoes("");
         setDescontoStr("");
         setComandaAlvo(null);
+        // entregadorNome NAO persiste — varia entre pedidos. endereco/telefone
+        // ficam pra repetir pedido do mesmo cliente.
+        setEntregadorNome("");
         // mesa NAO e' limpa de proposito: vendedor de balcao costuma
         // repetir varias comandas no mesmo local.
         registrarHistorico({
@@ -594,8 +636,19 @@ export default function PdvVolante() {
       // ETAPA#8b: PDV Volante envia COMANDA (nao venda direto) — o pedido
       // entra no Kanban da Central, onde o vendedor aceita, prepara e
       // fecha (gera Venda real com baixa de estoque no checkout).
+      // Validacao por tipo: DELIVERY exige endereco.
+      if (tipoComanda === "DELIVERY" && !enderecoEntrega.trim()) {
+        flashErro("DELIVERY: preencha o endereco de entrega");
+        return;
+      }
       const payload = {
-        mesa: mesaSnapshot || null,
+        tipo: tipoComanda,
+        // MESA usa `mesa`; outros tipos enviam null pra nao confundir o backend.
+        mesa: tipoComanda === "MESA" ? (mesaSnapshot || null) : null,
+        enderecoEntrega: tipoComanda === "DELIVERY" ? enderecoEntrega.trim() : null,
+        entregadorNome: tipoComanda === "DELIVERY" && entregadorNome.trim() ? entregadorNome.trim() : null,
+        telefoneContato: (tipoComanda === "VIAGEM" || tipoComanda === "DELIVERY") && telefoneContato.trim()
+          ? telefoneContato.trim() : null,
         observacoes: observacoes.trim() || null,
         clienteId: cliente?.id || null,
         desconto: desconto > 0 ? Number(desconto.toFixed(2)) : null,
@@ -841,29 +894,57 @@ export default function PdvVolante() {
             >📜 {historico.length}</button>
           )}
         </div>
+        {/* Seletor de tipo (Mesa/Viagem/Delivery) — primeiro decisivo do pedido. */}
+        <div className="mb-2 flex gap-1 bg-slate-800/60 border border-slate-700 rounded-lg p-0.5">
+          {([
+            ["MESA", "🍽 Mesa", "amber"],
+            ["VIAGEM", "📦 Viagem", "violet"],
+            ["DELIVERY", "🛵 Delivery", "cyan"],
+          ] as const).map(([id, label, cor]) => {
+            const ativo = tipoComanda === id;
+            const corClasse = cor === "amber"
+              ? "bg-amber-500/25 text-amber-300"
+              : cor === "violet"
+                ? "bg-violet-500/25 text-violet-300"
+                : "bg-cyan-500/25 text-cyan-300";
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setTipoComanda(id)}
+                className={`flex-1 px-2 py-1.5 rounded-md text-xs font-bold transition-colors ${
+                  ativo ? corClasse : "text-slate-400 hover:text-slate-200"
+                }`}
+              >{label}</button>
+            );
+          })}
+        </div>
+
         <div className="mb-2 flex flex-wrap gap-1.5">
-          <button
-            type="button"
-            onClick={() => { setMesaRascunho(mesa); setEditandoMesa(true); }}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
-              mesa
-                ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
-                : "bg-slate-800 border-slate-700 text-slate-400"
-            }`}
-            title="Identificar mesa, balcão ou comanda"
-          >
-            <span className="text-sm leading-none">📍</span>
-            {mesa ? <span className="truncate max-w-[140px]">{mesa}</span> : <span>Mesa / balcão</span>}
-            {mesa && (
-              <span
-                role="button"
-                tabIndex={0}
-                onClick={(e) => { e.stopPropagation(); setMesa(""); }}
-                className="ml-1 px-1 text-emerald-300/70 hover:text-white"
-                aria-label="Remover mesa"
-              >×</span>
-            )}
-          </button>
+          {tipoComanda === "MESA" && (
+            <button
+              type="button"
+              onClick={() => { setMesaRascunho(mesa); setEditandoMesa(true); }}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                mesa
+                  ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
+                  : "bg-slate-800 border-slate-700 text-slate-400"
+              }`}
+              title="Identificar mesa, balcão ou comanda"
+            >
+              <span className="text-sm leading-none">📍</span>
+              {mesa ? <span className="truncate max-w-[140px]">{mesa}</span> : <span>Mesa / balcão</span>}
+              {mesa && (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => { e.stopPropagation(); setMesa(""); }}
+                  className="ml-1 px-1 text-emerald-300/70 hover:text-white"
+                  aria-label="Remover mesa"
+                >×</span>
+              )}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setBuscandoCliente(true)}
@@ -887,6 +968,44 @@ export default function PdvVolante() {
             )}
           </button>
         </div>
+
+        {/* Campos especificos de VIAGEM/DELIVERY — endereco (so DELIVERY) + telefone. */}
+        {(tipoComanda === "VIAGEM" || tipoComanda === "DELIVERY") && (
+          <div className="mb-2 space-y-1.5">
+            {tipoComanda === "DELIVERY" && (
+              <input
+                value={enderecoEntrega}
+                onChange={(e) => setEnderecoEntrega(e.target.value.slice(0, 300))}
+                placeholder="Endereço de entrega *"
+                title="Endereço de entrega (obrigatório para DELIVERY)"
+                className={`w-full px-3 py-1.5 rounded-lg text-xs border focus:outline-none ${
+                  enderecoEntrega.trim()
+                    ? "bg-cyan-500/10 border-cyan-500/40 text-cyan-100"
+                    : "bg-slate-800 border-amber-500/40 text-slate-200 focus:border-amber-500"
+                }`}
+              />
+            )}
+            <div className="flex gap-1.5">
+              <input
+                value={telefoneContato}
+                onChange={(e) => setTelefoneContato(e.target.value.slice(0, 30))}
+                inputMode="tel"
+                placeholder="Telefone (opcional)"
+                title="Telefone de contato"
+                className="flex-1 px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-200 focus:border-emerald-500 focus:outline-none"
+              />
+              {tipoComanda === "DELIVERY" && (
+                <input
+                  value={entregadorNome}
+                  onChange={(e) => setEntregadorNome(e.target.value.slice(0, 120))}
+                  placeholder="Entregador (opcional)"
+                  title="Nome do entregador"
+                  className="flex-1 px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-200 focus:border-emerald-500 focus:outline-none"
+                />
+              )}
+            </div>
+          </div>
+        )}
         <div className="flex gap-2">
           <input
             value={busca}

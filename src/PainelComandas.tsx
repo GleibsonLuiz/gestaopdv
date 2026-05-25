@@ -18,7 +18,14 @@ import { imprimirViaBluetooth, bluetoothDisponivel } from "./lib/webBluetoothPri
 // abas/dispositivos sem WebSocket. ETAPA futura pode trocar pra SSE.
 // =====================================================================
 
-type StatusComanda = "NOVO" | "EM_PREPARACAO" | "CONCLUIDA" | "CANCELADA";
+type StatusComanda = "NOVO" | "EM_PREPARACAO" | "PRONTO" | "SERVINDO" | "EM_ENTREGA" | "CONCLUIDA" | "CANCELADA";
+type TipoComanda = "MESA" | "VIAGEM" | "DELIVERY";
+
+const TIPO_META: Record<TipoComanda, { icone: string; label: string; cor: string }> = {
+  MESA:     { icone: "🍽",  label: "Mesa",     cor: "#f59e0b" },
+  VIAGEM:   { icone: "📦", label: "Viagem",   cor: "#a78bfa" },
+  DELIVERY: { icone: "🛵", label: "Delivery", cor: "#22d3ee" },
+};
 
 interface ItemComanda {
   id: string;
@@ -43,12 +50,19 @@ interface ItemComanda {
 interface Comanda {
   id: string;
   numero: number;
+  tipo: TipoComanda;
   status: StatusComanda;
   mesa?: string | null;
+  enderecoEntrega?: string | null;
+  entregadorNome?: string | null;
+  telefoneContato?: string | null;
   observacoes?: string | null;
   total: number | string;
   criadoEm: string;
   aceitoEm?: string | null;
+  prontoEm?: string | null;
+  servindoEm?: string | null;
+  emEntregaEm?: string | null;
   concluidoEm?: string | null;
   cliente?: { id: string; nome: string } | null;
   user?: { id: string; nome: string } | null;
@@ -103,6 +117,17 @@ export default function PainelComandas({ user }: Props) {
   const [buscaDebounced, setBuscaDebounced] = useState("");
   const [ordenacao, setOrdenacao] = useState<"TEMPO" | "VALOR" | "MESA">("TEMPO");
   const [filtroMesa, setFiltroMesa] = useState<string | null>(null);
+  const [filtroTipo, setFiltroTipo] = useState<"TODOS" | TipoComanda>(() => {
+    try {
+      const salvo = localStorage.getItem("gestaopro_painel_filtro_tipo");
+      return (salvo === "MESA" || salvo === "VIAGEM" || salvo === "DELIVERY" || salvo === "TODOS")
+        ? salvo as "TODOS" | TipoComanda
+        : "TODOS";
+    } catch { return "TODOS"; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("gestaopro_painel_filtro_tipo", filtroTipo); } catch {}
+  }, [filtroTipo]);
   const [concluidas, setConcluidas] = useState<Comanda[]>([]);
   const [mostrarConcluidas, setMostrarConcluidas] = useState<boolean>(() => {
     try { return localStorage.getItem("gestaopro_painel_mostrar_concluidas") !== "false"; } catch { return true; }
@@ -149,9 +174,11 @@ export default function PainelComandas({ user }: Props) {
 
   const carregar = useCallback(async () => {
     try {
-      // Em paralelo: abertas (NOVO+EM_PREP) e concluidas hoje (limite 20).
+      // Em paralelo: todas as abertas (5 status pre-CONCLUIDA) e concluidas
+      // de hoje (limite 20). Sem filtro de tipo aqui — o front filtra depois
+      // pra evitar refetch ao trocar de aba MESA/VIAGEM/DELIVERY.
       const [r, rc] = await Promise.all([
-        api.listarComandas({ status: "NOVO,EM_PREPARACAO" }),
+        api.listarComandas({ status: "NOVO,EM_PREPARACAO,PRONTO,SERVINDO,EM_ENTREGA" }),
         api.listarComandas({ concluidasHoje: "true" }).catch(() => []),
       ]);
       const lista = Array.isArray(r) ? r as Comanda[] : [];
@@ -210,6 +237,10 @@ export default function PainelComandas({ user }: Props) {
       const refresh = () => { if (!cancelado) carregar(); };
       es.addEventListener("nova", refresh);
       es.addEventListener("aceita", refresh);
+      es.addEventListener("pronto", refresh);
+      es.addEventListener("servindo", refresh);
+      es.addEventListener("em-entrega", refresh);
+      es.addEventListener("atualizada", refresh);
       es.addEventListener("cancelada", refresh);
       es.addEventListener("concluida", refresh);
       // onerror dispara tanto em falha quanto durante a reconexao automatica
@@ -267,6 +298,7 @@ export default function PainelComandas({ user }: Props) {
   // de separar por status pra que o contador da coluna reflita o filtro.
   const comandasFiltradas = useMemo(() => {
     let lista = comandas;
+    if (filtroTipo !== "TODOS") lista = lista.filter(c => c.tipo === filtroTipo);
     if (filtroMesa) lista = lista.filter(c => c.mesa === filtroMesa);
     if (buscaDebounced) {
       lista = lista.filter(c => {
@@ -292,11 +324,22 @@ export default function PainelComandas({ user }: Props) {
 
   const novos = comandasFiltradas.filter(c => c.status === "NOVO");
   const emPrep = comandasFiltradas.filter(c => c.status === "EM_PREPARACAO");
+  const prontos = comandasFiltradas.filter(c => c.status === "PRONTO");
+  const servindo = comandasFiltradas.filter(c => c.status === "SERVINDO");
+  const emEntrega = comandasFiltradas.filter(c => c.status === "EM_ENTREGA");
 
   // Contadores totais (sem filtro) — usado pra mostrar "3 de 12" no header.
   const totalNovos = useMemo(() => comandas.filter(c => c.status === "NOVO").length, [comandas]);
   const totalEmPrep = useMemo(() => comandas.filter(c => c.status === "EM_PREPARACAO").length, [comandas]);
-  const filtroAtivo = Boolean(buscaDebounced || filtroMesa);
+  const totalProntos = useMemo(() => comandas.filter(c => c.status === "PRONTO").length, [comandas]);
+  const filtroAtivo = Boolean(buscaDebounced || filtroMesa || filtroTipo !== "TODOS");
+
+  // Quais colunas mostrar dado o filtro atual de tipo:
+  //  - SERVINDO so faz sentido pra MESA;
+  //  - EM_ENTREGA so pra DELIVERY;
+  //  - PRONTO aparece sempre (todos os tipos passam por ela).
+  const mostrarServindo = filtroTipo === "TODOS" || filtroTipo === "MESA";
+  const mostrarEmEntrega = filtroTipo === "TODOS" || filtroTipo === "DELIVERY";
 
   // KPIs operacionais
   // - emAberto: soma do total das comandas NOVO + EM_PREPARACAO (dinheiro
@@ -327,6 +370,44 @@ export default function PainelComandas({ user }: Props) {
     try {
       await api.aceitarComanda(c.id);
       toast(`Comanda #${c.numero} aceita`, "ok");
+      await carregar();
+    } catch (err) {
+      toast("Erro: " + (err as Error).message, "erro");
+    } finally { setAcao(null); }
+  }
+
+  async function marcarPronto(c: Comanda) {
+    setAcao(c.id);
+    try {
+      await api.prontoComanda(c.id);
+      const proxima = c.tipo === "MESA"
+        ? "garçom pode servir"
+        : c.tipo === "DELIVERY"
+          ? "entregador pode pegar"
+          : "cliente pode retirar";
+      toast(`Comanda #${c.numero} pronta — ${proxima}`, "ok");
+      await carregar();
+    } catch (err) {
+      toast("Erro: " + (err as Error).message, "erro");
+    } finally { setAcao(null); }
+  }
+
+  async function marcarServindo(c: Comanda) {
+    setAcao(c.id);
+    try {
+      await api.servindoComanda(c.id);
+      toast(`Comanda #${c.numero} servida na mesa`, "ok");
+      await carregar();
+    } catch (err) {
+      toast("Erro: " + (err as Error).message, "erro");
+    } finally { setAcao(null); }
+  }
+
+  async function marcarEmEntrega(c: Comanda) {
+    setAcao(c.id);
+    try {
+      await api.emEntregaComanda(c.id);
+      toast(`Comanda #${c.numero} saiu para entrega`, "ok");
       await carregar();
     } catch (err) {
       toast("Erro: " + (err as Error).message, "erro");
@@ -477,8 +558,16 @@ export default function PainelComandas({ user }: Props) {
         mesasPresentes={mesasPresentes}
         filtroMesa={filtroMesa}
         onFiltroMesa={setFiltroMesa}
+        filtroTipo={filtroTipo}
+        onFiltroTipo={setFiltroTipo}
+        contagemTipos={{
+          TODOS: comandas.length,
+          MESA: comandas.filter(c => c.tipo === "MESA").length,
+          VIAGEM: comandas.filter(c => c.tipo === "VIAGEM").length,
+          DELIVERY: comandas.filter(c => c.tipo === "DELIVERY").length,
+        }}
         filtroAtivo={filtroAtivo}
-        onLimparTudo={() => { setBusca(""); setBuscaDebounced(""); setFiltroMesa(null); }}
+        onLimparTudo={() => { setBusca(""); setBuscaDebounced(""); setFiltroMesa(null); setFiltroTipo("TODOS"); }}
       />
 
       {erro && (
@@ -501,6 +590,9 @@ export default function PainelComandas({ user }: Props) {
             cor={C.yellow}
             comandas={novos}
             onAceitar={aceitar}
+            onPronto={null}
+            onServindo={null}
+            onEmEntrega={null}
             onCancelar={(c) => setCancelando(c)}
             onImprimir={imprimirTicket}
             onImprimirBT={imprimirTicketBT}
@@ -514,6 +606,9 @@ export default function PainelComandas({ user }: Props) {
             cor={C.accent}
             comandas={emPrep}
             onAceitar={null}
+            onPronto={marcarPronto}
+            onServindo={null}
+            onEmEntrega={null}
             onCancelar={(c) => setCancelando(c)}
             onImprimir={imprimirTicket}
             onImprimirBT={imprimirTicketBT}
@@ -522,6 +617,58 @@ export default function PainelComandas({ user }: Props) {
             acaoAtual={acao}
             idsRealce={idsRealce}
           />
+          <ColunaKanban
+            titulo="🔔 Pronto"
+            cor="#10b981"
+            comandas={prontos}
+            onAceitar={null}
+            onPronto={null}
+            onServindo={marcarServindo}
+            onEmEntrega={marcarEmEntrega}
+            onCancelar={(c) => setCancelando(c)}
+            onImprimir={imprimirTicket}
+            onImprimirBT={imprimirTicketBT}
+            onCheckout={abrirCheckout}
+            onAbrir={(c) => setDetalhe(c)}
+            acaoAtual={acao}
+            idsRealce={idsRealce}
+          />
+          {mostrarServindo && (
+            <ColunaKanban
+              titulo="🍽 Servindo"
+              cor="#f59e0b"
+              comandas={servindo}
+              onAceitar={null}
+              onPronto={null}
+              onServindo={null}
+              onEmEntrega={null}
+              onCancelar={(c) => setCancelando(c)}
+              onImprimir={imprimirTicket}
+              onImprimirBT={imprimirTicketBT}
+              onCheckout={abrirCheckout}
+              onAbrir={(c) => setDetalhe(c)}
+              acaoAtual={acao}
+              idsRealce={idsRealce}
+            />
+          )}
+          {mostrarEmEntrega && (
+            <ColunaKanban
+              titulo="🛵 Em entrega"
+              cor="#22d3ee"
+              comandas={emEntrega}
+              onAceitar={null}
+              onPronto={null}
+              onServindo={null}
+              onEmEntrega={null}
+              onCancelar={(c) => setCancelando(c)}
+              onImprimir={imprimirTicket}
+              onImprimirBT={imprimirTicketBT}
+              onCheckout={abrirCheckout}
+              onAbrir={(c) => setDetalhe(c)}
+              acaoAtual={acao}
+              idsRealce={idsRealce}
+            />
+          )}
           <ColunaConcluidas
             comandas={concluidas}
             expandida={mostrarConcluidas}
@@ -569,6 +716,7 @@ export default function PainelComandas({ user }: Props) {
 function BarraFiltros({
   busca, onBusca, ordenacao, onOrdenacao,
   mesasPresentes, filtroMesa, onFiltroMesa,
+  filtroTipo, onFiltroTipo, contagemTipos,
   filtroAtivo, onLimparTudo,
 }: {
   busca: string;
@@ -578,6 +726,9 @@ function BarraFiltros({
   mesasPresentes: string[];
   filtroMesa: string | null;
   onFiltroMesa: (v: string | null) => void;
+  filtroTipo: "TODOS" | TipoComanda;
+  onFiltroTipo: (v: "TODOS" | TipoComanda) => void;
+  contagemTipos: { TODOS: number; MESA: number; VIAGEM: number; DELIVERY: number };
   filtroAtivo: boolean;
   onLimparTudo: () => void;
 }) {
@@ -586,12 +737,47 @@ function BarraFiltros({
     { id: "VALOR", label: "Valor", icone: "💰" },
     { id: "MESA", label: "Mesa", icone: "📍" },
   ];
+  const opcTipos: Array<{ id: "TODOS" | TipoComanda; label: string; icone: string }> = [
+    { id: "TODOS", label: "Tudo", icone: "📋" },
+    { id: "MESA", label: "Mesa", icone: TIPO_META.MESA.icone },
+    { id: "VIAGEM", label: "Viagem", icone: TIPO_META.VIAGEM.icone },
+    { id: "DELIVERY", label: "Delivery", icone: TIPO_META.DELIVERY.icone },
+  ];
   return (
     <div style={{
       marginBottom: 12, padding: "10px 12px",
       background: C.card, border: `1px solid ${C.border}`, borderRadius: 10,
       display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center",
     }}>
+      {/* Segmento de tipos — mais alto visualmente (primeiro filtro a aplicar). */}
+      <div style={{
+        display: "flex", gap: 4, padding: 3,
+        background: C.surface, borderRadius: 8, border: `1px solid ${C.border}`,
+        width: "100%",
+      }}>
+        {opcTipos.map(opt => {
+          const ativo = filtroTipo === opt.id;
+          const corBase = opt.id === "TODOS" ? C.accent
+            : opt.id === "MESA" ? TIPO_META.MESA.cor
+            : opt.id === "VIAGEM" ? TIPO_META.VIAGEM.cor
+            : TIPO_META.DELIVERY.cor;
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => onFiltroTipo(opt.id)}
+              style={{
+                flex: 1, padding: "6px 10px", borderRadius: 6,
+                background: ativo ? corBase + "33" : "transparent",
+                border: "none",
+                color: ativo ? corBase : C.muted,
+                fontSize: 12, fontWeight: 700, cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >{opt.icone} {opt.label} <span style={{ opacity: 0.65, fontWeight: 500 }}>· {contagemTipos[opt.id]}</span></button>
+          );
+        })}
+      </div>
       <div style={{ position: "relative", flex: "1 1 240px", minWidth: 200 }}>
         <span style={{
           position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)",
@@ -739,6 +925,9 @@ interface ColunaProps {
   cor: string;
   comandas: Comanda[];
   onAceitar: ((c: Comanda) => void) | null;
+  onPronto: ((c: Comanda) => void) | null;
+  onServindo: ((c: Comanda) => void) | null;
+  onEmEntrega: ((c: Comanda) => void) | null;
   onCancelar: ((c: Comanda) => void) | null;
   onImprimir: (c: Comanda) => void;
   onImprimirBT: (c: Comanda) => void;
@@ -747,7 +936,7 @@ interface ColunaProps {
   acaoAtual: string | null;
   idsRealce: Set<string>;
 }
-function ColunaKanban({ titulo, cor, comandas, onAceitar, onCancelar, onImprimir, onImprimirBT, onCheckout, onAbrir, acaoAtual, idsRealce }: ColunaProps) {
+function ColunaKanban({ titulo, cor, comandas, onAceitar, onPronto, onServindo, onEmEntrega, onCancelar, onImprimir, onImprimirBT, onCheckout, onAbrir, acaoAtual, idsRealce }: ColunaProps) {
   return (
     <div style={{
       background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10,
@@ -775,6 +964,9 @@ function ColunaKanban({ titulo, cor, comandas, onAceitar, onCancelar, onImprimir
               comanda={c}
               cor={cor}
               onAceitar={onAceitar}
+              onPronto={onPronto}
+              onServindo={onServindo}
+              onEmEntrega={onEmEntrega}
               onCancelar={onCancelar}
               onImprimir={onImprimir}
               onImprimirBT={onImprimirBT}
@@ -878,13 +1070,16 @@ function ColunaConcluidas({ comandas, expandida, onToggle, onAbrir }: {
 }
 
 // =====================================================================
-function CardComanda({ comanda, cor, onAceitar, onCancelar, onImprimir, onImprimirBT, onCheckout, onAbrir, acaoAtual, realce }: CardProps) {
+function CardComanda({ comanda, cor, onAceitar, onPronto, onServindo, onEmEntrega, onCancelar, onImprimir, onImprimirBT, onCheckout, onAbrir, acaoAtual, realce }: CardProps) {
   // BT disponivel uma vez por sessao do componente — bluetoothDisponivel
   // checa typeof navigator e nao precisa de re-avaliacao.
   const bt = useMemo(() => bluetoothDisponivel(), []);
-  // Timer ancorado no instante real do servidor — resiste a F5.
-  const desde = comanda.status === "EM_PREPARACAO" && comanda.aceitoEm
-    ? comanda.aceitoEm
+  // Timer ancorado no instante real do servidor — resiste a F5. Cada status
+  // usa o timestamp em que entrou nele (ou criadoEm como fallback).
+  const desde = comanda.status === "SERVINDO" && comanda.servindoEm ? comanda.servindoEm
+    : comanda.status === "EM_ENTREGA" && comanda.emEntregaEm ? comanda.emEntregaEm
+    : comanda.status === "PRONTO" && comanda.prontoEm ? comanda.prontoEm
+    : comanda.status === "EM_PREPARACAO" && comanda.aceitoEm ? comanda.aceitoEm
     : comanda.criadoEm;
   const { minutos, texto } = useTimerPersistente(desde);
   const gargalo = minutos >= LIMITE_GARGALO_MIN;
@@ -941,13 +1136,32 @@ function CardComanda({ comanda, cor, onAceitar, onCancelar, onImprimir, onImprim
         color: C.white, fontWeight: 700, fontSize: 13, cursor: "pointer",
         padding: 0, marginBottom: 4, textAlign: "left",
       }}>
-        <span>#{comanda.numero}{comanda.mesa ? ` · 📍 ${comanda.mesa}` : ""}</span>
+        <span style={{ display: "inline-flex", alignItems: "baseline", gap: 6 }}>
+          <span
+            title={TIPO_META[comanda.tipo].label}
+            style={{
+              fontSize: 10, fontWeight: 800,
+              padding: "1px 6px", borderRadius: 999,
+              background: TIPO_META[comanda.tipo].cor + "22",
+              color: TIPO_META[comanda.tipo].cor,
+              border: `1px solid ${TIPO_META[comanda.tipo].cor}55`,
+              lineHeight: 1.4,
+            }}
+          >{TIPO_META[comanda.tipo].icone} {TIPO_META[comanda.tipo].label}</span>
+          <span>#{comanda.numero}{comanda.mesa ? ` · 📍 ${comanda.mesa}` : ""}</span>
+        </span>
         <span style={{
           fontSize: 11, fontWeight: 600,
           color: gargalo ? C.red : cor,
           fontVariantNumeric: "tabular-nums",
         }}>{texto}{gargalo ? " ⚠" : ""}</span>
       </button>
+      {comanda.tipo === "DELIVERY" && comanda.enderecoEntrega && (
+        <div style={{ color: C.muted, fontSize: 10, marginBottom: 4, fontStyle: "italic" }}>
+          📍 {comanda.enderecoEntrega}
+          {comanda.entregadorNome ? ` · 🛵 ${comanda.entregadorNome}` : ""}
+        </div>
+      )}
 
       <div style={{ color: C.muted, fontSize: 11, marginBottom: 6 }}>
         {itens} {itens === 1 ? "item" : "itens"} ·{" "}
@@ -989,6 +1203,27 @@ function CardComanda({ comanda, cor, onAceitar, onCancelar, onImprimir, onImprim
           <button type="button" onClick={() => onAceitar(comanda)} disabled={ocupado}
             style={btnAcao(C.accent, ocupado)}>
             {ocupado ? "..." : "✓ Aceitar"}
+          </button>
+        )}
+        {onPronto && (
+          <button type="button" onClick={() => onPronto(comanda)} disabled={ocupado}
+            style={btnAcao("#10b981", ocupado)}
+            title="Marcar como pronto (saiu da cozinha/balcão)">
+            🔔 Pronto
+          </button>
+        )}
+        {onServindo && (
+          <button type="button" onClick={() => onServindo(comanda)} disabled={ocupado}
+            style={btnAcao("#f59e0b", ocupado)}
+            title="Garçom entregou na mesa (cliente consumindo)">
+            🍽 Servir
+          </button>
+        )}
+        {onEmEntrega && (
+          <button type="button" onClick={() => onEmEntrega(comanda)} disabled={ocupado}
+            style={btnAcao("#22d3ee", ocupado)}
+            title="Entregador saiu com o pedido">
+            🛵 Entregar
           </button>
         )}
         {onCheckout && (

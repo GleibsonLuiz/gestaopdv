@@ -147,6 +147,43 @@ d:/gestao-pdv/
 
 ## Histórico de sessões
 
+### Sessão — 2026-05-25 (Tipos de comanda MESA/VIAGEM/DELIVERY + estados PRONTO/SERVINDO/EM_ENTREGA)
+
+Refatoração do fluxo de status da Central de Comandas pra separar **produção** (cozinha pronta?) de **comercial** (cliente pagou?). Hoje o fluxo `NOVO→EM_PREPARACAO→CONCLUIDA` colava as duas coisas: comida saía da cozinha e ficava sumida até alguém pagar. Agora a comanda **inteira** muda de status (não item-por-item — decisão explícita do usuário pra começar simples) e a Central tem 3 modos de operação visualmente separados.
+
+**Decisões de UX confirmadas pelo usuário antes da implementação:**
+- Granularidade: comanda inteira (não item-por-item) — bom pra bar/lanchonete/copiadora.
+- Escopo: tudo de uma vez (tipos + estados + Kanban + PdvVolante) em 1 PR.
+
+**Schema/migration:**
+- [backend/prisma/schema.prisma:240-262](backend/prisma/schema.prisma#L240-L262) — novo `enum TipoComanda { MESA, VIAGEM, DELIVERY }` + 3 valores novos em `StatusComanda` (`PRONTO`, `SERVINDO`, `EM_ENTREGA`).
+- [backend/prisma/schema.prisma:1809-1855](backend/prisma/schema.prisma#L1809-L1855) — `Comanda` ganhou `tipo` (default `MESA`), `enderecoEntrega`, `entregadorNome`, `telefoneContato`, e 3 timestamps de transição (`prontoEm`, `servindoEm`, `emEntregaEm`).
+- [backend/prisma/migrations/20260525010000_comanda_tipos_e_status_pronto/migration.sql](backend/prisma/migrations/20260525010000_comanda_tipos_e_status_pronto/migration.sql) — aplicada via `prisma migrate deploy`. Comandas existentes ficam como `MESA` por default (preserva semântica anterior).
+
+**Backend:**
+- [backend/src/controllers/comandaController.js](backend/src/controllers/comandaController.js) `criar()` aceita `tipo` e valida: `DELIVERY` exige `enderecoEntrega`, `MESA` é o único que usa o campo `mesa`, outros tipos ignoram.
+- 3 novos endpoints: `PATCH /comandas/:id/pronto` (EM_PREP/NOVO → PRONTO), `PATCH /comandas/:id/servindo` (PRONTO → SERVINDO, só MESA), `PATCH /comandas/:id/em-entrega` (PRONTO → EM_ENTREGA, só DELIVERY, aceita `entregadorNome` no body).
+- `adicionarItens()` ganhou regra: se a comanda estava em PRONTO/SERVINDO, **volta automaticamente para EM_PREPARACAO** (cozinha re-acionada) e zera `prontoEm`/`servindoEm`. Bloqueia em EM_ENTREGA (entregador já saiu).
+- `listarAbertas()` agora retorna NOVO/EM_PREP/PRONTO/SERVINDO (era só NOVO/EM_PREP), filtrando `tipo: MESA` — VIAGEM/DELIVERY não usam o campo `mesa`.
+- `listar()` aceita `?tipo=MESA,VIAGEM` e retorna os 5 status abertos por default (era 2).
+- `resumo()` retorna contagens separadas: `novos`, `emPreparacao`, `prontos`, `servindo`, `emEntrega`, `concluidasHoje`, `faturamentoHoje`.
+- Broadcast SSE: 3 eventos novos `pronto`, `servindo`, `em-entrega` + `atualizada` quando adendo cai.
+
+**Central de Comandas ([src/PainelComandas.tsx](src/PainelComandas.tsx)):**
+- Barra de filtros ganhou segmento `[📋 Tudo] [🍽 Mesa] [📦 Viagem] [🛵 Delivery]` com contagem. Filtro persiste em localStorage.
+- Kanban com **colunas dinâmicas**: Novos, Em preparação e Pronto aparecem sempre. **Servindo** só em modo MESA/TUDO. **Em entrega** só em DELIVERY/TUDO. `concluidasHoje` segue como última coluna colapsável.
+- Cada card mostra badge colorida do tipo (🍽 âmbar / 📦 violeta / 🛵 ciano) ao lado do `#numero`. DELIVERY exibe endereço + entregador no rodapé do card.
+- Botões de ação por status: "✓ Aceitar" (NOVO), "🔔 Pronto" (EM_PREP), "🍽 Servir" (PRONTO/MESA), "🛵 Entregar" (PRONTO/DELIVERY), "💰 Fechar venda" (qualquer aberto).
+- Timer persistente agora ancora no timestamp do **status atual** (servindoEm > emEntregaEm > prontoEm > aceitoEm > criadoEm) — cronômetro mostra "5min servindo", não "1h desde que abriu a comanda".
+
+**PDV Volante ([src/PdvVolante.tsx](src/PdvVolante.tsx)):**
+- Seletor segmentado de tipo no topo (`🍽 Mesa | 📦 Viagem | 🛵 Delivery`). Persistido pro vendedor de delivery não reescolher a cada pedido.
+- Chip de mesa **só aparece em MESA**. VIAGEM/DELIVERY mostram inputs `endereço de entrega *` (obrigatório em DELIVERY, validado client+server), `telefone`, `entregador` (DELIVERY).
+- Banner "essa mesa já tem comanda aberta" agora só dispara em modo MESA (faz sentido — VIAGEM/DELIVERY não tem mesa).
+- Após enviar, `entregadorNome` é limpo (varia entre pedidos) mas `enderecoEntrega`/`telefoneContato` persistem (pra repetir pedido do mesmo cliente sem redigitar).
+
+**Pegadinha Windows EPERM:** o `prisma generate` ficou bloqueado de novo pelo backend rodando — migration aplicada, mas o usuário precisa parar o backend e rodar `npx prisma generate` antes de reiniciar.
+
 ### Sessão — 2026-05-25 (Adicionar itens a comanda existente — PDV Volante + Central)
 
 Encerra o gap conceitual da Central de Comandas: até então, todo "pediu mais um?" virava uma comanda nova no Kanban, inflando o painel e quebrando o conceito de "consumo da mesa". Agora a mesa pode ter UMA comanda aberta que recebe adições ao longo da permanência, e a cozinha imprime só os itens novos (adendo).

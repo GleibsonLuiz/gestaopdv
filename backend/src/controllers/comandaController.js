@@ -15,7 +15,12 @@ import { criar as criarVenda } from "./vendaController.js";
 import { registrar as sseRegistrar, broadcast as sseBroadcast } from "../lib/sseHub.js";
 import jwt from "jsonwebtoken";
 
-const STATUS_VALIDOS = new Set(["NOVO", "EM_PREPARACAO", "CONCLUIDA", "CANCELADA"]);
+const STATUS_VALIDOS = new Set([
+  "NOVO", "EM_PREPARACAO", "PRONTO", "SERVINDO", "EM_ENTREGA", "CONCLUIDA", "CANCELADA",
+]);
+const TIPOS_VALIDOS = new Set(["MESA", "VIAGEM", "DELIVERY"]);
+// Status considerados "abertos" — comanda ainda no Kanban (nao concluida/cancelada).
+const STATUS_ABERTOS = ["NOVO", "EM_PREPARACAO", "PRONTO", "SERVINDO", "EM_ENTREGA"];
 
 const INCLUDE_LISTA = {
   cliente: { select: { id: true, nome: true } },
@@ -75,8 +80,14 @@ export async function listar(req, res, next) {
     }
     const status = req.query.status
       ? String(req.query.status).split(",").filter(s => STATUS_VALIDOS.has(s))
-      : ["NOVO", "EM_PREPARACAO"];
-    const where = status.length ? { status: { in: status } } : {};
+      : STATUS_ABERTOS;
+    const tipoQuery = req.query.tipo
+      ? String(req.query.tipo).split(",").filter(t => TIPOS_VALIDOS.has(t))
+      : null;
+    const where = {
+      ...(status.length ? { status: { in: status } } : {}),
+      ...(tipoQuery && tipoQuery.length ? { tipo: { in: tipoQuery } } : {}),
+    };
     const comandas = await prisma.comanda.findMany({
       where,
       include: INCLUDE_LISTA,
@@ -99,12 +110,21 @@ export async function obter(req, res, next) {
 }
 
 // POST /comandas — chamado pelo PDV Volante Mobile.
-// body: { mesa?, observacoes?, clienteId?, itens: [{ produtoId, quantidade, precoUnitario }] }
+// body: { tipo?, mesa?, observacoes?, clienteId?, enderecoEntrega?,
+//   entregadorNome?, telefoneContato?, itens: [{ produtoId, quantidade, precoUnitario }] }
 export async function criar(req, res, next) {
   try {
     const itens = Array.isArray(req.body?.itens) ? req.body.itens : [];
     if (itens.length === 0) {
       return res.status(400).json({ erro: "Comanda precisa ter ao menos 1 item" });
+    }
+    const tipo = req.body?.tipo && TIPOS_VALIDOS.has(req.body.tipo)
+      ? req.body.tipo
+      : "MESA";
+    // Regras minimas por tipo: DELIVERY exige endereco, VIAGEM e DELIVERY
+    // recomendam telefone (mas nao bloqueia — usuario pode preencher depois).
+    if (tipo === "DELIVERY" && !req.body?.enderecoEntrega) {
+      return res.status(400).json({ erro: "Pedido DELIVERY exige endereco de entrega" });
     }
     const userId = req.user?.sub || null;
     const tenantId = req.tenantId;
@@ -160,8 +180,16 @@ export async function criar(req, res, next) {
     const comanda = await prisma.comanda.create({
       data: {
         numero,
+        tipo,
         status: "NOVO",
-        mesa: req.body.mesa ? String(req.body.mesa).slice(0, 80) : null,
+        // MESA usa o campo `mesa`; VIAGEM/DELIVERY ignoram (no MAX 80 char).
+        mesa: tipo === "MESA" && req.body.mesa ? String(req.body.mesa).slice(0, 80) : null,
+        enderecoEntrega: tipo === "DELIVERY" && req.body.enderecoEntrega
+          ? String(req.body.enderecoEntrega).slice(0, 300) : null,
+        entregadorNome: tipo === "DELIVERY" && req.body.entregadorNome
+          ? String(req.body.entregadorNome).slice(0, 120) : null,
+        telefoneContato: (tipo === "VIAGEM" || tipo === "DELIVERY") && req.body.telefoneContato
+          ? String(req.body.telefoneContato).slice(0, 30) : null,
         observacoes: req.body.observacoes ? String(req.body.observacoes).slice(0, 500) : null,
         total,
         desconto,
@@ -193,7 +221,7 @@ export async function adicionarItens(req, res, next) {
     const tenantId = req.tenantId;
     const comandaAtual = await prisma.comanda.findUnique({
       where: { id: req.params.id },
-      select: { id: true, status: true, total: true, desconto: true, numero: true },
+      select: { id: true, status: true, tipo: true, total: true, desconto: true, numero: true },
     });
     if (!comandaAtual) return res.status(404).json({ erro: "Comanda nao encontrada" });
     if (comandaAtual.status === "CONCLUIDA") {
@@ -201,6 +229,10 @@ export async function adicionarItens(req, res, next) {
     }
     if (comandaAtual.status === "CANCELADA") {
       return res.status(400).json({ erro: "Comanda cancelada — abra uma nova" });
+    }
+    // DELIVERY: entregador ja saiu com o pedido. Adicionar agora nao chega.
+    if (comandaAtual.status === "EM_ENTREGA") {
+      return res.status(400).json({ erro: "Pedido ja saiu para entrega — nao da pra adicionar" });
     }
 
     // Valida produtos e prepara itens (mesma logica de criar()).
@@ -236,12 +268,21 @@ export async function adicionarItens(req, res, next) {
     // aos itens adicionados depois; UX mais previsivel pro caixa).
     const novoTotal = Number((Number(comandaAtual.total) + subtotalNovos).toFixed(2));
 
+    // Regra: se a comanda ja estava PRONTO/SERVINDO e o cliente pediu mais,
+    // a cozinha precisa preparar o adendo — volta pra EM_PREPARACAO. Os
+    // timestamps `prontoEm`/`servindoEm` sao limpos pra zerar o cronometro
+    // no proximo ciclo de producao. NOVO/EM_PREPARACAO continuam onde estao.
+    const reverter = comandaAtual.status === "PRONTO" || comandaAtual.status === "SERVINDO";
+    const dadosUpdate = reverter
+      ? { total: novoTotal, status: "EM_PREPARACAO", prontoEm: null, servindoEm: null }
+      : { total: novoTotal };
+
     // Cria itens + atualiza total em transacao. Retorna a comanda completa.
     const [_criados, comanda] = await prisma.$transaction([
       prisma.itemComanda.createMany({ data: itensPreparados }),
       prisma.comanda.update({
         where: { id: comandaAtual.id },
-        data: { total: novoTotal },
+        data: dadosUpdate,
         include: INCLUDE_DETALHE,
       }),
     ]);
@@ -263,17 +304,19 @@ export async function adicionarItens(req, res, next) {
   } catch (err) { next(err); }
 }
 
-// GET /comandas/abertas?mesa=Mesa+5 — lista comandas NOVO/EM_PREP para
-// um identificador de mesa. Usado pelo PDV Volante para perguntar
-// "essa mesa ja tem comanda aberta — adicionar ou criar nova?".
+// GET /comandas/abertas?mesa=Mesa+5 — lista comandas abertas (qualquer status
+// pre-CONCLUIDA) na mesa. Usado pelo PDV Volante pra oferecer "adicionar a
+// existente". Filtra so MESA porque os outros tipos nao usam o campo mesa.
+// EM_ENTREGA fica de fora — pedido ja saiu, nao da pra adicionar.
 export async function listarAbertas(req, res, next) {
   try {
     const mesa = req.query.mesa ? String(req.query.mesa).trim() : null;
     if (!mesa) return res.json([]);
     const comandas = await prisma.comanda.findMany({
       where: {
+        tipo: "MESA",
         mesa: { equals: mesa, mode: "insensitive" },
-        status: { in: ["NOVO", "EM_PREPARACAO"] },
+        status: { in: ["NOVO", "EM_PREPARACAO", "PRONTO", "SERVINDO"] },
       },
       include: INCLUDE_LISTA,
       orderBy: { criadoEm: "desc" },
@@ -299,6 +342,91 @@ export async function aceitar(req, res, next) {
       include: INCLUDE_DETALHE,
     });
     sseBroadcast(req.tenantId, "aceita", { id: c.id, numero: c.numero });
+    res.json(c);
+  } catch (err) { next(err); }
+}
+
+// PATCH /comandas/:id/pronto — EM_PREPARACAO -> PRONTO
+// Cozinha terminou de preparar. Toca alerta na coluna PRONTO pra o garcom
+// retirar (MESA) ou cliente buscar (VIAGEM) ou entregador pegar (DELIVERY).
+export async function marcarPronto(req, res, next) {
+  try {
+    const atual = await prisma.comanda.findUnique({
+      where: { id: req.params.id },
+      select: { status: true, tipo: true },
+    });
+    if (!atual) return res.status(404).json({ erro: "Comanda nao encontrada" });
+    if (atual.status !== "EM_PREPARACAO" && atual.status !== "NOVO") {
+      return res.status(400).json({ erro: `Comanda esta em ${atual.status} — nao da pra marcar como PRONTO` });
+    }
+    const c = await prisma.comanda.update({
+      where: { id: req.params.id },
+      data: {
+        status: "PRONTO",
+        prontoEm: new Date(),
+        // Caso pulou EM_PREPARACAO direto de NOVO (raro mas possivel pro
+        // operador agil), registra aceitoEm tambem pra metricas baterem.
+        aceitoEm: atual.status === "NOVO" ? new Date() : undefined,
+      },
+      include: INCLUDE_DETALHE,
+    });
+    sseBroadcast(req.tenantId, "pronto", { id: c.id, numero: c.numero, tipo: c.tipo });
+    res.json(c);
+  } catch (err) { next(err); }
+}
+
+// PATCH /comandas/:id/servindo — PRONTO -> SERVINDO (so MESA)
+// Garcom retirou da cozinha e levou pra mesa. Cliente comecou a consumir.
+// A partir daqui, "adicionar item" e' o caso comum (cliente pede mais).
+export async function marcarServindo(req, res, next) {
+  try {
+    const atual = await prisma.comanda.findUnique({
+      where: { id: req.params.id },
+      select: { status: true, tipo: true },
+    });
+    if (!atual) return res.status(404).json({ erro: "Comanda nao encontrada" });
+    if (atual.tipo !== "MESA") {
+      return res.status(400).json({ erro: "So pedidos MESA passam por SERVINDO" });
+    }
+    if (atual.status !== "PRONTO") {
+      return res.status(400).json({ erro: `Comanda esta em ${atual.status} — precisa estar PRONTO` });
+    }
+    const c = await prisma.comanda.update({
+      where: { id: req.params.id },
+      data: { status: "SERVINDO", servindoEm: new Date() },
+      include: INCLUDE_DETALHE,
+    });
+    sseBroadcast(req.tenantId, "servindo", { id: c.id, numero: c.numero });
+    res.json(c);
+  } catch (err) { next(err); }
+}
+
+// PATCH /comandas/:id/em-entrega — PRONTO -> EM_ENTREGA (so DELIVERY)
+// Entregador pegou o pedido e saiu. Daqui em diante, finalizar (= entregue+pago).
+export async function marcarEmEntrega(req, res, next) {
+  try {
+    const atual = await prisma.comanda.findUnique({
+      where: { id: req.params.id },
+      select: { status: true, tipo: true },
+    });
+    if (!atual) return res.status(404).json({ erro: "Comanda nao encontrada" });
+    if (atual.tipo !== "DELIVERY") {
+      return res.status(400).json({ erro: "So pedidos DELIVERY passam por EM_ENTREGA" });
+    }
+    if (atual.status !== "PRONTO") {
+      return res.status(400).json({ erro: `Comanda esta em ${atual.status} — precisa estar PRONTO` });
+    }
+    const dados = { status: "EM_ENTREGA", emEntregaEm: new Date() };
+    // Permite registrar o nome do entregador na hora da saida (opcional).
+    if (req.body?.entregadorNome) {
+      dados.entregadorNome = String(req.body.entregadorNome).slice(0, 120);
+    }
+    const c = await prisma.comanda.update({
+      where: { id: req.params.id },
+      data: dados,
+      include: INCLUDE_DETALHE,
+    });
+    sseBroadcast(req.tenantId, "em-entrega", { id: c.id, numero: c.numero });
     res.json(c);
   } catch (err) { next(err); }
 }
@@ -429,25 +557,23 @@ export async function stream(req, res, next) {
 // GET /comandas/resumo — KPIs para o dashboard da central
 export async function resumo(req, res, next) {
   try {
-    const [novos, emPrep, hoje, totalHoje] = await Promise.all([
+    const inicioDia = new Date(new Date().setHours(0, 0, 0, 0));
+    const [novos, emPrep, prontos, servindo, emEntrega, hoje, totalHoje] = await Promise.all([
       prisma.comanda.count({ where: { status: "NOVO" } }),
       prisma.comanda.count({ where: { status: "EM_PREPARACAO" } }),
+      prisma.comanda.count({ where: { status: "PRONTO" } }),
+      prisma.comanda.count({ where: { status: "SERVINDO" } }),
+      prisma.comanda.count({ where: { status: "EM_ENTREGA" } }),
       prisma.comanda.count({
-        where: {
-          status: "CONCLUIDA",
-          concluidoEm: { gte: new Date(new Date().setHours(0, 0, 0, 0)) },
-        },
+        where: { status: "CONCLUIDA", concluidoEm: { gte: inicioDia } },
       }),
       prisma.comanda.aggregate({
-        where: {
-          status: "CONCLUIDA",
-          concluidoEm: { gte: new Date(new Date().setHours(0, 0, 0, 0)) },
-        },
+        where: { status: "CONCLUIDA", concluidoEm: { gte: inicioDia } },
         _sum: { total: true },
       }),
     ]);
     res.json({
-      novos, emPreparacao: emPrep,
+      novos, emPreparacao: emPrep, prontos, servindo, emEntrega,
       concluidasHoje: hoje,
       faturamentoHoje: Number(totalHoje?._sum?.total || 0),
     });

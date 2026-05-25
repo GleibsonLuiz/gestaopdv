@@ -238,10 +238,22 @@ enum Segmento {
 // CONCLUIDA: foi paga/finalizada (gera Venda, baixa estoque).
 // CANCELADA: descartada (nao gera venda nem baixa estoque).
 enum StatusComanda {
-  NOVO
-  EM_PREPARACAO
-  CONCLUIDA
+  NOVO            // recem-pedido (pelo PDV Volante ou direto no Kanban)
+  EM_PREPARACAO   // cozinha/balcao aceitou e esta produzindo
+  PRONTO          // produto pronto — aguarda garcom retirar / cliente buscar
+  SERVINDO        // cliente consumindo no local (so MESA) — adicoes caem aqui
+  EM_ENTREGA      // entregador saiu com o pedido (so DELIVERY)
+  CONCLUIDA       // pago (e entregue, no caso de DELIVERY)
   CANCELADA
+}
+
+// Modo de operacao da comanda. Cada tipo segue um sub-fluxo de status
+// diferente: MESA passa por SERVINDO, DELIVERY passa por EM_ENTREGA,
+// VIAGEM vai direto de PRONTO pra CONCLUIDA na retirada.
+enum TipoComanda {
+  MESA      // consumo no local com garcom
+  VIAGEM    // cliente pega no balcao (take-away)
+  DELIVERY  // entregue por motoboy/entregador
 }
 
 // ETAPA 12: tipo da notificacao define cor e icone no banner do usuario.
@@ -1810,18 +1822,30 @@ model Comanda {
   id          String        @id @default(uuid())
   // Numero sequencial por tenant (calculado no controller via MAX+1).
   numero      Int
+  tipo        TipoComanda   @default(MESA)
   status      StatusComanda @default(NOVO)
-  mesa        String?       // identificador livre (mesa 12, balcao 3, etc)
+  mesa        String?       // identificador livre (mesa 12, balcao 3, etc) — so MESA usa
   observacoes String?
+
+  // ====== Campos por tipo ======
+  // DELIVERY: dados do entregador e endereco.
+  enderecoEntrega String?
+  entregadorNome  String?
+  // VIAGEM/DELIVERY: telefone pra contato.
+  telefoneContato String?
 
   total       Decimal       @db.Decimal(10, 2)
   desconto    Decimal?      @db.Decimal(10, 2)
 
-  // Timestamps do fluxo — usados pelo timer persistente do Kanban.
-  criadoEm    DateTime      @default(now())
-  aceitoEm    DateTime?     // movido para EM_PREPARACAO
-  concluidoEm DateTime?     // finalizado (pago)
-  canceladaEm DateTime?
+  // Timestamps do fluxo — usados pelo timer persistente do Kanban e KPIs
+  // operacionais (tempo de producao vs tempo de permanencia).
+  criadoEm     DateTime      @default(now())
+  aceitoEm     DateTime?     // entrou em EM_PREPARACAO
+  prontoEm     DateTime?     // entrou em PRONTO (saiu da cozinha)
+  servindoEm   DateTime?     // entrou em SERVINDO (garcom levou pra mesa)
+  emEntregaEm  DateTime?     // entrou em EM_ENTREGA (entregador pegou)
+  concluidoEm  DateTime?     // finalizado (pago)
+  canceladaEm  DateTime?
 
   // ETAPA#9a: dados de fechamento de venda na mesa.
   formaPagamento String?    // "DINHEIRO" | "PIX" | "CARTAO_CREDITO" | ... (informativo)

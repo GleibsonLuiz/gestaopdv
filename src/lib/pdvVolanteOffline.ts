@@ -19,6 +19,9 @@ export interface ItemCarrinhoVol {
   quantidade: number;
   // Estoque visto no momento da adicao — para mostrar warn no offline.
   estoque?: number;
+  // Observacao do item (ex.: "sem cebola"). Vai pro backend em
+  // itens[i].observacoes (ItemComanda.observacoes — 300 chars).
+  observacoes?: string;
 }
 
 export interface VendaPendente {

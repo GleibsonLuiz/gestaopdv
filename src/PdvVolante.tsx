@@ -75,12 +75,38 @@ export default function PdvVolante() {
   const [editandoMesa, setEditandoMesa] = useState(false);
   const [mesaRascunho, setMesaRascunho] = useState("");
 
+  const [filtroTipo, setFiltroTipo] = useState<"TODOS" | "PRODUTOS" | "SERVICOS">("TODOS");
+
+  const [cliente, setCliente] = useState<{ id: string; nome: string } | null>(() => {
+    try {
+      const raw = localStorage.getItem("gestaopro_pdvvol_cliente");
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  });
+  const [buscandoCliente, setBuscandoCliente] = useState(false);
+
+  // Observacao por item: id do produto sendo editado + texto temporario
+  const [obsItemAlvo, setObsItemAlvo] = useState<string | null>(null);
+  const [obsItemRascunho, setObsItemRascunho] = useState("");
+
   useEffect(() => {
     try {
       if (mesa) localStorage.setItem("gestaopro_pdvvol_mesa", mesa);
       else localStorage.removeItem("gestaopro_pdvvol_mesa");
     } catch {}
   }, [mesa]);
+
+  useEffect(() => {
+    try {
+      if (cliente) localStorage.setItem("gestaopro_pdvvol_cliente", JSON.stringify(cliente));
+      else localStorage.removeItem("gestaopro_pdvvol_cliente");
+    } catch {}
+  }, [cliente]);
+
+  // Feedback tatil curto — silenciosamente ignorado em navegadores sem suporte (iOS Safari).
+  const vibrar = useCallback((ms: number) => {
+    try { if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate(ms); } catch {}
+  }, []);
 
   const segmento: SegmentoEmpresa = (getEmpresa()?.segmento as SegmentoEmpresa) || "GERAL";
 
@@ -156,7 +182,15 @@ export default function PdvVolante() {
       }];
     });
     flashOk(`+ ${p.nome}`);
-  }, [flashOk]);
+    vibrar(30);
+  }, [flashOk, vibrar]);
+
+  // Edita observacao de um item ja no carrinho.
+  const definirObsItem = useCallback((produtoId: string, texto: string) => {
+    setCarrinho(prev => prev.map(i =>
+      i.produtoId === produtoId ? { ...i, observacoes: texto.trim() || undefined } : i
+    ));
+  }, []);
 
   const ajustarQtd = useCallback((produtoId: string, delta: number) => {
     setCarrinho(prev => {
@@ -174,16 +208,28 @@ export default function PdvVolante() {
     setCarrinho(prev => prev.filter(i => i.produtoId !== produtoId));
   }, []);
 
-  // ====== filtro de busca (memoized) ======
+  // ====== filtro de busca + tipo (memoized) ======
   const produtosFiltrados = useMemo(() => {
     const q = buscaAtiva.trim().toLowerCase();
-    if (!q) return produtos;
-    return produtos.filter(p =>
+    let base = produtos;
+    if (filtroTipo === "PRODUTOS") base = base.filter(p => p.tipoItem !== "SERVICO");
+    else if (filtroTipo === "SERVICOS") base = base.filter(p => p.tipoItem === "SERVICO");
+    if (!q) return base;
+    return base.filter(p =>
       p.nome.toLowerCase().includes(q)
       || p.codigo.toLowerCase().includes(q)
       || (p.codigoBarras || "").toLowerCase().includes(q)
     );
-  }, [produtos, buscaAtiva]);
+  }, [produtos, buscaAtiva, filtroTipo]);
+
+  // Contagem por tipo (pra mostrar nos chips de filtro).
+  const contagemTipos = useMemo(() => {
+    let prod = 0, serv = 0;
+    for (const p of produtos) {
+      if (p.tipoItem === "SERVICO") serv++; else prod++;
+    }
+    return { todos: produtos.length, produtos: prod, servicos: serv };
+  }, [produtos]);
 
   // ====== total do carrinho ======
   const total = useMemo(
@@ -225,10 +271,12 @@ export default function PdvVolante() {
       const payload = {
         mesa: mesa.trim() || null,
         observacoes: observacoes.trim() || null,
+        clienteId: cliente?.id || null,
         itens: carrinho.map(i => ({
           produtoId: i.produtoId,
           quantidade: i.quantidade,
           precoUnitario: i.precoUnitario,
+          observacoes: i.observacoes || null,
         })),
       };
       const finalizar = (msg: string, ok: boolean) => {
@@ -266,6 +314,7 @@ export default function PdvVolante() {
       onCancelar={() => setTela("produtos")}
       onLer={(codigo) => {
         setTela("produtos");
+        vibrar(50); // confirmacao tatil do scan independente do hit/miss
         const p = produtos.find(x => x.codigoBarras === codigo || x.codigo === codigo);
         if (p) adicionar(p);
         else flashErro("Código não encontrado: " + codigo);
@@ -288,20 +337,33 @@ export default function PdvVolante() {
           {carrinho.length === 0 ? (
             <div className="text-center text-slate-500 p-12">Carrinho vazio.</div>
           ) : carrinho.map(it => (
-            <div key={it.produtoId} className="px-4 py-3 border-b border-slate-800 flex items-center gap-3">
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-sm truncate">{it.nome}</div>
-                <div className="text-xs text-slate-500 mt-1">{fmtBRL(it.precoUnitario)} cada</div>
+            <div key={it.produtoId} className="px-4 py-3 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-sm truncate">{it.nome}</div>
+                  <div className="text-xs text-slate-500 mt-1">{fmtBRL(it.precoUnitario)} cada · subtotal {fmtBRL(it.precoUnitario * it.quantidade)}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => ajustarQtd(it.produtoId, -1)}
+                    className="w-10 h-10 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-lg text-lg font-bold">−</button>
+                  <div className="min-w-[40px] text-center font-bold">{it.quantidade}</div>
+                  <button type="button" onClick={() => ajustarQtd(it.produtoId, 1)}
+                    className="w-10 h-10 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 rounded-lg text-lg font-bold">+</button>
+                  <button type="button" onClick={() => removerDoCarrinho(it.produtoId)}
+                    className="w-10 h-10 bg-red-700/40 text-red-300 hover:bg-red-700/60 rounded-lg text-lg">×</button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button onClick={() => ajustarQtd(it.produtoId, -1)}
-                  className="w-10 h-10 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-lg text-lg font-bold">−</button>
-                <div className="min-w-[40px] text-center font-bold">{it.quantidade}</div>
-                <button onClick={() => ajustarQtd(it.produtoId, 1)}
-                  className="w-10 h-10 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 rounded-lg text-lg font-bold">+</button>
-                <button onClick={() => removerDoCarrinho(it.produtoId)}
-                  className="w-10 h-10 bg-red-700/40 text-red-300 hover:bg-red-700/60 rounded-lg text-lg">×</button>
-              </div>
+              <button
+                type="button"
+                onClick={() => { setObsItemRascunho(it.observacoes || ""); setObsItemAlvo(it.produtoId); }}
+                className={`mt-2 w-full text-left text-xs px-2.5 py-1.5 rounded-lg border ${
+                  it.observacoes
+                    ? "bg-amber-500/10 border-amber-500/40 text-amber-200"
+                    : "bg-slate-800/50 border-slate-700 text-slate-500 hover:text-slate-300"
+                }`}
+              >
+                💬 {it.observacoes ? it.observacoes : "Adicionar observação no item (sem cebola, mal-passado, etc.)"}
+              </button>
             </div>
           ))}
         </div>
@@ -355,7 +417,7 @@ export default function PdvVolante() {
             </div>
           )}
         </div>
-        <div className="mb-2">
+        <div className="mb-2 flex flex-wrap gap-1.5">
           <button
             type="button"
             onClick={() => { setMesaRascunho(mesa); setEditandoMesa(true); }}
@@ -367,7 +429,7 @@ export default function PdvVolante() {
             title="Identificar mesa, balcão ou comanda"
           >
             <span className="text-sm leading-none">📍</span>
-            {mesa ? <span className="truncate max-w-[180px]">{mesa}</span> : <span>Adicionar mesa / balcão</span>}
+            {mesa ? <span className="truncate max-w-[140px]">{mesa}</span> : <span>Mesa / balcão</span>}
             {mesa && (
               <span
                 role="button"
@@ -375,6 +437,28 @@ export default function PdvVolante() {
                 onClick={(e) => { e.stopPropagation(); setMesa(""); }}
                 className="ml-1 px-1 text-emerald-300/70 hover:text-white"
                 aria-label="Remover mesa"
+              >×</span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setBuscandoCliente(true)}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+              cliente
+                ? "bg-cyan-500/15 border-cyan-500/40 text-cyan-300"
+                : "bg-slate-800 border-slate-700 text-slate-400"
+            }`}
+            title="Vincular cliente"
+          >
+            <span className="text-sm leading-none">👤</span>
+            {cliente ? <span className="truncate max-w-[140px]">{cliente.nome}</span> : <span>Cliente</span>}
+            {cliente && (
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => { e.stopPropagation(); setCliente(null); }}
+                className="ml-1 px-1 text-cyan-300/70 hover:text-white"
+                aria-label="Remover cliente"
               >×</span>
             )}
           </button>
@@ -392,6 +476,29 @@ export default function PdvVolante() {
             title="Escanear">
             📷
           </button>
+        </div>
+        <div className="mt-2 flex gap-1.5 text-xs">
+          {([
+            ["TODOS", "Tudo", contagemTipos.todos],
+            ["PRODUTOS", "Produtos", contagemTipos.produtos],
+            ["SERVICOS", "Serviços", contagemTipos.servicos],
+          ] as const).map(([k, label, n]) => {
+            const ativo = filtroTipo === k;
+            return (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setFiltroTipo(k)}
+                className={`flex-1 px-2 py-1.5 rounded-lg font-semibold border transition-colors ${
+                  ativo
+                    ? "bg-emerald-500 border-emerald-500 text-white"
+                    : "bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                {label} <span className={ativo ? "text-emerald-100" : "text-slate-500"}>· {n}</span>
+              </button>
+            );
+          })}
         </div>
       </header>
 
@@ -441,6 +548,25 @@ export default function PdvVolante() {
             setEditandoMesa(false);
           }}
           onLimpar={() => { setMesa(""); setEditandoMesa(false); }}
+        />
+      )}
+      {buscandoCliente && (
+        <ClienteModal
+          atual={cliente}
+          onCancelar={() => setBuscandoCliente(false)}
+          onSelecionar={(c) => { setCliente(c); setBuscandoCliente(false); }}
+          onLimpar={() => { setCliente(null); setBuscandoCliente(false); }}
+        />
+      )}
+      {obsItemAlvo && (
+        <ObsItemModal
+          valor={obsItemRascunho}
+          onChange={setObsItemRascunho}
+          onCancelar={() => setObsItemAlvo(null)}
+          onSalvar={() => {
+            definirObsItem(obsItemAlvo, obsItemRascunho);
+            setObsItemAlvo(null);
+          }}
         />
       )}
     </div>
@@ -505,6 +631,157 @@ function FlashView({ msg, tipo }: { msg: string; tipo: "ok" | "erro" }) {
       tipo === "ok" ? "bg-emerald-500 text-white" : "bg-red-500 text-white"
     }`}>
       {msg}
+    </div>
+  );
+}
+
+// =====================================================================
+// ClienteModal — busca cliente no CRM e vincula a comanda.
+// Faz busca server-side com debounce de 300ms para evitar martelar a API.
+// =====================================================================
+interface ClienteMin { id: string; nome: string; cpfCnpj?: string | null; telefone?: string | null; }
+function ClienteModal({ atual, onCancelar, onSelecionar, onLimpar }: {
+  atual: { id: string; nome: string } | null;
+  onCancelar: () => void;
+  onSelecionar: (c: { id: string; nome: string }) => void;
+  onLimpar: () => void;
+}) {
+  const [termo, setTermo] = useState("");
+  const [lista, setLista] = useState<ClienteMin[]>([]);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    let cancelado = false;
+    const t = setTimeout(async () => {
+      setCarregando(true);
+      setErro("");
+      try {
+        const resp: any = await api.listarClientes(termo ? { search: termo, ativo: "true" } : { ativo: "true" });
+        if (cancelado) return;
+        const arr: ClienteMin[] = Array.isArray(resp) ? resp : (resp?.clientes || []);
+        setLista(arr.slice(0, 50));
+      } catch (err) {
+        if (!cancelado) setErro((err as Error).message || "Falha ao buscar clientes");
+      } finally {
+        if (!cancelado) setCarregando(false);
+      }
+    }, 300);
+    return () => { cancelado = true; clearTimeout(t); };
+  }, [termo]);
+
+  return (
+    <div
+      className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-3"
+      onClick={onCancelar}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-4 shadow-2xl pb-[max(16px,env(safe-area-inset-bottom))] max-h-[80vh] flex flex-col"
+      >
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-xl">👤</span>
+          <h2 className="font-bold flex-1">Vincular cliente</h2>
+          <button type="button" onClick={onCancelar} className="text-slate-400 text-2xl px-2" aria-label="Fechar">×</button>
+        </div>
+        <input
+          autoFocus
+          value={termo}
+          onChange={(e) => setTermo(e.target.value)}
+          placeholder="Buscar nome, CPF/CNPJ ou telefone…"
+          className="w-full px-3 py-3 bg-slate-800 border border-slate-700 rounded-lg text-sm focus:border-cyan-500 focus:outline-none mb-3"
+        />
+        <div className="flex-1 overflow-y-auto -mx-1 px-1">
+          {carregando && lista.length === 0 ? (
+            <div className="text-center text-slate-500 text-sm py-6">Buscando…</div>
+          ) : erro ? (
+            <div className="text-red-300 text-sm py-4 text-center">{erro}</div>
+          ) : lista.length === 0 ? (
+            <div className="text-center text-slate-500 text-sm py-6">Nenhum cliente encontrado.</div>
+          ) : (
+            <div className="flex flex-col gap-1">
+              {lista.map(c => {
+                const selecionado = atual?.id === c.id;
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => onSelecionar({ id: c.id, nome: c.nome })}
+                    className={`text-left px-3 py-2 rounded-lg border ${
+                      selecionado
+                        ? "bg-cyan-500/15 border-cyan-500/40"
+                        : "bg-slate-800 border-slate-700 hover:border-slate-600"
+                    }`}
+                  >
+                    <div className="font-semibold text-sm truncate">{c.nome}</div>
+                    {(c.cpfCnpj || c.telefone) && (
+                      <div className="text-[11px] text-slate-500 truncate">
+                        {[c.cpfCnpj, c.telefone].filter(Boolean).join(" · ")}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        {atual && (
+          <button
+            type="button"
+            onClick={onLimpar}
+            className="mt-3 px-4 py-2.5 rounded-lg bg-slate-800 text-slate-300 text-sm font-medium border border-slate-700"
+          >Desvincular cliente atual ({atual.nome})</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// ObsItemModal — observacao por item (vai em itens[i].observacoes).
+// =====================================================================
+function ObsItemModal({ valor, onChange, onCancelar, onSalvar }: {
+  valor: string;
+  onChange: (v: string) => void;
+  onCancelar: () => void;
+  onSalvar: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-3"
+      onClick={onCancelar}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-4 shadow-2xl pb-[max(16px,env(safe-area-inset-bottom))]"
+      >
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-xl">💬</span>
+          <h2 className="font-bold flex-1">Observação do item</h2>
+          <button type="button" onClick={onCancelar} className="text-slate-400 text-2xl px-2" aria-label="Fechar">×</button>
+        </div>
+        <textarea
+          autoFocus
+          value={valor}
+          onChange={(e) => onChange(e.target.value.slice(0, 300))}
+          rows={3}
+          placeholder="Ex.: sem cebola · mal-passado · embrulhar separado"
+          className="w-full px-3 py-3 bg-slate-800 border border-slate-700 rounded-lg text-sm focus:border-amber-500 focus:outline-none resize-none mb-1"
+        />
+        <div className="text-[11px] text-slate-500 mb-3 text-right">{valor.length}/300</div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => { onChange(""); onSalvar(); }}
+            className="px-4 py-2.5 rounded-lg bg-slate-800 text-slate-300 text-sm font-medium border border-slate-700"
+          >Limpar</button>
+          <button
+            type="button"
+            onClick={onSalvar}
+            className="flex-1 px-4 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-white font-bold text-sm"
+          >Salvar</button>
+        </div>
+      </div>
     </div>
   );
 }

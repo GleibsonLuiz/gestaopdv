@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { api } from "./lib/api";
+import { api, getEmpresa } from "./lib/api";
 import { C } from "./lib/theme";
-import type { SessionUser } from "./lib/api";
+import type { SessionUser, SegmentoEmpresa } from "./lib/api";
+import { gerarComandosPedido } from "./lib/escposPedido";
+import { imprimirViaBluetooth, bluetoothDisponivel } from "./lib/webBluetoothPrint";
 
 // =====================================================================
 // ETAPA#8b — Central de Comandas (Kanban /painel-comandas)
@@ -318,17 +320,63 @@ export default function PainelComandas({ user }: Props) {
   }
 
   async function imprimirTicket(c: Comanda) {
-    // Reusa o caminho de impressao do navegador via janela escondida —
-    // pra ESC/POS Bluetooth direto, ver lib/escposPedido + webBluetoothPrint
-    // (a feature ja esta disponivel no PDV principal). Aqui usamos
-    // window.print() apenas como atalho rapido enquanto a tela de checkout
-    // (ETAPA#9a) e desenvolvida.
+    // Fallback do navegador — abre o modal de detalhe e dispara o
+    // dialogo de impressao do browser. Util quando nao ha impressora
+    // Bluetooth pareada (ver imprimirTicketBT abaixo).
     try {
       const completa = await api.obterComanda(c.id) as Comanda;
       setDetalhe(completa);
       setTimeout(() => window.print(), 300);
     } catch (err) {
       toast("Erro ao carregar comanda: " + (err as Error).message, "erro");
+    }
+  }
+
+  // Impressao direta via Bluetooth ESC/POS — sem dialogo do navegador.
+  // Carrega a comanda completa (precisa de camposSegmento dos itens),
+  // gera o stream binario reusando o mesmo gerador do PDV, e envia.
+  // Imprime cupom de COMANDA (sem forma de pagamento, com linha de
+  // assinatura do vendedor — entrega pra cozinha/balcao).
+  async function imprimirTicketBT(c: Comanda) {
+    setAcao(c.id);
+    try {
+      const empresa = getEmpresa();
+      const segmento: SegmentoEmpresa = empresa?.segmento || "GERAL";
+      const completa = await api.obterComanda(c.id) as Comanda;
+      const cmds = gerarComandosPedido(
+        {
+          numero: completa.numero,
+          createdAt: completa.criadoEm,
+          total: completa.total,
+          cliente: completa.cliente,
+          user: completa.user,
+          itens: (completa.itens || []).map(it => ({
+            quantidade: it.quantidade,
+            precoUnitario: it.precoUnitario,
+            subtotal: it.subtotal,
+            produto: it.produto || undefined,
+          })),
+          observacoes: completa.observacoes,
+        },
+        {
+          nome: empresa?.nome,
+          cnpj: empresa?.cnpj,
+          telefone: typeof empresa?.telefone === "string" ? empresa.telefone : undefined,
+        },
+        {
+          larguraMm: 80,
+          segmento,
+          cortarPapel: true,
+          vendedorAssinatura: true,
+          mensagemRodape: completa.mesa ? `Entregar em: ${completa.mesa}` : null,
+        },
+      );
+      await imprimirViaBluetooth(cmds);
+      toast(`Comanda #${c.numero} enviada pra impressora`, "ok");
+    } catch (err) {
+      toast("Falha na impressão Bluetooth: " + (err as Error).message, "erro");
+    } finally {
+      setAcao(null);
     }
   }
 
@@ -399,6 +447,7 @@ export default function PainelComandas({ user }: Props) {
             onAceitar={aceitar}
             onCancelar={(c) => setCancelando(c)}
             onImprimir={imprimirTicket}
+            onImprimirBT={imprimirTicketBT}
             onCheckout={null}
             onAbrir={(c) => setDetalhe(c)}
             acaoAtual={acao}
@@ -411,6 +460,7 @@ export default function PainelComandas({ user }: Props) {
             onAceitar={null}
             onCancelar={(c) => setCancelando(c)}
             onImprimir={imprimirTicket}
+            onImprimirBT={imprimirTicketBT}
             onCheckout={abrirCheckout}
             onAbrir={(c) => setDetalhe(c)}
             acaoAtual={acao}
@@ -631,12 +681,13 @@ interface ColunaProps {
   onAceitar: ((c: Comanda) => void) | null;
   onCancelar: ((c: Comanda) => void) | null;
   onImprimir: (c: Comanda) => void;
+  onImprimirBT: (c: Comanda) => void;
   onCheckout: ((c: Comanda) => void) | null;
   onAbrir: (c: Comanda) => void;
   acaoAtual: string | null;
   idsRealce: Set<string>;
 }
-function ColunaKanban({ titulo, cor, comandas, onAceitar, onCancelar, onImprimir, onCheckout, onAbrir, acaoAtual, idsRealce }: ColunaProps) {
+function ColunaKanban({ titulo, cor, comandas, onAceitar, onCancelar, onImprimir, onImprimirBT, onCheckout, onAbrir, acaoAtual, idsRealce }: ColunaProps) {
   return (
     <div style={{
       background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10,
@@ -666,6 +717,7 @@ function ColunaKanban({ titulo, cor, comandas, onAceitar, onCancelar, onImprimir
               onAceitar={onAceitar}
               onCancelar={onCancelar}
               onImprimir={onImprimir}
+              onImprimirBT={onImprimirBT}
               onCheckout={onCheckout}
               onAbrir={onAbrir}
               acaoAtual={acaoAtual}
@@ -766,7 +818,10 @@ function ColunaConcluidas({ comandas, expandida, onToggle, onAbrir }: {
 }
 
 // =====================================================================
-function CardComanda({ comanda, cor, onAceitar, onCancelar, onImprimir, onCheckout, onAbrir, acaoAtual, realce }: CardProps) {
+function CardComanda({ comanda, cor, onAceitar, onCancelar, onImprimir, onImprimirBT, onCheckout, onAbrir, acaoAtual, realce }: CardProps) {
+  // BT disponivel uma vez por sessao do componente — bluetoothDisponivel
+  // checa typeof navigator e nao precisa de re-avaliacao.
+  const bt = useMemo(() => bluetoothDisponivel(), []);
   // Timer ancorado no instante real do servidor — resiste a F5.
   const desde = comanda.status === "EM_PREPARACAO" && comanda.aceitoEm
     ? comanda.aceitoEm
@@ -883,10 +938,19 @@ function CardComanda({ comanda, cor, onAceitar, onCancelar, onImprimir, onChecko
           </button>
         )}
         <button type="button" onClick={() => onImprimir(comanda)} disabled={ocupado}
-          aria-label="Imprimir comanda"
+          aria-label="Imprimir comanda (navegador)"
+          title="Imprimir via navegador"
           style={btnAcao(C.muted, ocupado, true)}>
           🖨️
         </button>
+        {bt && (
+          <button type="button" onClick={() => onImprimirBT(comanda)} disabled={ocupado}
+            aria-label="Imprimir via Bluetooth (ESC/POS)"
+            title="Imprimir via Bluetooth (impressora térmica pareada)"
+            style={btnAcao(C.accent, ocupado, true)}>
+            🔌
+          </button>
+        )}
         {onCancelar && (
           <button type="button" onClick={() => onCancelar(comanda)} disabled={ocupado}
             aria-label="Cancelar comanda"

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { api, getEmpresa } from "./lib/api";
+import { api, getEmpresa, getToken, BASE_URL } from "./lib/api";
 import { C } from "./lib/theme";
 import type { SessionUser, SegmentoEmpresa } from "./lib/api";
 import { gerarComandosPedido } from "./lib/escposPedido";
@@ -117,6 +117,7 @@ export default function PainelComandas({ user }: Props) {
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audioRef = useRef<{ ctx?: AudioContext }>({});
   const totalAbertasRef = useRef(0);
+  const [sseAtivo, setSseAtivo] = useState(false);
 
   // Beep curto via Web Audio (singleton AudioContext).
   const beep = useCallback((freq: number, dur: number) => {
@@ -194,15 +195,45 @@ export default function PainelComandas({ user }: Props) {
     }
   }, [beep]);
 
-  // Polling adaptativo: timeout encadeado, reage a comandas.length sem
-  // depender de variavel mutavel num setInterval estatico.
+  // SSE: abre uma vez no mount, reconecta automatico via EventSource.
+  // Eventos disparam carregar() — payload do evento e' pequeno, refetch
+  // garante consistencia (filtros/ordenacao re-aplicados, paralelo com
+  // a 2a chamada de concluidas hoje).
+  useEffect(() => {
+    const token = getToken();
+    if (!token || typeof EventSource === "undefined") return;
+    let cancelado = false;
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource(`${BASE_URL}/comandas/stream?token=${encodeURIComponent(token)}`);
+      es.addEventListener("hello", () => { if (!cancelado) setSseAtivo(true); });
+      const refresh = () => { if (!cancelado) carregar(); };
+      es.addEventListener("nova", refresh);
+      es.addEventListener("aceita", refresh);
+      es.addEventListener("cancelada", refresh);
+      es.addEventListener("concluida", refresh);
+      // onerror dispara tanto em falha quanto durante a reconexao automatica
+      // do browser. Marca inativo — UI cai pra polling rapido enquanto isso.
+      es.onerror = () => { if (!cancelado) setSseAtivo(false); };
+    } catch { /* sem SSE, polling segura */ }
+    return () => {
+      cancelado = true;
+      if (es) es.close();
+      setSseAtivo(false);
+    };
+  }, [carregar]);
+
+  // Polling: rapido (3-10s) sem SSE; lento (30s) com SSE ativo, so como
+  // seguranca caso um evento se perca. Adapta sozinho via sseAtivoRef.
   useEffect(() => {
     let cancelado = false;
     async function tick() {
       if (cancelado) return;
       await carregar();
       if (cancelado) return;
-      const delay = totalAbertasRef.current > 0 ? POLL_MS_OCUPADO : POLL_MS_VAZIO;
+      const delay = sseAtivo
+        ? 30_000
+        : (totalAbertasRef.current > 0 ? POLL_MS_OCUPADO : POLL_MS_VAZIO);
       pollRef.current = setTimeout(tick, delay);
     }
     tick();
@@ -210,8 +241,7 @@ export default function PainelComandas({ user }: Props) {
       cancelado = true;
       if (pollRef.current) clearTimeout(pollRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [carregar]);
+  }, [carregar, sseAtivo]);
 
   // Debounce de busca (200ms) — evita re-filtrar a cada tecla.
   useEffect(() => {
@@ -392,8 +422,34 @@ export default function PainelComandas({ user }: Props) {
         }}>
           <div>
             <div style={{ color: C.white, fontSize: 16, fontWeight: 700 }}>🍽️ Central de Comandas</div>
-            <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>
-              Atualiza a cada {POLL_MS_OCUPADO / 1000}s com fila / {POLL_MS_VAZIO / 1000}s vazio · timer persistente (resiste a F5) · som ao chegar pedido
+            <div style={{ color: C.muted, fontSize: 12, marginTop: 2, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{
+                display: "inline-flex", alignItems: "center", gap: 4,
+                padding: "1px 8px", borderRadius: 999,
+                background: sseAtivo ? C.green + "22" : C.muted + "22",
+                color: sseAtivo ? C.green : C.muted,
+                fontSize: 10, fontWeight: 700,
+              }}>
+                <span style={{
+                  width: 6, height: 6, borderRadius: "50%",
+                  background: sseAtivo ? C.green : C.muted,
+                  boxShadow: sseAtivo ? `0 0 6px ${C.green}` : "none",
+                  animation: sseAtivo ? "pulse-live 1.6s ease-in-out infinite" : "none",
+                }} />
+                {sseAtivo ? "AO VIVO" : "POLLING"}
+              </span>
+              <span>
+                {sseAtivo
+                  ? `eventos em tempo real · refresh extra a cada 30s`
+                  : `atualiza a cada ${POLL_MS_OCUPADO / 1000}s com fila / ${POLL_MS_VAZIO / 1000}s vazio`}
+              </span>
+              <span>· timer persistente · som ao chegar pedido</span>
+              <style>{`
+                @keyframes pulse-live {
+                  0%, 100% { opacity: 1; }
+                  50% { opacity: 0.4; }
+                }
+              `}</style>
             </div>
           </div>
           <div style={{ display: "flex", gap: 12 }}>

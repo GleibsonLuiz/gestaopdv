@@ -12,6 +12,8 @@
 import prisma from "../lib/prisma.js";
 import { aplicarLimite } from "../lib/planoLimites.js";
 import { criar as criarVenda } from "./vendaController.js";
+import { registrar as sseRegistrar, broadcast as sseBroadcast } from "../lib/sseHub.js";
+import jwt from "jsonwebtoken";
 
 const STATUS_VALIDOS = new Set(["NOVO", "EM_PREPARACAO", "CONCLUIDA", "CANCELADA"]);
 
@@ -169,6 +171,7 @@ export async function criar(req, res, next) {
       },
       include: INCLUDE_DETALHE,
     });
+    sseBroadcast(tenantId, "nova", { id: comanda.id, numero: comanda.numero, mesa: comanda.mesa });
     res.status(201).json(comanda);
   } catch (err) {
     if (err.code === "P2002") return res.status(409).json({ erro: "Numero de comanda em uso, tente novamente" });
@@ -191,6 +194,7 @@ export async function aceitar(req, res, next) {
       data: { status: "EM_PREPARACAO", aceitoEm: new Date() },
       include: INCLUDE_DETALHE,
     });
+    sseBroadcast(req.tenantId, "aceita", { id: c.id, numero: c.numero });
     res.json(c);
   } catch (err) { next(err); }
 }
@@ -217,6 +221,7 @@ export async function cancelar(req, res, next) {
       },
       include: INCLUDE_DETALHE,
     });
+    sseBroadcast(req.tenantId, "cancelada", { id: c.id, numero: c.numero });
     res.json(c);
   } catch (err) { next(err); }
 }
@@ -279,7 +284,41 @@ export async function finalizar(req, res, next) {
       },
       include: INCLUDE_DETALHE,
     });
+    sseBroadcast(req.tenantId, "concluida", { id: finalizada.id, numero: finalizada.numero });
     res.json({ comanda: finalizada, venda: resFake._body });
+  } catch (err) { next(err); }
+}
+
+// GET /comandas/stream — Server-Sent Events.
+// Autenticacao via query ?token=...  porque EventSource nao permite
+// headers customizados. Token e' o mesmo JWT do header Authorization
+// (curto-vivido, expira junto). Aceita tambem header Bearer normal
+// pra clientes que conseguem injetar (proxies, fetch+ReadableStream).
+export async function stream(req, res, next) {
+  try {
+    let payload;
+    const auth = req.headers.authorization;
+    let raw = null;
+    if (auth && auth.startsWith("Bearer ")) raw = auth.slice(7);
+    else if (req.query.token) raw = String(req.query.token);
+    if (!raw) return res.status(401).json({ erro: "Token nao fornecido" });
+    try { payload = jwt.verify(raw, process.env.JWT_SECRET); }
+    catch { return res.status(401).json({ erro: "Token invalido ou expirado" }); }
+    if (!payload.tid) return res.status(401).json({ erro: "Token sem tenant" });
+
+    // Headers SSE — flushHeaders garante que o cliente recebe o status
+    // 200 imediatamente, em vez de esperar o primeiro write.
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      "Connection": "keep-alive",
+      "X-Accel-Buffering": "no", // desabilita buffering do nginx
+    });
+    res.flushHeaders?.();
+
+    sseRegistrar(payload.tid, res);
+    // Nao chama res.end() — a conexao fica aberta ate o cliente fechar
+    // ou cair (handler de "close" no hub faz cleanup).
   } catch (err) { next(err); }
 }
 

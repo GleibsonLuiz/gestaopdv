@@ -97,6 +97,10 @@ export default function PainelComandas({ user }: Props) {
   const [checkout, setCheckout] = useState<Comanda | null>(null);
   const [cancelando, setCancelando] = useState<Comanda | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [busca, setBusca] = useState("");
+  const [buscaDebounced, setBuscaDebounced] = useState("");
+  const [ordenacao, setOrdenacao] = useState<"TEMPO" | "VALOR" | "MESA">("TEMPO");
+  const [filtroMesa, setFiltroMesa] = useState<string | null>(null);
   const [idsRealce, setIdsRealce] = useState<Set<string>>(() => new Set());
   const idsConhecidosRef = useRef<Set<string>>(new Set());
   const primeiroLoadRef = useRef(true);
@@ -193,8 +197,60 @@ export default function PainelComandas({ user }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [carregar]);
 
-  const novos = comandas.filter(c => c.status === "NOVO");
-  const emPrep = comandas.filter(c => c.status === "EM_PREPARACAO");
+  // Debounce de busca (200ms) — evita re-filtrar a cada tecla.
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaDebounced(busca.trim().toLowerCase()), 200);
+    return () => clearTimeout(t);
+  }, [busca]);
+
+  // Mesas atualmente presentes (pra montar os chips). Sem mesas duplicadas,
+  // ordem alfabetica, ignora vazias.
+  const mesasPresentes = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of comandas) if (c.mesa) set.add(c.mesa);
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [comandas]);
+
+  // Se a mesa filtrada saiu da lista (ex.: ultima comanda dela foi finalizada),
+  // limpa o filtro automaticamente pra nao mostrar "vazio sem motivo".
+  useEffect(() => {
+    if (filtroMesa && !mesasPresentes.includes(filtroMesa)) setFiltroMesa(null);
+  }, [filtroMesa, mesasPresentes]);
+
+  // Aplica busca + filtro mesa + ordenacao. Ordem importa: filtrar antes
+  // de separar por status pra que o contador da coluna reflita o filtro.
+  const comandasFiltradas = useMemo(() => {
+    let lista = comandas;
+    if (filtroMesa) lista = lista.filter(c => c.mesa === filtroMesa);
+    if (buscaDebounced) {
+      lista = lista.filter(c => {
+        const num = String(c.numero);
+        const mesa = (c.mesa || "").toLowerCase();
+        const cli = (c.cliente?.nome || "").toLowerCase();
+        return num.includes(buscaDebounced) || mesa.includes(buscaDebounced) || cli.includes(buscaDebounced);
+      });
+    }
+    const arr = lista.slice();
+    if (ordenacao === "TEMPO") {
+      arr.sort((a, b) => new Date(a.criadoEm).getTime() - new Date(b.criadoEm).getTime());
+    } else if (ordenacao === "VALOR") {
+      arr.sort((a, b) => Number(b.total) - Number(a.total));
+    } else if (ordenacao === "MESA") {
+      arr.sort((a, b) => {
+        const m = (a.mesa || "~").localeCompare(b.mesa || "~", "pt-BR"); // sem mesa por ultimo
+        return m !== 0 ? m : new Date(a.criadoEm).getTime() - new Date(b.criadoEm).getTime();
+      });
+    }
+    return arr;
+  }, [comandas, buscaDebounced, filtroMesa, ordenacao]);
+
+  const novos = comandasFiltradas.filter(c => c.status === "NOVO");
+  const emPrep = comandasFiltradas.filter(c => c.status === "EM_PREPARACAO");
+
+  // Contadores totais (sem filtro) — usado pra mostrar "3 de 12" no header.
+  const totalNovos = useMemo(() => comandas.filter(c => c.status === "NOVO").length, [comandas]);
+  const totalEmPrep = useMemo(() => comandas.filter(c => c.status === "EM_PREPARACAO").length, [comandas]);
+  const filtroAtivo = Boolean(buscaDebounced || filtroMesa);
 
   async function aceitar(c: Comanda) {
     setAcao(c.id);
@@ -252,10 +308,22 @@ export default function PainelComandas({ user }: Props) {
           </div>
         </div>
         <div style={{ display: "flex", gap: 12 }}>
-          <KpiMini titulo="Novos" valor={novos.length} cor={C.yellow} />
-          <KpiMini titulo="Em preparação" valor={emPrep.length} cor={C.accent} />
+          <KpiMini titulo="Novos" valor={novos.length} totalSemFiltro={totalNovos} filtroAtivo={filtroAtivo} cor={C.yellow} />
+          <KpiMini titulo="Em preparação" valor={emPrep.length} totalSemFiltro={totalEmPrep} filtroAtivo={filtroAtivo} cor={C.accent} />
         </div>
       </div>
+
+      <BarraFiltros
+        busca={busca}
+        onBusca={setBusca}
+        ordenacao={ordenacao}
+        onOrdenacao={setOrdenacao}
+        mesasPresentes={mesasPresentes}
+        filtroMesa={filtroMesa}
+        onFiltroMesa={setFiltroMesa}
+        filtroAtivo={filtroAtivo}
+        onLimparTudo={() => { setBusca(""); setBuscaDebounced(""); setFiltroMesa(null); }}
+      />
 
       {erro && (
         <div style={{
@@ -326,14 +394,155 @@ export default function PainelComandas({ user }: Props) {
 }
 
 // =====================================================================
-function KpiMini({ titulo, valor, cor }: { titulo: string; valor: number; cor: string }) {
+// BarraFiltros — busca, ordenacao e chips de mesa pra Central de Comandas.
+// Aparece entre o header e o grid. Em pico (>15 comandas) e' a UX critica
+// pra achar um pedido especifico sem precisar olhar card por card.
+// =====================================================================
+function BarraFiltros({
+  busca, onBusca, ordenacao, onOrdenacao,
+  mesasPresentes, filtroMesa, onFiltroMesa,
+  filtroAtivo, onLimparTudo,
+}: {
+  busca: string;
+  onBusca: (v: string) => void;
+  ordenacao: "TEMPO" | "VALOR" | "MESA";
+  onOrdenacao: (v: "TEMPO" | "VALOR" | "MESA") => void;
+  mesasPresentes: string[];
+  filtroMesa: string | null;
+  onFiltroMesa: (v: string | null) => void;
+  filtroAtivo: boolean;
+  onLimparTudo: () => void;
+}) {
+  const opcOrden: Array<{ id: "TEMPO" | "VALOR" | "MESA"; label: string; icone: string }> = [
+    { id: "TEMPO", label: "Tempo", icone: "⏱" },
+    { id: "VALOR", label: "Valor", icone: "💰" },
+    { id: "MESA", label: "Mesa", icone: "📍" },
+  ];
+  return (
+    <div style={{
+      marginBottom: 12, padding: "10px 12px",
+      background: C.card, border: `1px solid ${C.border}`, borderRadius: 10,
+      display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center",
+    }}>
+      <div style={{ position: "relative", flex: "1 1 240px", minWidth: 200 }}>
+        <span style={{
+          position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)",
+          color: C.muted, fontSize: 13, pointerEvents: "none",
+        }}>🔍</span>
+        <input
+          value={busca}
+          onChange={(e) => onBusca(e.target.value)}
+          placeholder="Buscar #número, mesa ou cliente…"
+          style={{
+            width: "100%", padding: "8px 30px 8px 30px", borderRadius: 8,
+            background: C.surface, border: `1px solid ${C.border}`,
+            color: C.text, fontSize: 13, outline: "none", fontFamily: "inherit",
+            boxSizing: "border-box",
+          }}
+        />
+        {busca && (
+          <button
+            type="button"
+            onClick={() => onBusca("")}
+            aria-label="Limpar busca"
+            style={{
+              position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
+              background: "transparent", border: "none", color: C.muted,
+              fontSize: 16, cursor: "pointer", padding: "2px 6px",
+            }}
+          >×</button>
+        )}
+      </div>
+
+      <div style={{
+        display: "flex", gap: 4, padding: 3,
+        background: C.surface, borderRadius: 8, border: `1px solid ${C.border}`,
+      }}>
+        {opcOrden.map(opt => {
+          const ativo = ordenacao === opt.id;
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => onOrdenacao(opt.id)}
+              style={{
+                padding: "5px 10px", borderRadius: 6,
+                background: ativo ? C.accent + "33" : "transparent",
+                border: "none",
+                color: ativo ? C.accent : C.muted,
+                fontSize: 11, fontWeight: 700, cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >{opt.icone} {opt.label}</button>
+          );
+        })}
+      </div>
+
+      {mesasPresentes.length > 0 && (
+        <div style={{
+          display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center",
+          flex: "1 1 auto", minWidth: 0,
+        }}>
+          <span style={{ color: C.muted, fontSize: 11, marginRight: 2 }}>Mesa:</span>
+          {mesasPresentes.slice(0, 8).map(m => {
+            const ativo = filtroMesa === m;
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => onFiltroMesa(ativo ? null : m)}
+                style={{
+                  padding: "3px 9px", borderRadius: 999,
+                  background: ativo ? C.accent + "33" : C.surface,
+                  border: `1px solid ${ativo ? C.accent : C.border}`,
+                  color: ativo ? C.accent : C.muted,
+                  fontSize: 11, fontWeight: 600, cursor: "pointer",
+                  maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                }}
+                title={m}
+              >📍 {m}</button>
+            );
+          })}
+          {mesasPresentes.length > 8 && (
+            <span style={{ color: C.muted, fontSize: 10 }}>+{mesasPresentes.length - 8}</span>
+          )}
+        </div>
+      )}
+
+      {filtroAtivo && (
+        <button
+          type="button"
+          onClick={onLimparTudo}
+          style={{
+            padding: "5px 10px", borderRadius: 6,
+            background: "transparent", border: `1px solid ${C.muted}55`,
+            color: C.muted, fontSize: 11, fontWeight: 600, cursor: "pointer",
+          }}
+        >× Limpar filtros</button>
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
+function KpiMini({ titulo, valor, totalSemFiltro, filtroAtivo, cor }: {
+  titulo: string; valor: number; totalSemFiltro?: number; filtroAtivo?: boolean; cor: string;
+}) {
+  const mostraTotal = filtroAtivo && totalSemFiltro != null && totalSemFiltro !== valor;
   return (
     <div style={{
       padding: "6px 12px", borderRadius: 8, minWidth: 100,
       background: cor + "18", border: `1px solid ${cor}55`,
     }}>
       <div style={{ color: cor, fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>{titulo}</div>
-      <div style={{ color: C.white, fontSize: 22, fontWeight: 700 }}>{valor}</div>
+      <div style={{ color: C.white, fontSize: 22, fontWeight: 700 }}>
+        {valor}
+        {mostraTotal && (
+          <span style={{ color: C.muted, fontSize: 12, fontWeight: 500, marginLeft: 4 }}>
+            / {totalSemFiltro}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

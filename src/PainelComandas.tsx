@@ -101,6 +101,14 @@ export default function PainelComandas({ user }: Props) {
   const [buscaDebounced, setBuscaDebounced] = useState("");
   const [ordenacao, setOrdenacao] = useState<"TEMPO" | "VALOR" | "MESA">("TEMPO");
   const [filtroMesa, setFiltroMesa] = useState<string | null>(null);
+  const [concluidas, setConcluidas] = useState<Comanda[]>([]);
+  const [mostrarConcluidas, setMostrarConcluidas] = useState<boolean>(() => {
+    try { return localStorage.getItem("gestaopro_painel_mostrar_concluidas") !== "false"; } catch { return true; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem("gestaopro_painel_mostrar_concluidas", String(mostrarConcluidas)); } catch {}
+  }, [mostrarConcluidas]);
   const [idsRealce, setIdsRealce] = useState<Set<string>>(() => new Set());
   const idsConhecidosRef = useRef<Set<string>>(new Set());
   const primeiroLoadRef = useRef(true);
@@ -138,9 +146,15 @@ export default function PainelComandas({ user }: Props) {
 
   const carregar = useCallback(async () => {
     try {
-      const r = await api.listarComandas({ status: "NOVO,EM_PREPARACAO" });
+      // Em paralelo: abertas (NOVO+EM_PREP) e concluidas hoje (limite 20).
+      const [r, rc] = await Promise.all([
+        api.listarComandas({ status: "NOVO,EM_PREPARACAO" }),
+        api.listarComandas({ concluidasHoje: "true" }).catch(() => []),
+      ]);
       const lista = Array.isArray(r) ? r as Comanda[] : [];
+      const listaConcluidas = Array.isArray(rc) ? rc as Comanda[] : [];
       setComandas(lista);
+      setConcluidas(listaConcluidas);
       totalAbertasRef.current = lista.length;
       setErro("");
 
@@ -252,6 +266,30 @@ export default function PainelComandas({ user }: Props) {
   const totalEmPrep = useMemo(() => comandas.filter(c => c.status === "EM_PREPARACAO").length, [comandas]);
   const filtroAtivo = Boolean(buscaDebounced || filtroMesa);
 
+  // KPIs operacionais
+  // - emAberto: soma do total das comandas NOVO + EM_PREPARACAO (dinheiro
+  //   "preso" no Kanban — gestor sabe quanto ainda nao foi cobrado).
+  // - faturadoHoje: soma do total das CONCLUIDAS de hoje.
+  // - tempoMedioMin: media de (concluidoEm - criadoEm) em minutos. Util
+  //   pra capacity planning ("hoje o atendimento ta levando 8min").
+  const kpiEmAberto = useMemo(
+    () => comandas.reduce((acc, c) => acc + (Number(c.total) || 0), 0),
+    [comandas]
+  );
+  const kpiFaturadoHoje = useMemo(
+    () => concluidas.reduce((acc, c) => acc + (Number(c.total) || 0), 0),
+    [concluidas]
+  );
+  const kpiTempoMedioMin = useMemo(() => {
+    const validos = concluidas.filter(c => c.concluidoEm && c.criadoEm);
+    if (validos.length === 0) return null;
+    const soma = validos.reduce((acc, c) => {
+      const dt = new Date(c.concluidoEm as string).getTime() - new Date(c.criadoEm).getTime();
+      return acc + Math.max(0, dt);
+    }, 0);
+    return Math.round(soma / validos.length / 60000);
+  }, [concluidas]);
+
   async function aceitar(c: Comanda) {
     setAcao(c.id);
     try {
@@ -297,19 +335,33 @@ export default function PainelComandas({ user }: Props) {
   return (
     <div style={{ padding: "0 6px" }}>
       <div style={{
-        display: "flex", justifyContent: "space-between", alignItems: "center",
         marginBottom: 14, padding: "12px 14px",
         background: C.card, border: `1px solid ${C.border}`, borderRadius: 10,
       }}>
-        <div>
-          <div style={{ color: C.white, fontSize: 16, fontWeight: 700 }}>🍽️ Central de Comandas</div>
-          <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>
-            Atualiza a cada {POLL_MS_OCUPADO / 1000}s com fila / {POLL_MS_VAZIO / 1000}s vazio · timer persistente (resiste a F5) · som ao chegar pedido
+        <div style={{
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          flexWrap: "wrap", gap: 12, marginBottom: 12,
+        }}>
+          <div>
+            <div style={{ color: C.white, fontSize: 16, fontWeight: 700 }}>🍽️ Central de Comandas</div>
+            <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>
+              Atualiza a cada {POLL_MS_OCUPADO / 1000}s com fila / {POLL_MS_VAZIO / 1000}s vazio · timer persistente (resiste a F5) · som ao chegar pedido
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 12 }}>
+            <KpiMini titulo="Novos" valor={novos.length} totalSemFiltro={totalNovos} filtroAtivo={filtroAtivo} cor={C.yellow} />
+            <KpiMini titulo="Em preparação" valor={emPrep.length} totalSemFiltro={totalEmPrep} filtroAtivo={filtroAtivo} cor={C.accent} />
           </div>
         </div>
-        <div style={{ display: "flex", gap: 12 }}>
-          <KpiMini titulo="Novos" valor={novos.length} totalSemFiltro={totalNovos} filtroAtivo={filtroAtivo} cor={C.yellow} />
-          <KpiMini titulo="Em preparação" valor={emPrep.length} totalSemFiltro={totalEmPrep} filtroAtivo={filtroAtivo} cor={C.accent} />
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+          gap: 8,
+          paddingTop: 12, borderTop: `1px dashed ${C.border}`,
+        }}>
+          <KpiOperacional titulo="💰 Em aberto" valor={fmtBRL(kpiEmAberto)} subtitulo="aguardando fechamento" cor={C.yellow} />
+          <KpiOperacional titulo="✅ Faturado hoje" valor={fmtBRL(kpiFaturadoHoje)} subtitulo={`${concluidas.length} comanda${concluidas.length === 1 ? "" : "s"} fechada${concluidas.length === 1 ? "" : "s"}`} cor={C.green} />
+          <KpiOperacional titulo="⏱ Tempo médio" valor={kpiTempoMedioMin != null ? `${kpiTempoMedioMin} min` : "—"} subtitulo="da chegada ao fechamento" cor={C.accent} />
         </div>
       </div>
 
@@ -363,6 +415,12 @@ export default function PainelComandas({ user }: Props) {
             onAbrir={(c) => setDetalhe(c)}
             acaoAtual={acao}
             idsRealce={idsRealce}
+          />
+          <ColunaConcluidas
+            comandas={concluidas}
+            expandida={mostrarConcluidas}
+            onToggle={() => setMostrarConcluidas(v => !v)}
+            onAbrir={(c) => setDetalhe(c)}
           />
         </div>
       )}
@@ -525,6 +583,24 @@ function BarraFiltros({
 }
 
 // =====================================================================
+// KPI operacional — segunda fileira do header (valores em $, tempo medio).
+// Layout mais largo que KpiMini (que e' compacto pra contagens).
+function KpiOperacional({ titulo, valor, subtitulo, cor }: {
+  titulo: string; valor: string; subtitulo: string; cor: string;
+}) {
+  return (
+    <div style={{
+      padding: "8px 12px", borderRadius: 8,
+      background: C.surface, border: `1px solid ${cor}33`,
+      borderLeft: `3px solid ${cor}`,
+    }}>
+      <div style={{ color: cor, fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>{titulo}</div>
+      <div style={{ color: C.white, fontSize: 16, fontWeight: 700, marginTop: 2, fontVariantNumeric: "tabular-nums" }}>{valor}</div>
+      <div style={{ color: C.muted, fontSize: 10, marginTop: 1 }}>{subtitulo}</div>
+    </div>
+  );
+}
+
 function KpiMini({ titulo, valor, totalSemFiltro, filtroAtivo, cor }: {
   titulo: string; valor: number; totalSemFiltro?: number; filtroAtivo?: boolean; cor: string;
 }) {
@@ -607,6 +683,89 @@ interface CardProps extends Omit<ColunaProps, "titulo" | "comandas" | "idsRealce
   comanda: Comanda;
   realce: boolean;
 }
+// =====================================================================
+// ColunaConcluidas — 3a coluna do Kanban: ultimas 20 finalizadas do dia.
+// Colapsavel (estado persistido em localStorage). Cards compactos sem
+// acoes (ja fechou). Clique abre o modal de detalhe pra revisar.
+// =====================================================================
+function ColunaConcluidas({ comandas, expandida, onToggle, onAbrir }: {
+  comandas: Comanda[];
+  expandida: boolean;
+  onToggle: () => void;
+  onAbrir: (c: Comanda) => void;
+}) {
+  const total = comandas.reduce((acc, c) => acc + (Number(c.total) || 0), 0);
+  const fmtHora = (iso: string) => new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return (
+    <div style={{
+      background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10,
+      padding: 10, minHeight: expandida ? 200 : 50, opacity: 0.92,
+    }}>
+      <button type="button" onClick={onToggle} style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        width: "100%", background: "transparent", border: "none",
+        padding: 0, marginBottom: expandida ? 10 : 0, paddingBottom: expandida ? 8 : 0,
+        borderBottom: expandida ? `2px solid ${C.green}55` : "none",
+        cursor: "pointer",
+      }}>
+        <div style={{ color: C.green, fontSize: 13, fontWeight: 700 }}>
+          {expandida ? "▾" : "▸"} ✅ Concluídas hoje
+        </div>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <span style={{
+            background: C.green + "22", color: C.green,
+            padding: "2px 10px", borderRadius: 999,
+            fontSize: 11, fontWeight: 700,
+          }}>{comandas.length}</span>
+          {comandas.length > 0 && (
+            <span style={{ color: C.muted, fontSize: 11 }}>
+              {total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+            </span>
+          )}
+        </div>
+      </button>
+      {expandida && (
+        comandas.length === 0 ? (
+          <div style={{ color: C.muted, fontSize: 12, textAlign: "center", padding: 24 }}>
+            Nenhuma comanda fechada hoje ainda.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {comandas.map(c => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => onAbrir(c)}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  width: "100%", padding: "6px 10px", borderRadius: 6,
+                  background: C.card, border: `1px solid ${C.border}`,
+                  cursor: "pointer", textAlign: "left",
+                }}
+              >
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ color: C.white, fontSize: 12, fontWeight: 700 }}>
+                    #{c.numero}
+                    {c.mesa ? <span style={{ color: C.muted, fontWeight: 500 }}> · 📍 {c.mesa}</span> : null}
+                  </div>
+                  <div style={{ color: C.muted, fontSize: 10, marginTop: 1 }}>
+                    {c.concluidoEm ? fmtHora(c.concluidoEm) : "—"}
+                    {c.cliente?.nome ? ` · 👤 ${c.cliente.nome}` : ""}
+                  </div>
+                </div>
+                <div style={{ color: C.green, fontSize: 12, fontWeight: 700, marginLeft: 8 }}>
+                  {fmtBRL(c.total)}
+                </div>
+              </button>
+            ))}
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
 function CardComanda({ comanda, cor, onAceitar, onCancelar, onImprimir, onCheckout, onAbrir, acaoAtual, realce }: CardProps) {
   // Timer ancorado no instante real do servidor — resiste a F5.
   const desde = comanda.status === "EM_PREPARACAO" && comanda.aceitoEm

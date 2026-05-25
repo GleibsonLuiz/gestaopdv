@@ -55,8 +55,22 @@ function toQtd(v) {
 }
 
 // GET /comandas?status=NOVO,EM_PREPARACAO  (default: NOVO + EM_PREPARACAO)
+// Modo especial: ?concluidasHoje=true  -> apenas CONCLUIDA com concluidoEm
+// >= inicio do dia atual, limite 20, ordenado por concluidoEm desc. Usado
+// pela 3a coluna "Concluidas hoje" do Kanban.
 export async function listar(req, res, next) {
   try {
+    if (req.query.concluidasHoje === "true") {
+      const inicioDia = new Date();
+      inicioDia.setHours(0, 0, 0, 0);
+      const comandas = await prisma.comanda.findMany({
+        where: { status: "CONCLUIDA", concluidoEm: { gte: inicioDia } },
+        include: INCLUDE_LISTA,
+        orderBy: { concluidoEm: "desc" },
+        take: 20,
+      });
+      return res.json(comandas);
+    }
     const status = req.query.status
       ? String(req.query.status).split(",").filter(s => STATUS_VALIDOS.has(s))
       : ["NOVO", "EM_PREPARACAO"];

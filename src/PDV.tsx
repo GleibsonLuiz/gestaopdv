@@ -1209,7 +1209,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
               <BotaoAtalho
                 tecla="F10" tom="ok" label="Finalizar"
                 disabled={carrinho.length === 0 || semCaixa}
-                onClick={abrirPagamento}
+                onClick={() => abrirPagamento()}
               />
               <BotaoAtalho
                 tecla="Esc" tom="mut" label="Limpar busca"
@@ -1316,7 +1316,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
               )}
 
               <button
-                onClick={abrirPagamento}
+                onClick={() => abrirPagamento()}
                 disabled={semCaixa}
                 title={semCaixa ? "Abra um caixa antes de finalizar" : ""}
                 className="pdv-btn-finalize"

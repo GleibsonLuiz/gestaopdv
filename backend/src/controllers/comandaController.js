@@ -19,6 +19,17 @@ const INCLUDE_LISTA = {
   cliente: { select: { id: true, nome: true } },
   user: { select: { id: true, nome: true } },
   _count: { select: { itens: true } },
+  // Inclui itens pra Central de Comandas mostrar preview no card sem
+  // precisar de uma segunda chamada por comanda. So o nome — campos
+  // detalhados (camposSegmento, etc) ficam pro INCLUDE_DETALHE.
+  itens: {
+    select: {
+      id: true,
+      quantidade: true,
+      observacoes: true,
+      produto: { select: { id: true, nome: true, unidade: true } },
+    },
+  },
 };
 
 const INCLUDE_DETALHE = {

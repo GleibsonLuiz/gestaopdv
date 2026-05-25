@@ -108,7 +108,19 @@ export async function criar(req, res, next) {
         tenantId,
       });
     }
-    total = Number(total.toFixed(2));
+    const subtotal = Number(total.toFixed(2));
+
+    // Desconto opcional vindo do PDV Volante (R$). Nunca passa do subtotal,
+    // nunca fica negativo. Quando informado, o total final ja vem com o
+    // desconto aplicado pra a Central exibir o valor cobrado direto.
+    let desconto = null;
+    if (req.body.desconto != null) {
+      const d = toNumber(req.body.desconto);
+      if (Number.isFinite(d) && d > 0) {
+        desconto = Number(Math.min(d, subtotal).toFixed(2));
+      }
+    }
+    total = desconto != null ? Number((subtotal - desconto).toFixed(2)) : subtotal;
 
     // Numero sequencial por tenant.
     const ultima = await prisma.comanda.findFirst({
@@ -125,6 +137,7 @@ export async function criar(req, res, next) {
         mesa: req.body.mesa ? String(req.body.mesa).slice(0, 80) : null,
         observacoes: req.body.observacoes ? String(req.body.observacoes).slice(0, 500) : null,
         total,
+        desconto,
         clienteId: req.body.clienteId || null,
         userId,
         itens: { create: itensPreparados },

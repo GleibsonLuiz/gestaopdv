@@ -9,6 +9,8 @@
 const CARRINHO_KEY = "gestaopro_pdvvol_carrinho";
 const FILA_VENDAS_KEY = "gestaopro_pdvvol_fila";
 const CACHE_PRODUTOS_KEY = "gestaopro_pdvvol_produtos";
+const HISTORICO_KEY = "gestaopro_pdvvol_historico";
+const HISTORICO_LIMITE = 20;
 
 export interface ItemCarrinhoVol {
   produtoId: string;
@@ -108,4 +110,37 @@ export function marcarFalha(idLocal: string, mensagem: string): void {
 
 export function totalPendentesFila(): number {
   return lerFila().length;
+}
+
+// ============ HISTORICO LOCAL (ultimas 20 comandas enviadas) ============
+
+export interface ComandaHistorico {
+  /** Numero sequencial da comanda no backend (ou null se foi enfileirada offline). */
+  numero: number | null;
+  /** Total final (apos desconto). */
+  total: number;
+  /** Quantidade de itens distintos. */
+  qtdItens: number;
+  /** Mesa/balcao registrado. */
+  mesa?: string | null;
+  /** Cliente vinculado (nome). */
+  cliente?: string | null;
+  /** Timestamp do envio (Date.now). */
+  ts: number;
+  /** "enviada" se backend confirmou, "fila" se foi pra fila offline. */
+  origem: "enviada" | "fila";
+}
+
+export function lerHistorico(): ComandaHistorico[] {
+  return lerJson<ComandaHistorico[]>(HISTORICO_KEY, []);
+}
+
+export function registrarHistorico(item: ComandaHistorico): void {
+  const lista = lerHistorico();
+  lista.unshift(item);
+  escreverJson(HISTORICO_KEY, lista.slice(0, HISTORICO_LIMITE));
+}
+
+export function limparHistorico(): void {
+  try { localStorage.removeItem(HISTORICO_KEY); } catch {}
 }

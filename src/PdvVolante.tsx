@@ -6,7 +6,8 @@ import {
   lerCarrinho, salvarCarrinho, limparCarrinho,
   lerCacheProdutos, salvarCacheProdutos,
   lerFila, enfileirarVenda, removerDaFila, marcarFalha, totalPendentesFila,
-  type ItemCarrinhoVol,
+  lerHistorico, registrarHistorico, limparHistorico,
+  type ItemCarrinhoVol, type ComandaHistorico,
 } from "./lib/pdvVolanteOffline";
 
 // =====================================================================
@@ -93,6 +94,16 @@ export default function PdvVolante() {
   const [qtdAlvo, setQtdAlvo] = useState<string | null>(null);
   const [qtdRascunho, setQtdRascunho] = useState("");
 
+  // Desconto geral em R$ (string pra suportar virgula no input). 0 ou vazio = sem desconto.
+  const [descontoStr, setDescontoStr] = useState("");
+
+  // Confirmacao pra esvaziar o carrinho.
+  const [confirmandoLimpar, setConfirmandoLimpar] = useState(false);
+
+  // Historico das ultimas comandas deste dispositivo.
+  const [mostrandoHistorico, setMostrandoHistorico] = useState(false);
+  const [historico, setHistorico] = useState<ComandaHistorico[]>(() => lerHistorico());
+
   useEffect(() => {
     try {
       if (mesa) localStorage.setItem("gestaopro_pdvvol_mesa", mesa);
@@ -110,6 +121,34 @@ export default function PdvVolante() {
   // Feedback tatil curto — silenciosamente ignorado em navegadores sem suporte (iOS Safari).
   const vibrar = useCallback((ms: number) => {
     try { if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate(ms); } catch {}
+  }, []);
+
+  // Beep curto via Web Audio. Frequencia em Hz, duracao em ms.
+  // AudioContext fica em ref pra reusar entre toques (criar 1 por toque
+  // estoura em iOS depois de algumas dezenas de scans).
+  const beep = useCallback((freq: number, dur: number) => {
+    try {
+      const w = window as unknown as {
+        __pdvvolAC?: AudioContext;
+        AudioContext?: typeof AudioContext;
+        webkitAudioContext?: typeof AudioContext;
+      };
+      const Ctor = w.AudioContext || w.webkitAudioContext;
+      if (!Ctor) return;
+      const ctx = w.__pdvvolAC || (w.__pdvvolAC = new Ctor());
+      if (ctx.state === "suspended") ctx.resume();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.value = 0.08;
+      osc.connect(gain).connect(ctx.destination);
+      const t = ctx.currentTime;
+      osc.start(t);
+      gain.gain.setValueAtTime(0.08, t);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + dur / 1000);
+      osc.stop(t + dur / 1000);
+    } catch {}
   }, []);
 
   const segmento: SegmentoEmpresa = (getEmpresa()?.segmento as SegmentoEmpresa) || "GERAL";
@@ -187,7 +226,8 @@ export default function PdvVolante() {
     });
     flashOk(`+ ${p.nome}`);
     vibrar(30);
-  }, [flashOk, vibrar]);
+    beep(880, 60);
+  }, [flashOk, vibrar, beep]);
 
   // Edita observacao de um item ja no carrinho.
   const definirObsItem = useCallback((produtoId: string, texto: string) => {
@@ -248,10 +288,16 @@ export default function PdvVolante() {
   }, [produtos]);
 
   // ====== total do carrinho ======
-  const total = useMemo(
+  const subtotal = useMemo(
     () => carrinho.reduce((a, i) => a + i.precoUnitario * i.quantidade, 0),
     [carrinho]
   );
+  const desconto = useMemo(() => {
+    const n = Number((descontoStr || "0").replace(",", "."));
+    if (!Number.isFinite(n) || n < 0) return 0;
+    return Math.min(n, subtotal); // nunca desconta mais que o proprio total
+  }, [descontoStr, subtotal]);
+  const total = useMemo(() => Math.max(0, subtotal - desconto), [subtotal, desconto]);
   const totalItens = useMemo(
     () => carrinho.reduce((a, i) => a + i.quantidade, 0),
     [carrinho]
@@ -288,6 +334,7 @@ export default function PdvVolante() {
         mesa: mesa.trim() || null,
         observacoes: observacoes.trim() || null,
         clienteId: cliente?.id || null,
+        desconto: desconto > 0 ? Number(desconto.toFixed(2)) : null,
         itens: carrinho.map(i => ({
           produtoId: i.produtoId,
           quantidade: i.quantidade,
@@ -295,30 +342,45 @@ export default function PdvVolante() {
           observacoes: i.observacoes || null,
         })),
       };
-      const finalizar = (msg: string, ok: boolean) => {
+      const totalSnapshot = total;
+      const qtdSnapshot = carrinho.length;
+      const mesaSnapshot = mesa.trim();
+      const clienteSnapshot = cliente?.nome || null;
+      const finalizar = (msg: string, ok: boolean, numero: number | null, origem: "enviada" | "fila") => {
         setCarrinho([]);
         limparCarrinho();
         setObservacoes("");
+        setDescontoStr("");
         // mesa NAO e' limpa de proposito: vendedor de balcao costuma
         // repetir varias comandas no mesmo local.
+        registrarHistorico({
+          numero,
+          total: totalSnapshot,
+          qtdItens: qtdSnapshot,
+          mesa: mesaSnapshot || null,
+          cliente: clienteSnapshot,
+          ts: Date.now(),
+          origem,
+        });
+        setHistorico(lerHistorico());
         if (ok) flashOk(msg); else flashErro(msg);
         setTela("produtos");
       };
       if (online) {
         try {
-          await api.criarComanda(payload);
-          finalizar(`✓ Comanda enviada — ${fmtBRL(total)}`, true);
+          const resp: any = await api.criarComanda(payload);
+          finalizar(`✓ Comanda #${resp?.numero ?? ""} enviada — ${fmtBRL(totalSnapshot)}`, true, resp?.numero ?? null, "enviada");
           return;
         } catch {
           enfileirarVenda(payload);
           setPendentes(totalPendentesFila());
-          finalizar("Servidor offline — comanda salva na fila", false);
+          finalizar("Servidor offline — comanda salva na fila", false, null, "fila");
           return;
         }
       }
       enfileirarVenda(payload);
       setPendentes(totalPendentesFila());
-      finalizar("Comanda enfileirada — envia quando voltar a rede", true);
+      finalizar("Comanda enfileirada — envia quando voltar a rede", true, null, "fila");
     } finally {
       setEnviando(false);
     }
@@ -330,10 +392,14 @@ export default function PdvVolante() {
       onCancelar={() => setTela("produtos")}
       onLer={(codigo) => {
         setTela("produtos");
-        vibrar(50); // confirmacao tatil do scan independente do hit/miss
+        vibrar(50);
         const p = produtos.find(x => x.codigoBarras === codigo || x.codigo === codigo);
-        if (p) adicionar(p);
-        else flashErro("Código não encontrado: " + codigo);
+        if (p) {
+          adicionar(p); // beep ok ja vem do adicionar
+        } else {
+          beep(220, 180); // erro: tom grave e mais longo
+          flashErro("Código não encontrado: " + codigo);
+        }
       }}
     />;
   }
@@ -348,6 +414,15 @@ export default function PdvVolante() {
             <div className="font-bold truncate">Carrinho · {totalItens} {totalItens === 1 ? "item" : "itens"}</div>
             {mesa && <div className="text-[11px] text-emerald-300 truncate">📍 {mesa}</div>}
           </div>
+          {carrinho.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setConfirmandoLimpar(true)}
+              className="px-2 py-1 text-red-300 hover:bg-red-500/10 rounded-lg text-xl"
+              title="Limpar carrinho"
+              aria-label="Limpar carrinho"
+            >🗑️</button>
+          )}
         </header>
         <div className="flex-1 overflow-y-auto">
           {carrinho.length === 0 ? (
@@ -405,9 +480,36 @@ export default function PdvVolante() {
               className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm focus:border-emerald-500 focus:outline-none resize-none placeholder:text-slate-600"
             />
           </div>
-          <div className="flex items-baseline justify-between mb-3">
-            <span className="text-slate-400 text-sm">Total</span>
-            <span className="text-3xl font-bold text-emerald-400">{fmtBRL(total)}</span>
+          <div className="mb-3 flex items-center gap-3">
+            <label htmlFor="pdvvol-desc" className="text-[11px] uppercase tracking-wide text-slate-400 shrink-0">
+              Desconto (R$)
+            </label>
+            <input
+              id="pdvvol-desc"
+              value={descontoStr}
+              onChange={(e) => setDescontoStr(e.target.value.replace(/[^0-9.,]/g, "").slice(0, 8))}
+              inputMode="decimal"
+              placeholder="0,00"
+              className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-right font-mono focus:border-emerald-500 focus:outline-none"
+            />
+          </div>
+          <div className="mb-3 space-y-1">
+            {desconto > 0 && (
+              <>
+                <div className="flex items-baseline justify-between text-xs text-slate-500">
+                  <span>Subtotal</span>
+                  <span>{fmtBRL(subtotal)}</span>
+                </div>
+                <div className="flex items-baseline justify-between text-xs text-amber-300">
+                  <span>Desconto</span>
+                  <span>− {fmtBRL(desconto)}</span>
+                </div>
+              </>
+            )}
+            <div className="flex items-baseline justify-between">
+              <span className="text-slate-400 text-sm">Total</span>
+              <span className="text-3xl font-bold text-emerald-400">{fmtBRL(total)}</span>
+            </div>
           </div>
           <button
             type="button"
@@ -441,6 +543,23 @@ export default function PdvVolante() {
             }}
           />
         )}
+        {confirmandoLimpar && (
+          <ConfirmModal
+            titulo="Limpar carrinho?"
+            mensagem={`Vai remover ${totalItens} ${totalItens === 1 ? "item" : "itens"} (${fmtBRL(subtotal)}). Essa ação não pode ser desfeita.`}
+            textoConfirma="Sim, limpar"
+            cor="red"
+            onCancelar={() => setConfirmandoLimpar(false)}
+            onConfirmar={() => {
+              setCarrinho([]);
+              limparCarrinho();
+              setObservacoes("");
+              setDescontoStr("");
+              setConfirmandoLimpar(false);
+              setTela("produtos");
+            }}
+          />
+        )}
       </div>
     );
   }
@@ -462,6 +581,14 @@ export default function PdvVolante() {
             <div className="text-[10px] font-bold px-2 py-1 rounded bg-amber-500/20 text-amber-300">
               FILA: {pendentes}
             </div>
+          )}
+          {historico.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setMostrandoHistorico(true)}
+              className="text-[10px] font-bold px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
+              title="Últimas comandas enviadas deste dispositivo"
+            >📜 {historico.length}</button>
           )}
         </div>
         <div className="mb-2 flex flex-wrap gap-1.5">
@@ -603,6 +730,13 @@ export default function PdvVolante() {
           onCancelar={() => setBuscandoCliente(false)}
           onSelecionar={(c) => { setCliente(c); setBuscandoCliente(false); }}
           onLimpar={() => { setCliente(null); setBuscandoCliente(false); }}
+        />
+      )}
+      {mostrandoHistorico && (
+        <HistoricoModal
+          itens={historico}
+          onFechar={() => setMostrandoHistorico(false)}
+          onLimpar={() => { limparHistorico(); setHistorico([]); setMostrandoHistorico(false); }}
         />
       )}
     </div>
@@ -767,6 +901,117 @@ function ClienteModal({ atual, onCancelar, onSelecionar, onLimpar }: {
             onClick={onLimpar}
             className="mt-3 px-4 py-2.5 rounded-lg bg-slate-800 text-slate-300 text-sm font-medium border border-slate-700"
           >Desvincular cliente atual ({atual.nome})</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// ConfirmModal — confirmacao generica destrutiva (limpar carrinho etc).
+// =====================================================================
+function ConfirmModal({ titulo, mensagem, textoConfirma, cor = "red", onCancelar, onConfirmar }: {
+  titulo: string;
+  mensagem: string;
+  textoConfirma: string;
+  cor?: "red" | "emerald";
+  onCancelar: () => void;
+  onConfirmar: () => void;
+}) {
+  const classeBotao = cor === "red"
+    ? "bg-red-500 hover:bg-red-400"
+    : "bg-emerald-500 hover:bg-emerald-400";
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-3"
+      onClick={onCancelar}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-4 shadow-2xl pb-[max(16px,env(safe-area-inset-bottom))]"
+      >
+        <h2 className="font-bold text-base mb-2">{titulo}</h2>
+        <p className="text-sm text-slate-400 mb-4">{mensagem}</p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onCancelar}
+            className="flex-1 px-4 py-2.5 rounded-lg bg-slate-800 text-slate-300 text-sm font-medium border border-slate-700"
+          >Cancelar</button>
+          <button
+            type="button"
+            onClick={onConfirmar}
+            className={`flex-1 px-4 py-2.5 rounded-lg ${classeBotao} text-white font-bold text-sm`}
+          >{textoConfirma}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// HistoricoModal — ultimas 20 comandas enviadas por este dispositivo.
+// =====================================================================
+function HistoricoModal({ itens, onFechar, onLimpar }: {
+  itens: ComandaHistorico[];
+  onFechar: () => void;
+  onLimpar: () => void;
+}) {
+  const fmtHora = (ts: number) => new Date(ts).toLocaleString("pt-BR", {
+    day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+  });
+  return (
+    <div
+      className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-3"
+      onClick={onFechar}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-4 shadow-2xl pb-[max(16px,env(safe-area-inset-bottom))] max-h-[85vh] flex flex-col"
+      >
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-xl">📜</span>
+          <h2 className="font-bold flex-1">Últimas comandas deste dispositivo</h2>
+          <button type="button" onClick={onFechar} className="text-slate-400 text-2xl px-2" aria-label="Fechar">×</button>
+        </div>
+        <div className="flex-1 overflow-y-auto -mx-1 px-1">
+          {itens.length === 0 ? (
+            <div className="text-center text-slate-500 text-sm py-6">Nenhuma comanda enviada ainda.</div>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {itens.map((c, i) => (
+                <div
+                  key={c.ts + "-" + i}
+                  className={`px-3 py-2 rounded-lg border ${
+                    c.origem === "fila"
+                      ? "bg-amber-500/10 border-amber-500/30"
+                      : "bg-slate-800 border-slate-700"
+                  }`}
+                >
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div className="font-semibold text-sm">
+                      {c.numero != null ? `#${c.numero}` : "—"}
+                      <span className="text-slate-500 font-normal text-xs ml-2">{fmtHora(c.ts)}</span>
+                    </div>
+                    <div className="text-emerald-400 font-bold text-sm">{(c.total).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</div>
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-0.5 truncate">
+                    {c.qtdItens} {c.qtdItens === 1 ? "item" : "itens"}
+                    {c.mesa ? ` · 📍 ${c.mesa}` : ""}
+                    {c.cliente ? ` · 👤 ${c.cliente}` : ""}
+                    {c.origem === "fila" ? " · (na fila)" : ""}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        {itens.length > 0 && (
+          <button
+            type="button"
+            onClick={onLimpar}
+            className="mt-3 px-4 py-2.5 rounded-lg bg-slate-800 text-slate-400 text-xs font-medium border border-slate-700"
+          >Limpar histórico</button>
         )}
       </div>
     </div>
@@ -979,7 +1224,7 @@ function ScannerView({ onLer, onCancelar }: { onLer: (codigo: string) => void; o
   return (
     <div className="min-h-screen bg-black text-white flex flex-col">
       <header className="px-4 py-3 flex items-center gap-2 bg-slate-900/80">
-        <button onClick={onCancelar} className="text-slate-300 text-2xl px-2">←</button>
+        <button type="button" onClick={onCancelar} className="text-slate-300 text-2xl px-2">←</button>
         <div className="flex-1 font-semibold">Escanear</div>
       </header>
       <div id={containerId} className="flex-1 w-full" />

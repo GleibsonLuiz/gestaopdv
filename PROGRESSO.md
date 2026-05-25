@@ -147,6 +147,39 @@ d:/gestao-pdv/
 
 ## Histórico de sessões
 
+### Sessão — 2026-05-25 (Adicionar itens a comanda existente — PDV Volante + Central)
+
+Encerra o gap conceitual da Central de Comandas: até então, todo "pediu mais um?" virava uma comanda nova no Kanban, inflando o painel e quebrando o conceito de "consumo da mesa". Agora a mesa pode ter UMA comanda aberta que recebe adições ao longo da permanência, e a cozinha imprime só os itens novos (adendo).
+
+**Schema/migration:**
+- [backend/prisma/schema.prisma:1850-1872](backend/prisma/schema.prisma#L1850-L1872) — `ItemComanda.criadoEm DateTime @default(now())` + index `(comandaId, criadoEm)`.
+- [backend/prisma/migrations/20260525000000_item_comanda_criado_em/migration.sql](backend/prisma/migrations/20260525000000_item_comanda_criado_em/migration.sql) — aplicada no Neon.
+
+**Backend:**
+- [backend/src/controllers/comandaController.js](backend/src/controllers/comandaController.js) `adicionarItens` — POST `/comandas/:id/itens`. Bloqueia em CONCLUIDA/CANCELADA, valida produtos (mesmo pipeline de `criar()`), recalcula `total` somando subtotal dos novos sobre o total atual (desconto absoluto preserva, não distribui sobre os novos), grava itens via `createMany` em transação com o update do total, busca os N mais recentes da comanda para devolver `itensAdicionados` (createMany não retorna ids no Postgres). Broadcast SSE `atualizada`.
+- [backend/src/controllers/comandaController.js](backend/src/controllers/comandaController.js) `listarAbertas` — GET `/comandas/abertas?mesa=Mesa+5`. Busca case-insensitive de NOVO/EM_PREP por mesa, take 10.
+- Rotas registradas em [backend/src/routes/comandas.js](backend/src/routes/comandas.js).
+
+**Frontend — biblioteca:**
+- [src/lib/api.ts:655-661](src/lib/api.ts#L655-L661) — `comandasAbertasPorMesa(mesa)` e `adicionarItensComanda(id, dados)`.
+- [src/lib/escposPedido.ts](src/lib/escposPedido.ts) — `gerarComandosAdendo()`: cupom com cabeçalho `*** ADENDO ***` + `COMANDA #N`, lista só dos itens novos (com campos por segmento), subtotal próprio do adendo (não da comanda inteira — cozinha só precisa do que falta produzir).
+
+**PDV Volante ([src/PdvVolante.tsx](src/PdvVolante.tsx)):**
+- Quando o garçom seleciona uma mesa (debounce 300ms), busca comandas abertas dessa mesa. Se encontra, mostra banner âmbar `🔁 Mesa X tem comanda #N aberta · X itens · R$ Y` com botão `+ Adicionar`. Banner secundário verde `✏️ Adicionando a comanda #N` quando o modo está ativo.
+- Modo adendo: estado `comandaAlvo` redireciona o botão "Enviar" pra rota nova, troca a cor dos botões (emerald→amber), troca o texto ("Enviar Pedido" → "+ Adicionar a Comanda #N"), e desfaz automaticamente se a mesa é trocada/limpa.
+- Após sucesso, imprime cupom de adendo via Bluetooth (best-effort, falha silenciosa se sem impressora pareada).
+- Sem fallback offline no adendo: precisa do id da comanda no backend, então em modo adendo offline mostra "Sem rede — adicionar item requer servidor online" (operador da Central concilia depois).
+
+**Central de Comandas ([src/PainelComandas.tsx](src/PainelComandas.tsx)):**
+- Modal de detalhe ganhou botão tracejado âmbar `+ Adicionar item à comanda` (só em NOVO/EM_PREP).
+- Novo `ModalAdicionarItem` com busca de produto + qtd + obs. Reusa `GET /produtos` (carrega na abertura), POSTa no endpoint novo, recarrega o detalhe, dispara `onAtualizar` no parent para refazer o GET das colunas.
+
+**Decisões de UX confirmadas pelo usuário antes da implementação:**
+- Detecção automática de mesa com comanda + escolha "adicionar/criar nova" (vs aba separada ou sempre criar nova).
+- Impressão de adendo apenas com itens novos (vs reimprimir tudo marcando os novos).
+
+**Pegadinha Windows EPERM:** prisma generate não rodou na sessão porque o backend dev segurava o `query_engine-windows.dll.node`. Migration foi aplicada via `prisma migrate deploy`; o `prisma generate` precisa rodar depois que o usuário parar o backend. As queries usam apenas `orderBy: { criadoEm: "desc" }` — o engine PostgreSQL aceita mesmo com tipos TS desatualizados.
+
 ### Sessão — 2026-05-20 (Operacional Mercado Pago — encerramento das pendências da sessão 2026-05-19)
 
 Limpeza das pendências operacionais que ficaram em aberto desde a integração com a maquininha MP Point:

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { authRequired, requireRole, requirePermissao } from "../middlewares/auth.js";
 import {
   listar, obter, criar, aceitar, cancelar, finalizar, resumo, stream,
+  adicionarItens, listarAbertas,
 } from "../controllers/comandaController.js";
 
 const router = Router();
@@ -15,11 +16,15 @@ router.use(requirePermissao("COMANDAS"));
 
 router.get("/", listar);
 router.get("/resumo", resumo);
+router.get("/abertas", listarAbertas);
 router.get("/:id", obter);
 
 // PDV Volante envia pra ca; vendedores tambem podem criar manualmente
 // pelo painel da central. Permitido para qualquer role com COMANDAS.
 router.post("/", criar);
+
+// Adicionar itens a uma comanda ja aberta (cliente pediu mais).
+router.post("/:id/itens", adicionarItens);
 
 router.patch("/:id/aceitar", aceitar);
 router.patch("/:id/cancelar", cancelar);

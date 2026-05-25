@@ -179,6 +179,110 @@ export async function criar(req, res, next) {
   }
 }
 
+// POST /comandas/:id/itens — adiciona itens a uma comanda ja aberta.
+// Caso de uso: cliente pediu mais durante a permanencia. Permitido apenas
+// quando status e NOVO ou EM_PREPARACAO. Recalcula `total` mantendo o
+// desconto absoluto ja registrado (se houver). Retorna a comanda completa
+// + os ids dos itens adicionados nessa chamada (front imprime adendo).
+export async function adicionarItens(req, res, next) {
+  try {
+    const itens = Array.isArray(req.body?.itens) ? req.body.itens : [];
+    if (itens.length === 0) {
+      return res.status(400).json({ erro: "Informe ao menos 1 item para adicionar" });
+    }
+    const tenantId = req.tenantId;
+    const comandaAtual = await prisma.comanda.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, status: true, total: true, desconto: true, numero: true },
+    });
+    if (!comandaAtual) return res.status(404).json({ erro: "Comanda nao encontrada" });
+    if (comandaAtual.status === "CONCLUIDA") {
+      return res.status(400).json({ erro: "Comanda ja concluida — abra uma nova" });
+    }
+    if (comandaAtual.status === "CANCELADA") {
+      return res.status(400).json({ erro: "Comanda cancelada — abra uma nova" });
+    }
+
+    // Valida produtos e prepara itens (mesma logica de criar()).
+    const ids = [...new Set(itens.map(i => i.produtoId).filter(Boolean))];
+    const produtos = await prisma.produto.findMany({
+      where: { id: { in: ids }, ativo: true },
+      select: { id: true, precoVenda: true },
+    });
+    const mapaProd = new Map(produtos.map(p => [p.id, p]));
+    const itensPreparados = [];
+    let subtotalNovos = 0;
+    for (const it of itens) {
+      const p = mapaProd.get(it.produtoId);
+      if (!p) return res.status(400).json({ erro: `Produto ${it.produtoId} nao encontrado ou inativo` });
+      const qtd = toQtd(it.quantidade);
+      if (qtd <= 0) return res.status(400).json({ erro: "Quantidade invalida" });
+      const preco = it.precoUnitario != null ? toNumber(it.precoUnitario) : Number(p.precoVenda);
+      const subtotal = Number((qtd * preco).toFixed(2));
+      subtotalNovos += subtotal;
+      itensPreparados.push({
+        comandaId: comandaAtual.id,
+        produtoId: p.id,
+        quantidade: qtd,
+        precoUnitario: preco,
+        subtotal,
+        observacoes: it.observacoes ? String(it.observacoes).slice(0, 300) : null,
+        tenantId,
+      });
+    }
+
+    // Total novo = total atual (que ja considera desconto) + subtotal dos novos.
+    // Desconto absoluto registrado na comanda permanece igual (nao se aplica
+    // aos itens adicionados depois; UX mais previsivel pro caixa).
+    const novoTotal = Number((Number(comandaAtual.total) + subtotalNovos).toFixed(2));
+
+    // Cria itens + atualiza total em transacao. Retorna a comanda completa.
+    const [_criados, comanda] = await prisma.$transaction([
+      prisma.itemComanda.createMany({ data: itensPreparados }),
+      prisma.comanda.update({
+        where: { id: comandaAtual.id },
+        data: { total: novoTotal },
+        include: INCLUDE_DETALHE,
+      }),
+    ]);
+
+    // Pega os itens recem-criados (ordenados pelo timestamp) pra o front
+    // saber quais imprimir no adendo. createMany nao retorna ids no Postgres,
+    // entao busca pelos N mais recentes da comanda.
+    const itensAdicionados = await prisma.itemComanda.findMany({
+      where: { comandaId: comanda.id },
+      orderBy: { criadoEm: "desc" },
+      take: itensPreparados.length,
+      include: { produto: { select: { id: true, codigo: true, nome: true, unidade: true, camposSegmento: true } } },
+    });
+
+    sseBroadcast(tenantId, "atualizada", {
+      id: comanda.id, numero: comanda.numero, itensAdicionados: itensAdicionados.length,
+    });
+    res.status(201).json({ comanda, itensAdicionados });
+  } catch (err) { next(err); }
+}
+
+// GET /comandas/abertas?mesa=Mesa+5 — lista comandas NOVO/EM_PREP para
+// um identificador de mesa. Usado pelo PDV Volante para perguntar
+// "essa mesa ja tem comanda aberta — adicionar ou criar nova?".
+export async function listarAbertas(req, res, next) {
+  try {
+    const mesa = req.query.mesa ? String(req.query.mesa).trim() : null;
+    if (!mesa) return res.json([]);
+    const comandas = await prisma.comanda.findMany({
+      where: {
+        mesa: { equals: mesa, mode: "insensitive" },
+        status: { in: ["NOVO", "EM_PREPARACAO"] },
+      },
+      include: INCLUDE_LISTA,
+      orderBy: { criadoEm: "desc" },
+      take: 10,
+    });
+    res.json(comandas);
+  } catch (err) { next(err); }
+}
+
 // PATCH /comandas/:id/aceitar — NOVO -> EM_PREPARACAO
 export async function aceitar(req, res, next) {
   try {

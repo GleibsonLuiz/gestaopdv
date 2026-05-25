@@ -1848,11 +1848,15 @@ model Comanda {
 }
 
 model ItemComanda {
-  id            String  @id @default(uuid())
-  quantidade    Decimal @db.Decimal(12, 3)
-  precoUnitario Decimal @db.Decimal(10, 2)
-  subtotal      Decimal @db.Decimal(10, 2)
+  id            String   @id @default(uuid())
+  quantidade    Decimal  @db.Decimal(12, 3)
+  precoUnitario Decimal  @db.Decimal(10, 2)
+  subtotal      Decimal  @db.Decimal(10, 2)
   observacoes   String?
+  // Timestamp do momento em que o item entrou na comanda. Permite imprimir
+  // "adendo" apenas dos itens adicionados depois da abertura (cliente pediu
+  // mais durante a permanencia na mesa).
+  criadoEm      DateTime @default(now())
 
   comandaId String
   comanda   Comanda @relation(fields: [comandaId], references: [id], onDelete: Cascade)
@@ -1863,6 +1867,7 @@ model ItemComanda {
   tenantId String
   tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  @@index([comandaId, criadoEm])
   @@map("itens_comanda")
 }
 

@@ -9,6 +9,18 @@ import {
   lerHistorico, registrarHistorico, limparHistorico,
   type ItemCarrinhoVol, type ComandaHistorico,
 } from "./lib/pdvVolanteOffline";
+import { gerarComandosAdendo, type ItemPedidoImp } from "./lib/escposPedido";
+import { imprimirViaBluetooth, bluetoothDisponivel } from "./lib/webBluetoothPrint";
+
+// Resumo minimo de comanda aberta vindo de GET /comandas/abertas?mesa=...
+interface ComandaAbertaResumo {
+  id: string;
+  numero: number;
+  status: "NOVO" | "EM_PREPARACAO";
+  total: number | string;
+  mesa?: string | null;
+  _count?: { itens: number };
+}
 
 // =====================================================================
 // ETAPA#7 — PDV Volante Mobile (PWA)
@@ -103,6 +115,14 @@ export default function PdvVolante() {
   // Historico das ultimas comandas deste dispositivo.
   const [mostrandoHistorico, setMostrandoHistorico] = useState(false);
   const [historico, setHistorico] = useState<ComandaHistorico[]>(() => lerHistorico());
+
+  // Modo adendo: quando o vendedor escolhe "Adicionar a comanda existente",
+  // o proximo envio sai pelo endpoint POST /comandas/:id/itens e imprime
+  // cupom de adendo no lugar do pedido inteiro.
+  const [comandaAlvo, setComandaAlvo] = useState<{ id: string; numero: number } | null>(null);
+  // Resultado da busca por comandas abertas na mesa selecionada.
+  const [comandasAbertasMesa, setComandasAbertasMesa] = useState<ComandaAbertaResumo[]>([]);
+  const [buscandoComandasMesa, setBuscandoComandasMesa] = useState(false);
 
   // Pull-to-refresh manual (sem libs). Funciona no wrapper que envolve a
   // lista virtualizada — react-window tem seu proprio scroller interno,
@@ -203,6 +223,44 @@ export default function PdvVolante() {
   }, []);
 
   useEffect(() => { carregarProdutos(); }, [carregarProdutos]);
+
+  // ====== detectar comanda aberta na mesa selecionada ======
+  // Sempre que a mesa muda (e nao esta vazia), busca no backend se ja existe
+  // comanda NOVO/EM_PREP nessa mesa. Aparece banner oferecendo "adicionar".
+  // Se a mesa for limpa ou trocada, descarta o modo adendo silenciosamente.
+  useEffect(() => {
+    const mesaLimpa = mesa.trim();
+    // Se trocou de mesa enquanto estava em modo adendo, desfaz (nao faz sentido
+    // adicionar a comanda da Mesa 5 quando agora estou na Mesa 6).
+    if (comandaAlvo) {
+      const mesaCasaAlvo = comandasAbertasMesa.find(c => c.id === comandaAlvo.id)?.mesa;
+      if (!mesaLimpa || (mesaCasaAlvo && mesaCasaAlvo !== mesaLimpa)) {
+        setComandaAlvo(null);
+      }
+    }
+    if (!mesaLimpa) {
+      setComandasAbertasMesa([]);
+      return;
+    }
+    let cancelado = false;
+    setBuscandoComandasMesa(true);
+    const t = setTimeout(async () => {
+      try {
+        const resp = await api.comandasAbertasPorMesa(mesaLimpa);
+        if (cancelado) return;
+        const lista = Array.isArray(resp) ? (resp as ComandaAbertaResumo[]) : [];
+        setComandasAbertasMesa(lista);
+      } catch {
+        if (!cancelado) setComandasAbertasMesa([]);
+      } finally {
+        if (!cancelado) setBuscandoComandasMesa(false);
+      }
+    }, 300);
+    return () => { cancelado = true; clearTimeout(t); };
+    // comandaAlvo/comandasAbertasMesa nao podem entrar no deps senao loop;
+    // o efeito so precisa rodar quando mesa muda.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mesa]);
 
   // ====== pull-to-refresh ======
   // Threshold (60px) e maximo (100px) com resistencia /2: usuario puxa
@@ -416,6 +474,41 @@ export default function PdvVolante() {
     setPendentes(totalPendentesFila());
   }
 
+  // Imprime cupom de adendo via Bluetooth (best-effort). Falha silenciosa
+  // — toast de sucesso no envio nao depende da impressora estar pareada.
+  async function imprimirAdendoBT(
+    comandaNumero: number,
+    itensNovos: ItemPedidoImp[],
+  ): Promise<void> {
+    if (!bluetoothDisponivel()) return;
+    try {
+      const empresa = getEmpresa();
+      const segmento: SegmentoEmpresa = (empresa?.segmento as SegmentoEmpresa) || "GERAL";
+      const cmds = gerarComandosAdendo(
+        {
+          comandaNumero,
+          mesa: mesa.trim() || null,
+          itensNovos,
+          agora: new Date(),
+        },
+        {
+          nome: empresa?.nome,
+          cnpj: empresa?.cnpj,
+          telefone: typeof empresa?.telefone === "string" ? empresa.telefone : undefined,
+        },
+        {
+          larguraMm: 80,
+          segmento,
+          cortarPapel: true,
+          mensagemRodape: mesa.trim() ? `Entregar em: ${mesa.trim()}` : null,
+        },
+      );
+      await imprimirViaBluetooth(cmds);
+    } catch {
+      // sem impressora pareada / usuario recusou — segue sem alarmar.
+    }
+  }
+
   async function enviarPedido() {
     if (carrinho.length === 0) {
       flashErro("Carrinho vazio");
@@ -423,30 +516,19 @@ export default function PdvVolante() {
     }
     setEnviando(true);
     try {
-      // ETAPA#8b: PDV Volante envia COMANDA (nao venda direto) — o pedido
-      // entra no Kanban da Central, onde o vendedor aceita, prepara e
-      // fecha (gera Venda real com baixa de estoque no checkout).
-      const payload = {
-        mesa: mesa.trim() || null,
-        observacoes: observacoes.trim() || null,
-        clienteId: cliente?.id || null,
-        desconto: desconto > 0 ? Number(desconto.toFixed(2)) : null,
-        itens: carrinho.map(i => ({
-          produtoId: i.produtoId,
-          quantidade: i.quantidade,
-          precoUnitario: i.precoUnitario,
-          observacoes: i.observacoes || null,
-        })),
-      };
       const totalSnapshot = total;
       const qtdSnapshot = carrinho.length;
       const mesaSnapshot = mesa.trim();
       const clienteSnapshot = cliente?.nome || null;
+      const itensCarrinhoSnap = carrinho.slice();
+      const alvo = comandaAlvo;
+
       const finalizar = (msg: string, ok: boolean, numero: number | null, origem: "enviada" | "fila") => {
         setCarrinho([]);
         limparCarrinho();
         setObservacoes("");
         setDescontoStr("");
+        setComandaAlvo(null);
         // mesa NAO e' limpa de proposito: vendedor de balcao costuma
         // repetir varias comandas no mesmo local.
         registrarHistorico({
@@ -461,6 +543,68 @@ export default function PdvVolante() {
         setHistorico(lerHistorico());
         if (ok) flashOk(msg); else flashErro(msg);
         setTela("produtos");
+      };
+
+      // ====== MODO ADENDO: adiciona itens a comanda existente ======
+      // Sem fallback offline aqui: o endpoint precisa do id da comanda no
+      // backend; se a rede caiu, melhor enfileirar como comanda nova (e o
+      // operador da Central concilia) do que tentar PATCH sem sincronia.
+      if (alvo) {
+        if (!online) {
+          flashErro("Sem rede — adicionar item requer servidor online");
+          return;
+        }
+        try {
+          const payloadAdendo = {
+            itens: itensCarrinhoSnap.map(i => ({
+              produtoId: i.produtoId,
+              quantidade: i.quantidade,
+              precoUnitario: i.precoUnitario,
+              observacoes: i.observacoes || null,
+            })),
+          };
+          const resp: any = await api.adicionarItensComanda(alvo.id, payloadAdendo);
+          // resp.itensAdicionados = itens recem-criados (com produto). Ja vem
+          // em ordem decrescente do banco — inverter pra imprimir na ordem
+          // logica (primeiro adicionado primeiro).
+          const itensAdicionados: ItemPedidoImp[] = ((resp?.itensAdicionados || []) as Array<{
+            quantidade: number | string;
+            precoUnitario: number | string;
+            subtotal: number | string;
+            produto?: ItemPedidoImp["produto"];
+          }>).slice().reverse().map(it => ({
+            quantidade: it.quantidade,
+            precoUnitario: it.precoUnitario,
+            subtotal: it.subtotal,
+            produto: it.produto,
+          }));
+          finalizar(
+            `✓ Adicionado a comanda #${alvo.numero} — ${itensAdicionados.length} ${itensAdicionados.length === 1 ? "item" : "itens"}`,
+            true, alvo.numero, "enviada",
+          );
+          imprimirAdendoBT(alvo.numero, itensAdicionados);
+          return;
+        } catch (err) {
+          flashErro("Falha ao adicionar: " + (err as Error).message);
+          return;
+        }
+      }
+
+      // ====== MODO PADRAO: cria nova comanda ======
+      // ETAPA#8b: PDV Volante envia COMANDA (nao venda direto) — o pedido
+      // entra no Kanban da Central, onde o vendedor aceita, prepara e
+      // fecha (gera Venda real com baixa de estoque no checkout).
+      const payload = {
+        mesa: mesaSnapshot || null,
+        observacoes: observacoes.trim() || null,
+        clienteId: cliente?.id || null,
+        desconto: desconto > 0 ? Number(desconto.toFixed(2)) : null,
+        itens: itensCarrinhoSnap.map(i => ({
+          produtoId: i.produtoId,
+          quantidade: i.quantidade,
+          precoUnitario: i.precoUnitario,
+          observacoes: i.observacoes || null,
+        })),
       };
       if (online) {
         try {
@@ -507,8 +651,10 @@ export default function PdvVolante() {
         <header className="sticky top-0 bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center gap-2">
           <button type="button" onClick={() => setTela("produtos")} className="text-slate-400 text-2xl px-2">←</button>
           <div className="flex-1 min-w-0">
-            <div className="font-bold truncate">Carrinho · {totalItens} {totalItens === 1 ? "item" : "itens"}</div>
-            {mesa && <div className="text-[11px] text-emerald-300 truncate">📍 {mesa}</div>}
+            <div className="font-bold truncate">
+              {comandaAlvo ? `Adendo · Comanda #${comandaAlvo.numero}` : "Carrinho"} · {totalItens} {totalItens === 1 ? "item" : "itens"}
+            </div>
+            {mesa && <div className={`text-[11px] truncate ${comandaAlvo ? "text-amber-300" : "text-emerald-300"}`}>📍 {mesa}</div>}
           </div>
           {carrinho.length > 0 && (
             <button
@@ -611,8 +757,16 @@ export default function PdvVolante() {
             type="button"
             onClick={enviarPedido}
             disabled={enviando || carrinho.length === 0}
-            className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 disabled:opacity-50 text-white font-bold text-lg rounded-xl">
-            {enviando ? "Enviando..." : online ? "✓ Enviar Pedido" : "📥 Enfileirar (offline)"}
+            className={`w-full py-4 active:brightness-95 disabled:opacity-50 text-white font-bold text-lg rounded-xl ${
+              comandaAlvo
+                ? "bg-amber-500 hover:bg-amber-400"
+                : "bg-emerald-500 hover:bg-emerald-400"
+            }`}>
+            {enviando
+              ? (comandaAlvo ? "Adicionando..." : "Enviando...")
+              : comandaAlvo
+                ? `+ Adicionar a Comanda #${comandaAlvo.numero}`
+                : online ? "✓ Enviar Pedido" : "📥 Enfileirar (offline)"}
           </button>
         </footer>
         {flash && <FlashView {...flash} />}
@@ -772,6 +926,48 @@ export default function PdvVolante() {
         </div>
       </header>
 
+      {/* Banner de comanda aberta detectada na mesa — so aparece quando ha
+          mesa selecionada COM comanda NOVO/EM_PREP e o usuario ainda nao
+          escolheu (adicionar vs criar nova). Some quando alvo definido. */}
+      {mesa.trim() && comandasAbertasMesa.length > 0 && !comandaAlvo && (
+        <div className="px-3 py-2 bg-amber-500/10 border-b border-amber-500/30">
+          {comandasAbertasMesa.slice(0, 3).map(c => (
+            <div key={c.id} className="flex items-center gap-2 py-1">
+              <span className="text-amber-200 text-xs flex-1 min-w-0 truncate">
+                🔁 <b>{c.mesa}</b> tem comanda <b>#{c.numero}</b> aberta · {c._count?.itens ?? 0} {(c._count?.itens ?? 0) === 1 ? "item" : "itens"} · {fmtBRL(c.total)}
+              </span>
+              <button
+                type="button"
+                onClick={() => { setComandaAlvo({ id: c.id, numero: c.numero }); flashOk(`Modo adendo: #${c.numero}`); }}
+                className="px-2 py-1 text-[11px] font-bold rounded-md bg-amber-500 hover:bg-amber-400 text-slate-900"
+              >+ Adicionar</button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => { setComandasAbertasMesa([]); }}
+            className="mt-1 text-[10px] text-amber-300/70 hover:text-amber-200 underline"
+          >Ignorar — criar nova comanda</button>
+        </div>
+      )}
+      {/* Modo adendo ATIVO — banner verde fixo com opcao de cancelar. */}
+      {comandaAlvo && (
+        <div className="px-3 py-2 bg-emerald-500/15 border-b border-emerald-500/40 flex items-center gap-2">
+          <span className="text-emerald-200 text-xs flex-1 min-w-0">
+            ✏️ Adicionando a <b>comanda #{comandaAlvo.numero}</b>
+            {mesa ? ` · ${mesa}` : ""}
+          </span>
+          <button
+            type="button"
+            onClick={() => { setComandaAlvo(null); flashOk("Modo adendo cancelado"); }}
+            className="px-2 py-1 text-[11px] font-bold rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
+          >× Cancelar</button>
+        </div>
+      )}
+      {buscandoComandasMesa && mesa.trim() && comandasAbertasMesa.length === 0 && !comandaAlvo && (
+        <div className="px-3 py-1 text-[10px] text-slate-500 border-b border-slate-800">Procurando comanda aberta nesta mesa…</div>
+      )}
+
       {carregando && produtos.length === 0 ? (
         <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">Carregando produtos…</div>
       ) : erro && produtos.length === 0 ? (
@@ -814,8 +1010,12 @@ export default function PdvVolante() {
           <span className="font-bold text-emerald-400">{fmtBRL(total)}</span>
         </button>
         <button onClick={enviarPedido} disabled={enviando || carrinho.length === 0}
-          className="px-5 py-3 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white font-bold rounded-xl">
-          {enviando ? "..." : "Enviar"}
+          className={`px-5 py-3 disabled:opacity-50 text-white font-bold rounded-xl ${
+            comandaAlvo
+              ? "bg-amber-500 hover:bg-amber-400"
+              : "bg-emerald-500 hover:bg-emerald-400"
+          }`}>
+          {enviando ? "..." : comandaAlvo ? `+ #${comandaAlvo.numero}` : "Enviar"}
         </button>
       </footer>
 

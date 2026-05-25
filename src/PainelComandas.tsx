@@ -532,7 +532,11 @@ export default function PainelComandas({ user }: Props) {
       )}
 
       {detalhe && (
-        <ModalDetalheComanda comanda={detalhe} onFechar={() => setDetalhe(null)} />
+        <ModalDetalheComanda
+          comanda={detalhe}
+          onFechar={() => setDetalhe(null)}
+          onAtualizar={() => { carregar(); toast("Comanda atualizada", "ok"); }}
+        />
       )}
       {checkout && (
         <ModalCheckoutComanda
@@ -1031,13 +1035,30 @@ function btnAcao(cor: string, ocupado: boolean, ghost = false): React.CSSPropert
 }
 
 // =====================================================================
-function ModalDetalheComanda({ comanda, onFechar }: { comanda: Comanda; onFechar: () => void }) {
+function ModalDetalheComanda({ comanda, onFechar, onAtualizar }: {
+  comanda: Comanda;
+  onFechar: () => void;
+  onAtualizar?: () => void;
+}) {
   const [completa, setCompleta] = useState<Comanda>(comanda);
+  const [adicionando, setAdicionando] = useState(false);
+  const [erroAdd, setErroAdd] = useState("");
   useEffect(() => {
     if (!comanda.itens) {
       api.obterComanda(comanda.id).then(c => setCompleta(c as Comanda)).catch(() => {});
     }
   }, [comanda]);
+
+  const podeAdicionar = completa.status === "NOVO" || completa.status === "EM_PREPARACAO";
+
+  async function recarregar() {
+    try {
+      const c = await api.obterComanda(completa.id);
+      setCompleta(c as Comanda);
+      onAtualizar?.();
+    } catch {}
+  }
+
   return (
     <div onClick={onFechar} style={{
       position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
@@ -1092,6 +1113,11 @@ function ModalDetalheComanda({ comanda, onFechar }: { comanda: Comanda; onFechar
                     Lote {it.produto.camposSegmento.lote}{it.produto.camposSegmento.validade ? ` · Val. ${it.produto.camposSegmento.validade}` : ""}
                   </div>
                 )}
+                {it.observacoes && (
+                  <div style={{ color: C.muted, fontSize: 10, marginTop: 2, fontStyle: "italic" }}>
+                    💬 {it.observacoes}
+                  </div>
+                )}
               </div>
               <div style={{ color: C.white, fontWeight: 600 }}>{fmtBRL(it.subtotal)}</div>
             </div>
@@ -1106,12 +1132,259 @@ function ModalDetalheComanda({ comanda, onFechar }: { comanda: Comanda; onFechar
           </div>
         </div>
 
+        {podeAdicionar && (
+          <button
+            type="button"
+            onClick={() => { setErroAdd(""); setAdicionando(true); }}
+            style={{
+              width: "100%", padding: "10px 14px", borderRadius: 8,
+              background: C.yellow + "22", border: `1px dashed ${C.yellow}`,
+              color: C.yellow, fontSize: 13, fontWeight: 700,
+              cursor: "pointer", marginBottom: 10,
+            }}
+          >+ Adicionar item à comanda</button>
+        )}
+        {erroAdd && (
+          <div style={{
+            padding: "8px 12px", marginBottom: 10, borderRadius: 8,
+            background: C.red + "22", border: `1px solid ${C.red}55`,
+            color: C.red, fontSize: 12,
+          }}>{erroAdd}</div>
+        )}
+
         {completa.observacoes && (
           <div style={{
             padding: 10, borderRadius: 6, background: C.surface,
             color: C.muted, fontSize: 12, fontStyle: "italic",
           }}>Obs: {completa.observacoes}</div>
         )}
+      </div>
+
+      {adicionando && (
+        <ModalAdicionarItem
+          comanda={completa}
+          onCancelar={() => setAdicionando(false)}
+          onErro={(m) => setErroAdd(m)}
+          onSucesso={async () => {
+            setAdicionando(false);
+            await recarregar();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
+// ModalAdicionarItem — picker leve de produto + quantidade + observacao.
+// Reutiliza GET /produtos (cache na primeira chamada) e POSTa em
+// /comandas/:id/itens. Tenta imprimir adendo via Bluetooth se disponivel.
+// =====================================================================
+interface ProdutoPicker {
+  id: string;
+  codigo: string;
+  nome: string;
+  unidade?: string | null;
+  precoVenda: number | string;
+  tipoItem?: string;
+  camposSegmento?: {
+    codigoOEM?: string;
+    marcaPeca?: string;
+    lote?: string;
+    validade?: string;
+  } | null;
+}
+
+function ModalAdicionarItem({ comanda, onCancelar, onSucesso, onErro }: {
+  comanda: Comanda;
+  onCancelar: () => void;
+  onSucesso: () => void;
+  onErro: (msg: string) => void;
+}) {
+  const [produtos, setProdutos] = useState<ProdutoPicker[]>([]);
+  const [busca, setBusca] = useState("");
+  const [buscaAtiva, setBuscaAtiva] = useState("");
+  const [selecionado, setSelecionado] = useState<ProdutoPicker | null>(null);
+  const [quantidade, setQuantidade] = useState("1");
+  const [observacoes, setObservacoes] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => {
+    let cancelado = false;
+    api.listarProdutos({ ativo: "true" })
+      .then((r: unknown) => {
+        if (cancelado) return;
+        const lista: ProdutoPicker[] = Array.isArray(r) ? r as ProdutoPicker[] : (r as { produtos?: ProdutoPicker[] })?.produtos || [];
+        setProdutos(lista);
+      })
+      .catch(() => { if (!cancelado) setProdutos([]); });
+    return () => { cancelado = true; };
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaAtiva(busca.trim().toLowerCase()), 200);
+    return () => clearTimeout(t);
+  }, [busca]);
+
+  const filtrados = useMemo(() => {
+    if (!buscaAtiva) return produtos.slice(0, 30);
+    return produtos.filter(p =>
+      p.nome.toLowerCase().includes(buscaAtiva)
+      || p.codigo.toLowerCase().includes(buscaAtiva)
+    ).slice(0, 30);
+  }, [produtos, buscaAtiva]);
+
+  async function confirmar() {
+    if (!selecionado) return;
+    const qtd = Number(quantidade.replace(",", "."));
+    if (!Number.isFinite(qtd) || qtd <= 0) {
+      onErro("Quantidade inválida");
+      return;
+    }
+    setSalvando(true);
+    try {
+      await api.adicionarItensComanda(comanda.id, {
+        itens: [{
+          produtoId: selecionado.id,
+          quantidade: qtd,
+          precoUnitario: Number(selecionado.precoVenda),
+          observacoes: observacoes.trim() || null,
+        }],
+      });
+      onSucesso();
+    } catch (err) {
+      onErro((err as Error).message);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div onClick={() => !salvando && onCancelar()} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.78)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: 20, zIndex: 250,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
+        width: "100%", maxWidth: 460, maxHeight: "85vh", display: "flex", flexDirection: "column",
+        overflow: "hidden",
+      }}>
+        <div style={{ padding: "16px 20px 12px", borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ color: C.white, fontSize: 16, fontWeight: 700 }}>
+            + Adicionar item · Comanda #{comanda.numero}
+          </div>
+          <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>
+            {comanda.mesa ? `${comanda.mesa} · ` : ""}Cliente pediu mais durante a permanência
+          </div>
+        </div>
+
+        {selecionado ? (
+          <div style={{ padding: 20, overflowY: "auto" }}>
+            <div style={{
+              padding: 10, borderRadius: 8, background: C.surface, border: `1px solid ${C.border}`,
+              display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14,
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: C.white, fontWeight: 700, fontSize: 13 }}>{selecionado.nome}</div>
+                <div style={{ color: C.muted, fontSize: 11 }}>
+                  {selecionado.codigo} · {fmtBRL(selecionado.precoVenda)}
+                </div>
+              </div>
+              <button type="button" onClick={() => setSelecionado(null)}
+                style={{ background: "transparent", border: "none", color: C.muted, cursor: "pointer", fontSize: 12 }}>
+                trocar
+              </button>
+            </div>
+
+            <label htmlFor="add-item-qtd" style={labelStyle}>Quantidade</label>
+            <input
+              id="add-item-qtd"
+              value={quantidade}
+              onChange={e => setQuantidade(e.target.value.replace(/[^0-9.,]/g, "").slice(0, 8))}
+              inputMode="decimal"
+              autoFocus
+              title="Quantidade do item"
+              placeholder="1"
+              style={{ ...inputStyle, fontSize: 18, textAlign: "center", fontWeight: 700 }}
+            />
+
+            <label htmlFor="add-item-obs" style={{ ...labelStyle, marginTop: 14 }}>Observação (opcional)</label>
+            <textarea
+              id="add-item-obs"
+              value={observacoes}
+              onChange={e => setObservacoes(e.target.value.slice(0, 300))}
+              rows={2}
+              placeholder="Ex.: sem cebola · bem passado"
+              title="Observação do item"
+              style={{ ...inputStyle, resize: "none", fontFamily: "inherit" }}
+            />
+
+            <div style={{
+              marginTop: 16, padding: 10, borderRadius: 8,
+              background: C.green + "11", border: `1px solid ${C.green}33`,
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+            }}>
+              <span style={{ color: C.muted, fontSize: 11 }}>Subtotal</span>
+              <span style={{ color: C.green, fontSize: 18, fontWeight: 700 }}>
+                {fmtBRL((Number(quantidade.replace(",", ".")) || 0) * Number(selecionado.precoVenda))}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+            <div style={{ padding: "12px 20px 0" }}>
+              <input
+                value={busca}
+                onChange={e => setBusca(e.target.value)}
+                placeholder="Buscar nome ou código…"
+                title="Buscar produto"
+                autoFocus
+                style={inputStyle}
+              />
+            </div>
+            <div style={{ overflowY: "auto", flex: 1, padding: "12px 12px 4px" }}>
+              {filtrados.length === 0 ? (
+                <div style={{ padding: 20, textAlign: "center", color: C.muted, fontSize: 12 }}>
+                  Nenhum produto encontrado.
+                </div>
+              ) : filtrados.map(p => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setSelecionado(p)}
+                  style={{
+                    width: "100%", textAlign: "left", padding: "10px 12px",
+                    background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8,
+                    color: C.white, marginBottom: 6, cursor: "pointer",
+                    display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8,
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{p.nome}</div>
+                    <div style={{ color: C.muted, fontSize: 11 }}>{p.codigo}</div>
+                  </div>
+                  <div style={{ color: C.accent, fontWeight: 700, fontSize: 13 }}>{fmtBRL(p.precoVenda)}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div style={{ padding: 16, borderTop: `1px solid ${C.border}`, display: "flex", gap: 8 }}>
+          <button type="button" onClick={onCancelar} disabled={salvando}
+            style={{ flex: 1, padding: "10px 14px", borderRadius: 8, background: C.surface, border: `1px solid ${C.border}`, color: C.muted, fontWeight: 700, cursor: salvando ? "wait" : "pointer" }}>
+            Cancelar
+          </button>
+          <button type="button" onClick={confirmar} disabled={salvando || !selecionado}
+            style={{ flex: 2, padding: "10px 14px", borderRadius: 8,
+              background: !selecionado ? C.border : `linear-gradient(135deg, ${C.green}, ${C.accent})`,
+              border: "none", color: "white", fontWeight: 800, cursor: salvando ? "wait" : (!selecionado ? "not-allowed" : "pointer"),
+              opacity: !selecionado ? 0.6 : 1,
+            }}>
+            {salvando ? "Adicionando..." : "✓ Adicionar"}
+          </button>
+        </div>
       </div>
     </div>
   );

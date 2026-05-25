@@ -174,3 +174,93 @@ export function gerarComandosPedido(
 
   return e.concat(partes);
 }
+
+// =====================================================================
+// Adendo: cupom para itens adicionados a uma comanda ja aberta. Imprime
+// destacado "ADENDO COMANDA #X" + so os itens novos, sem totais da
+// comanda inteira (cozinha so precisa do que falta produzir).
+// =====================================================================
+export interface AdendoImp {
+  comandaNumero: number | string;
+  mesa?: string | null;
+  vendedorNome?: string | null;
+  itensNovos: ItemPedidoImp[];
+  agora?: Date;
+}
+
+export function gerarComandosAdendo(
+  adendo: AdendoImp,
+  empresa: EmpresaImp,
+  opcoes: OpcoesImp = {},
+): Uint8Array {
+  const largCh = (opcoes.larguraMm ?? 80) === 58 ? 32 : 48;
+  const segmento = opcoes.segmento ?? "GERAL";
+  const partes: Uint8Array[] = [];
+
+  partes.push(e.init());
+
+  // ============ CABECALHO ============
+  partes.push(e.align(1), e.bold(true), e.fontSize(1, 2));
+  partes.push(e.linha((empresa.nome || "ESTABELECIMENTO").toUpperCase()));
+  partes.push(e.fontSize(1, 1));
+  partes.push(e.linha("*** ADENDO ***"));
+  partes.push(e.bold(false), e.align(0));
+  partes.push(e.divisor(largCh, "="));
+
+  // ============ INFO DO ADENDO ============
+  partes.push(e.bold(true), e.align(1));
+  partes.push(e.linha("COMANDA #" + adendo.comandaNumero));
+  partes.push(e.bold(false), e.align(0));
+  partes.push(e.linha("Data: " + fmtData(adendo.agora || new Date())));
+  if (adendo.mesa) partes.push(e.linha("Mesa/Balcao: " + adendo.mesa));
+  if (adendo.vendedorNome) partes.push(e.linha("Vendedor: " + adendo.vendedorNome));
+  partes.push(e.divisor(largCh));
+
+  // ============ ITENS NOVOS ============
+  partes.push(e.align(1), e.bold(true));
+  partes.push(e.linha("ITENS ADICIONADOS"));
+  partes.push(e.bold(false), e.align(0));
+  partes.push(e.divisor(largCh));
+
+  let totalAdendo = 0;
+  for (const it of adendo.itensNovos) {
+    const seg = it.produto?.camposSegmento;
+    const nome = String(it.produto?.nome || "").slice(0, largCh - 2);
+    partes.push(e.linha(`${it.produto?.codigo ?? ""} ${nome}`.trim()));
+    if (segmento === "AUTO_PECAS") {
+      if (seg?.codigoOEM) {
+        const extra = seg.marcaPeca ? `OEM: ${seg.codigoOEM} - ${seg.marcaPeca}` : `OEM: ${seg.codigoOEM}`;
+        partes.push(e.linha("  " + extra));
+      }
+    } else if (segmento === "FARMACIA") {
+      if (seg?.lote || seg?.validade) {
+        const partesExtra: string[] = [];
+        if (seg.lote) partesExtra.push(`Lote ${seg.lote}`);
+        if (seg.validade) partesExtra.push(`Val. ${seg.validade}`);
+        partes.push(e.linha("  " + partesExtra.join(" / ")));
+      }
+    }
+    partes.push(e.linhaDireita(
+      `${fmtQtd(it.quantidade)} ${it.produto?.unidade || "un"} x ${fmtBRL(it.precoUnitario)}`,
+      fmtBRL(it.subtotal),
+      largCh,
+    ));
+    totalAdendo += Number(it.subtotal) || 0;
+  }
+  partes.push(e.divisor(largCh));
+
+  // ============ SUBTOTAL DO ADENDO (somente dos novos) ============
+  partes.push(e.bold(true));
+  partes.push(e.linhaDireita("Subtotal adendo:", fmtBRL(totalAdendo), largCh));
+  partes.push(e.bold(false));
+  partes.push(e.divisor(largCh));
+
+  // ============ RODAPE ============
+  partes.push(e.align(1));
+  partes.push(e.linha(opcoes.mensagemRodape || "ADICIONAR A COMANDA EXISTENTE"));
+  partes.push(e.align(0), e.newLine(3));
+
+  if (opcoes.cortarPapel !== false) partes.push(e.cut());
+
+  return e.concat(partes);
+}

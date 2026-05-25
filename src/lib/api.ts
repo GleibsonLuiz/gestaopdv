@@ -653,8 +653,12 @@ export const api = {
   listarComandas: (filtros: StringDict = {}) =>
     request(`/comandas${qsFrom(filtros)}`),
   obterComanda: (id: string) => request(`/comandas/${id}`),
+  comandasAbertasPorMesa: (mesa: string) =>
+    request(`/comandas/abertas${qsFrom({ mesa })}`),
   criarComanda: (data: unknown) =>
     request("/comandas", { method: "POST", body: data }),
+  adicionarItensComanda: (id: string, data: unknown) =>
+    request(`/comandas/${id}/itens`, { method: "POST", body: data }),
   aceitarComanda: (id: string) =>
     request(`/comandas/${id}/aceitar`, { method: "PATCH" }),
   cancelarComanda: (id: string, motivo?: string) =>

@@ -1284,7 +1284,13 @@ function ModalDetalheComanda({ comanda, onFechar, onAtualizar }: {
     }
   }, [comanda]);
 
-  const podeAdicionar = completa.status === "NOVO" || completa.status === "EM_PREPARACAO";
+  // Pode adicionar enquanto a comanda nao concluiu/cancelou e o pedido nao saiu
+  // pra entrega. Em PRONTO/SERVINDO o backend devolve a comanda pra EM_PREPARACAO
+  // automaticamente (cozinha re-acionada) e zera os timestamps do ciclo.
+  const podeAdicionar = completa.status === "NOVO"
+    || completa.status === "EM_PREPARACAO"
+    || completa.status === "PRONTO"
+    || completa.status === "SERVINDO";
 
   async function recarregar() {
     try {

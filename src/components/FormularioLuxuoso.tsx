@@ -246,7 +246,7 @@ export function FormularioLuxuoso({
         .lux-row.cols-1 { grid-template-columns: 1fr; }
         .lux-row.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
         .lux-row.three-tilt { grid-template-columns: 1.2fr 0.6fr 1fr; }
-        .lux-row.addr-tilt { grid-template-columns: 130px 1fr 110px; }
+        .lux-row.addr-tilt { grid-template-columns: 130px 110px 1fr; }
 
         .lux-field {
           display: flex; flex-direction: column; gap: 4px;
@@ -264,9 +264,10 @@ export function FormularioLuxuoso({
           transform: translateY(-2px);
         }
         .lux-field .hint {
-          position: absolute; right: 0; top: 0;
           font-family: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
           font-size: 10.5px; color: ${C.muted};
+          line-height: 1.35;
+          margin-top: 2px;
         }
         .lux-field .erro {
           color: ${C.red};
@@ -556,8 +557,8 @@ export function Campo({ label, obrigatorio, hint, erro, span, children }: CampoP
           {obrigatorio && <span className="req" aria-hidden="true">•</span>}
         </label>
       )}
-      {hint && <span className="hint">{hint}</span>}
       {children}
+      {hint && <span className="hint">{hint}</span>}
       {erro && <div className="erro">{erro}</div>}
     </div>
   );

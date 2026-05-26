@@ -581,7 +581,7 @@ export default function Clientes({ user }: ClientesProps) {
         compacto
       >
         <Secao legenda="Identificação">
-          <Linha cols={1}>
+          <Linha style={{ gridTemplateColumns: "1fr 180px" }}>
             <Campo
               label="Nome completo"
               obrigatorio
@@ -598,6 +598,15 @@ export default function Clientes({ user }: ClientesProps) {
                 autoFocus
                 autoComplete="name"
                 aria-invalid={nomeInvalido ? "true" : undefined}
+              />
+            </Campo>
+            <Campo label="Data de nascimento" hint="Usada em Aniversariantes">
+              <input
+                type="date"
+                className="lux-input"
+                value={form.dataNascimento}
+                onChange={(e) => setForm({ ...form, dataNascimento: e.target.value })}
+                aria-label="Data de nascimento"
               />
             </Campo>
           </Linha>
@@ -746,17 +755,6 @@ export default function Clientes({ user }: ClientesProps) {
                   <option key={o} value={o}>{o}</option>
                 ))}
               </select>
-            </Campo>
-          </Linha>
-          <Linha cols={1}>
-            <Campo label="Data de nascimento / fundação" hint="Usada na tela de Aniversariantes">
-              <input
-                type="date"
-                className="lux-input"
-                value={form.dataNascimento}
-                onChange={(e) => setForm({ ...form, dataNascimento: e.target.value })}
-                aria-label="Data de nascimento"
-              />
             </Campo>
           </Linha>
         </Secao>

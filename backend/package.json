@@ -15,7 +15,11 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "prisma:seed": "node prisma/seed.js"
+    "prisma:seed": "node prisma/seed.js",
+    "db:backup": "node scripts/db-manager.js backup",
+    "db:restore": "node scripts/db-manager.js restore",
+    "db:list": "node scripts/db-manager.js list",
+    "db:verify": "node scripts/db-manager.js verify"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

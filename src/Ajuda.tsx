@@ -141,14 +141,13 @@ const GRUPOS: Grupo[] = [
   },
 ];
 
-// Slugify usado pelo react-markdown (mesma logica do github-slugger).
-// Mantemos uma versao simples aqui para gerar os ids dos headings.
+// Slugify usado pelo react-markdown. Preserva acentos/cedilha (PT-BR)
+// usando classes Unicode \p{L} e \p{N}, para casar com os hrefs do
+// proprio MANUAL.md (ex: "[Operacao](#51-operação)").
 function slugify(texto: string): string {
   return texto
     .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^\w\s-]/g, "")
+    .replace(/[^\p{L}\p{N}\s-]/gu, "")
     .trim()
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-");
@@ -297,7 +296,35 @@ export default function Ajuda({ topicoInicial }: Props) {
               th: (props) => <th style={estilos.th} {...props} />,
               td: (props) => <td style={estilos.td} {...props} />,
               hr: () => <hr style={estilos.hr} />,
-              a:  (props) => <a style={estilos.link} target="_blank" rel="noopener noreferrer" {...props} />,
+              a:  (props) => {
+                const href = (props as any).href || "";
+                // Ancoras internas (#topico) — fazem scroll dentro do painel
+                // em vez de abrir nova aba. Sem isso, target=_blank carregava
+                // a app inteira no estado padrao (PDV).
+                if (href.startsWith("#")) {
+                  return (
+                    <a
+                      {...props}
+                      style={estilos.link}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        const raw = decodeURIComponent(href.slice(1));
+                        const root = conteudoRef.current;
+                        if (!root) return;
+                        let alvo = root.querySelector<HTMLElement>(`[id="${CSS.escape(raw)}"]`);
+                        if (!alvo) {
+                          // Fallback: normaliza o href via mesmo slugify dos
+                          // headings, caso o link no markdown tenha sido
+                          // escrito numa forma ligeiramente diferente.
+                          alvo = root.querySelector<HTMLElement>(`[id="${CSS.escape(slugify(raw))}"]`);
+                        }
+                        if (alvo) alvo.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }}
+                    />
+                  );
+                }
+                return <a style={estilos.link} target="_blank" rel="noopener noreferrer" {...props} />;
+              },
               strong: (props) => <strong style={{ color: C.white }} {...props} />,
             }}
           >

@@ -43,6 +43,9 @@ interface RequestOptions {
   method?: string;
   body?: unknown;
   auth?: boolean;
+  // Timeout customizado em ms. Default TIMEOUT_PADRAO_MS (15s). Operacoes
+  // pesadas (backup completo, restore, exports grandes) usam valores maiores.
+  timeoutMs?: number;
 }
 
 export type ApiErroKind = "NETWORK" | "TIMEOUT" | "SERVER_5XX" | "CLIENT_4XX" | "AUTH" | "ABORT";
@@ -172,17 +175,17 @@ export function clearSession(): void {
 // limpamos a sessao localmente e disparamos auth:logout para o
 // App.jsx redirecionar pro Login.
 async function request<T = unknown>(path: string, opts: RequestOptions = {}): Promise<T> {
-  const { method = "GET", body, auth = true } = opts;
+  const { method = "GET", body, auth = true, timeoutMs = TIMEOUT_PADRAO_MS } = opts;
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (auth) {
     const token = getToken();
     if (token) headers["Authorization"] = `Bearer ${token}`;
   }
 
-  // AbortController: corta a request se ultrapassar TIMEOUT_PADRAO_MS.
+  // AbortController: corta a request se ultrapassar timeoutMs.
   // Diferencia "servidor lento" (timeout) de "sem internet" (NETWORK).
   const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(new DOMException("Timeout", "TimeoutError")), TIMEOUT_PADRAO_MS);
+  const timer = setTimeout(() => ac.abort(new DOMException("Timeout", "TimeoutError")), timeoutMs);
 
   let res: Response;
   try {
@@ -669,6 +672,18 @@ export const api = {
 
   resetarSistema: (confirmacao: string) =>
     request("/admin/reset", { method: "POST", body: { confirmacao } }),
+
+  // Backup/restore JSON via HTTP. Timeout 60s para cobrir bancos maiores —
+  // o controller le todas as tabelas em paralelo via Prisma. Restore tem
+  // timeout maior (120s) porque insere todos os registros em transacao.
+  exportarBackup: () =>
+    request("/backup/exportar", { method: "POST", timeoutMs: 60_000 }),
+  restaurarBackup: (confirmacao: string, backup: unknown) =>
+    request("/backup/restaurar", {
+      method: "POST",
+      body: { confirmacao, backup },
+      timeoutMs: 120_000,
+    }),
 
   // ==================== FIDELIDADE ====================
   obterConfiguracaoFidelidade: () => request("/fidelidade/configuracao"),

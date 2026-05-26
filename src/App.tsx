@@ -27,6 +27,7 @@ const Dashboard = lazy(() => import("./Dashboard"));
 const Relatorios = lazy(() => import("./Relatorios"));
 const Projeto = lazy(() => import("./Projeto"));
 const Sistema = lazy(() => import("./Sistema"));
+const Backup = lazy(() => import("./Backup"));
 const ConfiguracoesImpressora = lazy(() => import("./ConfiguracoesImpressora"));
 const Empresa = lazy(() => import("./Empresa"));
 const TrocarSenhaModal = lazy(() => import("./TrocarSenhaModal"));
@@ -300,7 +301,7 @@ export default function App() {
 
   function podeVer(t: string) {
     if (t === "projeto" || t === "aparencia") return true;
-    if (t === "sistema" || t === "logs") return user?.role === "ADMIN";
+    if (t === "sistema" || t === "logs" || t === "backup") return user?.role === "ADMIN";
     if (t === "empresa") return user?.role === "ADMIN" || user?.role === "GERENTE";
     if (t === "impressora") return user?.role === "ADMIN" || user?.role === "GERENTE";
     return podeAcessar(user, TELA_MODULO[t] as any);
@@ -311,7 +312,7 @@ export default function App() {
     if (!user) return;
     if (!podeVer(tela)) {
       const primeira = ["pdv","dashboard","dashboardcrm","caixa","clientes","segmentos","reativacao","tarefas","fidelidade","funil","automacoes","nps","fornecedores","produtos","etiquetas",
-        "estoque","inventario","compras","orcamentos","financeiro","relatorios","comissoes","painelcomandas","whatsapp","funcionarios","projeto","sistema","empresa","impressora"].find(podeVer);
+        "estoque","inventario","compras","orcamentos","financeiro","relatorios","comissoes","painelcomandas","whatsapp","funcionarios","projeto","sistema","backup","empresa","impressora"].find(podeVer);
       if (primeira && primeira !== tela) setTela(primeira);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -612,6 +613,9 @@ export default function App() {
             <Item icone="📜" label="Logs" ativo={tela === "logs"} onClick={() => navegar("logs")} />
           )}
           {user.role === "ADMIN" && (
+            <Item icone="💾" label="Backup" ativo={tela === "backup"} onClick={() => navegar("backup")} />
+          )}
+          {user.role === "ADMIN" && (
             <Item icone="🛡" label="Sistema" ativo={tela === "sistema"} onClick={() => navegar("sistema")} />
           )}
         </nav>
@@ -879,6 +883,12 @@ export default function App() {
           )}
           {tela === "logs" && user.role === "ADMIN" && (
             <Logs />
+          )}
+          {tela === "backup" && user.role === "ADMIN" && (
+            <>
+              <PageHeader titulo="Backup e Restauração" subtitulo="Baixe ou restaure todos os dados da empresa em um arquivo .json" />
+              <Backup user={user} />
+            </>
           )}
           {tela === "sistema" && user.role === "ADMIN" && (
             <>

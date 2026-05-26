@@ -60,17 +60,28 @@ export function useRascunho<T>(
   } = opts;
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const versaoRef = useRef(versao);
+  // Marca se este hook ja gravou algo nesta sessao. Evita o cenario classico:
+  // mount com estado vazio + desativar=true apaga o rascunho persistido
+  // ANTES do componente ter chance de restaurar via restaurar(). So permite
+  // apagar via efeito automatico quando algo foi gravado por este mount.
+  const gravouRef = useRef(false);
 
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     if (desativar) {
-      try { localStorage.removeItem(chave); } catch { /* quota cheia / privado */ }
+      // So apaga se algo ja foi gravado por esta instancia. Mount com estado
+      // vazio nao apaga o rascunho que veio do reload anterior.
+      if (gravouRef.current) {
+        try { localStorage.removeItem(chave); } catch { /* quota cheia / privado */ }
+        gravouRef.current = false;
+      }
       return;
     }
     timerRef.current = setTimeout(() => {
       try {
         const payload: Payload<T> = { v: versaoRef.current, ts: Date.now(), data: valor };
         localStorage.setItem(chave, serializar(payload as unknown as T));
+        gravouRef.current = true;
       } catch {
         // localStorage pode estourar quota ou estar bloqueado em modo
         // privado — falha silenciosa, melhor que crashar a tela.
@@ -95,6 +106,7 @@ export function useRascunho<T>(
     restaurar: () => lerPayload()?.data ?? null,
     descartar: () => {
       try { localStorage.removeItem(chave); } catch { /* ignore */ }
+      gravouRef.current = false;
     },
     idadeMs: () => {
       const p = lerPayload();

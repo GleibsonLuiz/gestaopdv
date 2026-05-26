@@ -148,6 +148,18 @@ export function setSession(token: string, user: SessionUser, empresa: SessionEmp
   }
 }
 
+// Atualiza so o cache da empresa (sem mexer em token/user). Usado no boot
+// apos /auth/me para refletir mudancas feitas no Admin Master (ex: troca de
+// segmento) sem exigir logout/login. Produtos.tsx e outras telas leem
+// segmento de getEmpresa() entao precisam do cache atualizado.
+export function setEmpresa(empresa: SessionEmpresa | null): void {
+  if (empresa) {
+    localStorage.setItem(EMPRESA_KEY, JSON.stringify(empresa));
+  } else {
+    localStorage.removeItem(EMPRESA_KEY);
+  }
+}
+
 export function clearSession(): void {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, lazy, Suspense, type CSSProperties } from "react";
 import { C, hidratarAparenciaDoUser } from "./lib/theme";
 import Alertas from "./Alertas";
-import { getUser, getToken, clearSession, api } from "./lib/api";
+import { getUser, getToken, clearSession, setEmpresa, api } from "./lib/api";
 import { podeAcessar } from "./lib/permissoes";
 import PwaUpdateBanner from "./components/PwaUpdateBanner";
 import IndicadorRede from "./components/IndicadorRede";
@@ -219,6 +219,10 @@ export default function App() {
         if (ativo) {
           setUser(u);
           hidratarPreferencias(u);
+          // Sincroniza cache da empresa: o segmento pode ter sido alterado
+          // no Admin Master enquanto o user estava logado. Sem isso,
+          // Produtos.tsx renderiza com segmento antigo ate o proximo login.
+          if (u?.empresa) setEmpresa(u.empresa);
         }
       } catch {
         clearSession();

@@ -5,7 +5,6 @@
   "main": "src/server.js",
   "type": "module",
   "scripts": {
-    "predev": "prisma generate",
     "dev": "tsx watch src/server.js",
     "dev:node": "nodemon src/server.js",
     "prestart": "prisma generate",

@@ -13,6 +13,7 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { C } from "./lib/theme";
 import { api, setSession, getToken, getUser, type SessionUser, type SessionEmpresa } from "./lib/api";
+import { getAvisosRedeAtivos, setAvisosRedeAtivos } from "./lib/preferenciasUI";
 import Configuracoes from "./Configuracoes";
 
 type Plano = "TRIAL" | "FREE" | "STARTER" | "PRO" | "ENTERPRISE";
@@ -307,6 +308,9 @@ export default function Empresa({ user }: EmpresaProps) {
         </div>
       )}
 
+      {/* ============ BLOCO PREFERENCIAS LOCAIS ============ */}
+      <BlocoPreferenciasUI />
+
       {/* ============ BLOCO 3: DADOS FISCAIS (CONFIGURACAO EMPRESA) ============ */}
       <div className="bg-gp-card border border-gp-border rounded-xl p-1 mb-5">
         <div className="px-4 py-3 border-b border-gp-border">
@@ -437,6 +441,87 @@ function BlocoPlano({ plano, expiraEm, uso, limites }: BlocoPlanoProps) {
 
       <div className="mt-3 px-3 py-2 bg-gp-bg rounded-lg text-[11px] text-gp-muted">
         Para alterar o plano ou ampliar limites, entre em contato com o suporte.
+      </div>
+    </div>
+  );
+}
+
+// ============ BLOCO PREFERENCIAS LOCAIS (per-browser) ============
+// Hoje so' tem o flag de avisos de servidor (tarja + toasts automaticos
+// de NETWORK/TIMEOUT/5xx). Erros 4xx continuam aparecendo via try/catch
+// das telas. A preferencia e' por dispositivo (localStorage) — nao
+// sincroniza com o backend nem se aplica a outros usuarios do tenant.
+function BlocoPreferenciasUI() {
+  const [avisosRede, setAvisosRede] = useState<boolean>(() => getAvisosRedeAtivos());
+
+  function alternar() {
+    const novo = !avisosRede;
+    setAvisosRede(novo);
+    setAvisosRedeAtivos(novo);
+  }
+
+  return (
+    <div className="bg-gp-card border border-gp-border rounded-xl p-5 mb-5">
+      <div className="text-gp-muted text-[11px] font-bold uppercase tracking-[0.5px] mb-3">
+        Preferencias deste dispositivo
+      </div>
+
+      <div
+        className="bg-gp-surface border border-gp-border rounded-[10px] p-4"
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}
+      >
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="text-gp-white text-sm font-bold">
+            📡 Avisos de conexao com o servidor
+          </div>
+          <div className="text-gp-muted text-xs mt-1" style={{ lineHeight: 1.45 }}>
+            Quando ligado, mostra a tarja vermelha/amarela no topo e os toasts de
+            "sem conexao" / "servidor instavel". Desligue se preferir uma tela mais
+            limpa — mensagens de erro especificas das telas continuam aparecendo.
+          </div>
+          <div className="text-gp-muted text-[11px] mt-2" style={{ opacity: 0.7 }}>
+            Vale so neste navegador / dispositivo.
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={alternar}
+          role="switch"
+          aria-checked={avisosRede ? "true" : "false"}
+          aria-label="Mostrar avisos de conexao com o servidor"
+          style={{
+            position: "relative",
+            width: 52,
+            height: 28,
+            borderRadius: 999,
+            border: `1px solid ${avisosRede ? C.green : C.border}`,
+            background: avisosRede ? C.green : C.bg,
+            cursor: "pointer",
+            transition: "background 150ms, border-color 150ms",
+            flexShrink: 0,
+          }}
+        >
+          <span
+            style={{
+              position: "absolute",
+              top: 2,
+              left: avisosRede ? 26 : 2,
+              width: 22,
+              height: 22,
+              borderRadius: "50%",
+              background: "#ffffff",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+              transition: "left 150ms",
+            }}
+          />
+        </button>
+      </div>
+
+      <div className="text-gp-muted text-[11px] mt-2 px-1" style={{ opacity: 0.75 }}>
+        Status atual: <strong style={{ color: avisosRede ? C.green : C.muted }}>
+          {avisosRede ? "Avisos ligados" : "Avisos desligados"}
+        </strong>
       </div>
     </div>
   );

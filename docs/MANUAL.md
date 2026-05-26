@@ -689,6 +689,10 @@ Cada grupo tem header colapsável com contagem + subtotal.
 - Cores: 🟢 <70%, 🟡 70-90%, 🔴 ≥90%
 - `∞` = ilimitado
 
+**Bloco "Preferências deste dispositivo":**
+
+- 📡 **Avisos de conexão com o servidor** — interruptor liga/desliga a tarja vermelha/amarela do topo e os toasts automáticos de "sem conexão" / "servidor instável". Erros específicos das telas (validação, 4xx) continuam aparecendo normalmente. Vale só neste navegador (localStorage).
+
 ---
 
 #### 🖨️ Configurações de Impressora
@@ -810,6 +814,7 @@ O sistema é projetado para **degradar com graça** quando a internet falha.
 - **Finalizar venda** — bloqueado offline (precisa do servidor).
 - **Botões críticos** ficam meio-opacos / sem clique quando degradado (classe `gp-bloqueio-offline`).
 - Timeout padrão: 15s nas APIs, 60s em upload.
+- **Desligar avisos:** se preferir uma tela mais limpa, vá em **Empresa → Preferências deste dispositivo** e desligue *Avisos de conexão com o servidor*. A tarja e os toasts automáticos somem; o bloqueio do "Finalizar venda" continua valendo.
 
 ---
 

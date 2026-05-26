@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNetworkStatus } from "../lib/useNetworkStatus";
 import { ouvirToasts, type ToastPayload } from "../lib/toast";
+import { getAvisosRedeAtivos, ouvirAvisosRede } from "../lib/preferenciasUI";
 import { C } from "../lib/theme";
 
 // =====================================================================
@@ -18,14 +19,20 @@ import { C } from "../lib/theme";
 
 function TarjaRede() {
   const { online, apiSaudavel } = useNetworkStatus();
+  const [avisosAtivos, setAvisosAtivos] = useState<boolean>(() => getAvisosRedeAtivos());
 
-  // Mantem flag no body para CSS opt-in. Ex: `.gp-offline .pdv-btn-finalizar { opacity: .5; pointer-events: none; }`
+  useEffect(() => ouvirAvisosRede(setAvisosAtivos), []);
+
+  // Mantem flag no body para CSS opt-in. Mesmo com avisos desligados,
+  // continuamos marcando .gp-offline pra telas que dependem dele (PDV
+  // bloqueia o botao Finalizar venda).
   useEffect(() => {
     const degradado = !online || !apiSaudavel;
     document.body.classList.toggle("gp-offline", degradado);
     return () => { document.body.classList.remove("gp-offline"); };
   }, [online, apiSaudavel]);
 
+  if (!avisosAtivos) return null;
   if (online && apiSaudavel) return null;
 
   const fundo = !online ? "#dc2626" : "#f59e0b";

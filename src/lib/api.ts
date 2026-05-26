@@ -91,9 +91,12 @@ function avisarUsuarioFalha(kind: ApiErroKind, path: string) {
   if (agora - ultimo < 1500) return;
   ultimosToasts.set(chave, agora);
 
-  // Import lazy de toast.ts para evitar ciclo no tree-shake e nao quebrar
-  // contextos onde api.ts e usado sem UI (tests, SSR).
-  import("./toast").then(({ emitirToast }) => {
+  // Respeita preferencia per-browser do usuario: se ele desligou os avisos
+  // de servidor (Empresa > Avisos de conexao), nao emite toasts automaticos
+  // de rede. Erros 4xx continuam aparecendo via try/catch das telas.
+  import("./preferenciasUI").then(({ getAvisosRedeAtivos }) => {
+    if (!getAvisosRedeAtivos()) return;
+    return import("./toast").then(({ emitirToast }) => {
     if (kind === "NETWORK") {
       emitirToast({
         tipo: "aviso",
@@ -118,6 +121,7 @@ function avisarUsuarioFalha(kind: ApiErroKind, path: string) {
     }
     // CLIENT_4XX nao gera toast automatico — cada tela ja trata sua
     // mensagem de validacao especifica via try/catch.
+    });
   }).catch(() => { /* sem UI disponivel */ });
 }
 

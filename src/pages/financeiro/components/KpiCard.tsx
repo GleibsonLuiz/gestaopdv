@@ -58,19 +58,19 @@ export default function KpiCard({ kpi, active, onClick }: KpiCardProps) {
       onClick={onClick}
       aria-pressed={interactive ? !!active : undefined}
       className={[
-        "relative w-full text-left rounded-card p-[18px_20px_16px] border shadow-card overflow-hidden isolate transition",
+        "relative w-full text-left rounded-card p-[12px_16px_11px] border shadow-card overflow-hidden isolate transition",
         active ? "border-iris/55" : "border-hairline-soft",
         interactive ? "hover:border-iris/40 hover:brightness-105 cursor-pointer focus:outline-none focus:ring-2 focus:ring-iris/40" : "",
       ].join(" ")}
       style={{ background: cardBg }}
     >
-      <div className="flex items-center justify-between mb-[22px]">
-        <div className="flex items-center gap-2 text-[11px] uppercase tracking-[.14em] text-fg-muted font-medium">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2 text-[10.5px] uppercase tracking-[.14em] text-fg-muted font-medium">
           <span
-            className="w-[22px] h-[22px] rounded-[7px] inline-flex items-center justify-center"
+            className="w-[20px] h-[20px] rounded-[6px] inline-flex items-center justify-center"
             style={{ background: tone.bg, border: `1px solid ${tone.border}`, color: tone.color }}
           >
-            <Icon name={kpi.icon} className="w-3.5 h-3.5" />
+            <Icon name={kpi.icon} className="w-3 h-3" />
           </span>
           {kpi.label}
         </div>
@@ -78,28 +78,27 @@ export default function KpiCard({ kpi, active, onClick }: KpiCardProps) {
       </div>
 
       <div className="flex items-baseline font-medium tracking-[-0.025em]">
-        <span className="font-mono text-[13px] text-fg-muted mr-1.5 -translate-y-[7px]">R$</span>
-        <span className={`font-mono text-[30px] font-medium ${tone.intClass}`}>{kpi.value}</span>
-        <span className="font-mono text-base text-fg-muted font-medium ml-0.5">,{kpi.cents}</span>
+        <span className="font-mono text-[11.5px] text-fg-muted mr-1 -translate-y-[5px]">R$</span>
+        <span className={`font-mono text-[24px] font-medium leading-none ${tone.intClass}`}>{kpi.value}</span>
+        <span className="font-mono text-[13px] text-fg-muted font-medium ml-0.5">,{kpi.cents}</span>
       </div>
 
       {kpi.sparkPath && (
         <Sparkline d={kpi.sparkPath} color={tone.color} gradientId={`g-${kpi.id}`} />
       )}
-      {!kpi.sparkPath && <div className="h-3" />}
 
-      <div className="flex items-center justify-between mt-3.5 text-xs text-fg-faint">
-        <div className="flex items-center gap-2">
-          <span>{kpi.footLeft}</span>
+      <div className="flex items-center justify-between mt-2 text-[11px] text-fg-faint">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="truncate">{kpi.footLeft}</span>
           {kpi.footPill && (
-            <span className="font-mono text-[11px] px-[7px] py-0.5 rounded bg-white/[.04] text-fg-soft">
+            <span className="font-mono text-[10.5px] px-[6px] py-0.5 rounded bg-white/[.04] text-fg-soft">
               {kpi.footPill}
             </span>
           )}
         </div>
         {kpi.progress != null && (
           <div
-            className="w-[78px] h-1 rounded-full overflow-hidden bg-white/[.05] relative"
+            className="w-[64px] h-[3px] rounded-full overflow-hidden bg-white/[.05] relative flex-none ml-2"
             aria-label="cobertura"
           >
             <span

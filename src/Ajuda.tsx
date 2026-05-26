@@ -162,6 +162,7 @@ interface Props {
 export default function Ajuda({ topicoInicial }: Props) {
   const [busca, setBusca] = useState("");
   const [ativo, setAtivo] = useState<string>(() => topicoInicial || GRUPOS[0].topicos[0].id);
+  const [mostrarTopo, setMostrarTopo] = useState(false);
   const conteudoRef = useRef<HTMLDivElement | null>(null);
 
   // Quando o topicoInicial muda (usuario clica em "?" de outra tela), rola
@@ -173,6 +174,18 @@ export default function Ajuda({ topicoInicial }: Props) {
     setTimeout(() => rolarPara(topicoInicial), 50);
   }, [topicoInicial]);
 
+  // Mostra/oculta o botao flutuante "voltar ao topo" baseado no scroll
+  // do painel de conteudo (nao do window — o painel rola sozinho).
+  useEffect(() => {
+    const root = conteudoRef.current;
+    if (!root) return;
+    function aoRolar() {
+      setMostrarTopo((root as HTMLDivElement).scrollTop > 400);
+    }
+    root.addEventListener("scroll", aoRolar, { passive: true });
+    return () => root.removeEventListener("scroll", aoRolar);
+  }, []);
+
   function rolarPara(id: string) {
     const root = conteudoRef.current;
     if (!root) return;
@@ -180,6 +193,13 @@ export default function Ajuda({ topicoInicial }: Props) {
     if (alvo) {
       alvo.scrollIntoView({ behavior: "smooth", block: "start" });
     }
+  }
+
+  function voltarAoTopo() {
+    const root = conteudoRef.current;
+    if (!root) return;
+    root.scrollTo({ top: 0, behavior: "smooth" });
+    setAtivo(GRUPOS[0].topicos[0].id);
   }
 
   function aoClicarTopico(id: string) {
@@ -200,13 +220,18 @@ export default function Ajuda({ topicoInicial }: Props) {
     <div style={estilos.shell}>
       {/* Coluna esquerda: sumario + busca */}
       <aside style={estilos.sumario}>
-        <div style={estilos.cabecalhoSumario}>
+        <button
+          onClick={voltarAoTopo}
+          title="Voltar ao inicio do manual"
+          style={estilos.cabecalhoSumario}
+        >
           <div style={estilos.tituloAjuda}>
             <span style={{ fontSize: 22 }}>❓</span>
             <span>Ajuda</span>
+            <span style={{ marginLeft: "auto", fontSize: 11, color: C.muted, fontWeight: 500 }}>↑ Inicio</span>
           </div>
-          <div style={estilos.subtituloAjuda}>Manual do sistema</div>
-        </div>
+          <div style={estilos.subtituloAjuda}>Manual do sistema · clique para voltar ao topo</div>
+        </button>
         <div style={{ padding: "10px 12px", borderBottom: `1px solid ${C.border}` }}>
           <input
             value={busca}
@@ -279,6 +304,21 @@ export default function Ajuda({ topicoInicial }: Props) {
             {manualMd}
           </ReactMarkdown>
         </div>
+
+        {/* Botao flutuante "voltar ao topo" — aparece apos rolar > 400px */}
+        {mostrarTopo && (
+          <button
+            onClick={voltarAoTopo}
+            title="Voltar ao topo (Home)"
+            aria-label="Voltar ao topo"
+            style={estilos.botaoTopo}
+            onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
+          >
+            <span style={{ fontSize: 18 }}>↑</span>
+            <span>Topo</span>
+          </button>
+        )}
       </div>
     </div>
   );
@@ -304,8 +344,8 @@ const estilos: Record<string, CSSProperties> = {
     border: `1px solid ${C.border}`,
     borderRadius: 12,
     overflow: "hidden",
-    minHeight: "calc(100vh - 120px)",
-    maxHeight: "calc(100vh - 80px)",
+    height: "calc(100vh - 130px)",
+    position: "relative",
   },
   sumario: {
     background: C.bg,
@@ -318,6 +358,12 @@ const estilos: Record<string, CSSProperties> = {
     padding: "16px 16px 12px",
     borderBottom: `1px solid ${C.border}`,
     background: `linear-gradient(135deg, ${C.accent}15, ${C.purple}15)`,
+    cursor: "pointer",
+    width: "100%",
+    textAlign: "left",
+    border: "none",
+    borderRadius: 0,
+    transition: "background 0.15s ease",
   },
   tituloAjuda: {
     display: "flex", alignItems: "center", gap: 10,
@@ -410,4 +456,23 @@ const estilos: Record<string, CSSProperties> = {
     margin: "24px 0",
   },
   link: { color: C.accent, textDecoration: "underline" },
+  botaoTopo: {
+    position: "absolute",
+    right: 24,
+    bottom: 24,
+    background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+    color: C.white,
+    border: "none",
+    borderRadius: 24,
+    padding: "10px 18px",
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    boxShadow: "0 6px 20px rgba(0,0,0,0.4)",
+    transition: "transform 0.15s ease, box-shadow 0.15s ease",
+    zIndex: 10,
+  },
 };

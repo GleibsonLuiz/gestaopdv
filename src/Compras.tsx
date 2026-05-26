@@ -509,7 +509,7 @@ function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }: NovaC
 
         <div
           className="grid gap-3 mb-4"
-          style={{ gridTemplateColumns: "170px 1fr 1.5fr" }}
+          style={{ gridTemplateColumns: "170px 1.5fr 1fr" }}
         >
           <Campo label="Data da compra *">
             <input

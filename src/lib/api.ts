@@ -45,15 +45,77 @@ interface RequestOptions {
   auth?: boolean;
 }
 
+export type ApiErroKind = "NETWORK" | "TIMEOUT" | "SERVER_5XX" | "CLIENT_4XX" | "AUTH" | "ABORT";
+
 export class ApiError extends Error {
   status: number;
   data: unknown;
-  constructor(message: string, status: number, data: unknown) {
+  kind: ApiErroKind;
+  constructor(message: string, status: number, data: unknown, kind: ApiErroKind = "CLIENT_4XX") {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.data = data;
+    this.kind = kind;
   }
+}
+
+// Timeout padrao para qualquer request HTTP em ms. Cobre o caso comum de
+// conexao instavel sem deixar o usuario travado eternamente esperando.
+const TIMEOUT_PADRAO_MS = 15_000;
+
+// Emite "api:ok" / "api:falha" para o useNetworkStatus monitorar saude
+// do backend sem precisar de polling. Mensagens amigaveis vao para o
+// usuario via emitirToast (em toast.ts). Mantemos a comunicacao por
+// CustomEvent para nao criar dependencia circular entre api.ts e toast.ts.
+function notificarFalha(kind: ApiErroKind, detalhe?: { status?: number; path?: string }) {
+  try {
+    window.dispatchEvent(new CustomEvent("api:falha", { detail: { kind, ...detalhe } }));
+  } catch { /* SSR/jest safety */ }
+}
+function notificarOk() {
+  try { window.dispatchEvent(new Event("api:ok")); } catch {}
+}
+
+// Emite toast amigavel ao usuario classificado por tipo de falha. Evita
+// flood: deduplica por kind+path durante uma janela curta (1.5s) — uma
+// rajada de 5 requests falhando vira 1 toast.
+const ultimosToasts = new Map<string, number>();
+function avisarUsuarioFalha(kind: ApiErroKind, path: string) {
+  const chave = `${kind}:${path}`;
+  const agora = Date.now();
+  const ultimo = ultimosToasts.get(chave) || 0;
+  if (agora - ultimo < 1500) return;
+  ultimosToasts.set(chave, agora);
+
+  // Import lazy de toast.ts para evitar ciclo no tree-shake e nao quebrar
+  // contextos onde api.ts e usado sem UI (tests, SSR).
+  import("./toast").then(({ emitirToast }) => {
+    if (kind === "NETWORK") {
+      emitirToast({
+        tipo: "aviso",
+        titulo: "Sem conexao com o servidor",
+        mensagem: "Verifique sua internet e tente novamente.",
+        duracao: 6000,
+      });
+    } else if (kind === "TIMEOUT") {
+      emitirToast({
+        tipo: "aviso",
+        titulo: "Servidor demorou a responder",
+        mensagem: "A operacao expirou. Tente novamente em alguns segundos.",
+        duracao: 6000,
+      });
+    } else if (kind === "SERVER_5XX") {
+      emitirToast({
+        tipo: "erro",
+        titulo: "Servidor com problemas",
+        mensagem: "Falha temporaria no servidor. Tente novamente.",
+        duracao: 6000,
+      });
+    }
+    // CLIENT_4XX nao gera toast automatico — cada tela ja trata sua
+    // mensagem de validacao especifica via try/catch.
+  }).catch(() => { /* sem UI disponivel */ });
 }
 
 export function getToken(): string | null {
@@ -105,23 +167,41 @@ async function request<T = unknown>(path: string, opts: RequestOptions = {}): Pr
     if (token) headers["Authorization"] = `Bearer ${token}`;
   }
 
+  // AbortController: corta a request se ultrapassar TIMEOUT_PADRAO_MS.
+  // Diferencia "servidor lento" (timeout) de "sem internet" (NETWORK).
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(new DOMException("Timeout", "TimeoutError")), TIMEOUT_PADRAO_MS);
+
   let res: Response;
   try {
     res = await fetch(`${BASE_URL}${path}`, {
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: ac.signal,
     });
-  } catch {
-    throw new Error("Não foi possível conectar ao servidor. O backend está rodando em http://localhost:3333?");
+  } catch (err) {
+    clearTimeout(timer);
+    const ehTimeout = (err as Error)?.name === "TimeoutError" || ac.signal.aborted;
+    const kind: ApiErroKind = ehTimeout ? "TIMEOUT" : "NETWORK";
+    notificarFalha(kind, { path });
+    avisarUsuarioFalha(kind, path);
+    const msg = ehTimeout
+      ? "O servidor demorou a responder. Tente novamente."
+      : "Sem conexao com o servidor. Verifique sua internet.";
+    throw new ApiError(msg, 0, null, kind);
   }
+  clearTimeout(timer);
 
   if (res.status === 401 && auth) {
     clearSession();
     window.dispatchEvent(new Event("auth:logout"));
   }
 
-  if (res.status === 204) return null as T;
+  if (res.status === 204) {
+    notificarOk();
+    return null as T;
+  }
 
   let data: unknown = null;
   const text = await res.text();
@@ -132,9 +212,20 @@ async function request<T = unknown>(path: string, opts: RequestOptions = {}): Pr
   if (!res.ok) {
     const d = data as { erro?: string; message?: string } | null;
     const msg = (d && (d.erro || d.message)) || `Erro ${res.status}`;
-    throw new ApiError(msg, res.status, data);
+    const kind: ApiErroKind = res.status === 401 ? "AUTH"
+      : res.status >= 500 ? "SERVER_5XX"
+      : "CLIENT_4XX";
+    if (kind === "SERVER_5XX") {
+      notificarFalha(kind, { status: res.status, path });
+      avisarUsuarioFalha(kind, path);
+    } else {
+      // 4xx ainda significa que o servidor RESPONDEU — saude OK.
+      notificarOk();
+    }
+    throw new ApiError(msg, res.status, data, kind);
   }
 
+  notificarOk();
   return data as T;
 }
 
@@ -145,12 +236,26 @@ async function uploadForm<T = unknown>(path: string, formData: FormData): Promis
   const token = getToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
+  // Upload pode ser pesado: timeout 60s. Mesmo padrao de classificacao do request().
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(new DOMException("Timeout", "TimeoutError")), 60_000);
+
   let res: Response;
   try {
-    res = await fetch(`${BASE_URL}${path}`, { method: "POST", headers, body: formData });
-  } catch {
-    throw new Error("Não foi possível conectar ao servidor.");
+    res = await fetch(`${BASE_URL}${path}`, { method: "POST", headers, body: formData, signal: ac.signal });
+  } catch (err) {
+    clearTimeout(timer);
+    const ehTimeout = (err as Error)?.name === "TimeoutError" || ac.signal.aborted;
+    const kind: ApiErroKind = ehTimeout ? "TIMEOUT" : "NETWORK";
+    notificarFalha(kind, { path });
+    avisarUsuarioFalha(kind, path);
+    const msg = ehTimeout
+      ? "Upload demorou demais. Tente novamente."
+      : "Sem conexao com o servidor.";
+    throw new ApiError(msg, 0, null, kind);
   }
+  clearTimeout(timer);
+
   if (res.status === 401) {
     clearSession();
     window.dispatchEvent(new Event("auth:logout"));
@@ -161,8 +266,18 @@ async function uploadForm<T = unknown>(path: string, formData: FormData): Promis
   if (!res.ok) {
     const d = data as { erro?: string; message?: string } | null;
     const msg = (d && (d.erro || d.message)) || `Erro ${res.status}`;
-    throw new ApiError(msg, res.status, data);
+    const kind: ApiErroKind = res.status === 401 ? "AUTH"
+      : res.status >= 500 ? "SERVER_5XX"
+      : "CLIENT_4XX";
+    if (kind === "SERVER_5XX") {
+      notificarFalha(kind, { status: res.status, path });
+      avisarUsuarioFalha(kind, path);
+    } else {
+      notificarOk();
+    }
+    throw new ApiError(msg, res.status, data, kind);
   }
+  notificarOk();
   return data as T;
 }
 

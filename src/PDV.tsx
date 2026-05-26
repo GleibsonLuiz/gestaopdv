@@ -6,6 +6,8 @@
 import { useEffect, useMemo, useRef, useState, useCallback, useReducer } from "react";
 import { C } from "./lib/theme";
 import { api, BASE_URL } from "./lib/api";
+import { useRascunho } from "./lib/useRascunho";
+import { emitirToast } from "./lib/toast";
 import { useConfiguracaoEmpresa, formatarEndereco } from "./HeaderRelatorio";
 import { obterConfigImpressora, devePrintar } from "./lib/impressora";
 import CupomEnvelope from "./components/cupons/CupomEnvelope";
@@ -363,6 +365,52 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
 
   const [abrirCaixaAberto, setAbrirCaixaAberto] = useState(false);
 
+  // Persistencia de rascunho do carrinho. Salva em localStorage cada vez
+  // que o carrinho muda (debounce 600ms). Chave por usuario evita que
+  // 2 vendedores no mesmo browser misturem itens. `desativar` quando vazio
+  // mantem o localStorage limpo apos limparCarrinho().
+  const rascunhoChave = `pdv:rascunho:${user?.id || "anon"}`;
+  const rascunhoCarrinho = useRascunho(rascunhoChave, carrinho, {
+    debounceMs: 600,
+    desativar: carrinho.length === 0,
+    versao: 1,
+  });
+  // Banner de recuperacao: aparece uma vez no mount se houver rascunho salvo
+  // E o carrinho atual estiver vazio. Usuario decide se restaura ou descarta.
+  const [rascunhoOferta, setRascunhoOferta] = useState<{ itens: number; idadeMin: number } | null>(null);
+  useEffect(() => {
+    if (carrinho.length > 0) return; // ja tem coisa, nao oferece
+    const salvo = rascunhoCarrinho.restaurar();
+    if (Array.isArray(salvo) && salvo.length > 0) {
+      const idade = rascunhoCarrinho.idadeMs() ?? 0;
+      // Rascunho com mais de 24h e provavelmente lixo — descarta direto.
+      if (idade > 24 * 60 * 60 * 1000) {
+        rascunhoCarrinho.descartar();
+        return;
+      }
+      setRascunhoOferta({ itens: salvo.length, idadeMin: Math.max(1, Math.round(idade / 60000)) });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function recuperarRascunho() {
+    const salvo = rascunhoCarrinho.restaurar();
+    if (Array.isArray(salvo) && salvo.length > 0) {
+      setCarrinho(salvo);
+      emitirToast({
+        tipo: "sucesso",
+        titulo: "Carrinho recuperado",
+        mensagem: `${salvo.length} ${salvo.length === 1 ? "item restaurado" : "itens restaurados"} do rascunho.`,
+        duracao: 4000,
+      });
+    }
+    setRascunhoOferta(null);
+  }
+  function dispensarRascunho() {
+    rascunhoCarrinho.descartar();
+    setRascunhoOferta(null);
+  }
+
   // Mercado Pago Point (maquininha fisica). configMp = null ate carregar.
   // mpAberto controla a visibilidade do modal de cobranca (CREDITO/DEBITO).
   // pixAberto e um modal SEPARADO que mostra QR Code na propria tela do PDV
@@ -676,6 +724,9 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
     setPontosResgatando(0);
     setPainelPontosAberto(false);
     setSaldoPontos(null);
+    // Limpa rascunho — venda finalizou ou foi explicitamente descartada.
+    rascunhoCarrinho.descartar();
+    setRascunhoOferta(null);
     if (refocar) focarBusca();
   }
 
@@ -1006,6 +1057,60 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
             className="pdv-conversao-cancelar"
             title="Cancelar a conversão (a venda nao sera vinculada a oportunidade)"
           >✕ Cancelar conversão</button>
+        </div>
+      )}
+
+      {rascunhoOferta && (
+        <div
+          role="status"
+          style={{
+            background: C.card,
+            border: `1px solid ${C.accent}`,
+            borderRadius: 8,
+            padding: "10px 14px",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            fontSize: 13,
+          }}
+        >
+          <span style={{ fontSize: 20 }}>💾</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, color: C.text }}>
+              Voce tinha {rascunhoOferta.itens} {rascunhoOferta.itens === 1 ? "item" : "itens"} no carrinho
+            </div>
+            <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
+              Salvo automaticamente ha {rascunhoOferta.idadeMin} {rascunhoOferta.idadeMin === 1 ? "minuto" : "minutos"}. Deseja recuperar?
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={recuperarRascunho}
+            style={{
+              background: C.accent,
+              color: "#fff",
+              border: "none",
+              borderRadius: 6,
+              padding: "8px 14px",
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >Recuperar</button>
+          <button
+            type="button"
+            onClick={dispensarRascunho}
+            style={{
+              background: "transparent",
+              color: C.muted,
+              border: `1px solid ${C.border}`,
+              borderRadius: 6,
+              padding: "8px 12px",
+              fontSize: 13,
+              cursor: "pointer",
+            }}
+            title="Descartar rascunho"
+          >Descartar</button>
         </div>
       )}
 

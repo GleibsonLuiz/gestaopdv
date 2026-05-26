@@ -4,6 +4,7 @@ import Alertas from "./Alertas";
 import { getUser, getToken, clearSession, api } from "./lib/api";
 import { podeAcessar } from "./lib/permissoes";
 import PwaUpdateBanner from "./components/PwaUpdateBanner";
+import IndicadorRede from "./components/IndicadorRede";
 
 // Todas as telas sao lazy — cada uma vira um chunk separado e so e baixada
 // quando o usuario navegar para ela. Login fica lazy tambem (so carrega
@@ -324,12 +325,14 @@ export default function App() {
   if (modoMobile === "inventario" && user) return (
     <Suspense fallback={<TelaCarregando />}>
       <InventarioMobile />
+      <IndicadorRede />
       <PwaUpdateBanner />
     </Suspense>
   );
   if (modoMobile === "pdv-volante" && user) return (
     <Suspense fallback={<TelaCarregando />}>
       <PdvVolante />
+      <IndicadorRede />
       <PwaUpdateBanner />
     </Suspense>
   );
@@ -349,6 +352,7 @@ export default function App() {
   if (!user) return (
     <Suspense fallback={<TelaCarregando />}>
       <Login onSuccess={(u: any) => { setUser(u); hidratarPreferencias(u); }} />
+      <IndicadorRede />
       <PwaUpdateBanner />
     </Suspense>
   );
@@ -383,6 +387,7 @@ export default function App() {
             onContextoConsumido={() => setPdvContexto(null)}
           />
         </Suspense>
+        <IndicadorRede />
         <PwaUpdateBanner />
       </div>
     );
@@ -901,6 +906,7 @@ export default function App() {
           />
         </Suspense>
       )}
+      <IndicadorRede />
       <PwaUpdateBanner />
     </div>
   );

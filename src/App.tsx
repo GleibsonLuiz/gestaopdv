@@ -5,6 +5,7 @@ import { getUser, getToken, clearSession, setEmpresa, api } from "./lib/api";
 import { podeAcessar } from "./lib/permissoes";
 import PwaUpdateBanner from "./components/PwaUpdateBanner";
 import IndicadorRede from "./components/IndicadorRede";
+import { TELA_AJUDA } from "./Ajuda";
 
 // Todas as telas sao lazy — cada uma vira um chunk separado e so e baixada
 // quando o usuario navegar para ela. Login fica lazy tambem (so carrega
@@ -46,6 +47,7 @@ const PdvVolante = lazy(() => import("./PdvVolante"));
 const PainelComandas = lazy(() => import("./PainelComandas"));
 const Whatsapp = lazy(() => import("./Whatsapp"));
 const Logs = lazy(() => import("./Logs"));
+const Ajuda = lazy(() => import("./Ajuda"));
 // Modal de gerencia de formas de pagamento — antes ficava dentro do PDV
 // (botao ⚙ no modal de Finalizar Venda). Movido para a sidebar como entrada
 // global em "Sistema" — ETAPA#3.
@@ -149,6 +151,7 @@ export default function App() {
   const [user, setUser] = useState<any>(null);
   const [carregando, setCarregando] = useState(true);
   const [tela, setTela] = useState("pdv");
+  const [ajudaTopico, setAjudaTopico] = useState<string | null>(null);
   // Contexto opcional ao navegar pro PDV vindo de outro modulo (ex: Funil ->
   // Converter oportunidade em venda). Quando definido, PDV pre-seleciona o
   // cliente, mostra banner no topo e injeta `oportunidadeId` no payload da
@@ -300,7 +303,7 @@ export default function App() {
   };
 
   function podeVer(t: string) {
-    if (t === "projeto" || t === "aparencia") return true;
+    if (t === "projeto" || t === "aparencia" || t === "ajuda") return true;
     if (t === "sistema" || t === "logs" || t === "backup") return user?.role === "ADMIN";
     if (t === "empresa") return user?.role === "ADMIN" || user?.role === "GERENTE";
     if (t === "impressora") return user?.role === "ADMIN" || user?.role === "GERENTE";
@@ -608,6 +611,7 @@ export default function App() {
             <Item icone="📱" label="PDV Volante (mobile)" ativo={false}
               onClick={() => window.open("?mobile=pdv-volante", "_blank")} />
           )}
+          <Item icone="❓" label="Ajuda" ativo={tela === "ajuda"} onClick={() => { setAjudaTopico(null); navegar("ajuda"); }} />
           <Item icone="📋" label="Projeto" ativo={tela === "projeto"} onClick={() => navegar("projeto")} />
           {user.role === "ADMIN" && (
             <Item icone="📜" label="Logs" ativo={tela === "logs"} onClick={() => navegar("logs")} />
@@ -729,6 +733,26 @@ export default function App() {
               GestãoPRO
             </span>
           </div>
+          <button
+            onClick={() => {
+              const topico = TELA_AJUDA[tela] || null;
+              setAjudaTopico(topico);
+              navegar("ajuda");
+            }}
+            title={`Ajuda sobre ${tela}`}
+            aria-label="Abrir ajuda"
+            style={{
+              background: C.card, border: `1px solid ${C.border}`, color: C.text,
+              borderRadius: 8, padding: "6px 12px", fontSize: 14, cursor: "pointer",
+              fontWeight: 700, display: "flex", alignItems: "center", gap: 6,
+              transition: "background 0.15s ease, color 0.15s ease",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = C.accent + "22"; e.currentTarget.style.color = C.accent; }}
+            onMouseLeave={e => { e.currentTarget.style.background = C.card; e.currentTarget.style.color = C.text; }}
+          >
+            <span>❓</span>
+            <span style={{ fontSize: 12 }}>Ajuda</span>
+          </button>
           <Alertas onNavegar={navegar} />
         </div>
 
@@ -880,6 +904,9 @@ export default function App() {
           )}
           {tela === "aparencia" && (
             <Aparencia />
+          )}
+          {tela === "ajuda" && (
+            <Ajuda topicoInicial={ajudaTopico} />
           )}
           {tela === "logs" && user.role === "ADMIN" && (
             <Logs />

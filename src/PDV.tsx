@@ -8,6 +8,7 @@ import { C } from "./lib/theme";
 import { api, BASE_URL } from "./lib/api";
 import { useRascunho } from "./lib/useRascunho";
 import { emitirToast } from "./lib/toast";
+import { useNetworkStatus } from "./lib/useNetworkStatus";
 import { useConfiguracaoEmpresa, formatarEndereco } from "./HeaderRelatorio";
 import { obterConfigImpressora, devePrintar } from "./lib/impressora";
 import CupomEnvelope from "./components/cupons/CupomEnvelope";
@@ -375,6 +376,13 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
     desativar: carrinho.length === 0,
     versao: 1,
   });
+
+  // Status de rede: bloqueia botões críticos quando offline / API caida.
+  // Finalizar venda exige roundtrip no backend (criar venda + baixa de estoque
+  // + ContaReceber). Tentar offline corromperia o estado local.
+  const { online, apiSaudavel } = useNetworkStatus();
+  const podeFinalizarRede = online && apiSaudavel;
+
   // Banner de recuperacao: aparece uma vez no mount se houver rascunho salvo
   // E o carrinho atual estiver vazio. Usuario decide se restaura ou descarta.
   const [rascunhoOferta, setRascunhoOferta] = useState<{ itens: number; idadeMin: number } | null>(null);
@@ -884,6 +892,15 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
 
   function abrirPagamento(formaInicial = "DINHEIRO", seedOpts = {}) {
     setErro("");
+    if (!podeFinalizarRede) {
+      emitirToast({
+        tipo: "aviso",
+        titulo: "Sem conexao com o servidor",
+        mensagem: "Finalize a venda quando a conexao voltar — o carrinho ja esta salvo automaticamente.",
+        duracao: 5000,
+      });
+      return;
+    }
     if (semCaixa) { flashErro("Abra um caixa antes de finalizar uma venda."); return; }
     if (carrinho.length === 0) { flashErro("Adicione ao menos um item"); return; }
     if (descontoNum > subtotal) { flashErro("Desconto não pode ser maior que o subtotal"); return; }
@@ -907,6 +924,10 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
 
   async function confirmarPagamento() {
     setErro("");
+    if (!podeFinalizarRede) {
+      setErro("Sem conexao com o servidor. Aguarde a conexao voltar para finalizar.");
+      return;
+    }
     if (carrinho.length === 0) { setErro("Adicione ao menos um item"); return; }
     if (descontoNum > subtotal) { setErro("Desconto não pode ser maior que o subtotal"); return; }
     if (pagamentos.length === 0) { setErro("Adicione ao menos uma forma de pagamento"); return; }
@@ -1423,8 +1444,12 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
               <button
                 onClick={() => abrirPagamento()}
                 disabled={semCaixa}
-                title={semCaixa ? "Abra um caixa antes de finalizar" : ""}
-                className="pdv-btn-finalize"
+                title={
+                  semCaixa ? "Abra um caixa antes de finalizar"
+                  : !podeFinalizarRede ? "Sem conexao — finalize quando a conexao voltar"
+                  : ""
+                }
+                className={`pdv-btn-finalize ${podeFinalizarRede ? "" : "gp-bloqueio-offline"}`}
               >
                 {semCaixa ? <>🔒 Caixa fechado</> : <>Finalizar venda</>}
                 <span className="pdv-kbd">F10</span>
@@ -2024,7 +2049,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
                 ref={finalizarRef}
                 onClick={confirmarPagamento}
                 disabled={salvando || !podeFinalizar}
-                className="pdv-btn-finalize"
+                className={`pdv-btn-finalize ${podeFinalizarRede ? "" : "gp-bloqueio-offline"}`}
                 style={{ flex: 1, opacity: (salvando || !podeFinalizar) ? 0.55 : 1 }}
                 title={!podeFinalizar
                   ? (restante > 0

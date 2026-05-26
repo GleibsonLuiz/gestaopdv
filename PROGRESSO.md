@@ -147,6 +147,23 @@ d:/gestao-pdv/
 
 ## Histórico de sessões
 
+### Sessão — 2026-05-26 (Resiliência a falhas de rede — infra global)
+
+Endurecimento do front contra cenários degradados (offline, timeout, 5xx) e proteção contra perda do carrinho do PDV. Commit `415da10`. Decisões via AskUserQuestion: rascunho só no PDV, indicador como tarja superior + toasts inferiores.
+
+**Arquivos novos:**
+- [src/lib/useNetworkStatus.ts](src/lib/useNetworkStatus.ts) — hook com `online`, `apiSaudavel`, `degradado`. Escuta `online/offline` do browser + eventos `api:ok`/`api:falha` disparados pela camada de API.
+- [src/lib/toast.ts](src/lib/toast.ts) — event bus minimalista (`emitirToast` / `ouvirToasts`) via `CustomEvent("app:toast")`. Sem Context, sem dependência de React no caller.
+- [src/lib/useRascunho.ts](src/lib/useRascunho.ts) — hook genérico de persistência em localStorage com debounce + versionamento + API explícita (`restaurar`/`descartar`/`idadeMs`). Não sobrescreve estado automaticamente (evita race com dados da API).
+- [src/components/IndicadorRede.tsx](src/components/IndicadorRede.tsx) — tarja superior persistente (vermelha offline / amarela API instável) + container de toasts inferior direito. Adiciona classe `gp-offline` no `<body>` quando degradado — telas podem usar CSS `.gp-bloqueio-offline { opacity: 0.55; pointer-events: none; }` para bloquear botões críticos.
+
+**Arquivos modificados:**
+- [src/lib/api.ts](src/lib/api.ts) — `ApiError` ganhou campo `kind: ApiErroKind` (`NETWORK | TIMEOUT | SERVER_5XX | CLIENT_4XX | AUTH | ABORT`). `request()` e `uploadForm()` agora usam `AbortController` com timeout (15s padrão, 60s upload), classificam erros, disparam `api:ok`/`api:falha` no `window` e emitem toasts amigáveis com dedup de 1.5s para evitar flood em rajadas de falha. 4xx mantém saúde OK (servidor respondeu). Telas continuam pegando `ApiError` como antes (compat 100% — só ganhou `.kind` opcional).
+- [src/App.tsx](src/App.tsx) — `<IndicadorRede />` montado em todos os 5 returns (mobile inventario, mobile pdv-volante, login, PDV focado, shell principal).
+- [src/PDV.tsx](src/PDV.tsx) — carrinho persistido com `useRascunho` por usuário (`pdv:rascunho:<userId>`), debounce 600ms. Banner azul "Você tinha N itens — Recuperar / Descartar" no topo quando há rascunho < 24h e carrinho atual vazio. `limparCarrinho()` chama `descartar()` automaticamente. Toast verde ao recuperar.
+
+**Validação:** `tsc --noEmit` limpo, `vite build` em 2.94s. Sem backend/migrations.
+
 ### Sessão — 2026-05-25 (Tela Financeiro — refator visual em 4 ondas)
 
 Análise UX/dev sênior da tela Financeiro identificou 9 atritos de legibilidade/fluidez. Refator em 4 ondas, validado com screenshots Playwright antes/depois e build/typecheck limpos.

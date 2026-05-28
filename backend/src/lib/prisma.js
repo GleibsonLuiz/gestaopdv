@@ -34,7 +34,7 @@ export const tenantStorage = new AsyncLocalStorage();
 
 const MODELOS_COM_TENANT = new Set([
   "FormaPagamentoCustom", "User", "ConfiguracaoComissao", "Cliente",
-  "Fornecedor", "Categoria", "Produto", "Venda", "ItemVenda",
+  "Fornecedor", "Categoria", "Produto", "Venda", "ItemVenda", "VendaPagamento",
   "Compra", "ItemCompra", "MovimentacaoEstoque", "ContaPagar",
   "ContaReceber", "Anexo", "Caixa", "ConfiguracaoEmpresa",
   "ConfiguracaoImpressora",

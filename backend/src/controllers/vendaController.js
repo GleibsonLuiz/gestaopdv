@@ -18,6 +18,14 @@ const FORMAS_GERA_RECEBER = new Set(["CARTAO_CREDITO", "BOLETO", "CREDIARIO"]);
 // por arredondamento de Decimal em parcelas (ex: 1/3 de 10.00 = 3.33+3.33+3.34).
 const EPS_CENTAVO = 0.005;
 
+// Opcoes das transacoes interativas. O default do Prisma (timeout 5s) e
+// curto demais quando a Function roda longe do banco: cada venda faz ~10
+// queries sequenciais e, com latencia de rede alta (ex: Function em iad1 e
+// Neon em sa-east-1), o corpo da transacao estoura 5s em cold start e o
+// Prisma aborta com P2028 ("Transaction already closed") — que vira "Erro
+// interno do servidor". Margem ampla evita esse 500 mesmo no pior caso.
+const TX_OPTS = { maxWait: 15_000, timeout: 30_000 };
+
 // Normaliza/valida o array de pagamentos (split de pagamento). Aceita:
 //   1) body.pagamentos[] com [{forma, valor, formaCustomNome?, ordem?}]
 //   2) Legado: body.formaPagamento + valor implicito = total (split de 1)
@@ -558,7 +566,7 @@ export async function criar(req, res, next) {
           where: { id: vendaCriada.id },
           include: INCLUDE_DETALHE,
         });
-      });
+      }, TX_OPTS);
 
       res.status(201).json(venda);
     } catch (err) {
@@ -656,7 +664,7 @@ export async function reabrir(req, res, next) {
           data: { status: "EM_EDICAO" },
           include: INCLUDE_DETALHE,
         });
-      });
+      }, TX_OPTS);
 
       res.json(venda);
     } catch (err) {
@@ -734,8 +742,6 @@ export async function refinalizar(req, res, next) {
         // Substitui o split antigo pelo novo. Como VendaPagamento esta com
         // onDelete: Cascade no FK de Venda, o deleteMany simples ja basta.
         await tx.vendaPagamento.deleteMany({ where: { vendaId: id } });
-        // createMany nao passa pelo helper de propagacao de tenantId em
-        // nested writes — usamos create em loop para garantir injeção.
         for (const p of pagamentosNorm) {
           await tx.vendaPagamento.create({
             data: {
@@ -816,7 +822,7 @@ export async function refinalizar(req, res, next) {
           where: { id: atualizada.id },
           include: INCLUDE_DETALHE,
         });
-      });
+      }, TX_OPTS);
 
       res.json(venda);
     } catch (err) {
@@ -935,7 +941,7 @@ export async function cancelar(req, res, next) {
         }
 
         return cancelada;
-      });
+      }, TX_OPTS);
 
       res.json(venda);
     } catch (err) {

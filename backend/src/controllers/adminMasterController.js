@@ -247,7 +247,7 @@ export async function criarEmpresa(req, res, next) {
       }
     }
 
-    const senhaHash = await bcrypt.hash(senha, 10);
+    const senhaHash = await bcrypt.hash(senha, 12);
     const resultado = await prismaRaw.$transaction(async (tx) => {
       const empresa = await tx.empresa.create({
         data: {

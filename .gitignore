@@ -27,3 +27,8 @@ dist-ssr
 # Notas pessoais e screenshots soltos na raiz
 atualizacao.md
 image.png
+
+# Arquivos com credenciais — NUNCA versionar
+senha.rtf
+*.rtf
+secrets.txt

@@ -87,7 +87,7 @@ export async function criar(req, res, next) {
     // ETAPA 13: limite por plano
     if (!await aplicarLimite(req, res, "usuarios")) return;
 
-    const senhaHash = await bcrypt.hash(senha, 10);
+    const senhaHash = await bcrypt.hash(senha, 12);
 
     // ADMIN sempre recebe todos os modulos. Para outros, usa o que veio no body
     // ou cai no padrao por role.
@@ -156,7 +156,7 @@ export async function atualizar(req, res, next) {
     if (req.body.senha !== undefined && req.body.senha !== "") {
       const senha = String(req.body.senha);
       if (senha.length < 6) return res.status(400).json({ erro: "Senha deve ter ao menos 6 caracteres" });
-      data.senha = await bcrypt.hash(senha, 10);
+      data.senha = await bcrypt.hash(senha, 12);
     }
     if (req.body.permissoes !== undefined) {
       data.permissoes = sanitizarPermissoes(req.body.permissoes);

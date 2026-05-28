@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -49,6 +50,15 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3333;
+
+// Cabecalhos de seguranca (HSTS, X-Content-Type-Options, X-Frame-Options,
+// no-sniff, etc). API serve JSON; CORP fica "cross-origin" para nao quebrar
+// o carregamento de imagens de /uploads pelo frontend (origem diferente)
+// em dev. CSP fica desligada — esta API nao serve HTML interativo.
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+}));
 
 // CORS: em dev (sem FRONTEND_URL) libera tudo; em producao (Vercel) limita
 // ao dominio do frontend. Vercel preview deployments tem URL diferente da

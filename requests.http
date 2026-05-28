@@ -9,7 +9,8 @@
 ### -------------------------------------------------------------
 
 @host = http://localhost:3333
-@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhYjNmYTM5Ny0zODdmLTRlNTEtOTA1Ny1mYzczNTAzYTAwMTkiLCJyb2xlIjoiQURNSU4iLCJpb21lIjoiUWRtaGRCI6MTc3NzQxMTg4OTIwOCwiZXhwIjoxNzc3NDk4Mjk4NjQ4fQ.-bIyJNEty_y5TrxXwOfp9w5JMu7YNdiEILGZ7rdSHsA
+# Cole o token retornado pelo /auth/login. NAO commitar um token real.
+@token = COLE_SEU_TOKEN_AQUI
 
 ### 1. Health check (publico)
 GET {{host}}/health
@@ -20,7 +21,7 @@ Content-Type: application/json
 
 {
   "email": "admin@gestaopro.local",
-  "senha": "admin123"
+  "senha": "SUA_SENHA_AQUI"
 }
 
 ### 3. Login com senha errada (deve falhar com 401)

@@ -73,7 +73,7 @@ export async function signup(req, res, next) {
     }
 
     // ---------- Transacao: Empresa + admin User ----------
-    const senhaHash = await bcrypt.hash(senha, 10);
+    const senhaHash = await bcrypt.hash(senha, 12);
     const resultado = await prisma.$transaction(async (tx) => {
       const empresa = await tx.empresa.create({
         data: {

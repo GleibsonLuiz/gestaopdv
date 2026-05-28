@@ -319,5 +319,10 @@ function limparTimestamps(obj) {
   // Mantemos createdAt para preservar historico. updatedAt o Prisma seta
   // automaticamente, entao removemos para evitar conflito.
   delete copia.updatedAt;
+  // SEGURANCA: descarta o tenantId vindo do arquivo. Sem isso, um admin
+  // poderia editar o JSON e injetar registros no tenant de OUTRA empresa
+  // (o hook de create do Prisma so auto-preenche tenantId quando undefined).
+  // Removendo aqui, a extensao multi-tenant sempre grava no tenant logado.
+  delete copia.tenantId;
   return copia;
 }

@@ -233,7 +233,7 @@ export async function trocarSenha(req, res, next) {
       return res.status(401).json({ erro: "Senha atual incorreta" });
     }
 
-    const hash = await bcrypt.hash(senhaNova, 10);
+    const hash = await bcrypt.hash(senhaNova, 12);
     await prisma.user.update({
       where: { id: user.id },
       data: { senha: hash },

@@ -4,7 +4,10 @@ import prisma from "../lib/prisma.js";
 import { salvarArquivo, removerArquivo } from "../lib/storage.js";
 
 const TAMANHO_MAX = 2 * 1024 * 1024; // 2 MB
-const MIMES_PERMITIDOS = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/svg+xml"]);
+// SVG removido propositalmente: pode conter <script>/handlers e virar
+// vetor de XSS se o arquivo for aberto direto no navegador. Formatos
+// rasterizados nao executam codigo.
+const MIMES_PERMITIDOS = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp"]);
 
 const storage = multer.memoryStorage();
 

@@ -1,4 +1,15 @@
+import crypto from "node:crypto";
 import prisma, { prismaRaw, tenantStorage } from "../lib/prisma.js";
+
+// Comparacao de strings resistente a timing-attack. Retorna false em
+// qualquer entrada invalida ou de tamanho diferente sem vazar pelo tempo.
+function compararSegredo(a, b) {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const ba = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ba.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ba, bb);
+}
 
 const TIPOS = ["CLIENTE_INATIVO", "ORCAMENTO_PARADO", "POS_VENDA_FOLLOWUP"];
 const PRIORIDADES = ["BAIXA", "MEDIA", "ALTA", "URGENTE"];
@@ -473,7 +484,7 @@ export async function cronExecutarTodos(req, res, next) {
     }
     const authHeader = req.headers.authorization || "";
     const recebido = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-    if (recebido !== chaveEsperada) {
+    if (!compararSegredo(recebido, chaveEsperada)) {
       return res.status(401).json({ erro: "Chave de cron invalida" });
     }
 

@@ -674,7 +674,7 @@ Cada grupo tem header colapsável com contagem + subtotal.
 
 1. Aba **Identidade** — razão social, nome fantasia, CNPJ, inscrição estadual, telefone, e-mail.
 2. Aba **Endereço** — com ViaCEP.
-3. Aba **Logotipo** — dropzone (JPG/PNG/WebP/SVG, até 2 MB).
+3. Aba **Logotipo** — dropzone (JPG/PNG/WebP, até 2 MB).
 4. Aba **Observações** — texto livre que aparece em todos os relatórios.
 
 **Bloco "Plano":**

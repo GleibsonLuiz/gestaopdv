@@ -613,6 +613,8 @@ export const api = {
     request(`/relatorios/estoque${qsFrom(filtros)}`),
   relatorioCaixas: (filtros: StringDict = {}) =>
     request(`/relatorios/caixas${qsFrom(filtros)}`),
+  relatorioLucratividade: (filtros: StringDict = {}) =>
+    request(`/relatorios/lucratividade${qsFrom(filtros)}`),
   relatorioFunilCrm: (filtros: StringDict = {}) =>
     request(`/relatorios/crm/funil${qsFrom(filtros)}`),
   relatorioPerformanceCrm: (filtros: StringDict = {}) =>

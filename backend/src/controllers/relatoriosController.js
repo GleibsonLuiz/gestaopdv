@@ -546,3 +546,155 @@ export async function relatorioCaixas(req, res, next) {
     next(err);
   }
 }
+
+// ============ RELATORIO DE LUCRATIVIDADE / MARGEM ============
+//
+// Apura lucro bruto (receita - custo) por produto e por categoria a partir
+// dos itens de vendas CONCLUIDAS no periodo.
+//
+// Custo: usa o precoCusto ATUAL do produto (o sistema nao snapshota custo no
+// momento da venda). Produtos sem precoCusto entram com custo 0 e sao
+// sinalizados via custoIndefinido / resumo.itensSemCusto — nesses casos a
+// margem fica superestimada.
+//
+// Receita por produto = soma de ItemVenda.subtotal (bruto, antes do desconto
+// de nivel de venda). O desconto da venda entra so no resumo (lucro liquido) e
+// apenas quando NAO ha filtro de categoria — atribuir o desconto de uma venda
+// a uma unica categoria distorceria o numero, ja que a venda pode ter itens de
+// varias categorias.
+
+export async function relatorioLucratividade(req, res, next) {
+  try {
+    const { dataInicio, dataFim, categoriaId, userId } = req.query;
+    const di = parseDataInicio(dataInicio);
+    const df = parseDataFim(dataFim);
+
+    const vendaWhere = { status: "CONCLUIDA" };
+    if (di || df) vendaWhere.createdAt = {};
+    if (di) vendaWhere.createdAt.gte = di;
+    if (df) vendaWhere.createdAt.lte = df;
+    if (req.user.role === "VENDEDOR") vendaWhere.userId = req.user.sub;
+    else if (userId) vendaWhere.userId = userId;
+
+    const itemWhere = { venda: vendaWhere };
+    if (categoriaId) itemWhere.produto = { categoriaId };
+
+    const itens = await prisma.itemVenda.findMany({
+      where: itemWhere,
+      select: {
+        vendaId: true,
+        quantidade: true,
+        subtotal: true,
+        produto: {
+          select: {
+            id: true, codigo: true, nome: true, unidade: true,
+            precoCusto: true,
+            categoria: { select: { nome: true } },
+          },
+        },
+      },
+    });
+
+    const porProduto = new Map();
+    const porCategoria = new Map();
+    const vendaIds = new Set();
+    let receitaBruta = 0;
+    let custoTotal = 0;
+
+    for (const it of itens) {
+      vendaIds.add(it.vendaId);
+      const p = it.produto;
+      const receita = toNum(it.subtotal);
+      const qtd = Number(it.quantidade) || 0;
+      const temCusto = p?.precoCusto != null;
+      const custo = temCusto ? qtd * Number(p.precoCusto) : 0;
+
+      receitaBruta += receita;
+      custoTotal += custo;
+
+      const pid = p?.id || "removido";
+      if (!porProduto.has(pid)) {
+        porProduto.set(pid, {
+          produtoId: pid,
+          codigo: p?.codigo || "—",
+          nome: p?.nome || "Produto removido",
+          unidade: p?.unidade || "",
+          categoria: p?.categoria?.nome || null,
+          quantidade: 0, receita: 0, custo: 0,
+          custoIndefinido: false,
+        });
+      }
+      const rp = porProduto.get(pid);
+      rp.quantidade += qtd;
+      rp.receita += receita;
+      rp.custo += custo;
+      if (!temCusto) rp.custoIndefinido = true;
+
+      const cat = p?.categoria?.nome || "Sem categoria";
+      if (!porCategoria.has(cat)) {
+        porCategoria.set(cat, { categoria: cat, receita: 0, custo: 0 });
+      }
+      const rc = porCategoria.get(cat);
+      rc.receita += receita;
+      rc.custo += custo;
+    }
+
+    const lucroBruto = receitaBruta - custoTotal;
+    const margemBruta = receitaBruta > 0 ? (lucroBruto / receitaBruta) * 100 : 0;
+
+    let totalVendas;
+    let descontos = null;
+    let lucroLiquido = lucroBruto;
+    let margemLiquida = margemBruta;
+    if (categoriaId) {
+      totalVendas = vendaIds.size;
+    } else {
+      const agg = await prisma.venda.aggregate({
+        where: vendaWhere,
+        _sum: { desconto: true },
+        _count: { _all: true },
+      });
+      totalVendas = agg._count._all;
+      descontos = toNum(agg._sum.desconto);
+      lucroLiquido = lucroBruto - descontos;
+      const receitaLiquida = receitaBruta - descontos;
+      margemLiquida = receitaLiquida > 0 ? (lucroLiquido / receitaLiquida) * 100 : 0;
+    }
+
+    const finalizar = (o) => {
+      const lucro = o.receita - o.custo;
+      return { ...o, lucro, margem: o.receita > 0 ? (lucro / o.receita) * 100 : 0 };
+    };
+
+    const produtos = Array.from(porProduto.values()).map(finalizar);
+    const itensSemCusto = produtos.filter(p => p.custoIndefinido).length;
+
+    res.json({
+      geradoEm: new Date().toISOString(),
+      filtros: {
+        dataInicio: di ? di.toISOString() : null,
+        dataFim: df ? df.toISOString() : null,
+        categoriaId: categoriaId || null,
+        userId: req.user.role === "VENDEDOR" ? req.user.sub : (userId || null),
+      },
+      resumo: {
+        totalVendas,
+        qtdProdutos: porProduto.size,
+        receitaBruta,
+        custoTotal,
+        lucroBruto,
+        margemBruta,
+        descontos,
+        lucroLiquido,
+        margemLiquida,
+        itensSemCusto,
+      },
+      porCategoria: Array.from(porCategoria.values())
+        .map(finalizar)
+        .sort((a, b) => b.lucro - a.lucro),
+      porProduto: produtos.sort((a, b) => b.lucro - a.lucro),
+    });
+  } catch (err) {
+    next(err);
+  }
+}

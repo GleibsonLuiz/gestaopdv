@@ -6,6 +6,7 @@ import {
   relatorioFinanceiro,
   relatorioEstoque,
   relatorioCaixas,
+  relatorioLucratividade,
 } from "../controllers/relatoriosController.js";
 import {
   relatorioFunilCrm,
@@ -27,6 +28,7 @@ router.get("/compras", relatorioCompras);
 router.get("/financeiro", relatorioFinanceiro);
 router.get("/estoque", relatorioEstoque);
 router.get("/caixas", relatorioCaixas);
+router.get("/lucratividade", relatorioLucratividade);
 router.get("/crm/funil", relatorioFunilCrm);
 router.get("/crm/performance", relatorioPerformanceCrm);
 router.get("/crm/carteira", relatorioCarteiraCrm);

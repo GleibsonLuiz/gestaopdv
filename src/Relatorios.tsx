@@ -26,6 +26,12 @@ const fmtNum = (v) => {
 const fmtData = (iso) => iso ? new Date(iso).toLocaleDateString("pt-BR") : "—";
 const fmtDataHora = (iso) => iso ? new Date(iso).toLocaleString("pt-BR") : "—";
 
+const fmtPct = (v) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "0,0%";
+  return `${n.toFixed(1).replace(".", ",")}%`;
+};
+
 const ROTULO_PAGAMENTO = {
   DINHEIRO: "Dinheiro",
   CARTAO_CREDITO: "Cartão crédito",
@@ -46,6 +52,7 @@ const ABAS = [
   { id: "financeiro", label: "💰 Financeiro", cor: C.green },
   { id: "estoque", label: "📦 Estoque", cor: C.purple },
   { id: "caixas", label: "💵 Caixas (DRE)", cor: C.red },
+  { id: "lucratividade", label: "📈 Lucratividade", cor: C.green },
   { id: "comissoes", label: "🏆 Comissões", cor: C.purple },
   { id: "crm", label: "🎯 CRM", cor: "#7c3aed" },
 ];
@@ -101,6 +108,7 @@ export default function Relatorios() {
       {aba === "financeiro" && <RelatorioFinanceiro key="f" />}
       {aba === "estoque" && <RelatorioEstoque key="e" />}
       {aba === "caixas" && <RelatorioCaixas key="x" />}
+      {aba === "lucratividade" && <RelatorioLucratividade key="l" />}
       {aba === "comissoes" && <RelatorioComissoesLista key="m" />}
       {aba === "crm" && <RelatoriosCrm key="r" />}
     </div>
@@ -850,6 +858,159 @@ function RelatorioCaixas() {
               c.diferenca > 0 ? `+${fmtBRL(c.diferenca)}` : fmtBRL(c.diferenca),
             ])}
             vazioTexto="Nenhum caixa fechado no período."
+          />
+        </>
+      )}
+    </BlocoRelatorio>
+  );
+}
+
+// ============ RELATÓRIO DE LUCRATIVIDADE / MARGEM ============
+function RelatorioLucratividade() {
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+  const [categoriaId, setCategoriaId] = useState("");
+  const [userId, setUserId] = useState("");
+  const [categorias, setCategorias] = useState([]);
+  const [usuarios, setUsuarios] = useState([]);
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    api.listarCategorias().then(setCategorias).catch(() => {});
+    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
+  }, []);
+
+  const gerar = useCallback(async () => {
+    setCarregando(true); setErro("");
+    try {
+      const r = await api.relatorioLucratividade({ dataInicio, dataFim, categoriaId, userId });
+      setDados(r);
+    } catch (err) { setErro(err.message); }
+    finally { setCarregando(false); }
+  }, [dataInicio, dataFim, categoriaId, userId]);
+
+  async function exportar() {
+    if (!dados) return;
+    const doc = await criarPDF("Relatório de Lucratividade / Margem");
+    addPeriodo(doc, dataInicio, dataFim);
+
+    const body = [
+      ["Receita bruta", fmtBRL(dados.resumo.receitaBruta)],
+      ["Custo total (CMV)", fmtBRL(dados.resumo.custoTotal)],
+      ["Lucro bruto", fmtBRL(dados.resumo.lucroBruto)],
+      ["Margem bruta", fmtPct(dados.resumo.margemBruta)],
+    ];
+    if (dados.resumo.descontos != null) {
+      body.push(["Descontos concedidos", fmtBRL(dados.resumo.descontos)]);
+      body.push(["Lucro líquido (após descontos)", fmtBRL(dados.resumo.lucroLiquido)]);
+      body.push(["Margem líquida", fmtPct(dados.resumo.margemLiquida)]);
+    }
+    body.push(["Produtos vendidos", fmtNum(dados.resumo.qtdProdutos)]);
+    if (dados.resumo.itensSemCusto > 0) {
+      body.push(["Produtos sem custo cadastrado", fmtNum(dados.resumo.itensSemCusto)]);
+    }
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 4,
+      head: [["Indicador", "Valor"]],
+      body,
+      theme: "striped", headStyles: { fillColor: [34, 197, 94] },
+      styles: { fontSize: 10 },
+    });
+
+    if (dados.porCategoria.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["Categoria", "Receita", "Custo", "Lucro", "Margem"]],
+        body: dados.porCategoria.map(c => [
+          c.categoria, fmtBRL(c.receita), fmtBRL(c.custo), fmtBRL(c.lucro), fmtPct(c.margem),
+        ]),
+        theme: "striped", headStyles: { fillColor: [34, 197, 94] },
+        styles: { fontSize: 9 },
+      });
+    }
+
+    if (dados.porProduto.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["#", "Produto", "Código", "Categoria", "Qtd", "Receita", "Custo", "Lucro", "Margem"]],
+        body: dados.porProduto.map((p, i) => [
+          i + 1, p.nome, p.codigo, p.categoria || "—",
+          `${fmtNum(p.quantidade)} ${p.unidade}`,
+          fmtBRL(p.receita),
+          p.custoIndefinido ? "—" : fmtBRL(p.custo),
+          fmtBRL(p.lucro),
+          p.custoIndefinido ? "s/ custo" : fmtPct(p.margem),
+        ]),
+        theme: "striped", headStyles: { fillColor: [34, 197, 94] },
+        styles: { fontSize: 8 },
+      });
+    }
+
+    doc.save(`relatorio-lucratividade-${hoje()}.pdf`);
+  }
+
+  return (
+    <BlocoRelatorio
+      titulo="Relatório de Lucratividade / Margem" cor={C.green}
+      filtros={
+        <>
+          <CampoData label="De" value={dataInicio} onChange={setDataInicio} />
+          <CampoData label="Até" value={dataFim} onChange={setDataFim} />
+          <CampoSelectBusca label="Categoria" opcoes={categorias} value={categoriaId} onChange={setCategoriaId} placeholder="Todas" />
+          <CampoSelectBusca label="Vendedor" opcoes={usuarios} value={userId} onChange={setUserId} placeholder="Todos" />
+        </>
+      }
+      onGerar={gerar} onExportar={exportar} carregando={carregando}
+      erro={erro} dados={dados}
+    >
+      {dados && (
+        <>
+          <Resumo cards={[
+            { rotulo: "Receita bruta", valor: fmtBRL(dados.resumo.receitaBruta), cor: C.accent },
+            { rotulo: "Custo (CMV)", valor: fmtBRL(dados.resumo.custoTotal), cor: C.red },
+            { rotulo: "Lucro bruto", valor: fmtBRL(dados.resumo.lucroBruto), cor: dados.resumo.lucroBruto >= 0 ? C.green : C.red },
+            { rotulo: "Margem bruta", valor: fmtPct(dados.resumo.margemBruta), cor: C.purple },
+            ...(dados.resumo.descontos != null ? [
+              { rotulo: "Lucro líquido", valor: fmtBRL(dados.resumo.lucroLiquido), cor: dados.resumo.lucroLiquido >= 0 ? C.green : C.red },
+            ] : []),
+          ]} />
+
+          {dados.resumo.itensSemCusto > 0 && (
+            <div style={{
+              padding: "10px 14px", borderRadius: 8, marginBottom: 16,
+              background: C.yellow + "22", border: `1px solid ${C.yellow}55`, color: C.yellow, fontSize: 12,
+            }}>
+              ⚠️ {dados.resumo.itensSemCusto} produto(s) sem preço de custo cadastrado — a margem desses itens fica superestimada (custo considerado R$ 0).
+            </div>
+          )}
+
+          {dados.porCategoria.length > 0 && (
+            <Tabela
+              titulo="Lucro por categoria"
+              colunas={["Categoria", "Receita", "Custo", "Lucro", "Margem"]}
+              alinhamentos={["left", "right", "right", "right", "right"]}
+              linhas={dados.porCategoria.map(c => [
+                c.categoria, fmtBRL(c.receita), fmtBRL(c.custo), fmtBRL(c.lucro), fmtPct(c.margem),
+              ])}
+            />
+          )}
+
+          <Tabela
+            titulo={`Lucro por produto (${dados.porProduto.length})`}
+            colunas={["#", "Produto", "Código", "Categoria", "Qtd", "Receita", "Custo", "Lucro", "Margem"]}
+            alinhamentos={["center", "left", "left", "left", "right", "right", "right", "right", "right"]}
+            linhas={dados.porProduto.map((p, i) => [
+              i + 1, p.nome, p.codigo, p.categoria || "—",
+              `${fmtNum(p.quantidade)} ${p.unidade}`,
+              fmtBRL(p.receita),
+              p.custoIndefinido ? "—" : fmtBRL(p.custo),
+              fmtBRL(p.lucro),
+              p.custoIndefinido ? "s/ custo" : fmtPct(p.margem),
+            ])}
+            vazioTexto="Nenhuma venda no período."
           />
         </>
       )}

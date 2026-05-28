@@ -1941,3 +1941,21 @@ model WhatsappLog {
   @@index([tenantId, numero])
   @@map("whatsapp_logs")
 }
+
+// Controle de forca-bruta de login. GLOBAL (sem tenantId) — o login
+// acontece antes de haver contexto de tenant. Conta tentativas falhas por
+// chave ("ip:<addr>" e "email:<addr>") e bloqueia temporariamente ao
+// exceder o limite. Persistente em banco para funcionar em serverless,
+// onde um contador em memoria nao e compartilhado entre instancias.
+// NAO incluir em MODELOS_COM_TENANT (lib/prisma.js).
+model LoginThrottle {
+  id           String    @id @default(uuid())
+  chave        String    @unique
+  tentativas   Int       @default(0)
+  janelaInicio DateTime  @default(now())
+  bloqueadoAte DateTime?
+  atualizadoEm DateTime  @updatedAt
+
+  @@index([bloqueadoAte])
+  @@map("login_throttle")
+}

@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import prisma from "../lib/prisma.js";
 import { registrarEvento } from "../middlewares/auditoria.js";
+import { registrarFalhaLogin, limparThrottleLogin } from "../middlewares/rateLimitLogin.js";
 
 export async function login(req, res, next) {
   try {
@@ -34,6 +35,7 @@ export async function login(req, res, next) {
         // de validar). Para usuario inativo, sabemos o tenant.
         tenantId: user?.tenantId || null,
       });
+      await registrarFalhaLogin(req);
       return res.status(401).json({ erro: "Credenciais invalidas" });
     }
 
@@ -90,8 +92,12 @@ export async function login(req, res, next) {
         mensagem: "Senha incorreta", req,
         tenantId: user.tenantId,
       });
+      await registrarFalhaLogin(req);
       return res.status(401).json({ erro: "Credenciais invalidas" });
     }
+
+    // Login valido — zera o contador de tentativas (IP + email).
+    await limparThrottleLogin(req);
 
     // JWT inclui `tid` (tenant id) que sera usado pelo middleware da
     // ETAPA 3 para injetar req.tenantId em toda request. `sa` (super

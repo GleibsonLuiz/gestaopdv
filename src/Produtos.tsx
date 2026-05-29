@@ -948,7 +948,7 @@ export default function Produtos({ user }: ProdutosProps) {
                       </CampoLux>
                     </Linha>
                     <Linha cols={1}>
-                      <CampoLux label="Fabricante / Marca" hint="Cadastre uma vez e reutilize nos próximos produtos — clique no + para adicionar">
+                      <CampoLux label="Fabricante / Marca">
                         <div className="flex gap-2">
                           <SelectBusca<Fabricante>
                             opcoes={fabricantes}
@@ -981,7 +981,7 @@ export default function Produtos({ user }: ProdutosProps) {
 
                   <Secao legenda="Imagem e tipo do item">
                     <Linha style={{ gridTemplateColumns: "1fr 1fr", alignItems: "stretch" }}>
-                      <CampoLux label="Foto do produto" hint="JPG, PNG ou WEBP · máx 2 MB">
+                      <CampoLux label="Foto do produto">
                         <DropzoneImagem
                           preview={imagemPreview}
                           onSelecionar={escolherImagem}

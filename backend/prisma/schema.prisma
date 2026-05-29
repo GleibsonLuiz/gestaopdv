@@ -291,6 +291,54 @@ enum RegimeTributario {
   REGIME_NORMAL // CRT=3 — usa CST do ICMS
 }
 
+// ============ EMISSAO FISCAL (NF-e / NFC-e) ============
+// Enums de suporte ao documento fiscal eletronico. Schema preparado para
+// emissao futura — nenhuma logica de emissao depende disto ainda. A
+// integracao (gateway/SEFAZ/XML) sera adicionada quando o lojista ativar.
+
+// Modelo do documento fiscal. NFC-e (65) e o cupom fiscal eletronico ao
+// consumidor; NF-e (55) e a nota convencional B2B. Comecamos so com 65.
+enum ModeloDocFiscal {
+  NFCE_65 // NFC-e — cupom fiscal eletronico (modelo 65)
+  NFE_55 // NF-e (modelo 55)
+}
+
+// Ambiente de transmissao SEFAZ. tpAmb no XML: PRODUCAO=1, HOMOLOGACAO=2.
+// Homologacao gera documento SEM valor fiscal (para testes).
+enum AmbienteFiscal {
+  HOMOLOGACAO // tpAmb=2 — testes, sem valor fiscal
+  PRODUCAO // tpAmb=1 — valor fiscal real
+}
+
+// Forma de emissao (tpEmis). NFC-e permite emissao offline (contingencia)
+// quando a SEFAZ esta indisponivel — transmite-se depois.
+enum TipoEmissaoFiscal {
+  NORMAL // tpEmis=1 — online, autorizacao sincrona
+  CONTINGENCIA_OFFLINE // tpEmis=9 — NFC-e offline, transmite depois
+}
+
+// Ciclo de vida do documento perante a SEFAZ.
+//   PENDENTE     - criado localmente, ainda nao transmitido
+//   PROCESSANDO  - enviado ao gateway/SEFAZ, aguardando retorno
+//   AUTORIZADA   - cStat 100, documento valido (tem chave + protocolo)
+//   REJEITADA    - erro de validacao; corrigir e reenviar (numero reaproveita)
+//   DENEGADA     - cStat 110/301/302; irregularidade do emitente/dest
+//   CANCELADA    - evento de cancelamento autorizado pela SEFAZ
+//   CONTINGENCIA - emitida offline, aguardando transmissao posterior
+//   INUTILIZADA  - faixa de numeracao inutilizada (nao gerou documento)
+//   ERRO         - falha de comunicacao com gateway/SEFAZ
+enum StatusSefaz {
+  PENDENTE
+  PROCESSANDO
+  AUTORIZADA
+  REJEITADA
+  DENEGADA
+  CANCELADA
+  CONTINGENCIA
+  INUTILIZADA
+  ERRO
+}
+
 // ============ MULTI-TENANT ============
 //
 // Empresa = tenant. Cada registro de negocio (cliente, produto, venda, etc)
@@ -370,6 +418,8 @@ model Empresa {
   vendasEspera           VendaEspera[]
   whatsappSettings       WhatsappSettings?
   whatsappLogs           WhatsappLog[]
+  notasFiscais           NotaFiscal[]
+  itensNotaFiscal        ItemNotaFiscal[]
 
   @@map("empresas")
 }
@@ -440,6 +490,7 @@ model User {
   inventarios              Inventario[]
   intencoesPagamentoMP     IntencaoPagamentoMP[]
   comandas                 Comanda[]
+  notasFiscais             NotaFiscal[]
   vendasEspera             VendaEspera[]
 
   @@unique([tenantId, email])
@@ -702,6 +753,7 @@ model Produto {
   movimentacoes   MovimentacaoEstoque[]
   inventarioItens InventarioItem[]
   itensComanda    ItemComanda[]
+  itensNotaFiscal ItemNotaFiscal[]
 
   @@unique([tenantId, codigo])
   @@unique([tenantId, codigoBarras])
@@ -744,6 +796,7 @@ model Venda {
   oportunidade        Oportunidade?
   pesquisaNps         PesquisaNps?
   comandas            Comanda[]
+  notasFiscais        NotaFiscal[]
 
   @@unique([tenantId, numero])
   @@index([caixaId])
@@ -797,6 +850,135 @@ model ItemVenda {
 
   @@index([tenantId])
   @@map("itens_venda")
+}
+
+// ============ DOCUMENTO FISCAL ELETRONICO (NFC-e / NF-e) ============
+//
+// SCHEMA PREPARADO — emissao ainda NAO implementada. Modela o documento
+// fiscal autorizado pela SEFAZ vinculado a uma Venda. Uma Venda pode ter
+// 1..N NotaFiscal ao longo do tempo (ex: rejeitada -> reemitida, ou
+// autorizada -> cancelada -> reemitida); o registro AUTORIZADA vigente e a
+// nota valida. A numeracao fiscal (serie + numeroFiscal) e propria e
+// contigua, separada de Venda.numero (ver ConfiguracaoEmpresa.proximoNumeroNfce).
+//
+// Snapshot fiscal: os campos fiscais ficam congelados aqui no momento da
+// emissao (em NotaFiscal e ItemNotaFiscal), pois Produto/Empresa mudam com
+// o tempo e a nota precisa preservar o que valeu naquela autorizacao.
+model NotaFiscal {
+  id           String            @id @default(uuid())
+  modelo       ModeloDocFiscal   @default(NFCE_65)
+  serie        Int
+  // Numeracao fiscal propria (nNF), contigua por serie. Diferente de
+  // Venda.numero. Buracos exigem inutilizacao perante a SEFAZ.
+  numeroFiscal Int
+  ambiente     AmbienteFiscal
+  tipoEmissao  TipoEmissaoFiscal @default(NORMAL)
+  status       StatusSefaz       @default(PENDENTE)
+
+  // --- Identificacao do documento autorizado ---
+  chaveAcesso     String?   @unique @db.VarChar(44)
+  protocolo       String? // nProt da autorizacao
+  dataAutorizacao DateTime?
+  digestValue     String? // resumo da assinatura (consulta/QR Code)
+
+  // --- Retorno SEFAZ ---
+  cStat        String? @db.VarChar(3) // codigo de status (100=autorizada)
+  xMotivo      String? // descricao do status/rejeicao
+  mensagemErro String? @db.Text // detalhe de erro do gateway/SEFAZ
+
+  // --- NFC-e: QR Code e URL de consulta ---
+  qrCode      String? @db.Text
+  urlConsulta String? @db.Text
+
+  // --- XMLs ---
+  xmlAutorizado   String? @db.Text
+  xmlCancelamento String? @db.Text
+
+  // --- Cancelamento (evento) ---
+  dataCancelamento          DateTime?
+  justificativaCancelamento String?
+  protocoloCancelamento     String?
+
+  // --- Integracao com gateway fiscal ---
+  provedorFiscal       String? // snapshot do provedor usado
+  idIntegracaoProvedor String? // id da nota no gateway (idempotencia)
+
+  // --- Snapshot de totais (vNF + tributos) ---
+  valorTotal      Decimal  @db.Decimal(10, 2)
+  valorTributos   Decimal? @db.Decimal(10, 2) // vTotTrib (Lei da Transparencia)
+  baseCalculoIcms Decimal? @db.Decimal(10, 2)
+  valorIcms       Decimal? @db.Decimal(10, 2)
+  valorPis        Decimal? @db.Decimal(10, 2)
+  valorCofins     Decimal? @db.Decimal(10, 2)
+
+  // --- Snapshot do destinatario (NFC-e: opcional, "consumidor") ---
+  destCpfCnpj String?
+  destNome    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Venda de origem. SetNull para preservar o historico fiscal mesmo se a
+  // venda for removida (a nota autorizada nao deve sumir).
+  vendaId String?
+  venda   Venda?  @relation(fields: [vendaId], references: [id], onDelete: SetNull)
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  itens ItemNotaFiscal[]
+
+  @@unique([tenantId, modelo, serie, numeroFiscal])
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+  @@index([vendaId])
+  @@map("notas_fiscais")
+}
+
+model ItemNotaFiscal {
+  id         String @id @default(uuid())
+  numeroItem Int // nItem — ordem do item no XML (1..N)
+
+  // --- Snapshot do produto no momento da emissao ---
+  codigo        String?
+  descricao     String
+  ncm           String?           @db.VarChar(8)
+  cest          String?           @db.VarChar(7)
+  cfop          String?           @db.VarChar(4)
+  unidade       String?
+  quantidade    Decimal           @db.Decimal(12, 3)
+  valorUnitario Decimal           @db.Decimal(10, 4)
+  valorTotal    Decimal           @db.Decimal(10, 2)
+  origem        OrigemMercadoria?
+
+  // --- Tributos calculados por item ---
+  cstIcms      String?  @db.VarChar(3)
+  csosnIcms    String?  @db.VarChar(4)
+  baseIcms     Decimal? @db.Decimal(10, 2)
+  aliquotaIcms Decimal? @db.Decimal(5, 2)
+  valorIcms    Decimal? @db.Decimal(10, 2)
+  cstPis       String?  @db.VarChar(2)
+  valorPis     Decimal? @db.Decimal(10, 2)
+  cstCofins    String?  @db.VarChar(2)
+  valorCofins  Decimal? @db.Decimal(10, 2)
+
+  notaFiscalId String
+  notaFiscal   NotaFiscal @relation(fields: [notaFiscalId], references: [id], onDelete: Cascade)
+
+  // Produto de origem (opcional — pode ter sido removido depois). O snapshot
+  // textual acima garante que a nota se sustenta sozinha.
+  produtoId String?
+  produto   Produto? @relation(fields: [produtoId], references: [id])
+
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([notaFiscalId])
+  @@index([tenantId])
+  @@map("itens_nota_fiscal")
 }
 
 // ============ COMPRAS ============
@@ -1114,6 +1296,52 @@ model ConfiguracaoEmpresa {
   // (e vice-versa). Util para operar so com QR Code quando a Point esta
   // offline, ou so com maquininha quando o PIX nao e desejado.
   mpPixAtivo       Boolean @default(false)
+
+  // ============ EMISSAO FISCAL — DADOS DO EMITENTE (NFC-e / NF-e) ============
+  // Campos do EMITENTE necessarios para a nota fiscal eletronica. Todos
+  // opcionais hoje (preparacao) — viram obrigatorios quando fiscalAtivo=true,
+  // validado no controller de emissao (etapa futura). Complementam os campos
+  // ja existentes acima (razaoSocial, cnpj, inscEstadual, endereco...).
+
+  // CRT do emitente: 1=Simples Nacional, 2=Simples/Excesso, 3=Regime Normal.
+  // Decide CST x CSOSN no XML em nivel de empresa.
+  crt                 Int?
+  // CNAE fiscal principal (7 digitos).
+  cnae                String?
+  // Inscricao Municipal (servicos / ISSQN).
+  inscMunicipal       String?
+  // IE do Substituto Tributario (IEST), quando aplicavel.
+  ieSubstitutoTrib    String?
+  // Regime especial de tributacao do ISSQN (so prestadores de servico).
+  regimeEspecialISSQN Int?
+  // Endereco do emitente em codigos IBGE (o endereco textual acima nao basta
+  // para o XML — a SEFAZ exige cMun/cUF). 7 digitos / 2 digitos.
+  codMunicipioIBGE    String?
+  codUFIBGE           String?
+  codPais             String  @default("1058")
+  nomePais            String  @default("BRASIL")
+
+  // --- Configuracao da emissao NFC-e ---
+  // Liga/desliga a emissao fiscal para o tenant. Default false: ninguem
+  // emite ate configurar certificado + CSC + credenciamento na SEFAZ.
+  fiscalAtivo         Boolean        @default(false)
+  ambienteFiscal      AmbienteFiscal @default(HOMOLOGACAO)
+  // Serie e proximo numero da NFC-e. Numeracao fiscal PROPRIA, contigua por
+  // serie (independente de Venda.numero). Incrementada com a mesma protecao
+  // contra race de lib/proximoNumero.js na emissao.
+  serieNfce           Int            @default(1)
+  proximoNumeroNfce   Int            @default(1)
+  // CSC (Codigo de Seguranca do Contribuinte) e seu ID — usados no hash do
+  // QR Code da NFC-e. cscEnc cifrado com AES-256-GCM (lib/cripto.js), nunca
+  // exposto decifrado em GETs do frontend (mesmo padrao do mpAccessTokenEnc).
+  cscEnc              String?
+  cscId               String?
+  // Provedor/gateway fiscal escolhido (ex: "nuvemfiscal", "plugnotas",
+  // "focusnfe"). Define qual cliente HTTP a etapa de emissao vai usar.
+  provedorFiscal      String?
+  // Referencia ao certificado digital A1 (.pfx) — ex: chave no Blob ou nome
+  // do secret. NUNCA guardar o .pfx nem a senha em texto aqui.
+  certificadoRef      String?
 
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

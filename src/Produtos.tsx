@@ -1275,7 +1275,7 @@ function SeletorTipoItem({ valor, onMudar }: SeletorTipoItemProps) {
     { id: "SERVICO", icone: "🛠", label: "Serviço / digital", desc: "Sem estoque. Sempre disponível para venda (impressão, 2ª via...)." },
   ];
   return (
-    <div className="grid grid-cols-1 gap-2.5">
+    <div className="grid grid-cols-2 gap-2.5 h-full">
       {opcoes.map((opt) => {
         const ativo = valor === opt.id;
         return (
@@ -1285,7 +1285,7 @@ function SeletorTipoItem({ valor, onMudar }: SeletorTipoItemProps) {
             onClick={() => onMudar(opt.id)}
             className="cursor-pointer text-left rounded-[10px]"
             style={{
-              padding: "12px 14px",
+              padding: "10px 12px",
               background: ativo ? (opt.id === "SERVICO" ? C.purple + "22" : C.accent + "22") : C.surface,
               border: `1px solid ${ativo ? (opt.id === "SERVICO" ? C.purple : C.accent) : C.border}`,
               color: ativo ? C.white : C.text,
@@ -1296,7 +1296,7 @@ function SeletorTipoItem({ valor, onMudar }: SeletorTipoItemProps) {
               <span className="text-lg">{opt.icone}</span>
               {opt.label}
             </div>
-            <div className="text-gp-muted text-[11px] mt-1">{opt.desc}</div>
+            <div className="text-gp-muted text-[11px] mt-1 leading-snug">{opt.desc}</div>
           </button>
         );
       })}

@@ -875,14 +875,14 @@ export default function Produtos({ user }: ProdutosProps) {
               {ativa === 0 && (
                 <>
                   <Secao legenda="Identificação">
-                    <Linha style={{ gridTemplateColumns: "150px 1fr 80px" }}>
+                    <Linha style={{ gridTemplateColumns: "120px 1fr 64px 165px 120px" }}>
                       <CampoLux label="Código" obrigatorio>
                         <div className="flex gap-1.5">
                           <input
                             className="lux-input"
                             value={form.codigo}
                             onChange={(e) => setForm({ ...form, codigo: e.target.value })}
-                            style={{ flex: 1 }}
+                            style={{ flex: 1, minWidth: 0 }}
                             autoFocus
                           />
                           <button
@@ -893,7 +893,8 @@ export default function Produtos({ user }: ProdutosProps) {
                             className="rounded-[10px] font-semibold cursor-pointer text-base text-gp-accent bg-gp-surface"
                             style={{
                               border: `1px solid ${C.border}`,
-                              padding: "0 12px",
+                              padding: "0 10px",
+                              flexShrink: 0,
                             }}
                           >
                             ↻
@@ -913,17 +914,15 @@ export default function Produtos({ user }: ProdutosProps) {
                           className="lux-input"
                           value={form.unidade}
                           onChange={(e) => setForm({ ...form, unidade: e.target.value.toUpperCase().slice(0, 6) })}
-                          placeholder="UN, KG, LT..."
+                          placeholder="UN, KG…"
                         />
                       </CampoLux>
-                    </Linha>
-                    <Linha style={{ gridTemplateColumns: "1fr 1fr 1.4fr" }}>
                       <CampoLux label="Código de barras">
                         <input
                           className="lux-input"
                           value={form.codigoBarras}
                           onChange={(e) => setForm({ ...form, codigoBarras: e.target.value.replace(/\s/g, "") })}
-                          placeholder="EAN-13, EAN-8, GTIN…"
+                          placeholder="EAN / GTIN…"
                           inputMode="numeric"
                           style={{ fontFamily: "ui-monospace, monospace" }}
                         />
@@ -933,21 +932,11 @@ export default function Produtos({ user }: ProdutosProps) {
                           className="lux-input"
                           value={form.referencia}
                           onChange={(e) => setForm({ ...form, referencia: e.target.value.toUpperCase() })}
-                          placeholder="Cód. fabricante / fornecedor"
-                        />
-                      </CampoLux>
-                      <CampoLux label="Descrição">
-                        <textarea
-                          className="lux-textarea"
-                          value={form.descricao}
-                          onChange={(e) => setForm({ ...form, descricao: e.target.value })}
-                          rows={2}
-                          placeholder="Detalhes complementares…"
-                          style={{ minHeight: 38, height: 38, maxHeight: 80, resize: "vertical" }}
+                          placeholder="Cód. fornecedor"
                         />
                       </CampoLux>
                     </Linha>
-                    <Linha cols={1}>
+                    <Linha style={{ gridTemplateColumns: "1.1fr 1fr" }}>
                       <CampoLux label="Fabricante / Marca">
                         <div className="flex gap-2">
                           <SelectBusca<Fabricante>
@@ -956,7 +945,7 @@ export default function Produtos({ user }: ProdutosProps) {
                             onChange={(v) => setForm({ ...form, fabricanteId: v })}
                             placeholder="— Sem fabricante —"
                             className="lux-input"
-                            containerStyle={{ flex: 1 }}
+                            containerStyle={{ flex: 1, minWidth: 0 }}
                           />
                           <button
                             type="button"
@@ -967,7 +956,7 @@ export default function Produtos({ user }: ProdutosProps) {
                             style={{
                               border: "none",
                               background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-                              padding: "0 16px",
+                              padding: "0 14px",
                               fontSize: 13,
                               flexShrink: 0,
                             }}
@@ -975,6 +964,16 @@ export default function Produtos({ user }: ProdutosProps) {
                             <span style={{ fontSize: 18, lineHeight: 1 }}>+</span> Novo
                           </button>
                         </div>
+                      </CampoLux>
+                      <CampoLux label="Descrição">
+                        <textarea
+                          className="lux-textarea"
+                          value={form.descricao}
+                          onChange={(e) => setForm({ ...form, descricao: e.target.value })}
+                          rows={2}
+                          placeholder="Detalhes complementares…"
+                          style={{ minHeight: 36, height: 36, maxHeight: 80, resize: "vertical" }}
+                        />
                       </CampoLux>
                     </Linha>
                   </Secao>

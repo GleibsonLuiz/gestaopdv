@@ -818,6 +818,7 @@ export default function Produtos({ user }: ProdutosProps) {
         erro={erroForm}
         larguraMax={920}
         compacto
+        className="produto-modal"
         acaoSecundaria={editando ? (
           <div className="flex gap-2.5 flex-wrap">
             <button

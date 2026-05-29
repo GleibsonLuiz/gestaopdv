@@ -59,6 +59,8 @@ export interface FormularioLuxuosoProps {
   erro?: string;
   /** Modo compacto: reduz paddings/gaps/heights internos pra caber em 90vh sem scroll. */
   compacto?: boolean;
+  /** Classe extra aplicada ao .lux-stage, p/ escopar ajustes finos de layout por modal. */
+  className?: string;
   /** Ação secundária no canto esquerdo do rodapé (ex.: Inativar/Reativar na
    * edição). Quando presente, substitui a dica "Enter/Esc". */
   acaoSecundaria?: ReactNode;
@@ -83,6 +85,7 @@ export function FormularioLuxuoso({
   larguraMax = 720,
   erro,
   compacto = false,
+  className,
   acaoSecundaria,
   children,
 }: FormularioLuxuosoProps) {
@@ -397,8 +400,8 @@ export function FormularioLuxuoso({
         /* Modo compacto: solicitado via prop compacto=true (ex: modal Novo Cliente
            — ETAPA#2). Reduz paddings/gaps/heights internos pra caber em ~90vh
            sem scroll vertical. Eyebrow + subtitulo escondidos. */
-        .lux-overlay--compact { padding: 4vh clamp(8px, 1.6vw, 16px); }
-        .lux-stage--compact { max-height: 92vh; }
+        .lux-overlay--compact { padding: 2.5vh clamp(8px, 1.6vw, 16px); }
+        .lux-stage--compact { max-height: 95vh; }
         .lux-stage--compact .lux-eyebrow { display: none; }
         .lux-stage--compact .lux-sub { display: none; }
         .lux-stage--compact .lux-head {
@@ -437,7 +440,7 @@ export function FormularioLuxuoso({
       `}</style>
 
       <div className={`lux-overlay${compacto ? " lux-overlay--compact" : ""}`} onClick={() => !salvando && onFechar?.()}>
-        <div className={`lux-stage${compacto ? " lux-stage--compact" : ""}`} onClick={(e) => e.stopPropagation()}>
+        <div className={`lux-stage${compacto ? " lux-stage--compact" : ""}${className ? ` ${className}` : ""}`} onClick={(e) => e.stopPropagation()}>
           {(eyebrow || numeroLote || data) && (
             <div className="lux-eyebrow" aria-hidden="true">
               <span className="dot" />

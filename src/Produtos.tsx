@@ -265,7 +265,6 @@ export default function Produtos({ user }: ProdutosProps) {
   const inputImagemRef = useRef<HTMLInputElement | null>(null);
 
   const podeEditar = user.role === "ADMIN" || user.role === "GERENTE";
-  const podeExcluir = user.role === "ADMIN";
 
   const progressoForm = useMemo(() => {
     let preenchidos = 0;
@@ -748,7 +747,7 @@ export default function Produtos({ user }: ProdutosProps) {
                       icon: p.ativo ? "⊘" : "↻",
                       color: p.ativo ? C.yellow : C.green,
                       onClick: () => alternarAtivo(p),
-                      hidden: !podeExcluir,
+                      hidden: !podeEditar,
                     },
                   ]}
                 />

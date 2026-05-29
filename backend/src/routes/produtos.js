@@ -15,7 +15,8 @@ router.get("/:id/compras", historicoCompras);
 router.get("/:id", obter);
 router.post("/", requirePermissao("PRODUTOS"), requireRole("ADMIN", "GERENTE"), criar);
 router.put("/:id", requirePermissao("PRODUTOS"), requireRole("ADMIN", "GERENTE"), atualizar);
-router.delete("/:id", requirePermissao("PRODUTOS"), requireRole("ADMIN"), excluir);
+// "Excluir" e soft-delete (marca ativo=false); por isso GERENTE tambem pode inativar.
+router.delete("/:id", requirePermissao("PRODUTOS"), requireRole("ADMIN", "GERENTE"), excluir);
 
 router.post(
   "/:id/imagem",

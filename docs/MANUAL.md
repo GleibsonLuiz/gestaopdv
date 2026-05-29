@@ -367,6 +367,8 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 
 O status alterna entre **ATIVO** (verde) e **INATIVO** (cinza). Use o filtro **"Todos status" → "Apenas inativos"** no topo da tela para listar os inativos.
 
+> Inativar/reativar pode ser feito por **ADMIN** e **GERENTE** (mesmos perfis que editam produtos). Não há exclusão permanente de produto: "inativar" é um soft-delete que preserva todo o histórico de vendas, compras e estoque.
+
 **Histórico de compras de um produto:** ao **editar** um produto físico, o botão **🚚 Histórico de compras** (no canto inferior esquerdo do formulário, ao lado de *Inativar produto*) abre uma janela com **todas as entradas de compra daquele produto por fornecedor**: data, número da compra, fornecedor, quantidade, custo unitário e subtotal. No topo há um resumo — quantas compras, quantidade total comprada, total gasto, **custo médio** e o **último custo** (com a data e o fornecedor). Compras estornadas aparecem marcadas como **ESTORNADA** e não entram no resumo (o estorno já reverteu a entrada). Serviços não têm esse botão (não entram em compras).
 
 ---

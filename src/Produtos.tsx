@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback, useRef, useMemo, type CSSProperties, 
 import { C } from "./lib/theme";
 import { api, BASE_URL, getEmpresa, type SessionUser, type SegmentoEmpresa } from "./lib/api";
 import MovimentarEstoqueModal from "./MovimentarEstoqueModal";
+import HistoricoComprasModal from "./HistoricoComprasModal";
+import FabricanteModal from "./FabricanteModal";
 import ActionsMenu from "./components/ActionsMenu";
 import EtiquetaPrecoModal from "./components/EtiquetaPrecoModal";
 import { FormularioLuxuoso, Secao, Linha, Campo as CampoLux } from "./components/FormularioLuxuoso";
@@ -36,6 +38,12 @@ interface Fornecedor {
   [extra: string]: unknown;
 }
 
+interface Fabricante {
+  id: string;
+  nome: string;
+  [extra: string]: unknown;
+}
+
 interface CategoriaRef { nome: string; }
 interface FornecedorRef { nome: string; }
 
@@ -46,6 +54,8 @@ interface Produto {
   referencia?: string | null;
   nome: string;
   descricao?: string | null;
+  fabricanteId?: string | null;
+  fabricante?: { nome: string } | null;
   tipoItem?: TipoItem;
   precoVenda?: number | string | null;
   precoCusto?: number | string | null;
@@ -84,6 +94,7 @@ interface FormProduto {
   referencia: string;
   nome: string;
   descricao: string;
+  fabricanteId: string;
   tipoItem: TipoItem;
   precoVenda: string;
   precoCusto: string;
@@ -126,7 +137,7 @@ interface Markup {
 
 const VAZIO: FormProduto = {
   codigo: "", codigoBarras: "", referencia: "",
-  nome: "", descricao: "",
+  nome: "", descricao: "", fabricanteId: "",
   tipoItem: "PRODUTO",
   precoVenda: "", precoCusto: "",
   estoque: "0", estoqueMinimo: "0", unidade: "UN",
@@ -224,6 +235,7 @@ export default function Produtos({ user }: ProdutosProps) {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
+  const [fabricantes, setFabricantes] = useState<Fabricante[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
   const [search, setSearch] = useState("");
@@ -240,8 +252,10 @@ export default function Produtos({ user }: ProdutosProps) {
   const [mensagem, setMensagem] = useState("");
 
   const [novaCategoria, setNovaCategoria] = useState("");
+  const [modalFabricante, setModalFabricante] = useState(false);
   const [modalEstoqueProduto, setModalEstoqueProduto] = useState<Produto | null>(null);
   const [modalEtiquetaProduto, setModalEtiquetaProduto] = useState<Produto | null>(null);
+  const [modalHistoricoProduto, setModalHistoricoProduto] = useState<Produto | null>(null);
 
   const [markup, setMarkup] = useState<Markup>(MARKUP_VAZIO);
 
@@ -290,6 +304,7 @@ export default function Produtos({ user }: ProdutosProps) {
   useEffect(() => {
     api.listarCategorias().then((r) => setCategorias((r as Categoria[]) || [])).catch(() => {});
     api.listarFornecedores({ ativo: "true" }).then((r) => setFornecedores((r as Fornecedor[]) || [])).catch(() => {});
+    api.listarFabricantes().then((r) => setFabricantes((r as Fabricante[]) || [])).catch(() => {});
   }, []);
 
   function flash(texto: string) {
@@ -338,6 +353,7 @@ export default function Produtos({ user }: ProdutosProps) {
       referencia: p.referencia || "",
       nome: p.nome || "",
       descricao: p.descricao || "",
+      fabricanteId: p.fabricanteId || "",
       tipoItem: p.tipoItem || "PRODUTO",
       precoVenda: p.precoVenda != null ? String(p.precoVenda) : "",
       precoCusto: p.precoCusto != null ? String(p.precoCusto) : "",
@@ -442,6 +458,7 @@ export default function Produtos({ user }: ProdutosProps) {
         referencia: form.referencia || null,
         nome: form.nome,
         descricao: form.descricao,
+        fabricanteId: form.fabricanteId || null,
         tipoItem: form.tipoItem,
         precoVenda: form.precoVenda,
         precoCusto: form.precoCusto === "" ? null : form.precoCusto,
@@ -762,6 +779,26 @@ export default function Produtos({ user }: ProdutosProps) {
         />
       )}
 
+      {modalHistoricoProduto && (
+        <HistoricoComprasModal
+          produtoId={modalHistoricoProduto.id}
+          produtoNome={`${modalHistoricoProduto.codigo} — ${modalHistoricoProduto.nome}`}
+          onFechar={() => setModalHistoricoProduto(null)}
+        />
+      )}
+
+      {modalFabricante && (
+        <FabricanteModal
+          onFechar={() => setModalFabricante(false)}
+          onCriado={(fab) => {
+            setFabricantes((prev) =>
+              [...prev, fab].sort((a, b) => a.nome.localeCompare(b.nome)));
+            setForm((f) => ({ ...f, fabricanteId: fab.id }));
+            setModalFabricante(false);
+          }}
+        />
+      )}
+
       <FormularioLuxuoso
         aberto={modalAberto}
         onFechar={() => setModalAberto(false)}
@@ -782,24 +819,38 @@ export default function Produtos({ user }: ProdutosProps) {
         erro={erroForm}
         larguraMax={920}
         acaoSecundaria={editando ? (
-          <button
-            type="button"
-            className="lux-btn lux-btn--ghost"
-            disabled={salvando}
-            onClick={async () => {
-              const mudou = await alternarAtivo(editando);
-              if (mudou) setModalAberto(false);
-            }}
-            style={{
-              color: editando.ativo ? C.yellow : C.green,
-              borderColor: (editando.ativo ? C.yellow : C.green) + "55",
-            }}
-            title={editando.ativo
-              ? "Inativar este produto (some do PDV; histórico preservado)"
-              : "Reativar este produto (volta a aparecer no PDV)"}
-          >
-            {editando.ativo ? "⊘ Inativar produto" : "↻ Reativar produto"}
-          </button>
+          <div className="flex gap-2.5 flex-wrap">
+            <button
+              type="button"
+              className="lux-btn lux-btn--ghost"
+              disabled={salvando}
+              onClick={async () => {
+                const mudou = await alternarAtivo(editando);
+                if (mudou) setModalAberto(false);
+              }}
+              style={{
+                color: editando.ativo ? C.yellow : C.green,
+                borderColor: (editando.ativo ? C.yellow : C.green) + "55",
+              }}
+              title={editando.ativo
+                ? "Inativar este produto (some do PDV; histórico preservado)"
+                : "Reativar este produto (volta a aparecer no PDV)"}
+            >
+              {editando.ativo ? "⊘ Inativar produto" : "↻ Reativar produto"}
+            </button>
+            {editando.tipoItem !== "SERVICO" && (
+              <button
+                type="button"
+                className="lux-btn lux-btn--ghost"
+                disabled={salvando}
+                onClick={() => setModalHistoricoProduto(editando)}
+                style={{ color: C.accent, borderColor: C.accent + "55" }}
+                title="Ver todas as compras deste produto por fornecedor"
+              >
+                🚚 Histórico de compras
+              </button>
+            )}
+          </div>
         ) : null}
       >
         <Abas
@@ -897,6 +948,36 @@ export default function Produtos({ user }: ProdutosProps) {
                         />
                       </CampoLux>
                     </Linha>
+                    <Linha cols={1}>
+                      <CampoLux label="Fabricante / Marca" hint="Cadastre uma vez e reutilize nos próximos produtos — clique no + para adicionar">
+                        <div className="flex gap-2">
+                          <SelectBusca<Fabricante>
+                            opcoes={fabricantes}
+                            value={form.fabricanteId}
+                            onChange={(v) => setForm({ ...form, fabricanteId: v })}
+                            placeholder="— Sem fabricante —"
+                            className="lux-input"
+                            containerStyle={{ flex: 1 }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setModalFabricante(true)}
+                            title="Cadastrar novo fabricante"
+                            aria-label="Cadastrar novo fabricante"
+                            className="rounded-[10px] font-bold cursor-pointer text-gp-white flex items-center gap-1.5"
+                            style={{
+                              border: "none",
+                              background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+                              padding: "0 16px",
+                              fontSize: 13,
+                              flexShrink: 0,
+                            }}
+                          >
+                            <span style={{ fontSize: 18, lineHeight: 1 }}>+</span> Novo
+                          </button>
+                        </div>
+                      </CampoLux>
+                    </Linha>
                   </Secao>
 
                   <Secao legenda="Imagem e tipo do item">
@@ -965,6 +1046,7 @@ export default function Produtos({ user }: ProdutosProps) {
                       <CampoLux label="Cálculo de markup">
                         <CalculoMarkup
                           precoCusto={form.precoCusto}
+                          precoVenda={form.precoVenda}
                           markup={markup}
                           onChange={setMarkup}
                           onAplicar={(valor) => setForm((f) => ({ ...f, precoVenda: valor }))}
@@ -1215,12 +1297,13 @@ function SeletorTipoItem({ valor, onMudar }: SeletorTipoItemProps) {
 
 interface CalculoMarkupProps {
   precoCusto: string;
+  precoVenda: string;
   markup: Markup;
   onChange: (m: Markup) => void;
   onAplicar: (valor: string) => void;
 }
 
-function CalculoMarkup({ precoCusto, markup, onChange, onAplicar }: CalculoMarkupProps) {
+function CalculoMarkup({ precoCusto, precoVenda, markup, onChange, onAplicar }: CalculoMarkupProps) {
   const custo = Number(precoCusto) || 0;
   const impostos = Number(markup.impostos) || 0;
   const taxas = Number(markup.taxasCartao) || 0;
@@ -1233,11 +1316,59 @@ function CalculoMarkup({ precoCusto, markup, onChange, onAplicar }: CalculoMarku
   const set = (campo: keyof Markup) => (e: ChangeEvent<HTMLInputElement>) =>
     onChange({ ...markup, [campo]: e.target.value });
 
+  // Margem sobre o custo (markup "por fora"), com vínculo bidirecional ao preço de venda.
+  const venda = Number(precoVenda) || 0;
+  const [margemCustoFocada, setMargemCustoFocada] = useState(false);
+  const [margemCustoLocal, setMargemCustoLocal] = useState("");
+  const margemDerivada = custo > 0 && venda > 0 ? (venda / custo - 1) * 100 : null;
+  // Enquanto o campo está em foco usa o texto digitado; fora de foco deriva do preço de venda.
+  const margemCustoValor = margemCustoFocada
+    ? margemCustoLocal
+    : margemDerivada != null ? margemDerivada.toFixed(2) : "";
+
+  const onChangeMargemCusto = (e: ChangeEvent<HTMLInputElement>) => {
+    const txt = e.target.value;
+    setMargemCustoLocal(txt);
+    const m = Number(txt);
+    if (custo > 0 && txt !== "" && !Number.isNaN(m)) {
+      onAplicar((custo * (1 + m / 100)).toFixed(2));
+    }
+  };
+
   return (
     <div
       className="bg-gp-surface rounded-[10px]"
       style={{ border: `1px solid ${C.border}`, padding: 14 }}
     >
+      <div className="text-gp-muted text-[11px] font-semibold mb-2">
+        Margem sobre o custo (preço = custo + margem)
+      </div>
+      <div className="grid grid-cols-2 gap-2.5 mb-3">
+        <SubCampo label="Margem de Lucro sobre o Custo (%)">
+          <input type="number" step="0.01" min="0" value={margemCustoValor}
+            onChange={onChangeMargemCusto}
+            onFocus={() => { setMargemCustoLocal(margemCustoValor); setMargemCustoFocada(true); }}
+            onBlur={() => setMargemCustoFocada(false)}
+            style={inputStyle} placeholder="0,00" aria-label="Margem de lucro sobre o custo" />
+        </SubCampo>
+        <SubCampo label="Preço de Venda resultante">
+          <div
+            className="text-base font-extrabold flex items-center"
+            style={{ color: custo > 0 && venda > 0 ? C.green : C.muted, minHeight: 38 }}
+          >
+            {custo > 0 && venda > 0 ? fmtBRL(venda) : "—"}
+          </div>
+        </SubCampo>
+      </div>
+      {custo === 0 && (
+        <div className="text-gp-muted text-[11px] mb-3">
+          ℹ Informe o Preço de Custo para usar a margem sobre o custo.
+        </div>
+      )}
+
+      <div className="text-gp-muted text-[11px] font-semibold mb-2 mt-1">
+        Formação de preço (margem sobre a venda)
+      </div>
       <div className="grid grid-cols-3 gap-2.5">
         <SubCampo label="Impostos sobre Venda (%)">
           <input type="number" step="0.01" min="0" value={markup.impostos}

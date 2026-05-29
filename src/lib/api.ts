@@ -428,6 +428,12 @@ export const api = {
     request(`/categorias/${id}`, { method: "PUT", body: data }),
   excluirCategoria: (id: string) => request(`/categorias/${id}`, { method: "DELETE" }),
 
+  listarFabricantes: () => request("/fabricantes"),
+  criarFabricante: (data: unknown) => request("/fabricantes", { method: "POST", body: data }),
+  atualizarFabricante: (id: string, data: unknown) =>
+    request(`/fabricantes/${id}`, { method: "PUT", body: data }),
+  excluirFabricante: (id: string) => request(`/fabricantes/${id}`, { method: "DELETE" }),
+
   listarFormasPagamento: (filtros: StringDict = {}) =>
     request(`/formas-pagamento${qsFrom(filtros)}`),
   criarFormaPagamento: (data: unknown) =>
@@ -451,6 +457,9 @@ export const api = {
   },
   excluirImagemProduto: (id: string) =>
     request(`/produtos/${id}/imagem`, { method: "DELETE" }),
+
+  historicoComprasProduto: (id: string) =>
+    request(`/produtos/${id}/compras`),
 
   listarMovimentacoes: (filtros: StringDict = {}) =>
     request(`/estoque/movimentacoes${qsFrom(filtros)}`),

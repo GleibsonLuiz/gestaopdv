@@ -341,15 +341,20 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 - **Código interno** (obrigatório, único)
 - **Código de barras / EAN** (opcional, único quando preenchido)
 - **Referência** (livre, código do fornecedor)
+- **Fabricante / Marca** (opcional, cadastro reutilizável — ex.: BIC, Faber-Castell, Bosch)
 - **Nome** (busca por trecho)
 
 **Como usar (form em 5 seções):**
 
-1. **Identificação** — código (sugestão automática), nome, descrição, código de barras, referência.
+1. **Identificação** — código (sugestão automática), nome, descrição, código de barras, referência, fabricante/marca. O **Fabricante / Marca** é um cadastro reutilizável: selecione um já existente na busca ou clique no botão **+ Novo** ao lado para cadastrar um novo sem sair da tela — ele já fica selecionado e disponível para os próximos produtos.
 2. **Imagem** — dropzone (arraste ou clique). Até 2 MB, JPG/PNG/WebP.
 3. **Tipo do item** — radio cards Produto/Serviço.
-4. **Preços e estoque** — preço de custo, markup automático, preço de venda, estoque atual, estoque mínimo, unidade (UN, KG, M, L, PCT…).
+4. **Preços e estoque** — preço de custo, cálculo de markup, preço de venda, estoque atual, estoque mínimo, unidade (UN, KG, M, L, PCT…).
 5. **Categorização** — categoria (cria inline se não existir), fornecedor padrão, tributação fiscal (NCM, CEST, CFOP, Origem, CST/CSOSN, PIS, COFINS, cBenef).
+
+**Cálculo de markup** — dois jeitos de chegar ao preço de venda:
+- **Margem sobre o custo** — digite a margem desejada (ex.: 120%) e o preço de venda é calculado na hora como `custo × (1 + margem%)` (custo 10,00 + 120% = 22,00). É bidirecional: se você digitar o preço de venda direto, o campo de margem mostra automaticamente qual margem aquele preço representa.
+- **Formação de preço (margem sobre a venda)** — informe impostos sobre venda, taxas de cartão e a margem desejada; o sistema sugere o preço "por dentro" (`custo ÷ (1 − soma%)`) e o botão **Aplicar ao preço de venda** preenche o campo. Como a margem aqui é sobre a venda, a soma dos percentuais precisa ser menor que 100%.
 
 **Lista:** miniatura, badges (`SERVIÇO`, `📊 EAN`, `🏷 REF`), unidade, estoque atual (com cor: verde > mínimo, amarelo = mínimo, vermelho < mínimo, ♾ se serviço), botão **📊 Movimentar estoque**.
 
@@ -361,6 +366,8 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 - **Dentro do cadastro:** ao **editar** um produto, há o botão **⊘ Inativar produto** (ou **↻ Reativar produto**) no canto inferior esquerdo do formulário, ao lado de Cancelar/Salvar.
 
 O status alterna entre **ATIVO** (verde) e **INATIVO** (cinza). Use o filtro **"Todos status" → "Apenas inativos"** no topo da tela para listar os inativos.
+
+**Histórico de compras de um produto:** ao **editar** um produto físico, o botão **🚚 Histórico de compras** (no canto inferior esquerdo do formulário, ao lado de *Inativar produto*) abre uma janela com **todas as entradas de compra daquele produto por fornecedor**: data, número da compra, fornecedor, quantidade, custo unitário e subtotal. No topo há um resumo — quantas compras, quantidade total comprada, total gasto, **custo médio** e o **último custo** (com a data e o fornecedor). Compras estornadas aparecem marcadas como **ESTORNADA** e não entram no resumo (o estorno já reverteu a entrada). Serviços não têm esse botão (não entram em compras).
 
 ---
 

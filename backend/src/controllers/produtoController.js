@@ -71,6 +71,7 @@ function toQtd(v, fallback = 0) {
 const INCLUDE_REL = {
   categoria: { select: { id: true, nome: true } },
   fornecedor: { select: { id: true, nome: true } },
+  fabricante: { select: { id: true, nome: true } },
 };
 
 export async function listar(req, res, next) {
@@ -114,6 +115,72 @@ export async function obter(req, res, next) {
     });
     if (!produto) return res.status(404).json({ erro: "Produto nao encontrado" });
     res.json(produto);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Historico de compras de UM produto: toda vez que ele entrou via nota de
+// compra, com fornecedor, quantidade, preco unitario, subtotal e data. Usado
+// pelo botao "Histórico de compras" no cadastro do produto. As compras
+// canceladas/estornadas aparecem na lista (marcadas) mas NAO entram no resumo
+// — o estorno ja reverteu a entrada de estoque.
+export async function historicoCompras(req, res, next) {
+  try {
+    const produto = await prisma.produto.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, codigo: true, nome: true, unidade: true, precoCusto: true },
+    });
+    if (!produto) return res.status(404).json({ erro: "Produto nao encontrado" });
+
+    const itens = await prisma.itemCompra.findMany({
+      where: { produtoId: req.params.id },
+      select: {
+        id: true,
+        quantidade: true,
+        precoUnitario: true,
+        subtotal: true,
+        compra: {
+          select: {
+            id: true,
+            numero: true,
+            createdAt: true,
+            cancelada: true,
+            fornecedor: { select: { id: true, nome: true, cnpj: true } },
+          },
+        },
+      },
+      orderBy: { compra: { createdAt: "desc" } },
+    });
+
+    // Resumo apenas das compras validas (nao canceladas).
+    const validos = itens.filter(it => !it.compra.cancelada);
+    let quantidadeTotal = 0;
+    let valorTotal = 0;
+    for (const it of validos) {
+      quantidadeTotal += Number(it.quantidade);
+      valorTotal += Number(it.subtotal);
+    }
+    quantidadeTotal = Math.round(quantidadeTotal * 1000) / 1000;
+    valorTotal = Math.round(valorTotal * 100) / 100;
+    const precoMedio = quantidadeTotal > 0
+      ? Math.round((valorTotal / quantidadeTotal) * 100) / 100
+      : null;
+    const ultima = validos[0] || null; // ja vem ordenado por data desc
+
+    res.json({
+      produto,
+      itens,
+      resumo: {
+        totalCompras: validos.length,
+        quantidadeTotal,
+        valorTotal,
+        precoMedio,
+        ultimoPreco: ultima ? Number(ultima.precoUnitario) : null,
+        ultimaData: ultima ? ultima.compra.createdAt : null,
+        ultimoFornecedor: ultima ? ultima.compra.fornecedor?.nome || null : null,
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -195,6 +262,7 @@ export async function criar(req, res, next) {
         referencia: norm(req.body.referencia),
         nome,
         descricao: norm(req.body.descricao),
+        fabricanteId: norm(req.body.fabricanteId),
         tipoItem,
         precoVenda,
         precoCusto,
@@ -232,7 +300,7 @@ export async function criar(req, res, next) {
       const campo = err.meta?.target?.includes("codigoBarras") ? "codigo de barras" : "codigo";
       return res.status(409).json({ erro: `Ja existe um produto com este ${campo}` });
     }
-    if (err.code === "P2003") return res.status(400).json({ erro: "Categoria ou fornecedor inexistente" });
+    if (err.code === "P2003") return res.status(400).json({ erro: "Categoria, fornecedor ou fabricante inexistente" });
     next(err);
   }
 }
@@ -251,6 +319,7 @@ export async function atualizar(req, res, next) {
       data.nome = n;
     }
     if (req.body.descricao !== undefined) data.descricao = norm(req.body.descricao);
+    if (req.body.fabricanteId !== undefined) data.fabricanteId = norm(req.body.fabricanteId);
     // codigoBarras eh validado mais abaixo no bloco fiscal (ETAPA 14, checksum GTIN).
     if (req.body.referencia !== undefined) data.referencia = norm(req.body.referencia);
     if (req.body.tipoItem !== undefined) {
@@ -396,7 +465,7 @@ export async function atualizar(req, res, next) {
       const campo = err.meta?.target?.includes("codigoBarras") ? "codigo de barras" : "codigo";
       return res.status(409).json({ erro: `Ja existe um produto com este ${campo}` });
     }
-    if (err.code === "P2003") return res.status(400).json({ erro: "Categoria ou fornecedor inexistente" });
+    if (err.code === "P2003") return res.status(400).json({ erro: "Categoria, fornecedor ou fabricante inexistente" });
     next(err);
   }
 }

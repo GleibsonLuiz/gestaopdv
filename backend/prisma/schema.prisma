@@ -378,6 +378,7 @@ model Empresa {
   clientes               Cliente[]
   fornecedores           Fornecedor[]
   categorias             Categoria[]
+  fabricantes            Fabricante[]
   produtos               Produto[]
   vendas                 Venda[]
   vendaPagamentos        VendaPagamento[]
@@ -643,6 +644,23 @@ model Categoria {
   @@map("categorias")
 }
 
+// Fabricante / marca do produto, cadastrado uma vez e reutilizado em varios
+// produtos (ex: BIC, Faber-Castell, Bosch). Mesma estrutura de Categoria.
+model Fabricante {
+  id        String   @id @default(uuid())
+  nome      String
+  createdAt DateTime @default(now())
+
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  produtos Produto[]
+
+  @@unique([tenantId, nome])
+  @@index([tenantId])
+  @@map("fabricantes")
+}
+
 // ============ PRODUTOS / ESTOQUE ============
 
 model Produto {
@@ -743,6 +761,9 @@ model Produto {
 
   fornecedorId String?
   fornecedor   Fornecedor? @relation(fields: [fornecedorId], references: [id])
+
+  fabricanteId String?
+  fabricante   Fabricante? @relation(fields: [fabricanteId], references: [id])
 
   tenantId String
   tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)

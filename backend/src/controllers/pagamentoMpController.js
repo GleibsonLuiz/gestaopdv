@@ -91,8 +91,20 @@ export async function obterConfig(req, res, next) {
         mpAtivo: true,
         mpPixAtivo: true,
         mpAccessTokenEnc: true,
+        mpWebhookSecret: true,
       },
     });
+    // URL do webhook com o secret embutido — registrar em Mercado Pago >
+    // Webhooks autentica as notificacoes e dispensa a varredura cross-tenant
+    // no backend. So exposta a quem administra a config (ADMIN/GERENTE),
+    // pois o secret autentica as chamadas.
+    const podeVerSecret = req.user?.role === "ADMIN" || req.user?.role === "GERENTE";
+    let webhookUrl = null;
+    if (podeVerSecret && cfg?.mpWebhookSecret) {
+      const proto = req.headers["x-forwarded-proto"] || req.protocol;
+      const host = req.get("host");
+      webhookUrl = `${proto}://${host}/pagamentos-mp/webhook?secret=${cfg.mpWebhookSecret}`;
+    }
     res.json({
       configurada: !!(cfg && cfg.mpAccessTokenEnc && cfg.mpDeviceId),
       mpAtivo: !!cfg?.mpAtivo,
@@ -102,6 +114,7 @@ export async function obterConfig(req, res, next) {
       mpAccessTokenMascarado: cfg?.mpAccessTokenEnc
         ? mascarar(safeDecifrarPrefixo(cfg.mpAccessTokenEnc))
         : null,
+      webhookUrl,
     });
   } catch (err) { next(err); }
 }
@@ -659,6 +672,43 @@ export async function webhook(req, res, next) {
       // Topicos diferentes (merchant_order, point_integration_wh, etc.)
       // tambem chegam aqui — ignoramos com 200 pra evitar retries.
       return res.json({ ignored: true });
+    }
+
+    // SEGURANCA (recomendado): se a URL registrada no MP incluir
+    // ?secret=<mpWebhookSecret> (ou header x-webhook-secret), autenticamos o
+    // tenant dono diretamente por ele. Isso barra chamadas forjadas ANTES de
+    // qualquer ida a API do MP e elimina a varredura cross-tenant (cada
+    // request bogus, sem secret, dispara 1 chamada MP por tenant ativo).
+    // O mpWebhookSecret tem 24 bytes aleatorios — lookup por igualdade no
+    // banco e seguro. Sem secret, cai no fluxo legado abaixo.
+    const secretRecebido = req.query.secret || req.headers["x-webhook-secret"];
+    if (secretRecebido) {
+      const dono = await prismaRaw.configuracaoEmpresa.findFirst({
+        where: {
+          mpWebhookSecret: String(secretRecebido),
+          mpAtivo: true,
+          mpAccessTokenEnc: { not: null },
+        },
+        select: { tenantId: true, mpAccessTokenEnc: true },
+      });
+      if (!dono) {
+        return res.status(401).json({ erro: "Webhook nao autorizado" });
+      }
+      let processado = false;
+      try {
+        const accessToken = decifrar(dono.mpAccessTokenEnc);
+        await processarPaymentNotificacao({
+          tenantId: dono.tenantId,
+          paymentId,
+          accessToken,
+        });
+        processado = true;
+      } catch (err) {
+        // payment inexistente / sem permissao para este tenant: ignora com
+        // 200 (evita loop de retry do MP); o detalhe ja foi logado na intencao.
+        if (!(err.status === 404 || err.status === 401)) throw err;
+      }
+      return res.json({ processado });
     }
 
     // Resolve a intencao SEM filtro de tenant — webhook nao tem JWT.

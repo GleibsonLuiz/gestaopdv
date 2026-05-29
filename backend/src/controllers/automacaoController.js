@@ -1,15 +1,5 @@
-import crypto from "node:crypto";
 import prisma, { prismaRaw, tenantStorage } from "../lib/prisma.js";
-
-// Comparacao de strings resistente a timing-attack. Retorna false em
-// qualquer entrada invalida ou de tamanho diferente sem vazar pelo tempo.
-function compararSegredo(a, b) {
-  if (typeof a !== "string" || typeof b !== "string") return false;
-  const ba = Buffer.from(a);
-  const bb = Buffer.from(b);
-  if (ba.length !== bb.length) return false;
-  return crypto.timingSafeEqual(ba, bb);
-}
+import { compararSegredo } from "../lib/timingSafe.js";
 
 const TIPOS = ["CLIENTE_INATIVO", "ORCAMENTO_PARADO", "POS_VENDA_FOLLOWUP"];
 const PRIORIDADES = ["BAIXA", "MEDIA", "ALTA", "URGENTE"];

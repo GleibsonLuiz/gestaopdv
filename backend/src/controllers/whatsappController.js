@@ -7,6 +7,7 @@
 // =====================================================================
 import prisma, { prismaRaw, tenantStorage } from "../lib/prisma.js";
 import { cifrar, decifrar, mascarar } from "../lib/cripto.js";
+import { compararSegredo } from "../lib/timingSafe.js";
 import { gerarResposta, ClaudeIAError } from "../lib/claudeIA.js";
 import {
   enviarTexto, obterQrCode, obterStatus, WhatsappGatewayError,
@@ -165,11 +166,34 @@ export async function listarLogs(req, res, next) {
 export async function webhook(req, res, next) {
   try {
     const body = req.body || {};
-    // Resposta rapida 200 — gateways tipicamente retentam se nao receberem 2xx logo.
-    res.json({ received: true });
-
     const instanceName = body.instance || body.instanceName;
-    if (!instanceName) return;
+    if (!instanceName) return res.json({ received: true });
+
+    // Localiza o tenant pelo instanceName (cross-tenant via prismaRaw) ANTES
+    // de responder, para validar a autenticidade da chamada.
+    const settings = await prismaRaw.whatsappSettings.findFirst({
+      where: { instanceName },
+    });
+    // instanceName desconhecido ou inativo: responde 200 generico (nao
+    // revela se a instancia existe) e nao processa nada.
+    if (!settings || !settings.isActive) return res.json({ received: true });
+
+    // SEGURANCA: se o tenant configurou um webhookSecret, exige que a chamada
+    // o apresente (header x-webhook-secret / apikey ou query ?secret=). Sem
+    // isso, qualquer um que saiba o instanceName dispararia respostas da IA
+    // — custo Anthropic + envio de WhatsApp em nome do tenant. Timing-safe.
+    if (settings.webhookSecret) {
+      const recebido = req.headers["x-webhook-secret"]
+        || req.headers["apikey"]
+        || req.query.secret
+        || "";
+      if (!compararSegredo(String(recebido), settings.webhookSecret)) {
+        return res.status(401).json({ erro: "Webhook nao autorizado" });
+      }
+    }
+
+    // Resposta rapida 200 — gateways retentam se nao receberem 2xx logo.
+    res.json({ received: true });
 
     // Filtra: so processa upsert de mensagens.
     const event = body.event || body.type || "";
@@ -190,13 +214,6 @@ export async function webhook(req, res, next) {
 
     const numero = remoteJid.split("@")[0];
     const nomeContato = data.pushName || null;
-
-    // Localiza tenant pelo instanceName (busca cross-tenant via prismaRaw).
-    const settings = await prismaRaw.whatsappSettings.findFirst({
-      where: { instanceName },
-    });
-    if (!settings) return;
-    if (!settings.isActive) return;
 
     // Executa todo o processamento dentro do escopo do tenant para que o
     // extension multi-tenant filtre corretamente (mesmo padrao MP).
@@ -231,7 +248,9 @@ export async function webhook(req, res, next) {
       }).catch(() => { /* log falhou — ignora pra nao quebrar webhook */ });
     });
   } catch (err) {
-    // res ja foi enviado — apenas logamos pra nao crashar a function.
     console.error("[webhook whatsapp]", err);
+    // O erro pode ter ocorrido ANTES da resposta (ex: lookup de settings).
+    // Garante um 200 pro gateway nao entrar em loop de retry.
+    if (!res.headersSent) res.json({ received: true });
   }
 }

@@ -1,8 +1,15 @@
-import { useEffect, useState, useCallback, useMemo, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { C } from "./lib/theme";
 import { api, type SessionUser } from "./lib/api";
 import ActionsMenu from "./components/ActionsMenu";
 import SelectBusca from "./components/SelectBusca";
+import {
+  listarRascunhos,
+  salvarRascunho,
+  removerRascunho,
+  novoRascunhoId,
+  type CompraRascunho,
+} from "./lib/comprasRascunho";
 
 // ============ TIPOS ============
 
@@ -57,6 +64,7 @@ interface Compra {
   numero: number;
   createdAt: string;
   total: number | string;
+  desconto?: number | string;
   cancelada?: boolean;
   canceladaEm?: string | null;
   motivoCancelamento?: string | null;
@@ -136,8 +144,12 @@ export default function Compras({ user }: ComprasProps) {
   const [novoAberto, setNovoAberto] = useState(false);
   const [detalhe, setDetalhe] = useState<Compra | null>(null);
   const [mensagem, setMensagem] = useState("");
+  const [rascunhos, setRascunhos] = useState<CompraRascunho[]>([]);
+  const [rascunhoEditando, setRascunhoEditando] = useState<CompraRascunho | null>(null);
 
   const podeCriar = user.role === "ADMIN" || user.role === "GERENTE";
+
+  useEffect(() => { setRascunhos(listarRascunhos()); }, []);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -237,7 +249,7 @@ export default function Compras({ user }: ComprasProps) {
         {podeCriar && (
           <button
             type="button"
-            onClick={() => setNovoAberto(true)}
+            onClick={() => { setRascunhoEditando(null); setNovoAberto(true); }}
             className="ml-auto text-gp-white border-none rounded-lg text-sm font-bold cursor-pointer"
             style={{
               background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
@@ -263,6 +275,67 @@ export default function Compras({ user }: ComprasProps) {
           style={{ background: C.red + "22", border: `1px solid ${C.red}55` }}
         >
           {erro}
+        </div>
+      )}
+
+      {podeCriar && rascunhos.length > 0 && (
+        <div
+          className="mb-4 rounded-xl overflow-hidden"
+          style={{ border: `1px solid ${C.accent}55`, background: C.accent + "0d" }}
+        >
+          <div
+            className="text-gp-muted text-[11px] font-bold uppercase"
+            style={{ padding: "10px 16px", borderBottom: `1px solid ${C.border}`, letterSpacing: 0.5 }}
+          >
+            📝 Compras em rascunho ({rascunhos.length}) — salvas neste dispositivo
+          </div>
+          {rascunhos.map((r) => {
+            const totalRasc = r.itens.reduce((acc, it) => {
+              const q = parseFloat(it.quantidade) || 0;
+              const p = parseFloat(it.precoUnitario) || 0;
+              return acc + q * p;
+            }, 0) - (parseFloat(r.desconto) || 0);
+            return (
+              <div
+                key={r.id}
+                className="grid items-center gap-2 text-[13px]"
+                style={{
+                  gridTemplateColumns: "1fr 90px 120px 180px",
+                  padding: "10px 16px",
+                  borderBottom: `1px solid ${C.border}`,
+                }}
+              >
+                <div>
+                  <div className="text-gp-white font-semibold">{r.fornecedorNome || "Sem fornecedor"}</div>
+                  <div className="text-gp-muted text-[11px]">Salvo em {fmtData(new Date(r.ts).toISOString())}</div>
+                </div>
+                <div className="text-right text-gp-text">{r.itens.length} {r.itens.length === 1 ? "item" : "itens"}</div>
+                <div className="text-right text-gp-green font-semibold">{fmtBRL(totalRasc)}</div>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setRascunhoEditando(r); setNovoAberto(true); }}
+                    className="rounded-md text-xs font-semibold cursor-pointer text-gp-white border-none"
+                    style={{ background: C.accent, padding: "6px 12px" }}
+                  >
+                    Retomar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm("Descartar este rascunho de compra?")) {
+                        setRascunhos(removerRascunho(r.id));
+                      }
+                    }}
+                    className="rounded-md text-xs cursor-pointer"
+                    style={{ background: C.red + "22", border: `1px solid ${C.red}55`, color: C.red, padding: "6px 10px" }}
+                  >
+                    Descartar
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -356,9 +429,19 @@ export default function Compras({ user }: ComprasProps) {
         <NovaCompraModal
           fornecedores={fornecedores}
           produtos={produtos}
-          onCancelar={() => setNovoAberto(false)}
+          rascunhoInicial={rascunhoEditando}
+          onCancelar={() => { setNovoAberto(false); setRascunhoEditando(null); }}
+          onSalvarRascunho={(r) => {
+            setRascunhos(salvarRascunho(r));
+            setNovoAberto(false);
+            setRascunhoEditando(null);
+            flash("Rascunho de compra salvo — retome quando quiser pela lista acima.");
+          }}
           onSalvar={(c) => {
             setNovoAberto(false);
+            // Concluiu a compra — se veio de um rascunho, descarta o rascunho.
+            if (rascunhoEditando) setRascunhos(removerRascunho(rascunhoEditando.id));
+            setRascunhoEditando(null);
             const qtdContas = c.contasGeradas?.length || 0;
             const sufixo = qtdContas > 0
               ? ` · ${qtdContas} conta${qtdContas > 1 ? "s" : ""} a pagar gerada${qtdContas > 1 ? "s" : ""}`
@@ -390,23 +473,31 @@ export default function Compras({ user }: ComprasProps) {
 interface NovaCompraModalProps {
   fornecedores: Fornecedor[];
   produtos: Produto[];
+  rascunhoInicial?: CompraRascunho | null;
   onCancelar: () => void;
   onSalvar: (c: CompraResultado) => void;
+  onSalvarRascunho: (r: CompraRascunho) => void;
 }
 
-function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }: NovaCompraModalProps) {
-  const [fornecedorId, setFornecedorId] = useState("");
-  const [observacoes, setObservacoes] = useState("");
-  const [dataCompra, setDataCompra] = useState<string>(() => hojeLocalISO());
-  const [itens, setItens] = useState<ItemForm[]>([]);
+function NovaCompraModal({ fornecedores, produtos, rascunhoInicial, onCancelar, onSalvar, onSalvarRascunho }: NovaCompraModalProps) {
+  const [fornecedorId, setFornecedorId] = useState(rascunhoInicial?.fornecedorId ?? "");
+  const [observacoes, setObservacoes] = useState(rascunhoInicial?.observacoes ?? "");
+  const [dataCompra, setDataCompra] = useState<string>(() => rascunhoInicial?.dataCompra || hojeLocalISO());
+  const [itens, setItens] = useState<ItemForm[]>(() => rascunhoInicial?.itens ?? []);
+  const [desconto, setDesconto] = useState(rascunhoInicial?.desconto ?? "");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+  // Id estavel deste rascunho: reusa o do rascunho retomado ou cria um novo,
+  // pra "Salvar rascunho" varias vezes atualizar o mesmo registro.
+  const rascunhoIdRef = useRef<string>(rascunhoInicial?.id ?? novoRascunhoId());
+  // Indice da linha que deve receber foco (nova linha criada via Tab/botao).
+  const [focarIdx, setFocarIdx] = useState<number | null>(null);
 
-  const [gerarConta, setGerarConta] = useState(true);
-  const [vencimento, setVencimento] = useState<string>(() => dataDaqui(30));
-  const [parcelas, setParcelas] = useState(1);
+  const [gerarConta, setGerarConta] = useState(rascunhoInicial?.gerarConta ?? true);
+  const [vencimento, setVencimento] = useState<string>(() => rascunhoInicial?.vencimento || dataDaqui(30));
+  const [parcelas, setParcelas] = useState(rascunhoInicial?.parcelas ?? 1);
 
-  const total = useMemo(
+  const subtotal = useMemo(
     () => itens.reduce((acc, it) => {
       const q = parseFloat(it.quantidade) || 0;
       const p = parseFloat(it.precoUnitario) || 0;
@@ -415,7 +506,11 @@ function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }: NovaC
     [itens],
   );
 
+  const descontoNum = Math.max(0, parseFloat(String(desconto).replace(",", ".")) || 0);
+  const total = Math.max(0, subtotal - descontoNum);
+
   function adicionarItem() {
+    setFocarIdx(itens.length); // foca a linha recem-criada
     setItens([...itens, { produtoId: "", quantidade: "1", precoUnitario: "" }]);
   }
 
@@ -451,6 +546,8 @@ function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }: NovaC
       if (!Number.isFinite(p) || p < 0) { setErro(`Item ${i + 1}: preço unitário inválido`); return; }
     }
 
+    if (descontoNum > subtotal) { setErro("Desconto não pode ser maior que o subtotal da compra"); return; }
+
     if (gerarConta) {
       if (!vencimento) { setErro("Informe o vencimento da conta a pagar"); return; }
       const p = parcelas;
@@ -464,6 +561,7 @@ function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }: NovaC
       const payload: Record<string, unknown> = {
         fornecedorId,
         observacoes,
+        desconto: descontoNum,
         itens: itens.map((it) => ({
           produtoId: it.produtoId,
           quantidade: it.quantidade,
@@ -486,6 +584,28 @@ function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }: NovaC
     } finally {
       setSalvando(false);
     }
+  }
+
+  function salvarComoRascunho() {
+    setErro("");
+    if (!fornecedorId && itens.length === 0) {
+      setErro("Selecione um fornecedor ou adicione um item para salvar o rascunho");
+      return;
+    }
+    const forn = fornecedores.find((f) => f.id === fornecedorId);
+    onSalvarRascunho({
+      id: rascunhoIdRef.current,
+      ts: Date.now(),
+      fornecedorId,
+      fornecedorNome: forn?.nome ?? "",
+      observacoes,
+      dataCompra,
+      itens,
+      desconto: String(desconto),
+      gerarConta,
+      vencimento,
+      parcelas,
+    });
   }
 
   return (
@@ -599,6 +719,7 @@ function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }: NovaC
                   labelFn={(p) => `${p.codigo} — ${p.nome}`}
                   placeholder="Buscar produto..."
                   required
+                  autoFocus={focarIdx === idx}
                   style={{ ...inputStyle, padding: "6px 8px" }}
                 />
                 <input
@@ -617,6 +738,16 @@ function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }: NovaC
                   min="0"
                   value={it.precoUnitario}
                   onChange={(e) => atualizarItem(idx, "precoUnitario", e.target.value)}
+                  onKeyDown={(e) => {
+                    // Tab no preco da ULTIMA linha (ja com produto escolhido)
+                    // cria a proxima linha e foca o campo de produto dela —
+                    // assim da pra lancar varios itens so com o teclado, sem
+                    // precisar caçar o botao "+ Adicionar item".
+                    if (e.key === "Tab" && !e.shiftKey && idx === itens.length - 1 && it.produtoId) {
+                      e.preventDefault();
+                      adicionarItem();
+                    }
+                  }}
                   required
                   aria-label="Preço unitário"
                   style={{ ...inputStyle, padding: "6px 8px", textAlign: "right" }}
@@ -645,15 +776,44 @@ function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }: NovaC
         </div>
 
         <div
-          className="mt-3.5 bg-gp-surface flex justify-between items-center"
+          className="mt-3.5 bg-gp-surface"
           style={{
             padding: "12px 16px",
             border: `1px solid ${C.border}`,
             borderRadius: 10,
           }}
         >
-          <div className="text-gp-muted text-xs font-semibold">TOTAL DA COMPRA</div>
-          <div className="text-gp-green text-[22px] font-extrabold">{fmtBRL(total)}</div>
+          <div className="flex justify-between items-center text-[13px]">
+            <div className="text-gp-muted">Subtotal dos itens</div>
+            <div className="text-gp-text font-semibold">{fmtBRL(subtotal)}</div>
+          </div>
+          <div className="flex justify-between items-center mt-2.5 gap-3">
+            <label className="text-gp-muted text-[13px] whitespace-nowrap" htmlFor="desconto-ajuste">
+              Desconto de ajuste
+            </label>
+            <div className="flex items-center gap-1.5" style={{ width: 160 }}>
+              <span className="text-gp-muted text-[13px]">R$</span>
+              <input
+                id="desconto-ajuste"
+                type="number"
+                step="0.01"
+                min="0"
+                max={subtotal || undefined}
+                value={desconto}
+                onChange={(e) => setDesconto(e.target.value)}
+                placeholder="0,00"
+                aria-label="Desconto de ajuste"
+                style={{ ...inputStyle, padding: "6px 8px", textAlign: "right" }}
+              />
+            </div>
+          </div>
+          <div
+            className="flex justify-between items-center mt-3 pt-3"
+            style={{ borderTop: `1px solid ${C.border}` }}
+          >
+            <div className="text-gp-muted text-xs font-semibold">TOTAL DA COMPRA</div>
+            <div className="text-gp-green text-[22px] font-extrabold">{fmtBRL(total)}</div>
+          </div>
         </div>
 
         {/* BLOCO FINANCEIRO */}
@@ -744,17 +904,34 @@ function NovaCompraModal({ fornecedores, produtos, onCancelar, onSalvar }: NovaC
           </div>
         )}
 
-        <div className="flex gap-2.5 justify-end mt-5">
-          <button type="button" onClick={onCancelar} disabled={salvando} style={btnSecundarioStyle}>
-            Cancelar
-          </button>
+        <div className="flex gap-2.5 justify-between items-center mt-5 flex-wrap">
           <button
-            type="submit"
-            disabled={salvando || itens.length === 0}
-            style={{ ...btnPrimarioStyle, opacity: itens.length === 0 ? 0.5 : 1 }}
+            type="button"
+            onClick={salvarComoRascunho}
+            disabled={salvando}
+            title="Salva esta compra pela metade neste dispositivo para retomar depois"
+            className="rounded-lg font-semibold text-[13px] cursor-pointer"
+            style={{
+              background: C.accent + "22",
+              border: `1px solid ${C.accent}55`,
+              color: C.accent,
+              padding: "10px 16px",
+            }}
           >
-            {salvando ? "Registrando..." : "Registrar compra"}
+            💾 Salvar rascunho
           </button>
+          <div className="flex gap-2.5 justify-end">
+            <button type="button" onClick={onCancelar} disabled={salvando} style={btnSecundarioStyle}>
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={salvando || itens.length === 0}
+              style={{ ...btnPrimarioStyle, opacity: itens.length === 0 ? 0.5 : 1 }}
+            >
+              {salvando ? "Registrando..." : "Registrar compra"}
+            </button>
+          </div>
         </div>
         <div className="mt-2.5 text-gp-muted text-[11px] text-right">
           ⚠ Ao confirmar, o estoque dos produtos será incrementado automaticamente.
@@ -913,22 +1090,36 @@ function DetalheCompraModal({ compra, podeEstornar, onFechar, onEstornado }: Det
         </div>
 
         <div
-          className="mt-3.5 bg-gp-surface flex justify-between items-center"
+          className="mt-3.5 bg-gp-surface"
           style={{
             padding: "14px 16px",
             border: `1px solid ${C.border}`,
             borderRadius: 10,
           }}
         >
-          <div className="text-gp-muted text-xs font-semibold">TOTAL</div>
-          <div
-            className="text-[22px] font-extrabold"
-            style={{
-              color: compra.cancelada ? C.muted : C.green,
-              textDecoration: compra.cancelada ? "line-through" : "none",
-            }}
-          >
-            {fmtBRL(compra.total)}
+          {Number(compra.desconto) > 0 && (
+            <>
+              <div className="flex justify-between items-center text-[13px]">
+                <div className="text-gp-muted">Subtotal dos itens</div>
+                <div className="text-gp-text">{fmtBRL(Number(compra.total) + Number(compra.desconto))}</div>
+              </div>
+              <div className="flex justify-between items-center text-[13px] mt-1.5 mb-2.5 pb-2.5" style={{ borderBottom: `1px solid ${C.border}` }}>
+                <div className="text-gp-muted">Desconto de ajuste</div>
+                <div style={{ color: C.red }}>− {fmtBRL(compra.desconto)}</div>
+              </div>
+            </>
+          )}
+          <div className="flex justify-between items-center">
+            <div className="text-gp-muted text-xs font-semibold">TOTAL</div>
+            <div
+              className="text-[22px] font-extrabold"
+              style={{
+                color: compra.cancelada ? C.muted : C.green,
+                textDecoration: compra.cancelada ? "line-through" : "none",
+              }}
+            >
+              {fmtBRL(compra.total)}
+            </div>
           </div>
         </div>
 

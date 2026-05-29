@@ -70,7 +70,7 @@ export async function obter(req, res, next) {
 
 export async function criar(req, res, next) {
   try {
-    const { fornecedorId, observacoes, itens, gerarContaPagar, dataCompra } = req.body;
+    const { fornecedorId, observacoes, itens, gerarContaPagar, dataCompra, desconto } = req.body;
 
     if (!fornecedorId) return res.status(400).json({ erro: "fornecedorId e obrigatorio" });
     if (!Array.isArray(itens) || itens.length === 0) {
@@ -135,7 +135,20 @@ export async function criar(req, res, next) {
       itensNorm.push({ produtoId: it.produtoId, quantidade: qtd, precoUnitario: preco });
     }
 
-    const total = itensNorm.reduce((acc, it) => acc + it.quantidade * it.precoUnitario, 0);
+    const subtotal = itensNorm.reduce((acc, it) => acc + it.quantidade * it.precoUnitario, 0);
+
+    // Desconto de ajuste (opcional). Nao pode ser negativo nem maior que o
+    // subtotal — senao o total ficaria negativo.
+    let descontoNum = toNumber(desconto);
+    if (descontoNum === null) descontoNum = 0;
+    if (Number.isNaN(descontoNum) || descontoNum < 0) {
+      return res.status(400).json({ erro: "Desconto invalido" });
+    }
+    descontoNum = Math.round(descontoNum * 100) / 100;
+    if (descontoNum > subtotal) {
+      return res.status(400).json({ erro: "Desconto nao pode ser maior que o subtotal da compra" });
+    }
+    const total = Math.round((subtotal - descontoNum) * 100) / 100;
 
     try {
       const compra = await prisma.$transaction(async (tx) => {
@@ -166,6 +179,7 @@ export async function criar(req, res, next) {
               numero,
               fornecedorId,
               total,
+              desconto: descontoNum,
               observacoes: observacoes ? String(observacoes).trim() : null,
               ...(dataCompraDate ? { createdAt: dataCompraDate } : {}),
               itens: {

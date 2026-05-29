@@ -1,4 +1,4 @@
-import { useState, useMemo, type CSSProperties, type ChangeEvent } from "react";
+import { useState, useMemo, useRef, useEffect, type CSSProperties, type ChangeEvent } from "react";
 import { C } from "../lib/theme";
 
 const dropStyle: CSSProperties = {
@@ -35,6 +35,9 @@ interface SelectBuscaProps<T extends ItemBase> {
   disabled?: boolean;
   required?: boolean;
   filtroOpcoes?: (item: T) => boolean;
+  // Foca o campo automaticamente ao montar. Util para fluxos guiados por
+  // teclado (ex: nova linha de item criada via Tab ja entra com foco aqui).
+  autoFocus?: boolean;
 }
 
 export default function SelectBusca<T extends ItemBase>({
@@ -49,9 +52,17 @@ export default function SelectBusca<T extends ItemBase>({
   className,
   disabled,
   filtroOpcoes,
+  autoFocus,
 }: SelectBuscaProps<T>) {
   const [busca, setBusca] = useState("");
   const [aberto, setAberto] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (autoFocus) inputRef.current?.focus();
+    // so no mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const getLabel = labelFn || ((item: T) => item.nome || "");
   const getSub = subLabelFn || null;
@@ -95,6 +106,7 @@ export default function SelectBusca<T extends ItemBase>({
   return (
     <div style={{ position: "relative", ...containerStyle }}>
       <input
+        ref={inputRef}
         type="text"
         value={inputValue}
         onChange={handleChange}

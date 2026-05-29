@@ -426,12 +426,14 @@ O status alterna entre **ATIVO** (verde) e **INATIVO** (cinza). Use o filtro **"
 **Como usar:**
 
 1. **+ Nova compra** → fornecedor → adicionar itens (busca produto, qtd, custo unitário).
-2. Total calculado automaticamente.
-3. Bloco verde **"💰 Gerar conta a pagar"** (ligado por padrão):
+   - **Dica de teclado:** ao terminar o **preço** do último item, aperte **Tab** que já abre a próxima linha com o foco no campo de produto — dá pra lançar a nota inteira sem tirar a mão do teclado.
+2. **Subtotal** somado automaticamente. Há um campo **Desconto de ajuste** (R$) para abater bonificações/acertos do fornecedor; o **Total da compra** = subtotal − desconto, e é esse valor líquido que vira conta a pagar.
+3. **💾 Salvar rascunho** (rodapé): guarda a compra pela metade **neste dispositivo** para retomar depois. Os rascunhos aparecem numa faixa no topo da tela de Compras com **Retomar** / **Descartar**. Ao **Registrar** uma compra retomada, o rascunho some sozinho. (É local ao navegador — não fica compartilhado entre dispositivos.)
+4. Bloco verde **"💰 Gerar conta a pagar"** (ligado por padrão):
    - Vencimento (default: hoje + 30 dias)
    - Parcelas (1× à vista até 12×)
    - Preview: "✓ 3× R$ 100,00 — vencendo no dia 15 de cada mês a partir de 15/06/2026"
-4. **Registrar** — em uma transação, cria: compra + ENTRADA no estoque para cada item + N contas a pagar com `grupoRecorrenciaId` compartilhado.
+5. **Registrar** — em uma transação, cria: compra + ENTRADA no estoque para cada item + N contas a pagar com `grupoRecorrenciaId` compartilhado.
 
 **Estornar compra:** detalhe → botão "↩ Estornar". Pede motivo. Reverte estoque (SAIDA), cancela contas pendentes. Bloqueia se houver conta já paga (precisa reabrir no Financeiro primeiro).
 

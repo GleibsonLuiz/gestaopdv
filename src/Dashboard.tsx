@@ -376,17 +376,16 @@ function ConteudoDashboard({ dados, onAtualizar, user, contagem }: any) {
           />
         )}
 
-        {/* ========= ESTOQUE BAIXO + ULTIMAS VENDAS ========= */}
+        {/* ========= ULTIMAS VENDAS + ULTIMAS COMPRAS ========= */}
+        {/* Estoque baixo saiu daqui (poluia com itens descontinuados); a lista
+            vive agora na tela de Estoque. O mini-card de contagem permanece. */}
         <section style={{
           display: "grid", gap: 14,
           gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
         }}>
-          <PainelEstoqueBaixo itens={dados.estoqueBaixo || []} />
           <PainelUltimasVendas itens={dados.ultimasVendas || []} totalHoje={k.vendasHoje.total} qtdHoje={k.vendasHoje.quantidade} />
+          <PainelUltimasCompras itens={dados.ultimasCompras || []} />
         </section>
-
-        {/* ========= ULTIMAS COMPRAS ========= */}
-        <PainelUltimasCompras itens={dados.ultimasCompras || []} />
 
         <div style={{
           display: "flex", justifyContent: "space-between", alignItems: "center",
@@ -1436,72 +1435,6 @@ function PainelProximasContas({ pagar, receber }: any) {
           })}
         </div>
       )}
-    </Card>
-  );
-}
-
-// ============================================================
-// Estoque baixo
-// ============================================================
-
-function PainelEstoqueBaixo({ itens }: any) {
-  return (
-    <Card>
-      <CardHead
-        titulo="Produtos com estoque baixo"
-        meta={
-          itens.length > 0
-            ? <span><span style={{ color: C.yellow, fontWeight: 700 }}>{itens.length}</span> {itens.length === 1 ? "item crítico" : "itens críticos"}</span>
-            : "tudo em ordem"
-        }
-      />
-      {itens.length === 0 ? (
-        <Vazio texto="✓ Todos os produtos com estoque acima do mínimo." />
-      ) : itens.map((p, idx) => {
-        const min = Number(p.estoqueMinimo) || 0;
-        const est = Number(p.estoque) || 0;
-        const pct = min > 0 ? Math.max(0, Math.min(100, (est / min) * 100)) : 0;
-        const eZero = est <= 0;
-        return (
-          <div key={p.id} style={{
-            display: "grid", gridTemplateColumns: "1fr auto auto", gap: 10,
-            alignItems: "center", padding: "11px 0",
-            borderBottom: idx < itens.length - 1 ? `1px dashed ${C.border}` : "0",
-          }}>
-            <div>
-              <div style={{
-                fontSize: 13, fontWeight: 600, color: C.white, letterSpacing: "-0.005em",
-              }}>{p.nome}</div>
-              <div style={{
-                fontSize: 10.5, color: C.muted, fontFamily: FONT_MONO, marginTop: 2,
-              }}>
-                {p.codigo || "—"} · mín. {fmtNumero(min)} {p.unidade || "UN"}
-              </div>
-            </div>
-            <div style={{
-              width: 90, height: 6, borderRadius: 99,
-              background: "rgba(255,255,255,0.05)", overflow: "hidden",
-            }}>
-              <div style={{
-                width: `${pct}%`, height: "100%",
-                background: eZero
-                  ? C.red
-                  : `linear-gradient(90deg, ${C.yellow}, ${C.red})`,
-              }} />
-            </div>
-            <div style={{
-              fontFamily: FONT_MONO, fontWeight: 700, fontSize: 13,
-              color: eZero ? C.red : C.yellow, textAlign: "right",
-            }}>
-              {fmtNumero(est)} {p.unidade || "UN"}
-              <small style={{
-                display: "block", fontSize: 10, color: C.muted, fontWeight: 500,
-                marginTop: 1, letterSpacing: "0.04em",
-              }}>{eZero ? "esgotado" : "abaixo do mín."}</small>
-            </div>
-          </div>
-        );
-      })}
     </Card>
   );
 }

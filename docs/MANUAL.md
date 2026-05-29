@@ -406,6 +406,8 @@ O status alterna entre **ATIVO** (verde) e **INATIVO** (cinza). Use o filtro **"
 
 **Filtros:** tipo, produto, período.
 
+**Produtos com estoque baixo:** no topo da tela há um painel (recolhível) listando os produtos físicos **ativos** com estoque no/abaixo do mínimo — código, mínimo, barra de nível e quantidade atual (vermelho = esgotado, amarelo = abaixo do mínimo). Produtos **inativos** não aparecem, então **inative os itens descontinuados** (que você passou a comprar de outra marca) para tirá-los da lista.
+
 ---
 
 #### 📋 Inventário
@@ -654,8 +656,10 @@ Cada grupo tem header colapsável com contagem + subtotal.
 - Gráfico de vendas semanal (barra por dia)
 - Top 5 produtos mais vendidos
 - Top 5 vendedores
-- Estoque baixo (produtos abaixo do mínimo)
+- Últimas vendas e últimas compras (lado a lado)
 - Resumo financeiro (a pagar / a receber / vencendo / atrasadas)
+
+> O **mini-card "Estoque baixo"** (só a contagem) continua no dashboard, mas a **lista detalhada** de produtos abaixo do mínimo foi movida para a tela **🗃️ Estoque** — assim itens descontinuados não poluem a visão geral.
 
 ---
 

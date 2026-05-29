@@ -25,6 +25,8 @@ interface Produto {
   codigo: string;
   nome: string;
   estoque: number;
+  estoqueMinimo?: number;
+  unidade?: string;
   tipoItem?: "PRODUTO" | "SERVICO";
   [extra: string]: unknown;
 }
@@ -81,6 +83,12 @@ export default function Estoque({ user }: EstoqueProps) {
   const [mensagem, setMensagem] = useState("");
 
   const podeMovimentar = user.role === "ADMIN" || user.role === "GERENTE";
+
+  // Produtos com estoque no/abaixo do minimo (so itens fisicos ativos).
+  // Mesma regra do dashboard; descontinuados saem ao serem inativados.
+  const estoqueBaixo = produtos
+    .filter((p) => (p.tipoItem ?? "PRODUTO") === "PRODUTO" && Number(p.estoque) <= Number(p.estoqueMinimo ?? 0))
+    .sort((a, b) => (Number(a.estoque) - Number(a.estoqueMinimo ?? 0)) - (Number(b.estoque) - Number(b.estoqueMinimo ?? 0)));
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -179,6 +187,8 @@ export default function Estoque({ user }: EstoqueProps) {
         </div>
       )}
 
+      <PainelEstoqueBaixo itens={estoqueBaixo} />
+
       <div
         className="bg-gp-card rounded-xl overflow-hidden"
         style={{ border: `1px solid ${C.border}` }}
@@ -260,6 +270,90 @@ export default function Estoque({ user }: EstoqueProps) {
         />
       )}
     </div>
+  );
+}
+
+// Lista de produtos com estoque baixo. Veio do dashboard pra ca: aqui o usuario
+// abre de proposito, sem poluir a visao geral com itens descontinuados.
+function PainelEstoqueBaixo({ itens }: { itens: Produto[] }) {
+  if (itens.length === 0) {
+    return (
+      <div
+        className="mb-4 px-[14px] py-[10px] rounded-lg text-[13px] text-gp-green"
+        style={{ background: C.green + "15", border: `1px solid ${C.green}33` }}
+      >
+        ✓ Todos os produtos estão com estoque acima do mínimo.
+      </div>
+    );
+  }
+  return (
+    <details
+      open
+      className="mb-4 rounded-xl overflow-hidden"
+      style={{ background: C.card, border: `1px solid ${C.yellow}44` }}
+    >
+      <summary
+        className="cursor-pointer select-none flex items-center gap-2 text-[13px] font-bold text-gp-white"
+        style={{ padding: "12px 16px", background: C.yellow + "12", listStyle: "none" }}
+      >
+        <span style={{ color: C.yellow }}>⚠ Produtos com estoque baixo</span>
+        <span
+          className="text-[11px] font-bold rounded-md"
+          style={{ padding: "2px 8px", background: C.yellow + "22", color: C.yellow, border: `1px solid ${C.yellow}55` }}
+        >
+          {itens.length} {itens.length === 1 ? "item crítico" : "itens críticos"}
+        </span>
+        <span className="ml-auto text-[11px] font-normal text-gp-muted">clique para recolher/expandir</span>
+      </summary>
+      <div style={{ maxHeight: 320, overflowY: "auto" }}>
+        {itens.map((p, idx) => {
+          const min = Number(p.estoqueMinimo) || 0;
+          const est = Number(p.estoque) || 0;
+          const pct = min > 0 ? Math.max(0, Math.min(100, (est / min) * 100)) : 0;
+          const eZero = est <= 0;
+          return (
+            <div
+              key={p.id}
+              className="grid items-center"
+              style={{
+                gridTemplateColumns: "1fr 110px 120px",
+                gap: 12,
+                padding: "10px 16px",
+                borderTop: idx === 0 ? "0" : `1px dashed ${C.border}`,
+              }}
+            >
+              <div className="min-w-0">
+                <div className="text-gp-white font-semibold text-[13px] truncate">{p.nome}</div>
+                <div className="text-gp-muted font-mono text-[11px] mt-0.5">
+                  {p.codigo || "—"} · mín. {fmtQtd(min)} {p.unidade || "UN"}
+                </div>
+              </div>
+              <div
+                className="h-1.5 rounded-full overflow-hidden"
+                style={{ background: "rgba(255,255,255,0.06)" }}
+              >
+                <div
+                  style={{
+                    width: `${pct}%`,
+                    height: "100%",
+                    background: eZero ? C.red : `linear-gradient(90deg, ${C.yellow}, ${C.red})`,
+                  }}
+                />
+              </div>
+              <div
+                className="text-right font-mono font-bold text-[13px]"
+                style={{ color: eZero ? C.red : C.yellow }}
+              >
+                {fmtQtd(est)} {p.unidade || "UN"}
+                <small className="block text-[10px] text-gp-muted font-medium mt-0.5">
+                  {eZero ? "esgotado" : "abaixo do mín."}
+                </small>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </details>
   );
 }
 

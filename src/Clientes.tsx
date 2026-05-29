@@ -579,6 +579,7 @@ export default function Clientes({ user }: ClientesProps) {
         erro={erroForm}
         larguraMax={760}
         compacto
+        className="cliente-modal"
       >
         <Secao legenda="Identificação">
           <Linha style={{ gridTemplateColumns: "1fr 180px" }}>
@@ -645,7 +646,7 @@ export default function Clientes({ user }: ClientesProps) {
         </Secao>
 
         <Secao legenda="Endereço">
-          <Linha variant="addr-tilt">
+          <Linha style={{ gridTemplateColumns: "130px 1fr 90px" }}>
             <Campo
               label="CEP"
               hint={
@@ -665,6 +666,35 @@ export default function Clientes({ user }: ClientesProps) {
                 inputMode="numeric"
                 maxLength={9}
                 autoComplete="postal-code"
+              />
+            </Campo>
+            <Campo label="Logradouro">
+              <input
+                className="lux-input"
+                value={form.endereco}
+                onChange={(e) => setForm({ ...form, endereco: e.target.value })}
+                placeholder="Rua, avenida ou alameda"
+                autoComplete="street-address"
+              />
+            </Campo>
+            <Campo label="Número">
+              <input
+                className="lux-input"
+                value={form.numero}
+                onChange={(e) => setForm({ ...form, numero: e.target.value })}
+                placeholder="123"
+                inputMode="numeric"
+              />
+            </Campo>
+          </Linha>
+          <Linha style={{ gridTemplateColumns: "1fr 1fr 70px 1fr" }}>
+            <Campo label="Bairro">
+              <input
+                className="lux-input"
+                value={form.bairro || ""}
+                onChange={(e) => setForm({ ...form, bairro: e.target.value })}
+                placeholder="Centro, Jardim…"
+                autoComplete="address-level3"
               />
             </Campo>
             <Campo label="Cidade">
@@ -689,43 +719,12 @@ export default function Clientes({ user }: ClientesProps) {
                 ))}
               </select>
             </Campo>
-          </Linha>
-          <Linha style={{ gridTemplateColumns: "1fr 120px" }}>
-            <Campo label="Logradouro">
-              <input
-                className="lux-input"
-                value={form.endereco}
-                onChange={(e) => setForm({ ...form, endereco: e.target.value })}
-                placeholder="Rua, avenida ou alameda"
-                autoComplete="street-address"
-              />
-            </Campo>
-            <Campo label="Número">
-              <input
-                className="lux-input"
-                value={form.numero}
-                onChange={(e) => setForm({ ...form, numero: e.target.value })}
-                placeholder="123"
-                inputMode="numeric"
-              />
-            </Campo>
-          </Linha>
-          <Linha cols={2}>
-            <Campo label="Bairro">
-              <input
-                className="lux-input"
-                value={form.bairro || ""}
-                onChange={(e) => setForm({ ...form, bairro: e.target.value })}
-                placeholder="Centro, Jardim das Flores…"
-                autoComplete="address-level3"
-              />
-            </Campo>
             <Campo label="Complemento">
               <input
                 className="lux-input"
                 value={form.complemento || ""}
                 onChange={(e) => setForm({ ...form, complemento: e.target.value })}
-                placeholder="Apto, sala, bloco"
+                placeholder="Apto, sala…"
               />
             </Campo>
           </Linha>

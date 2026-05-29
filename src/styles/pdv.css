@@ -1675,10 +1675,10 @@
 .mk-toggle .mk-toggle__chevron { transition: transform .15s ease; display: inline-block; }
 .mk-toggle[open] .mk-toggle__chevron { transform: rotate(90deg); }
 
-/* Cadastro de produto: aperto fino de espacamentos (escopado por .produto-modal)
-   p/ caber sem rolagem em telas baixas (~667px de altura) no modo compacto. */
-.produto-modal .lux-body { padding-top: 8px; padding-bottom: 8px; gap: 8px; }
-.produto-modal .lux-fieldset { gap: 5px; }
-.produto-modal .lux-legend { margin-bottom: 0; }
-.produto-modal .lux-row { gap: 6px; }
-.produto-modal .lux-head { padding-top: 10px; }
+/* Cadastros densos (produto/cliente): aperto fino de espacamentos p/ caber sem
+   rolagem em telas baixas (~667px de altura) no modo compacto. */
+.produto-modal .lux-body, .cliente-modal .lux-body { padding-top: 8px; padding-bottom: 8px; gap: 8px; }
+.produto-modal .lux-fieldset, .cliente-modal .lux-fieldset { gap: 5px; }
+.produto-modal .lux-legend, .cliente-modal .lux-legend { margin-bottom: 0; }
+.produto-modal .lux-row, .cliente-modal .lux-row { gap: 6px; }
+.produto-modal .lux-head, .cliente-modal .lux-head { padding-top: 10px; }

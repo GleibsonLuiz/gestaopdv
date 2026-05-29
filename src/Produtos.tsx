@@ -936,7 +936,7 @@ export default function Produtos({ user }: ProdutosProps) {
                         />
                       </CampoLux>
                     </Linha>
-                    <Linha style={{ gridTemplateColumns: "1.1fr 1fr" }}>
+                    <Linha style={{ gridTemplateColumns: "1fr 300px" }}>
                       <CampoLux label="Fabricante / Marca">
                         <div className="flex gap-2">
                           <SelectBusca<Fabricante>
@@ -965,20 +965,17 @@ export default function Produtos({ user }: ProdutosProps) {
                           </button>
                         </div>
                       </CampoLux>
-                      <CampoLux label="Descrição">
-                        <textarea
-                          className="lux-textarea"
-                          value={form.descricao}
-                          onChange={(e) => setForm({ ...form, descricao: e.target.value })}
-                          rows={2}
-                          placeholder="Detalhes complementares…"
-                          style={{ minHeight: 36, height: 36, maxHeight: 80, resize: "vertical" }}
+                      <CampoLux label="Tipo do item">
+                        <SeletorTipoItem
+                          compacto
+                          valor={form.tipoItem}
+                          onMudar={(t) => setForm((f) => ({ ...f, tipoItem: t }))}
                         />
                       </CampoLux>
                     </Linha>
                   </Secao>
 
-                  <Secao legenda="Imagem e tipo do item">
+                  <Secao legenda="Imagem e descrição">
                     <Linha style={{ gridTemplateColumns: "1fr 1fr", alignItems: "stretch" }}>
                       <CampoLux label="Foto do produto">
                         <DropzoneImagem
@@ -988,10 +985,13 @@ export default function Produtos({ user }: ProdutosProps) {
                           inputRef={inputImagemRef}
                         />
                       </CampoLux>
-                      <CampoLux label="Tipo do item">
-                        <SeletorTipoItem
-                          valor={form.tipoItem}
-                          onMudar={(t) => setForm((f) => ({ ...f, tipoItem: t }))}
+                      <CampoLux label="Descrição">
+                        <textarea
+                          className="lux-textarea"
+                          value={form.descricao}
+                          onChange={(e) => setForm({ ...form, descricao: e.target.value })}
+                          placeholder="Detalhes complementares do produto…"
+                          style={{ height: "100%", minHeight: 72, resize: "vertical" }}
                         />
                       </CampoLux>
                     </Linha>
@@ -1265,36 +1265,50 @@ function Miniatura({ url, nome, servico = false }: MiniaturaProps) {
 interface SeletorTipoItemProps {
   valor: TipoItem;
   onMudar: (t: TipoItem) => void;
+  /** Variante compacta: botoes segmentados (icone + label, sem descricao). */
+  compacto?: boolean;
 }
 
-function SeletorTipoItem({ valor, onMudar }: SeletorTipoItemProps) {
+function SeletorTipoItem({ valor, onMudar, compacto = false }: SeletorTipoItemProps) {
   const opcoes: { id: TipoItem; icone: string; label: string; desc: string }[] = [
     { id: "PRODUTO", icone: "📦", label: "Produto físico", desc: "Controla estoque, gera entradas/saídas, alerta quando baixo." },
     { id: "SERVICO", icone: "🛠", label: "Serviço / digital", desc: "Sem estoque. Sempre disponível para venda (impressão, 2ª via...)." },
   ];
   return (
-    <div className="grid grid-cols-2 gap-2.5 h-full">
+    <div className="grid grid-cols-2 gap-2 h-full">
       {opcoes.map((opt) => {
         const ativo = valor === opt.id;
+        const cor = opt.id === "SERVICO" ? C.purple : C.accent;
         return (
           <button
             key={opt.id}
             type="button"
             onClick={() => onMudar(opt.id)}
-            className="cursor-pointer text-left rounded-[10px]"
+            title={opt.desc}
+            className={`cursor-pointer rounded-[10px] ${compacto ? "flex items-center justify-center gap-2 font-semibold text-[13px]" : "text-left"}`}
             style={{
-              padding: "8px 10px",
-              background: ativo ? (opt.id === "SERVICO" ? C.purple + "22" : C.accent + "22") : C.surface,
-              border: `1px solid ${ativo ? (opt.id === "SERVICO" ? C.purple : C.accent) : C.border}`,
+              padding: compacto ? "0 10px" : "8px 10px",
+              height: compacto ? 36 : undefined,
+              background: ativo ? cor + "22" : C.surface,
+              border: `1px solid ${ativo ? cor : C.border}`,
               color: ativo ? C.white : C.text,
               transition: "all 0.15s ease",
             }}
           >
-            <div className="flex items-center gap-2 font-bold text-[13px]">
-              <span className="text-lg">{opt.icone}</span>
-              {opt.label}
-            </div>
-            <div className="text-gp-muted text-[11px] mt-1 leading-snug">{opt.desc}</div>
+            {compacto ? (
+              <>
+                <span className="text-base">{opt.icone}</span>
+                {opt.label}
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 font-bold text-[13px]">
+                  <span className="text-lg">{opt.icone}</span>
+                  {opt.label}
+                </div>
+                <div className="text-gp-muted text-[11px] mt-1 leading-snug">{opt.desc}</div>
+              </>
+            )}
           </button>
         );
       })}

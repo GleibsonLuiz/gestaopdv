@@ -60,12 +60,27 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
 }));
 
-// CORS: em dev (sem FRONTEND_URL) libera tudo; em producao (Vercel) limita
-// ao dominio do frontend. Vercel preview deployments tem URL diferente da
-// prod — para liberar geral, deixar FRONTEND_URL = "*".
+// CORS: libera o dominio do front (FRONTEND_URL), os deploys da Vercel
+// (*.vercel.app — cobre producao e previews) e localhost (dev). Requests
+// sem header Origin (curl, health checks, server-to-server) passam.
+// FRONTEND_URL="*" mantem o modo "libera geral" como escape de emergencia.
+// Antes refletia QUALQUER origem; agora so as confiaveis.
 const FRONTEND_URL = process.env.FRONTEND_URL;
+
+function origemPermitida(origin) {
+  if (!origin) return true;               // sem Origin (curl, same-origin, SSR)
+  if (FRONTEND_URL === "*") return true;  // escape explicito: libera geral
+  if (FRONTEND_URL && origin === FRONTEND_URL) return true;
+  try {
+    const host = new URL(origin).hostname;
+    if (host === "localhost" || host === "127.0.0.1") return true;
+    if (host === "vercel.app" || host.endsWith(".vercel.app")) return true;
+  } catch { /* origin malformado — nega */ }
+  return false;
+}
+
 app.use(cors({
-  origin: FRONTEND_URL && FRONTEND_URL !== "*" ? FRONTEND_URL : true,
+  origin(origin, cb) { cb(null, origemPermitida(origin)); },
   credentials: true,
 }));
 app.use(express.json());

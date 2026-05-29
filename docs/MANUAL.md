@@ -352,7 +352,7 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 4. **Preços e estoque** — preço de custo, cálculo de markup, preço de venda, estoque atual, estoque mínimo, unidade (UN, KG, M, L, PCT…).
 5. **Categorização** — categoria (cria inline se não existir), fornecedor padrão, tributação fiscal (NCM, CEST, CFOP, Origem, CST/CSOSN, PIS, COFINS, cBenef).
 
-**Cálculo de markup** — dois jeitos de chegar ao preço de venda:
+**Cálculo de markup** — fica recolhido por padrão (clique em **🧮 Calculadora de markup / formação de preço** para abrir, deixando a aba *Dados Gerais* mais enxuta). Dois jeitos de chegar ao preço de venda:
 - **Margem sobre o custo** — digite a margem desejada (ex.: 120%) e o preço de venda é calculado na hora como `custo × (1 + margem%)` (custo 10,00 + 120% = 22,00). É bidirecional: se você digitar o preço de venda direto, o campo de margem mostra automaticamente qual margem aquele preço representa.
 - **Formação de preço (margem sobre a venda)** — informe impostos sobre venda, taxas de cartão e a margem desejada; o sistema sugere o preço "por dentro" (`custo ÷ (1 − soma%)`) e o botão **Aplicar ao preço de venda** preenche o campo. Como a margem aqui é sobre a venda, a soma dos percentuais precisa ser menor que 100%.
 

@@ -1667,3 +1667,10 @@
     font-weight: 700;
   }
 }
+
+/* Calculadora de markup recolhivel (cadastro de produto -> Dados Gerais).
+   Esconde o marker nativo do <details> e gira o chevron ao abrir. */
+.mk-toggle > summary { list-style: none; }
+.mk-toggle > summary::-webkit-details-marker { display: none; }
+.mk-toggle .mk-toggle__chevron { transition: transform .15s ease; display: inline-block; }
+.mk-toggle[open] .mk-toggle__chevron { transform: rotate(90deg); }

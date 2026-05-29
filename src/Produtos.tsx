@@ -817,6 +817,7 @@ export default function Produtos({ user }: ProdutosProps) {
         editando={!!editando}
         erro={erroForm}
         larguraMax={920}
+        compacto
         acaoSecundaria={editando ? (
           <div className="flex gap-2.5 flex-wrap">
             <button
@@ -1042,15 +1043,24 @@ export default function Produtos({ user }: ProdutosProps) {
                       </CampoLux>
                     </Linha>
                     <Linha cols={1}>
-                      <CampoLux label="Cálculo de markup">
-                        <CalculoMarkup
-                          precoCusto={form.precoCusto}
-                          precoVenda={form.precoVenda}
-                          markup={markup}
-                          onChange={setMarkup}
-                          onAplicar={(valor) => setForm((f) => ({ ...f, precoVenda: valor }))}
-                        />
-                      </CampoLux>
+                      <details className="lux-field mk-toggle">
+                        <summary
+                          className="cursor-pointer select-none text-[12px] font-medium flex items-center gap-1.5"
+                          style={{ color: C.muted }}
+                        >
+                          <span className="mk-toggle__chevron" style={{ fontSize: 11 }}>▸</span>
+                          🧮 Calculadora de markup / formação de preço
+                        </summary>
+                        <div style={{ marginTop: 8 }}>
+                          <CalculoMarkup
+                            precoCusto={form.precoCusto}
+                            precoVenda={form.precoVenda}
+                            markup={markup}
+                            onChange={setMarkup}
+                            onAplicar={(valor) => setForm((f) => ({ ...f, precoVenda: valor }))}
+                          />
+                        </div>
+                      </details>
                     </Linha>
                   </Secao>
                 </>
@@ -1686,19 +1696,18 @@ function DropzoneImagem({ preview, onSelecionar, onLimpar, inputRef }: DropzoneI
         onDragLeave={aoArrastar}
         onDrop={aoSoltar}
         onClick={() => inputRef.current?.click()}
-        className="flex-1 rounded-[10px] text-center cursor-pointer text-gp-muted text-[13px]"
+        className="flex-1 flex flex-col items-center justify-center rounded-[10px] text-center cursor-pointer text-gp-muted text-[13px]"
         style={{
           background: arrastando ? C.accent + "22" : C.surface,
           border: `2px dashed ${arrastando ? C.accent : C.border}`,
-          padding: "18px 14px",
+          padding: "10px 14px",
           transition: "all 0.15s ease",
         }}
       >
-        <div className="text-3xl mb-1">🖼️</div>
+        <div className="text-2xl mb-0.5">🖼️</div>
         <div className="text-gp-text font-semibold">
           {preview ? "Trocar imagem" : "Clique ou arraste uma imagem"}
         </div>
-        <div className="text-[11px] mt-1">JPG, PNG ou WEBP • máx 2 MB</div>
         <input
           ref={inputRef}
           type="file"

@@ -46,6 +46,7 @@ const MODELOS_COM_TENANT = new Set([
   "Inventario", "InventarioItem", "IntencaoPagamentoMP",
   "Comanda", "ItemComanda",
   "WhatsappSettings", "WhatsappLog",
+  "VendaEspera",
 ]);
 
 function tenantAtual() {

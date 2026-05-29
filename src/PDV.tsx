@@ -134,6 +134,20 @@ const fmtData = (iso) => {
   return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 };
 
+// "agora", "há 3 min", "há 2 h", "há 1 d" — relativo curto para a lista de
+// atendimentos em espera.
+const tempoAtras = (iso) => {
+  if (!iso) return "";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 60000) return "agora";
+  const min = Math.floor(ms / 60000);
+  if (min < 60) return `há ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `há ${h} h`;
+  const d = Math.floor(h / 24);
+  return `há ${d} ${d === 1 ? "dia" : "dias"}`;
+};
+
 // Mapeamento de cor (CSS var name) por forma de pagamento — usado em pílulas
 // e no dashboard de "vendas hoje por forma".
 const FORMA_COR_VAR = {
@@ -366,6 +380,15 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
 
   const [abrirCaixaAberto, setAbrirCaixaAberto] = useState(false);
 
+  // Vendas em espera (park/hold): atendimentos congelados no servidor para
+  // retomar depois. Visiveis para todo o tenant (qualquer operador retoma).
+  const [vendasEspera, setVendasEspera] = useState([]);
+  const [esperaAberta, setEsperaAberta] = useState(false);
+  const [salvandoEspera, setSalvandoEspera] = useState(false);
+  // Confirmacao em 2 cliques do "Descartar" (evita perder um atendimento
+  // por engano). Guarda o id da espera aguardando o 2o clique.
+  const [descarteConfirmar, setDescarteConfirmar] = useState(null);
+
   // Persistencia de rascunho do carrinho. Salva em localStorage cada vez
   // que o carrinho muda (debounce 600ms). Chave por usuario evita que
   // 2 vendedores no mesmo browser misturem itens. `desativar` quando vazio
@@ -427,7 +450,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
   const [mpAberto, setMpAberto] = useState(false);
   const [pixAberto, setPixAberto] = useState(false);
 
-  const algumaModalAberta = pagamentoAberto || cancelarAberto || !!reciboAberto || !!qtdModalProduto || abrirCaixaAberto || mpAberto || pixAberto;
+  const algumaModalAberta = pagamentoAberto || cancelarAberto || !!reciboAberto || !!qtdModalProduto || abrirCaixaAberto || mpAberto || pixAberto || esperaAberta;
   const semCaixa = !caixaCarregando && !caixaAtual;
 
   // Reordena FORMAS por uso real (ultimos 90 dias) e reatribui os atalhos
@@ -492,12 +515,19 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
       .catch(() => setFormasCustom([]));
   }, []);
 
+  const recarregarEspera = useCallback(() => {
+    return api.listarVendasEspera()
+      .then(lista => setVendasEspera(Array.isArray(lista) ? lista : []))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     api.listarProdutos({ ativo: "true" }).then(setProdutos).catch(() => {});
     api.listarClientes({ ativo: "true" }).then(setClientes).catch(() => {});
     recarregarCaixa().finally(() => setCaixaCarregando(false));
     recarregarPainel();
     recarregarFormasCustom();
+    recarregarEspera();
     api.obterConfiguracaoFidelidade().then(setConfigFidelidade).catch(() => {});
     // Carrega config Mercado Pago Point. Em erro (sem config ainda, 403 sem
     // permissao) cai pro estado "nao configurada" — botao da maquininha
@@ -505,7 +535,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
     api.obterConfigMp()
       .then(setConfigMp)
       .catch(() => setConfigMp({ configurada: false, mpAtivo: false }));
-  }, [recarregarCaixa, recarregarPainel, recarregarFormasCustom]);
+  }, [recarregarCaixa, recarregarPainel, recarregarFormasCustom, recarregarEspera]);
 
   useEffect(() => {
     setPontosResgatando(0);
@@ -738,6 +768,120 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
     if (refocar) focarBusca();
   }
 
+  // ===== Vendas em espera (park/hold) =====
+  // Congela o carrinho atual no servidor e libera a tela. Retorna a espera
+  // criada (ou null em falha) — usado pelo "swap" do retomarEspera.
+  async function salvarEmEspera() {
+    if (carrinho.length === 0) { flashErro("Carrinho vazio — nada para colocar em espera."); return null; }
+    if (salvandoEspera) return null;
+    if (!podeFinalizarRede) {
+      emitirToast({
+        tipo: "aviso",
+        titulo: "Sem conexão com o servidor",
+        mensagem: "Não foi possível salvar em espera agora. O carrinho continua salvo neste navegador — tente de novo quando a conexão voltar.",
+        duracao: 5000,
+      });
+      return null;
+    }
+    setSalvandoEspera(true);
+    try {
+      const espera = await api.salvarVendaEspera({
+        clienteId: clienteId || null,
+        desconto: descontoNum,
+        observacoes: null,
+        itens: carrinho.map(it => ({
+          produtoId: it.produtoId,
+          codigo: it.codigo,
+          nome: it.nome,
+          unidade: it.unidade,
+          tipoItem: it.tipoItem,
+          imagem: it.imagem,
+          precoUnitario: it.precoUnitario,
+          quantidade: it.quantidade,
+        })),
+      });
+      limparCarrinho({ refocar: true });
+      await recarregarEspera();
+      emitirToast({
+        tipo: "sucesso",
+        titulo: `Atendimento #${espera.numero} em espera`,
+        mensagem: "Carrinho salvo. Tela liberada para o próximo cliente.",
+        duracao: 4000,
+      });
+      return espera;
+    } catch (err) {
+      flashErro(err.message || "Falha ao colocar o atendimento em espera.");
+      return null;
+    } finally {
+      setSalvandoEspera(false);
+    }
+  }
+
+  // Reconstrói os itens salvos contra o catálogo vivo (estoque/dados atuais),
+  // caindo no snapshot quando o produto sumiu/foi desativado. Preserva o
+  // preço salvo (pode ter sido negociado/editado no atendimento original).
+  function reconstruirItensEspera(itens) {
+    return (Array.isArray(itens) ? itens : []).map(it => {
+      const prod = produtos.find(p => p.id === it.produtoId);
+      const ehServico = (prod?.tipoItem || it.tipoItem) === "SERVICO";
+      return {
+        produtoId: it.produtoId,
+        codigo: prod?.codigo ?? it.codigo,
+        nome: prod?.nome ?? it.nome,
+        unidade: prod?.unidade ?? it.unidade,
+        estoque: ehServico ? Infinity : Number(prod?.estoque ?? 0),
+        tipoItem: ehServico ? "SERVICO" : "PRODUTO",
+        precoUnitario: Number(it.precoUnitario) || 0,
+        imagem: prod?.imagem ?? it.imagem ?? null,
+        quantidade: Number(it.quantidade) || 0,
+      };
+    });
+  }
+
+  // Retoma uma espera: traz os itens de volta para a cestinha e remove a
+  // espera do servidor. Se já houver atendimento em andamento, ele é salvo
+  // em espera antes (troca de cliente sem perder nada).
+  async function retomarEspera(espera) {
+    if (!espera) return;
+    if (carrinho.length > 0) {
+      const salvo = await salvarEmEspera();
+      if (!salvo) return; // falhou ao salvar o atual — aborta a troca
+    }
+    setCarrinho(reconstruirItensEspera(espera.itens));
+    setClienteId(espera.cliente?.id || espera.clienteId || "");
+    setDesconto(String(espera.desconto ?? "0"));
+    setEsperaAberta(false);
+    setDescarteConfirmar(null);
+    try {
+      await api.excluirVendaEspera(espera.id);
+    } catch { /* backend é idempotente; ignora */ }
+    await recarregarEspera();
+    focarBusca();
+    const n = Array.isArray(espera.itens) ? espera.itens.length : 0;
+    emitirToast({
+      tipo: "sucesso",
+      titulo: `Atendimento #${espera.numero} retomado`,
+      mensagem: `${n} ${n === 1 ? "item de volta" : "itens de volta"} na cestinha.`,
+      duracao: 4000,
+    });
+  }
+
+  // Descarta uma espera sem retomar (cliente desistiu). A confirmação em 2
+  // cliques é controlada pela UI via descarteConfirmar.
+  async function descartarEspera(espera) {
+    if (!espera) return;
+    try {
+      await api.excluirVendaEspera(espera.id);
+    } catch { /* idempotente */ }
+    setDescarteConfirmar(null);
+    await recarregarEspera();
+    emitirToast({
+      tipo: "info",
+      titulo: `Espera #${espera.numero} descartada`,
+      duracao: 3000,
+    });
+  }
+
   const subtotal = useMemo(
     () => carrinho.reduce((acc, it) => acc + it.quantidade * it.precoUnitario, 0),
     [carrinho]
@@ -863,6 +1007,17 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
         setCancelarAberto(true);
         return;
       }
+      if (e.key === "F9") {
+        e.preventDefault();
+        // F9 nao faz sentido com o modal de pagamento aberto.
+        if (pagamentoAbertoRef.current) return;
+        if (carrinhoRef.current.length === 0) {
+          flashErro("Carrinho vazio — nada para colocar em espera.");
+          return;
+        }
+        salvarEmEsperaRef.current?.();
+        return;
+      }
       if (e.key === "F10") {
         e.preventDefault();
         if (pagamentoAbertoRef.current) confirmarPagamentoRef.current?.();
@@ -884,11 +1039,13 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
   const abrirPagamentoRef = useRef(null);
   const confirmarPagamentoRef = useRef(null);
   const adicionarPagamentoFormaRef = useRef(null);
+  const salvarEmEsperaRef = useRef(null);
   const topProdutosRef = useRef(painel.topProdutos);
   useEffect(() => { carrinhoRef.current = carrinho; }, [carrinho]);
   useEffect(() => { pagamentoAbertoRef.current = pagamentoAberto; }, [pagamentoAberto]);
   useEffect(() => { topProdutosRef.current = painel.topProdutos; }, [painel.topProdutos]);
   useEffect(() => { adicionarPagamentoFormaRef.current = adicionarPagamentoForma; });
+  useEffect(() => { salvarEmEsperaRef.current = salvarEmEspera; });
 
   function abrirPagamento(formaInicial = "DINHEIRO", seedOpts = {}) {
     setErro("");
@@ -1035,6 +1192,9 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
     onConfirm: confirmarQtdModal,
     permitirEnter: true,
   });
+  useModalKeys(esperaAberta, {
+    onClose: () => { setEsperaAberta(false); setDescarteConfirmar(null); focarBusca(); },
+  });
 
   const [scanFocused, setScanFocused] = useState(false);
 
@@ -1167,6 +1327,38 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
               )}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
+              {vendasEspera.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => { setEsperaAberta(true); setDescarteConfirmar(null); }}
+                  className="pdv-btn-rm"
+                  style={{ color: "var(--pdv-accent)", borderColor: "color-mix(in oklab, var(--pdv-accent) 40%, transparent)" }}
+                  title="Atendimentos em espera — clique para retomar"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+                  </svg>
+                  Em espera
+                  <span className="pdv-pill-dot" style={{ position: "static", animation: "none", background: "var(--pdv-accent)" }} />
+                  {vendasEspera.length}
+                </button>
+              )}
+              {carrinho.length > 0 && (
+                <button
+                  type="button"
+                  onClick={salvarEmEspera}
+                  disabled={salvandoEspera}
+                  className="pdv-btn-rm"
+                  title="Salvar este atendimento para retomar depois (F9)"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                    <polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" />
+                  </svg>
+                  {salvandoEspera ? "Salvando…" : "Salvar atendimento"}
+                  <span className="pdv-kbd">F9</span>
+                </button>
+              )}
               {carrinho.length > 0 && (
                 <button
                   type="button"
@@ -1331,6 +1523,11 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
                 tecla="F8" tom="warn" label="Cancelar item"
                 disabled={carrinho.length === 0}
                 onClick={() => carrinho.length > 0 && setCancelarAberto(true)}
+              />
+              <BotaoAtalho
+                tecla="F9" tom="info" label="Em espera"
+                disabled={carrinho.length === 0 || salvandoEspera}
+                onClick={salvarEmEspera}
               />
               <BotaoAtalho
                 tecla="F10" tom="ok" label="Finalizar"
@@ -1519,6 +1716,105 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
       </div>
 
       {/* MODAL CANCELAR ITEM (F8) — clique no produto para remover */}
+      {esperaAberta && (
+        <div
+          onClick={() => { setEsperaAberta(false); setDescarteConfirmar(null); focarBusca(); }}
+          className="pdv-modal-bg"
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className="pdv-modal"
+            style={{ width: "min(580px, calc(100vw - 32px))" }}
+          >
+            <div className="pdv-modal-hd">
+              <div>
+                <div className="pdv-modal-title">Atendimentos em espera</div>
+                <div className="pdv-modal-sub">
+                  Retome um atendimento salvo. Os itens voltam para a cestinha.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setEsperaAberta(false); setDescarteConfirmar(null); focarBusca(); }}
+                className="pdv-modal-x"
+              >×</button>
+            </div>
+
+            <div className="pdv-modal-body">
+              {vendasEspera.length === 0 ? (
+                <div style={{ padding: "30px 0", textAlign: "center", color: "var(--pdv-t3)", fontSize: 13 }}>
+                  Nenhum atendimento em espera.
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingBottom: 16 }}>
+                  {vendasEspera.map(esp => {
+                    const qtdItens = Array.isArray(esp.itens) ? esp.itens.length : 0;
+                    const confirmando = descarteConfirmar === esp.id;
+                    return (
+                      <div key={esp.id} className="pdv-cancel-item" style={{ cursor: "default" }}>
+                        <div style={{
+                          width: 44, height: 44, borderRadius: 10, flexShrink: 0,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          background: "color-mix(in oklab, var(--pdv-accent) 12%, transparent)",
+                          color: "var(--pdv-accent)", fontWeight: 700, fontSize: 13,
+                          fontFamily: "'Geist Mono', monospace",
+                        }}>#{esp.numero}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ color: "var(--pdv-t1)", fontSize: 13.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {esp.cliente?.nome || "Sem cliente"}
+                          </div>
+                          <div style={{ color: "var(--pdv-t3)", fontSize: 11, marginTop: 2 }}>
+                            {qtdItens} {qtdItens === 1 ? "item" : "itens"} · {fmtBRL(esp.total)} · {tempoAtras(esp.criadoEm)}
+                            {esp.user?.nome ? ` · ${esp.user.nome}` : ""}
+                          </div>
+                        </div>
+                        {confirmando ? (
+                          <button
+                            type="button"
+                            onClick={() => descartarEspera(esp)}
+                            className="pdv-btn-rm pdv-btn-rm-danger"
+                            title="Confirmar exclusão deste atendimento"
+                          >Confirmar exclusão</button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDescarteConfirmar(esp.id);
+                              setTimeout(() => setDescarteConfirmar(prev => (prev === esp.id ? null : prev)), 3500);
+                            }}
+                            className="pdv-btn-rm"
+                            title="Descartar este atendimento (cliente desistiu)"
+                          >Descartar</button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => retomarEspera(esp)}
+                          disabled={salvandoEspera}
+                          className="pdv-btn-rm"
+                          style={{ color: "var(--pdv-c-emerald, #22c55e)", borderColor: "rgba(34,197,94,.35)" }}
+                          title="Retomar este atendimento"
+                        >↩ Retomar</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="pdv-modal-foot" style={{ justifyContent: "space-between" }}>
+              <span style={{ fontSize: 11.5, color: "var(--pdv-t3)" }}>
+                Tem itens na cestinha? Ao retomar, eles são salvos em espera automaticamente.
+              </span>
+              <button
+                type="button"
+                onClick={() => { setEsperaAberta(false); setDescarteConfirmar(null); focarBusca(); }}
+                className="pdv-btn-ghost"
+              >Fechar <span className="pdv-kbd is-warn">Esc</span></button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {cancelarAberto && (
         <div
           onClick={() => { setCancelarAberto(false); focarBusca(); }}

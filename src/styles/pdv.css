@@ -1043,9 +1043,10 @@
   letter-spacing: .08em; text-transform: uppercase; margin-bottom: 10px;
 }
 .pdv-short-grid {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
-  /* overflow visible permite o divisor do nth-child(3) aparecer dentro
-     do gap entre F10 (transacao) e Esc (navegacao). */
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px;
+  /* overflow visible permite o divisor do nth-child(4) aparecer dentro
+     do gap entre F10 (transacao) e Esc (navegacao). minmax(0,1fr) deixa
+     as 5 colunas caberem numa linha so sem estourar em telas menores. */
   overflow: visible;
 }
 .pdv-vendedor-aviso {
@@ -1079,8 +1080,9 @@
 .pdv-short-btn:not(:disabled):active { transform: translateY(0); }
 /* Divisor visual entre F10 (transacao) e Esc (navegacao). Reforca a
    separacao mental "estou finalizando" vs "estou navegando", evita
-   apertar Esc achando que e o atalho de finalizar. */
-.pdv-short-btn:nth-child(3)::before {
+   apertar Esc achando que e o atalho de finalizar. Esc agora e o 4o item
+   (F8, F9, F10 formam o grupo de acao antes dele). */
+.pdv-short-btn:nth-child(4)::before {
   content: ""; position: absolute;
   left: -5px; top: 25%; bottom: 25%;
   width: 1px; background: var(--pdv-line-3);

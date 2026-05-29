@@ -137,6 +137,7 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 **Atalhos:**
 - **F1–F6** — formas de pagamento
 - **F8** — modal "Cancelar item"
+- **F9** — salvar atendimento em espera
 - **F10** — abrir pagamento
 - **Esc** — limpa campo de busca ou fecha modal
 - **Setas ↑↓** — navega nas sugestões
@@ -146,6 +147,15 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 **Maquininha Mercado Pago Point** (se ativada em Configurações): botão "📲 Maquininha MP" cobra direto na máquina física, com polling de aprovação a cada 2s. A venda só é criada **após** o pagamento ser aprovado pelo MP.
 
 **Recuperação de rascunho:** se você fechar o navegador no meio de uma venda, ao reabrir o PDV aparece um banner azul "Você tinha N itens — Recuperar / Descartar". O carrinho é salvo a cada 600ms.
+
+**Atendimentos em espera (salvar para depois):** está atendendo um cliente que precisou sair (foi buscar outro produto, esqueceu o cartão no carro)? Clique em **"Salvar atendimento"** (ou **F9**) no topo da cestinha. O carrinho atual é congelado e a tela fica livre para o próximo cliente.
+
+- A espera fica salva **no servidor** e aparece para **qualquer operador** do balcão (útil em troca de turno / caixa compartilhado).
+- Para retomar, clique no botão **"⏱ Em espera (N)"** no topo da cestinha → escolha o atendimento → **↩ Retomar**. Os itens, o cliente e o desconto voltam para a cestinha.
+- Se você já tiver itens na cestinha ao retomar, eles são **salvos em espera automaticamente** antes — você nunca perde um atendimento ao trocar de cliente.
+- Cada espera mostra nº, cliente, quantidade de itens, total, há quanto tempo foi salva e quem salvou.
+- Cliente desistiu? **Descartar** (pede confirmação) remove a espera.
+- Importante: a espera **não é uma venda** — não baixa estoque, não consome número de venda nem mexe no caixa. Isso só acontece quando você retoma e finaliza normalmente (F10).
 
 ---
 

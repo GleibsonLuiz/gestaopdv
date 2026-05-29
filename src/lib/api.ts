@@ -737,6 +737,14 @@ export const api = {
   // ==================== CAIXA ====================
   obterCaixaAtual: () => request("/caixas/atual"),
   obterPainelPDV: () => request("/pdv/inicio"),
+
+  // Vendas em espera (park/hold do PDV): congelar o atendimento atual para
+  // retomar depois. Visivel para todo o tenant.
+  listarVendasEspera: () => request("/pdv/vendas-espera"),
+  salvarVendaEspera: (data: unknown) =>
+    request("/pdv/vendas-espera", { method: "POST", body: data }),
+  excluirVendaEspera: (id: string) =>
+    request(`/pdv/vendas-espera/${id}`, { method: "DELETE" }),
   sugerirTrocoCaixa: () => request("/caixas/sugestao-troco"),
   listarCaixas: (params: StringDict = {}) =>
     request(`/caixas${qsFrom(params)}`),

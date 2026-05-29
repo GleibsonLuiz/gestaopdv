@@ -367,6 +367,7 @@ model Empresa {
   intencoesPagamentoMP   IntencaoPagamentoMP[]
   comandas               Comanda[]
   itensComanda           ItemComanda[]
+  vendasEspera           VendaEspera[]
   whatsappSettings       WhatsappSettings?
   whatsappLogs           WhatsappLog[]
 
@@ -439,6 +440,7 @@ model User {
   inventarios              Inventario[]
   intencoesPagamentoMP     IntencaoPagamentoMP[]
   comandas                 Comanda[]
+  vendasEspera             VendaEspera[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -505,6 +507,7 @@ model Cliente {
   contatos            Contato[]
   pesquisasNps        PesquisaNps[]
   comandas            Comanda[]
+  vendasEspera        VendaEspera[]
 
   @@unique([tenantId, cpfCnpj])
   @@index([tenantId])
@@ -1893,6 +1896,46 @@ model ItemComanda {
 
   @@index([comandaId, criadoEm])
   @@map("itens_comanda")
+}
+
+
+// ============ VENDAS EM ESPERA (PARK/HOLD do PDV) ============
+//
+// Atendimento "congelado" no PDV para retomar depois: o operador esta
+// atendendo um cliente, ele precisa sair (foi buscar mais um produto, etc),
+// salva o carrinho atual aqui, libera a tela para o proximo cliente e retoma
+// quando quiser. NAO e uma Venda — nao consome numero de venda, nao baixa
+// estoque e nao toca no caixa. E so um snapshot do carrinho.
+//
+// Ao retomar, os itens voltam para a cestinha e a espera e excluida. A venda
+// so vira Venda real (com baixa de estoque / caixa) ao finalizar normalmente.
+// Visivel para todo o tenant: qualquer operador pode retomar (caixa
+// compartilhado / troca de turno). `itens` guarda o snapshot exato da
+// cestinha em Json (mesma forma do rascunho de localStorage do PDV).
+model VendaEspera {
+  id          String   @id @default(uuid())
+  // Numero sequencial por tenant (identificacao rapida na lista de esperas).
+  numero      Int
+  itens       Json
+  desconto    Decimal  @default(0) @db.Decimal(10, 2)
+  total       Decimal  @db.Decimal(10, 2)
+  observacoes String?
+
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@unique([tenantId, numero])
+  @@index([tenantId, criadoEm])
+  @@map("vendas_espera")
 }
 
 

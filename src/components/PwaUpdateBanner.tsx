@@ -17,6 +17,15 @@ export default function PwaUpdateBanner() {
     updateServiceWorker,
   } = useRegisterSW({
     immediate: true,
+    onRegisteredSW(_swUrl, registration) {
+      // Sessoes que ficam abertas o dia todo (PDV/Caixa) so checariam por
+      // versao nova num reload. Aqui forcamos uma checagem periodica pra o
+      // banner aparecer logo apos um deploy, sem precisar recarregar na mao.
+      if (!registration) return;
+      setInterval(() => {
+        registration.update().catch(() => {});
+      }, 30 * 60 * 1000); // a cada 30 min
+    },
     onRegisterError(err) {
       // Em dev (sem PWA habilitado) o registro falha silenciosamente. OK.
       console.warn("[PWA] erro ao registrar SW:", err);

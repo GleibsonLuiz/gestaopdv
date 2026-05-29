@@ -11,7 +11,10 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt' (nao 'autoUpdate'): o SW novo fica em "waiting" e o
+      // PwaUpdateBanner avisa "Nova versao disponivel" pro operador aplicar
+      // quando quiser. Evita reload automatico no meio de uma venda no PDV.
+      registerType: 'prompt',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'GestãoPRO — Inventário Mobile',

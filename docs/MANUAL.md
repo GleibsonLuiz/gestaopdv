@@ -922,6 +922,8 @@ O sistema é **PWA** — pode ser instalado como app no celular pelo banner do n
 - Use Chrome ou Edge no Android, Safari no iOS.
 - Adicione à tela inicial para ter ícone próprio e tela cheia.
 - Verifique permissão de **Bluetooth** se for usar impressora térmica.
+
+**Atualizações de versão:** quando uma versão nova é publicada, aparece um banner verde **"Nova versão disponível — Toque em Atualizar"** no rodapé. A atualização **não é automática** (pra não recarregar no meio de uma venda): toque em **Atualizar** quando estiver num momento seguro. O app também checa por versão nova sozinho a cada 30 min. Se o banner não aparecer e você suspeitar que está numa versão antiga, recarregue a página (no celular, feche e reabra o app).
 - Carrinho do PDV não roda offline — depende do servidor.
 
 ---

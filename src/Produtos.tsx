@@ -917,35 +917,33 @@ export default function Produtos({ user }: ProdutosProps) {
                         />
                       </CampoLux>
                     </Linha>
-                    <Linha style={{ gridTemplateColumns: "1fr 2fr", alignItems: "stretch" }}>
-                      <div className="flex flex-col gap-3">
-                        <CampoLux label="Código de barras">
-                          <input
-                            className="lux-input"
-                            value={form.codigoBarras}
-                            onChange={(e) => setForm({ ...form, codigoBarras: e.target.value.replace(/\s/g, "") })}
-                            placeholder="EAN-13, EAN-8, GTIN…"
-                            inputMode="numeric"
-                            style={{ fontFamily: "ui-monospace, monospace" }}
-                          />
-                        </CampoLux>
-                        <CampoLux label="Referência">
-                          <input
-                            className="lux-input"
-                            value={form.referencia}
-                            onChange={(e) => setForm({ ...form, referencia: e.target.value.toUpperCase() })}
-                            placeholder="Código do fabricante / fornecedor"
-                          />
-                        </CampoLux>
-                      </div>
+                    <Linha style={{ gridTemplateColumns: "1fr 1fr 1.4fr" }}>
+                      <CampoLux label="Código de barras">
+                        <input
+                          className="lux-input"
+                          value={form.codigoBarras}
+                          onChange={(e) => setForm({ ...form, codigoBarras: e.target.value.replace(/\s/g, "") })}
+                          placeholder="EAN-13, EAN-8, GTIN…"
+                          inputMode="numeric"
+                          style={{ fontFamily: "ui-monospace, monospace" }}
+                        />
+                      </CampoLux>
+                      <CampoLux label="Referência">
+                        <input
+                          className="lux-input"
+                          value={form.referencia}
+                          onChange={(e) => setForm({ ...form, referencia: e.target.value.toUpperCase() })}
+                          placeholder="Cód. fabricante / fornecedor"
+                        />
+                      </CampoLux>
                       <CampoLux label="Descrição">
                         <textarea
                           className="lux-textarea"
                           value={form.descricao}
                           onChange={(e) => setForm({ ...form, descricao: e.target.value })}
-                          rows={4}
-                          placeholder="Detalhes complementares do produto…"
-                          style={{ height: "100%", minHeight: 90, resize: "vertical" }}
+                          rows={2}
+                          placeholder="Detalhes complementares…"
+                          style={{ minHeight: 38, height: 38, maxHeight: 80, resize: "vertical" }}
                         />
                       </CampoLux>
                     </Linha>
@@ -1286,7 +1284,7 @@ function SeletorTipoItem({ valor, onMudar }: SeletorTipoItemProps) {
             onClick={() => onMudar(opt.id)}
             className="cursor-pointer text-left rounded-[10px]"
             style={{
-              padding: "10px 12px",
+              padding: "8px 10px",
               background: ativo ? (opt.id === "SERVICO" ? C.purple + "22" : C.accent + "22") : C.surface,
               border: `1px solid ${ativo ? (opt.id === "SERVICO" ? C.purple : C.accent) : C.border}`,
               color: ativo ? C.white : C.text,

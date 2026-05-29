@@ -157,6 +157,13 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 - Cliente desistiu? **Descartar** (pede confirmação) remove a espera.
 - Importante: a espera **não é uma venda** — não baixa estoque, não consome número de venda nem mexe no caixa. Isso só acontece quando você retoma e finaliza normalmente (F10).
 
+**Orçamento rápido (enviar por WhatsApp / e-mail):** o cliente quer "pensar" e levar os preços anotados? Em vez de refazer tudo na tela de Orçamentos, clique em **"📄 Orçamento"** no topo da cestinha. Abre um modal com os itens do carrinho já preenchidos.
+
+- Confirme/ajuste **nome, telefone e e-mail** do cliente (se houver um cliente selecionado na venda, esses campos já vêm preenchidos). Opcionalmente defina **validade em dias** e uma **observação** (condições de pagamento, prazo de entrega).
+- Escolha o envio: **💬 WhatsApp** (abre a conversa com o resumo do orçamento já digitado), **✉️ E-mail** (abre o cliente de e-mail com assunto e corpo prontos) ou **Só salvar** (gera o orçamento sem enviar).
+- Em todos os casos o orçamento é **salvo de verdade** (status *Rascunho*) e fica disponível na tela **Orçamentos** para acompanhar, aprovar e depois converter em venda.
+- A **cestinha continua intacta** — gerar o orçamento é um passo de pré-venda; você pode finalizar a venda normalmente em seguida (F10) ou colocar em espera.
+
 ---
 
 #### 🍽️ Central de Comandas

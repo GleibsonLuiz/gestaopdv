@@ -355,6 +355,13 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 
 **Busca:** placeholder "Buscar por código, código de barras, referência ou nome…"
 
+**Inativar / Reativar um produto:** inativar é a forma correta de "tirar de circulação" um produto sem apagar o histórico — ele some das buscas do PDV (não pode mais ser vendido), mas as vendas antigas continuam intactas. Há duas formas:
+
+- **Na lista:** clique no botão **`···`** (coluna *Ações*, à direita da linha) → **⊘ Inativar** (ou **↻ Reativar** se já estiver inativo) → confirme.
+- **Dentro do cadastro:** ao **editar** um produto, há o botão **⊘ Inativar produto** (ou **↻ Reativar produto**) no canto inferior esquerdo do formulário, ao lado de Cancelar/Salvar.
+
+O status alterna entre **ATIVO** (verde) e **INATIVO** (cinza). Use o filtro **"Todos status" → "Apenas inativos"** no topo da tela para listar os inativos.
+
 ---
 
 #### 🏷️ Etiquetas

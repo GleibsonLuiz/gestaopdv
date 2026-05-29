@@ -497,10 +497,10 @@ export default function Produtos({ user }: ProdutosProps) {
     }
   }
 
-  async function alternarAtivo(p: Produto) {
+  async function alternarAtivo(p: Produto): Promise<boolean> {
     try {
       if (p.ativo) {
-        if (!confirm(`Inativar "${p.nome}"?`)) return;
+        if (!confirm(`Inativar "${p.nome}"?`)) return false;
         await api.excluirProduto(p.id);
         flash("Produto inativado");
       } else {
@@ -508,8 +508,10 @@ export default function Produtos({ user }: ProdutosProps) {
         flash("Produto reativado");
       }
       carregar();
+      return true;
     } catch (err) {
       alert((err as Error).message);
+      return false;
     }
   }
 
@@ -779,6 +781,26 @@ export default function Produtos({ user }: ProdutosProps) {
         editando={!!editando}
         erro={erroForm}
         larguraMax={920}
+        acaoSecundaria={editando ? (
+          <button
+            type="button"
+            className="lux-btn lux-btn--ghost"
+            disabled={salvando}
+            onClick={async () => {
+              const mudou = await alternarAtivo(editando);
+              if (mudou) setModalAberto(false);
+            }}
+            style={{
+              color: editando.ativo ? C.yellow : C.green,
+              borderColor: (editando.ativo ? C.yellow : C.green) + "55",
+            }}
+            title={editando.ativo
+              ? "Inativar este produto (some do PDV; histórico preservado)"
+              : "Reativar este produto (volta a aparecer no PDV)"}
+          >
+            {editando.ativo ? "⊘ Inativar produto" : "↻ Reativar produto"}
+          </button>
+        ) : null}
       >
         <Abas
           abas={[

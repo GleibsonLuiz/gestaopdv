@@ -59,6 +59,9 @@ export interface FormularioLuxuosoProps {
   erro?: string;
   /** Modo compacto: reduz paddings/gaps/heights internos pra caber em 90vh sem scroll. */
   compacto?: boolean;
+  /** Ação secundária no canto esquerdo do rodapé (ex.: Inativar/Reativar na
+   * edição). Quando presente, substitui a dica "Enter/Esc". */
+  acaoSecundaria?: ReactNode;
   children?: ReactNode;
 }
 
@@ -80,6 +83,7 @@ export function FormularioLuxuoso({
   larguraMax = 720,
   erro,
   compacto = false,
+  acaoSecundaria,
   children,
 }: FormularioLuxuosoProps) {
   useEffect(() => {
@@ -480,11 +484,15 @@ export function FormularioLuxuoso({
               </div>
 
               <footer className="lux-foot">
-                <span className="lux-foot__note">
-                  <span className="key">⏎</span> Enviar com Enter
-                  <span style={{ opacity: .5, margin: "0 4px" }}>·</span>
-                  <span className="key">Esc</span> cancelar
-                </span>
+                {acaoSecundaria ? (
+                  <div className="lux-foot__secundaria">{acaoSecundaria}</div>
+                ) : (
+                  <span className="lux-foot__note">
+                    <span className="key">⏎</span> Enviar com Enter
+                    <span style={{ opacity: .5, margin: "0 4px" }}>·</span>
+                    <span className="key">Esc</span> cancelar
+                  </span>
+                )}
                 <div className="lux-actions">
                   <button
                     type="button"

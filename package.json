@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:api": "npm --prefix backend run dev",
+    "dev:all": "concurrently -n web,api -c cyan,green \"npm:dev\" \"npm:dev:api\"",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -33,6 +35,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
     "autoprefixer": "^10.5.0",
+    "concurrently": "^10.0.0",
     "eslint": "^10.2.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",

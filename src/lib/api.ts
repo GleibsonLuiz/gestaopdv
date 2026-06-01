@@ -757,6 +757,51 @@ export const api = {
   cancelarMp: (id: string) =>
     request(`/pagamentos-mp/status/${id}/cancelar`, { method: "POST" }),
 
+  // ==================== FISCAL — NFC-e (modelo 65) ====================
+  // Config do emitente. GET devolve o CSC sempre mascarado + prontidao
+  // (lista de campos faltantes p/ ativar). PUT e partial: omitir mantem,
+  // passar "" em csc limpa. fiscalAtivo so liga se a prontidao estiver ok.
+  obterConfigFiscal: () => request("/fiscal/config"),
+  salvarConfigFiscal: (dados: {
+    provedorFiscal?: string | null;
+    ambienteFiscal?: "HOMOLOGACAO" | "PRODUCAO";
+    crt?: number | null;
+    cnae?: string | null;
+    inscMunicipal?: string | null;
+    ieSubstitutoTrib?: string | null;
+    regimeEspecialISSQN?: number | null;
+    codMunicipioIBGE?: string | null;
+    codUFIBGE?: string | null;
+    codPais?: string | null;
+    nomePais?: string | null;
+    serieNfce?: number;
+    proximoNumeroNfce?: number;
+    cscId?: string | null;
+    csc?: string | null;
+    fiscalAtivo?: boolean;
+  }) => request("/fiscal/config", { method: "PUT", body: dados }),
+
+  // Emissao / consulta de NFC-e (modelo 65).
+  emitirNfce: (vendaId: string) =>
+    request("/fiscal/nfce", { method: "POST", body: { vendaId } }),
+  listarNotasFiscais: (params?: { status?: string; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set("status", params.status);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    const s = qs.toString();
+    return request(`/fiscal/nfce${s ? `?${s}` : ""}`);
+  },
+  obterNotaFiscal: (id: string, comXml = false) =>
+    request(`/fiscal/nfce/${id}${comXml ? "?xml=1" : ""}`),
+  consultarNotaFiscal: (id: string) =>
+    request(`/fiscal/nfce/${id}/consultar`, { method: "POST" }),
+  cancelarNotaFiscal: (id: string, justificativa: string) =>
+    request(`/fiscal/nfce/${id}/cancelar`, { method: "POST", body: { justificativa } }),
+  inutilizarNumeracaoFiscal: (dados: {
+    serie: number; numeroInicial: number; numeroFinal: number; justificativa: string;
+  }) => request("/fiscal/inutilizar", { method: "POST", body: dados }),
+  statusServicoFiscal: () => request("/fiscal/status-servico"),
+
   // ==================== CAIXA ====================
   obterCaixaAtual: () => request("/caixas/atual"),
   obterPainelPDV: () => request("/pdv/inicio"),

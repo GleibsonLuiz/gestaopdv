@@ -5,3 +5,8 @@ dist
 uploads
 backups
 logs
+
+# Setup fiscal — config com segredos (senha do .pfx, CSC) e o proprio certificado
+scripts/nuvemfiscal-empresa.json
+scripts/*.pfx
+scripts/*.p12

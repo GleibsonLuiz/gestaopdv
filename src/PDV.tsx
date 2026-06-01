@@ -13,6 +13,7 @@ import { useConfiguracaoEmpresa, formatarEndereco } from "./HeaderRelatorio";
 import { obterConfigImpressora, devePrintar } from "./lib/impressora";
 import CupomEnvelope from "./components/cupons/CupomEnvelope";
 import CupomVenda from "./components/cupons/CupomVenda";
+import { imprimirDanfeNfce } from "./lib/danfeNfce";
 import { useModalKeys } from "./lib/modalKeys";
 import ActionsMenu from "./components/ActionsMenu";
 import SelectBusca from "./components/SelectBusca";
@@ -3272,6 +3273,45 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpr
     }
   }
 
+  // ===== Emissao de NFC-e (modelo 65) =====
+  // O botao so aparece quando a emissao fiscal esta ativa (Configuracoes >
+  // Emissao Fiscal). Status guarda PENDENTE/AUTORIZADA/etc da nota da venda.
+  const [fiscalAtivo, setFiscalAtivo] = useState(false);
+  const [statusNfce, setStatusNfce] = useState(null);
+  const [emitindoNfce, setEmitindoNfce] = useState(false);
+
+  useEffect(() => {
+    let ativo = true;
+    api.obterConfigFiscal()
+      .then((c: any) => { if (ativo) setFiscalAtivo(!!c?.fiscalAtivo); })
+      .catch(() => {});
+    return () => { ativo = false; };
+  }, []);
+
+  async function emitirNotaFiscal() {
+    if (emitindoNfce || !venda?.id) return;
+    setEmitindoNfce(true);
+    try {
+      const resp: any = await api.emitirNfce(venda.id);
+      const nota = resp?.nota;
+      setStatusNfce(nota?.status || null);
+      if (nota?.status === "AUTORIZADA") {
+        emitirToast({ tipo: "sucesso", titulo: "NFC-e autorizada", mensagem: `Nota ${nota.numeroFiscal} autorizada.` });
+        try {
+          await imprimirDanfeNfce(nota.id, { pagamentos: venda.pagamentos, troco });
+        } catch { /* impressao e best-effort — a nota ja esta autorizada */ }
+      } else if (nota?.status === "REJEITADA") {
+        emitirToast({ tipo: "erro", titulo: "NFC-e rejeitada", mensagem: nota.xMotivo || "Verifique o cadastro fiscal.", duracao: 8000 });
+      } else if (resp?.aviso) {
+        emitirToast({ tipo: "aviso", titulo: "NFC-e pendente", mensagem: resp.aviso, duracao: 7000 });
+      }
+    } catch (err) {
+      emitirToast({ tipo: "erro", titulo: "Falha ao emitir NFC-e", mensagem: (err as Error).message, duracao: 8000 });
+    } finally {
+      setEmitindoNfce(false);
+    }
+  }
+
   return (
     <>
       <style>{`
@@ -3388,6 +3428,27 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpr
               </div>
             </div>
           </div>
+
+          {/* NFC-e: emissao fiscal (so quando ativa). Status fica visivel
+              apos emitir; AUTORIZADA ja dispara a impressao do DANFE. */}
+          {fiscalAtivo && venda?.id && (
+            <div style={{ padding: "0 16px 8px", display: "flex", alignItems: "center", gap: 10 }}>
+              <button
+                onClick={emitirNotaFiscal}
+                disabled={emitindoNfce || statusNfce === "AUTORIZADA"}
+                className="pdv-btn-ghost"
+                style={{ flex: 1, justifyContent: "center" }}
+                title="Emitir Nota Fiscal de Consumidor eletronica (NFC-e)"
+              >
+                {statusNfce === "AUTORIZADA"
+                  ? "✓ NFC-e autorizada"
+                  : emitindoNfce ? "Emitindo NFC-e…" : "🧾 Emitir NFC-e"}
+              </button>
+              {statusNfce && statusNfce !== "AUTORIZADA" && (
+                <span style={{ fontSize: 11, color: "var(--pdv-t3)" }}>{statusNfce}</span>
+              )}
+            </div>
+          )}
 
           <div className="pdv-modal-foot">
             <button onClick={imprimir} className="pdv-btn-ghost" style={{ flex: 1, justifyContent: "center" }}>

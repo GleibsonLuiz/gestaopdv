@@ -288,6 +288,11 @@ function BlocoFunil({ funil }: { funil: FunilData }) {
                 <span className="text-gp-text">
                   <strong>{d.quantidade}</strong>{" · "}
                   <span className="text-gp-muted">{fmtBRL(d.valorEstimado)}</span>
+                  {e.id !== "GANHO" && e.id !== "PERDIDO" && d.valorPonderado > 0 && (
+                    <span style={{ color: "#7c3aed" }} title="Forecast ponderado (valor × probabilidade)">
+                      {" · 🔮 "}{fmtBRL(d.valorPonderado)}
+                    </span>
+                  )}
                 </span>
               </div>
               <div

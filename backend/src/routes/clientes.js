@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authRequired, requireRole, requirePermissao } from "../middlewares/auth.js";
-import { listar, obter, obterScore, criar, atualizar, excluir, perfil, segmentos, aniversariantes, reativacao } from "../controllers/clienteController.js";
+import { listar, obter, obterScore, criar, atualizar, excluir, perfil, timeline, segmentos, aniversariantes, reativacao } from "../controllers/clienteController.js";
 import { listar as listarInteracoes, criar as criarInteracao, excluir as excluirInteracao } from "../controllers/interacaoController.js";
 import { listar as listarContatos, criar as criarContato, atualizar as atualizarContato, excluir as excluirContato } from "../controllers/contatoController.js";
 
@@ -14,6 +14,7 @@ router.get("/segmentos", segmentos);
 router.get("/aniversariantes", aniversariantes);
 router.get("/reativacao", reativacao);
 router.get("/:id/perfil", perfil);
+router.get("/:id/timeline", timeline);
 router.get("/:id/score", obterScore);
 router.get("/:id", obter);
 router.post("/", requirePermissao("CLIENTES"), criar);

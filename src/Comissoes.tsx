@@ -11,7 +11,7 @@ const RelatorioComissoes = lazy(() => import("./components/RelatorioComissoes"))
 
 type TipoComissao = "PORCENTAGEM" | "VALOR_FIXO";
 type BaseComissao = "VALOR_BRUTO" | "LUCRO_LIQUIDO";
-type AbaId = "config" | "evolucao";
+type AbaId = "config" | "metas" | "evolucao";
 
 interface RoleInfo {
   label: string;
@@ -60,8 +60,9 @@ const ROLE_INFO: Record<Role, RoleInfo> = {
 const MARGEM_PADRAO = 30;
 
 const ABAS_COMISSAO: AbaDef[] = [
-  { id: "config",   label: "⚙️ Configuração", cor: C.accent },
-  { id: "evolucao", label: "📈 Evolução",     cor: C.green  },
+  { id: "config",   label: "⚙️ Configuração",  cor: C.accent },
+  { id: "metas",    label: "🎯 Metas do mês",  cor: C.purple },
+  { id: "evolucao", label: "📈 Evolução",      cor: C.green  },
 ];
 
 interface ComissoesProps {
@@ -100,6 +101,7 @@ export default function Comissoes({ user }: ComissoesProps) {
       </div>
 
       {aba === "config" && <ComissoesConfig user={user} />}
+      {aba === "metas" && <MetasMes />}
       {aba === "evolucao" && (
         <Suspense fallback={
           <div style={{ padding: 40, textAlign: "center", color: C.muted, fontSize: 13 }}>
@@ -109,6 +111,201 @@ export default function Comissoes({ user }: ComissoesProps) {
           <RelatorioComissoes />
         </Suspense>
       )}
+    </div>
+  );
+}
+
+// ============ ABA METAS DO MES (pacing + ranking) ============
+
+interface MetaVendedor {
+  id: string;
+  nome: string;
+  role: Role;
+  meta: number;
+  realizado: number;
+  vendasCount: number;
+  percentual: number;
+  projecao: number;
+  percentualProjetado: number;
+  falta: number;
+  ritmoNecessarioDia: number;
+  bonusPorMeta: number;
+  status: "BATIDA" | "NO_RITMO" | "ATENCAO" | "ATRASADO" | "ABAIXO";
+}
+
+interface MetasMesResp {
+  mes: string;
+  ehMesCorrente: boolean;
+  diasNoMes: number;
+  diasDecorridos: number;
+  diasRestantes: number;
+  resumo: {
+    totalMeta: number;
+    totalRealizado: number;
+    percentual: number;
+    vendedoresComMeta: number;
+    vendedoresBateram: number;
+  };
+  vendedores: MetaVendedor[];
+}
+
+const STATUS_META: Record<MetaVendedor["status"], { label: string; cor: string }> = {
+  BATIDA:   { label: "🏆 Meta batida", cor: C.green },
+  NO_RITMO: { label: "✅ No ritmo",    cor: C.accent },
+  ATENCAO:  { label: "⚠️ Atenção",     cor: C.yellow },
+  ATRASADO: { label: "🔴 Atrasado",    cor: C.red },
+  ABAIXO:   { label: "Abaixo da meta", cor: C.muted },
+};
+
+function mesAtualISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function MetasMes() {
+  const [mes, setMes] = useState(mesAtualISO);
+  const [dados, setDados] = useState<MetasMesResp | null>(null);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    let ativo = true;
+    setCarregando(true);
+    setErro("");
+    api.metasMesComissoes({ mes })
+      .then((d) => { if (ativo) setDados(d as MetasMesResp); })
+      .catch((e) => { if (ativo) setErro((e as Error).message); })
+      .finally(() => { if (ativo) setCarregando(false); });
+    return () => { ativo = false; };
+  }, [mes]);
+
+  const medalha = (i: number) => (i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}º`);
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Cabecalho: seletor de mes + resumo */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <input
+          type="month"
+          value={mes}
+          onChange={(e) => setMes(e.target.value || mesAtualISO())}
+          aria-label="Mês de referência"
+          className="rounded-lg text-[13px] outline-none"
+          style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, padding: "8px 12px" }}
+        />
+        {dados && (
+          <div className="text-gp-muted text-xs">
+            {dados.ehMesCorrente
+              ? `Dia ${dados.diasDecorridos} de ${dados.diasNoMes} · faltam ${dados.diasRestantes} dia(s)`
+              : `Mês fechado (${dados.diasNoMes} dias)`}
+          </div>
+        )}
+      </div>
+
+      {erro && (
+        <div className="rounded-lg text-[13px] text-gp-red" style={{ padding: "10px 14px", background: C.red + "22", border: `1px solid ${C.red}55` }}>
+          {erro}
+        </div>
+      )}
+
+      {carregando ? (
+        <div className="text-gp-muted py-10 text-center text-[13px]">Carregando metas...</div>
+      ) : !dados || dados.vendedores.length === 0 ? (
+        <div className="text-gp-muted py-10 text-center text-[13px]">
+          Nenhum vendedor com meta configurada. Defina a <strong>meta mensal</strong> na aba ⚙️ Configuração.
+        </div>
+      ) : (
+        <>
+          {/* Resumo geral da equipe */}
+          <div
+            className="rounded-xl flex flex-wrap gap-5"
+            style={{ padding: "16px 20px", background: C.surface, border: `1px solid ${C.border}` }}
+          >
+            <ResumoItem label="Meta da equipe" valor={fmtBRL(dados.resumo.totalMeta)} />
+            <ResumoItem label="Realizado" valor={fmtBRL(dados.resumo.totalRealizado)} cor={C.green} />
+            <ResumoItem
+              label="Atingimento"
+              valor={`${dados.resumo.percentual.toFixed(0)}%`}
+              cor={dados.resumo.percentual >= 100 ? C.green : dados.resumo.percentual >= 80 ? C.yellow : C.red}
+            />
+            <ResumoItem
+              label="Bateram a meta"
+              valor={`${dados.resumo.vendedoresBateram}/${dados.resumo.vendedoresComMeta}`}
+            />
+          </div>
+
+          {/* Ranking de vendedores */}
+          <div className="flex flex-col gap-2.5">
+            {dados.vendedores.map((v, i) => {
+              const st = STATUS_META[v.status];
+              const pct = Math.min(100, v.percentual);
+              return (
+                <div
+                  key={v.id}
+                  className="rounded-xl"
+                  style={{ padding: "14px 16px", background: C.surface, border: `1px solid ${C.border}`, borderLeft: `3px solid ${st.cor}` }}
+                >
+                  <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="text-base font-extrabold" style={{ color: i < 3 ? C.yellow : C.muted, minWidth: 28 }}>
+                        {medalha(i)}
+                      </span>
+                      <span className="text-gp-white font-bold text-sm truncate">{v.nome}</span>
+                      <span
+                        className="text-[10px] font-bold uppercase rounded px-1.5 py-0.5"
+                        style={{ background: st.cor + "22", color: st.cor, border: `1px solid ${st.cor}44` }}
+                      >
+                        {st.label}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-gp-white font-extrabold text-base">{v.percentual.toFixed(0)}%</span>
+                      <span className="text-gp-muted text-xs ml-1">de {fmtBRL(v.meta)}</span>
+                    </div>
+                  </div>
+
+                  {/* Barra de atingimento com marcador de projecao */}
+                  <div className="w-full overflow-hidden rounded-md relative" style={{ height: 14, background: C.bg, border: `1px solid ${C.border}` }}>
+                    <div className="h-full" style={{ width: `${pct}%`, background: st.cor, transition: "width 0.3s ease" }} />
+                    {/* Marcador da projecao (so no mes corrente e quando ainda nao bateu) */}
+                    {dados.ehMesCorrente && v.status !== "BATIDA" && v.percentualProjetado > 0 && (
+                      <div
+                        className="absolute top-0 bottom-0"
+                        title={`Projeção pelo ritmo atual: ${v.percentualProjetado.toFixed(0)}% (${fmtBRL(v.projecao)})`}
+                        style={{ left: `${Math.min(100, v.percentualProjetado)}%`, width: 2, background: C.white, opacity: 0.85 }}
+                      />
+                    )}
+                  </div>
+
+                  <div className="flex justify-between flex-wrap gap-x-4 gap-y-1 mt-2 text-[11px] text-gp-muted">
+                    <span>Realizado: <strong className="text-gp-text">{fmtBRL(v.realizado)}</strong> ({v.vendasCount} venda{v.vendasCount === 1 ? "" : "s"})</span>
+                    {dados.ehMesCorrente && v.status !== "BATIDA" && (
+                      <>
+                        <span title="Projeção do mês mantendo o ritmo atual">Projeção: <strong style={{ color: v.percentualProjetado >= 100 ? C.green : C.yellow }}>{fmtBRL(v.projecao)}</strong></span>
+                        {v.falta > 0 && (
+                          <span>Falta <strong className="text-gp-text">{fmtBRL(v.falta)}</strong>{dados.diasRestantes > 0 ? ` · ${fmtBRL(v.ritmoNecessarioDia)}/dia` : ""}</span>
+                        )}
+                      </>
+                    )}
+                    {v.status === "BATIDA" && v.bonusPorMeta > 0 && (
+                      <span style={{ color: C.green }}>+{v.bonusPorMeta}% de bônus garantido 🎉</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ResumoItem({ label, valor, cor }: { label: string; valor: string; cor?: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-gp-muted text-[10px] uppercase font-bold" style={{ letterSpacing: "0.05em" }}>{label}</span>
+      <span className="text-lg font-extrabold" style={{ color: cor || C.text }}>{valor}</span>
     </div>
   );
 }

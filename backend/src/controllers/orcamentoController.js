@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import prisma from "../lib/prisma.js";
 import { exigirCaixaAberto, registrarNoCaixaAberto } from "./caixaController.js";
 import { criarComNumeroRetry } from "../lib/proximoNumero.js";
@@ -664,6 +665,132 @@ export async function excluir(req, res, next) {
     if (err.code === "P2025") {
       return res.status(404).json({ erro: "Orcamento nao encontrado" });
     }
+    next(err);
+  }
+}
+
+// ===================== ACEITE ONLINE (Fase 1.3 - CRM) =====================
+//
+// Gera (ou retorna) o token publico de um orcamento para que o cliente
+// possa aprovar/recusar pela pagina publica /?orc=<token>. Rota autenticada.
+// So faz sentido para orcamentos que ja "sairam" para o cliente decidir —
+// movemos RASCUNHO -> AGUARDANDO_APROVACAO automaticamente ao gerar o link.
+export async function gerarLinkPublico(req, res, next) {
+  try {
+    const orc = await prisma.orcamento.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, status: true, tokenPublico: true },
+    });
+    if (!orc) return res.status(404).json({ erro: "Orcamento nao encontrado" });
+    if (orc.status === "CANCELADO" || orc.status === "ENTREGUE") {
+      return res.status(400).json({ erro: `Orcamento ${orc.status.toLowerCase()} nao pode receber aprovacao online` });
+    }
+
+    const data = {};
+    if (!orc.tokenPublico) data.tokenPublico = randomUUID().replace(/-/g, "");
+    // Se ainda e rascunho, sobe para aguardando aprovacao (esta indo ao cliente).
+    if (orc.status === "RASCUNHO") data.status = "AGUARDANDO_APROVACAO";
+
+    const atualizado = Object.keys(data).length
+      ? await prisma.orcamento.update({ where: { id: orc.id }, data, select: { tokenPublico: true, status: true } })
+      : { tokenPublico: orc.tokenPublico, status: orc.status };
+
+    res.json({ token: atualizado.tokenPublico, status: atualizado.status });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Visao publica do orcamento (sem auth). Token unico globalmente e a chave —
+// nao injetamos tenant (mesma estrategia de PesquisaNps publico). Retorna os
+// dados que o cliente precisa para decidir: itens, totais, validade, empresa.
+export async function obterPublico(req, res, next) {
+  try {
+    const { token } = req.params;
+    const orc = await prisma.orcamento.findUnique({
+      where: { tokenPublico: token },
+      include: {
+        cliente: { select: { nome: true } },
+        responsavel: { select: { nome: true } },
+        user: { select: { nome: true } },
+        itens: {
+          orderBy: { ordem: "asc" },
+          select: { descricao: true, quantidade: true, valorUnitario: true, subtotal: true },
+        },
+      },
+    });
+    if (!orc) return res.status(404).json({ erro: "Orcamento nao encontrado" });
+
+    // Nome da empresa do MESMO tenant do orcamento (sem tenantStorage aqui,
+    // entao filtramos manualmente).
+    const empresa = await prisma.configuracaoEmpresa.findFirst({
+      where: { tenantId: orc.tenantId },
+      select: { nomeFantasia: true, razaoSocial: true },
+    });
+
+    res.json({
+      token: orc.tokenPublico,
+      numero: orc.numero,
+      tipo: orc.tipo,
+      status: orc.status,
+      decidido: orc.status === "APROVADO" || orc.status === "REJEITADO" || orc.status === "ENTREGUE" || orc.status === "CANCELADO",
+      cliente: orc.cliente?.nome || orc.descricaoCliente || null,
+      responsavel: orc.responsavel?.nome || orc.user?.nome || null,
+      observacoes: orc.imprimirObservacoes ? orc.observacoes : null,
+      formaCondicaoPagamento: orc.formaCondicaoPagamento,
+      valorProdutos: Number(orc.valorProdutos),
+      valorServicos: Number(orc.valorServicos),
+      deslocamento: Number(orc.deslocamento),
+      desconto: Number(orc.desconto),
+      total: Number(orc.total),
+      imprimirValores: orc.imprimirValores,
+      itens: orc.itens.map((it) => ({
+        descricao: it.descricao,
+        quantidade: Number(it.quantidade),
+        valorUnitario: Number(it.valorUnitario),
+        subtotal: Number(it.subtotal),
+      })),
+      criadoEm: orc.createdAt,
+      empresa: empresa?.nomeFantasia || empresa?.razaoSocial || "Nossa empresa",
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Cliente aprova ou recusa pela pagina publica (sem auth). Aceita apenas a
+// transicao a partir de AGUARDANDO_APROVACAO, de forma idempotente-segura:
+// se ja foi decidido, devolve 409.
+export async function responderPublico(req, res, next) {
+  try {
+    const { token } = req.params;
+    const { decisao, motivo } = req.body || {};
+    if (decisao !== "APROVAR" && decisao !== "RECUSAR") {
+      return res.status(400).json({ erro: "Decisao invalida (APROVAR ou RECUSAR)" });
+    }
+
+    const orc = await prisma.orcamento.findUnique({
+      where: { tokenPublico: token },
+      select: { id: true, status: true },
+    });
+    if (!orc) return res.status(404).json({ erro: "Orcamento nao encontrado" });
+    if (orc.status !== "AGUARDANDO_APROVACAO") {
+      return res.status(409).json({ erro: "Este orcamento ja foi respondido ou nao esta disponivel para aprovacao" });
+    }
+
+    const agora = new Date();
+    const data = decisao === "APROVAR"
+      ? { status: "APROVADO", dataAprovacao: agora }
+      : { status: "REJEITADO", dataRejeicao: agora, motivoRejeicao: trimOrNull(motivo, 500) };
+
+    const atualizado = await prisma.orcamento.update({
+      where: { id: orc.id },
+      data,
+      select: { status: true },
+    });
+
+    res.json({ ok: true, status: atualizado.status });
+  } catch (err) {
     next(err);
   }
 }

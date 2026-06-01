@@ -61,12 +61,26 @@ const TIPO_INTERACAO = {
 
 const ABAS = [
   { id: "resumo",      label: "Resumo" },
+  { id: "timeline",    label: "Linha do tempo" },
   { id: "contatos",    label: "Contatos" },
   { id: "interacoes",  label: "Interações" },
   { id: "compras",     label: "Compras" },
   { id: "financeiro",  label: "Financeiro" },
   { id: "orcamentos",  label: "Orçamentos" },
 ];
+
+// Metadados visuais (ícone + cor) por tipo de evento da timeline unificada.
+const TIMELINE_META: Record<string, { icon: string; cor: string; label: string }> = {
+  VENDA:              { icon: "🛒", cor: C.green,        label: "Venda" },
+  ORCAMENTO:          { icon: "📝", cor: C.accent,       label: "Orçamento" },
+  CONTA_RECEBER:      { icon: "💰", cor: C.yellow,       label: "Financeiro" },
+  INTERACAO:          { icon: "💬", cor: C.purple || "#7c3aed", label: "Interação" },
+  OPORTUNIDADE:       { icon: "🎯", cor: "#f97316",      label: "Oportunidade" },
+  OPORTUNIDADE_ETAPA: { icon: "↗️", cor: "#f97316",      label: "Mudança de etapa" },
+  NPS:                { icon: "⭐", cor: C.yellow,       label: "NPS" },
+  PONTOS:             { icon: "🏆", cor: C.purple || "#7c3aed", label: "Fidelidade" },
+  TAREFA:             { icon: "✅", cor: C.accent,       label: "Tarefa" },
+};
 
 function Pill({ status, mapa }: { status: string; mapa: Record<string, { label: string; cor: string }> }) {
   const info = mapa[status] || { label: status, cor: C.muted };
@@ -644,6 +658,139 @@ function CardLeadScore({ score }: { score: ScoreResp }) {
   );
 }
 
+// ============ ABA LINHA DO TEMPO (CUSTOMER 360) ============
+//
+// Feed cronologico unico agregando todos os eventos do cliente vindos do
+// endpoint /clientes/:id/timeline. Permite filtrar por tipo de evento.
+function AbaTimeline({ clienteId }: { clienteId: string }) {
+  const [eventos, setEventos] = useState<any[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState("");
+  const [filtro, setFiltro] = useState<string>("TODOS");
+
+  useEffect(() => {
+    let ativo = true;
+    setCarregando(true);
+    setErro("");
+    api.timelineCliente(clienteId)
+      .then((d: any) => { if (ativo) setEventos(d.eventos || []); })
+      .catch((err) => { if (ativo) setErro((err as Error).message); })
+      .finally(() => { if (ativo) setCarregando(false); });
+    return () => { ativo = false; };
+  }, [clienteId]);
+
+  // Tipos presentes nos dados, para montar os chips de filtro dinamicamente.
+  const tiposPresentes = Array.from(new Set(eventos.map((e) => e.tipo)));
+  const visiveis = filtro === "TODOS" ? eventos : eventos.filter((e) => e.tipo === filtro);
+
+  if (carregando) {
+    return <div style={{ textAlign: "center", padding: "40px 0", color: C.muted, fontSize: 13 }}>Carregando linha do tempo...</div>;
+  }
+  if (erro) {
+    return <div style={{ color: C.red, fontSize: 13, textAlign: "center", padding: "40px 0" }}>{erro}</div>;
+  }
+  if (eventos.length === 0) {
+    return <TabelaVazia msg="Nenhum evento registrado para este cliente ainda." />;
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Filtros por tipo */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {["TODOS", ...tiposPresentes].map((t) => {
+          const meta = t === "TODOS" ? null : TIMELINE_META[t];
+          const ativo = filtro === t;
+          const cor = meta?.cor || C.accent;
+          return (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setFiltro(t)}
+              style={{
+                background: ativo ? `${cor}22` : "transparent",
+                color: ativo ? cor : C.muted,
+                border: `1px solid ${ativo ? `${cor}66` : C.border}`,
+                borderRadius: 999,
+                padding: "4px 12px",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {meta ? `${meta.icon} ${meta.label}` : "Tudo"}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Feed */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 0, position: "relative" }}>
+        <div style={{ position: "absolute", left: 19, top: 0, bottom: 0, width: 2, background: C.border, zIndex: 0 }} />
+        {visiveis.map((ev: any) => {
+          const meta = TIMELINE_META[ev.tipo] || { icon: "•", cor: C.muted, label: ev.tipo };
+          return (
+            <div key={ev.id} style={{ display: "flex", gap: 14, paddingBottom: 18, position: "relative", zIndex: 1 }}>
+              <div style={{
+                width: 38, height: 38, borderRadius: "50%", flexShrink: 0,
+                background: `${meta.cor}22`, border: `2px solid ${meta.cor}`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 16, lineHeight: 1,
+              }}>
+                {meta.icon}
+              </div>
+              <div style={{
+                flex: 1, background: C.card, border: `1px solid ${C.border}`,
+                borderRadius: 10, padding: "10px 14px",
+                display: "flex", flexDirection: "column", gap: 4, minWidth: 0,
+              }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: meta.cor, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                      {meta.label}
+                    </span>
+                    <span style={{ fontSize: 11, color: C.muted }}>{fmtDataHora(ev.data)}</span>
+                    {ev.usuario && <span style={{ fontSize: 11, color: C.muted }}>· {ev.usuario}</span>}
+                  </div>
+                  {ev.valor != null && (
+                    <span style={{ fontSize: 13, fontWeight: 700, color: meta.cor, whiteSpace: "nowrap" }}>
+                      {fmtBRL(ev.valor)}
+                    </span>
+                  )}
+                </div>
+                {ev.titulo && (
+                  <p style={{ margin: 0, fontSize: 13, color: C.text, fontWeight: 600, lineHeight: 1.4 }}>
+                    {ev.titulo}
+                  </p>
+                )}
+                {ev.descricao && (
+                  <p style={{ margin: 0, fontSize: 12.5, color: C.muted, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+                    {ev.descricao}
+                  </p>
+                )}
+                {ev.status && (
+                  <div style={{ marginTop: 2 }}>
+                    <span style={{
+                      display: "inline-block", padding: "1px 8px", borderRadius: 999,
+                      fontSize: 10, fontWeight: 700, background: `${meta.cor}18`,
+                      color: meta.cor, border: `1px solid ${meta.cor}33`,
+                    }}>
+                      {ev.status}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        {visiveis.length === 0 && (
+          <TabelaVazia msg="Nenhum evento deste tipo." />
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AbaResumo({ kpis, cliente, score }: { kpis: any; cliente: any; score: ScoreResp | null }) {
   const diasDesdeUltimaCompra = kpis.ultimaCompra
     ? Math.floor((Date.now() - new Date(kpis.ultimaCompra).getTime()) / 86400000)
@@ -1050,6 +1197,7 @@ export default function PerfilClienteModal({ clienteId, onFechar, user }: Perfil
           ) : dados ? (
             <>
               {aba === "resumo" && <AbaResumo kpis={dados.kpis} cliente={dados.cliente} score={score} />}
+              {aba === "timeline" && <AbaTimeline clienteId={clienteId} />}
               {aba === "contatos" && (
                 <AbaContatos
                   clienteId={clienteId}

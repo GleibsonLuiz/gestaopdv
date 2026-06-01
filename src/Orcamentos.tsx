@@ -1240,8 +1240,38 @@ function DetalheOrcamentoModal({
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento>("DINHEIRO");
   const [executando, setExecutando] = useState(false);
   const [erroAcao, setErroAcao] = useState("");
+  // Aceite online: link publico gerado e feedback de copia.
+  const [gerandoLink, setGerandoLink] = useState(false);
+  const [linkPublico, setLinkPublico] = useState<string | null>(null);
+  const [linkCopiado, setLinkCopiado] = useState(false);
 
   const cor = corStatus(orc.status);
+
+  // Gera (ou recupera) o link de aprovacao e copia para a area de
+  // transferencia. Disponivel enquanto o orcamento nao foi cancelado/entregue.
+  const podeGerarLink = orc.status !== "CANCELADO" && orc.status !== "ENTREGUE" && !orc.vendaId;
+  async function gerarECopiarLink() {
+    setGerandoLink(true);
+    setErroAcao("");
+    try {
+      const r = await api.gerarLinkPublicoOrcamento(orc.id) as { token: string; status: string };
+      const url = `${window.location.origin}/?orc=${r.token}`;
+      setLinkPublico(url);
+      try {
+        await navigator.clipboard.writeText(url);
+        setLinkCopiado(true);
+        setTimeout(() => setLinkCopiado(false), 2500);
+      } catch { /* clipboard pode falhar sem https — link fica visivel para copia manual */ }
+      // Se subiu de RASCUNHO para AGUARDANDO_APROVACAO, reflete na tela.
+      if (r.status && r.status !== orc.status) {
+        onAtualizar(`✓ Link gerado — orçamento agora "${STATUS_LABEL[r.status as StatusOrcamento]}"`);
+      }
+    } catch (err) {
+      setErroAcao((err as Error).message);
+    } finally {
+      setGerandoLink(false);
+    }
+  }
 
   const acoesPossiveis = useMemo<AcaoDef[]>(() => {
     const arr: AcaoDef[] = [];
@@ -1585,9 +1615,49 @@ function DetalheOrcamentoModal({
           </div>
         )}
 
+        {linkPublico && (
+          <div
+            className="mb-3 rounded-[10px] flex items-center gap-2 flex-wrap"
+            style={{ padding: "10px 12px", background: C.green + "11", border: `1px solid ${C.green}44` }}
+          >
+            <span className="text-[11px] font-bold uppercase" style={{ color: C.green, letterSpacing: 0.4 }}>
+              🔗 Link de aprovação
+            </span>
+            <input
+              readOnly
+              value={linkPublico}
+              onFocus={(e) => e.currentTarget.select()}
+              aria-label="Link de aprovação do orçamento"
+              className="flex-1 min-w-[180px] bg-gp-bg text-gp-text rounded-md text-xs outline-none"
+              style={{ border: `1px solid ${C.border}`, padding: "6px 8px" }}
+            />
+            {orc.telefone && (
+              <a
+                href={`https://wa.me/${(() => { const d = String(orc.telefone).replace(/\D/g, ""); return d.length <= 11 ? `55${d}` : d; })()}?text=${encodeURIComponent(`Olá! Segue o orçamento #${orc.numero} para sua aprovação: ${linkPublico}`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={btnIconeStyle(C.green)}
+              >
+                💬 Enviar
+              </a>
+            )}
+          </div>
+        )}
+
         <div className="flex gap-2 justify-between flex-wrap">
           <div className="flex gap-2 flex-wrap">
             <button type="button" onClick={imprimir} style={btnIconeStyle(C.accent)}>🖨 Imprimir</button>
+            {podeAgir && podeGerarLink && (
+              <button
+                type="button"
+                onClick={gerarECopiarLink}
+                disabled={gerandoLink}
+                style={btnIconeStyle(C.green)}
+                title="Gera um link para o cliente aprovar ou recusar online"
+              >
+                {gerandoLink ? "Gerando..." : linkCopiado ? "✓ Link copiado" : "🔗 Link de aprovação"}
+              </button>
+            )}
             {podeExcluir && !orc.vendaId && (
               <button type="button" onClick={excluir} style={btnIconeStyle(C.red)}>🗑 Excluir</button>
             )}

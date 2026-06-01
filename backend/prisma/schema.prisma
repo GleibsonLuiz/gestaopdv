@@ -1470,6 +1470,11 @@ model Orcamento {
   status      StatusOrcamento @default(RASCUNHO)
   tabelaPreco TabelaPreco     @default(AV)
 
+  // Token para aceite online (pre-venda). Quando presente, o cliente acessa
+  // /?orc=<token> e aprova ou recusa sem precisar logar. Unico globalmente
+  // (mesma estrategia do token de PesquisaNps).
+  tokenPublico String? @unique
+
   clienteId        String?
   cliente          Cliente? @relation(fields: [clienteId], references: [id])
   descricaoCliente String?

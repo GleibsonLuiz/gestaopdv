@@ -393,6 +393,10 @@ export const api = {
     request(`/clientes${qsFrom(filtros)}`),
   obterCliente: (id: string) => request(`/clientes/${id}`),
   perfilCliente: (id: string) => request(`/clientes/${id}/perfil`),
+  // Timeline unificada (Customer 360): feed cronologico de todos os eventos
+  // do cliente (vendas, orcamentos, contas, interacoes, oportunidades, NPS,
+  // pontos, tarefas).
+  timelineCliente: (id: string) => request(`/clientes/${id}/timeline`),
   // Lead score individual (0-100) com breakdown por componente. Usa a mesma
   // mediaTotal global de /clientes/segmentos para consistencia entre telas.
   obterScoreCliente: (id: string) => request(`/clientes/${id}/score`),
@@ -526,6 +530,14 @@ export const api = {
   converterOrcamentoEmVenda: (id: string, formaPagamento: string) =>
     request(`/orcamentos/${id}/converter-venda`, { method: "POST", body: { formaPagamento } }),
   excluirOrcamento: (id: string) => request(`/orcamentos/${id}`, { method: "DELETE" }),
+  // Aceite online: gera/retorna o token publico e sobe RASCUNHO -> AGUARDANDO.
+  gerarLinkPublicoOrcamento: (id: string) =>
+    request(`/orcamentos/${id}/link-publico`, { method: "POST" }),
+  // Endpoints publicos (sem auth): cliente acessa pela URL ?orc=<token>
+  obterOrcamentoPublico: (token: string) =>
+    request(`/orcamentos/publico/${token}`, { auth: false }),
+  responderOrcamentoPublico: (token: string, data: unknown) =>
+    request(`/orcamentos/publico/${token}`, { method: "POST", body: data, auth: false }),
 
   // ==================== NPS POS-VENDA ====================
   // Endpoints publicos (sem auth): cliente acessa pela URL ?nps=<token>
@@ -620,6 +632,8 @@ export const api = {
     request(`/relatorios/financeiro${qsFrom(filtros)}`),
   relatorioEstoque: (filtros: StringDict = {}) =>
     request(`/relatorios/estoque${qsFrom(filtros)}`),
+  relatorioProdutosPorFabricante: (filtros: StringDict = {}) =>
+    request(`/relatorios/produtos-fabricante${qsFrom(filtros)}`),
   relatorioCaixas: (filtros: StringDict = {}) =>
     request(`/relatorios/caixas${qsFrom(filtros)}`),
   relatorioLucratividade: (filtros: StringDict = {}) =>
@@ -802,6 +816,9 @@ export const api = {
     request(`/comissoes/${userId}`, { method: "DELETE" }),
   relatorioComissoes: (filtros: StringDict = {}) =>
     request(`/comissoes/relatorio${qsFrom(filtros)}`),
+  // Painel de metas do mes (pacing + ranking). mes opcional (YYYY-MM).
+  metasMesComissoes: (filtros: StringDict = {}) =>
+    request(`/comissoes/metas-mes${qsFrom(filtros)}`),
 
   // ETAPA#9b: Atendimento Inteligente WhatsApp + IA
   obterConfigWhatsapp: () => request("/whatsapp/config"),

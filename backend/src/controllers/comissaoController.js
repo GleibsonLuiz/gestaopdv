@@ -395,6 +395,120 @@ function round2(n) {
   return Math.round((Number(n) || 0) * 100) / 100;
 }
 
+// GET /comissoes/metas-mes?mes=YYYY-MM
+//
+// Painel de metas do mes (Fase 1.4 - CRM). Para cada vendedor com meta
+// configurada (metaMensal > 0), cruza com as vendas concluidas do mes e
+// calcula:
+//   - realizado, meta, percentual de atingimento
+//   - pacing: projecao linear do mes (realizado / diasDecorridos * diasNoMes)
+//   - status: ADIANTADO / NO_RITMO / ATRASADO / BATIDA (quando ja atingiu)
+// Ordena por percentual desc (ranking/leaderboard). Mes corrente por default.
+export async function metasMes(req, res, next) {
+  try {
+    const hoje = new Date();
+    let ano = hoje.getFullYear();
+    let mes = hoje.getMonth(); // 0-11
+    if (req.query.mes && /^\d{4}-\d{2}$/.test(req.query.mes)) {
+      const [a, m] = req.query.mes.split("-").map(Number);
+      ano = a; mes = m - 1;
+    }
+
+    const inicio = new Date(ano, mes, 1, 0, 0, 0, 0);
+    const fim = new Date(ano, mes + 1, 0, 23, 59, 59, 999); // ultimo dia do mes
+    const diasNoMes = fim.getDate();
+
+    // Dias decorridos: se for o mes corrente, ate hoje; se mes passado, o mes
+    // inteiro; se mes futuro, 0 (evita divisao por zero / projecao absurda).
+    const ehMesCorrente = ano === hoje.getFullYear() && mes === hoje.getMonth();
+    const ehFuturo = inicio > hoje;
+    const diasDecorridos = ehFuturo ? 0 : (ehMesCorrente ? hoje.getDate() : diasNoMes);
+
+    // So vendedores com meta ativa configurada entram no painel.
+    const configs = await prisma.configuracaoComissao.findMany({
+      where: { ativo: true, metaMensal: { gt: 0 } },
+      select: {
+        metaMensal: true, bonusPorMeta: true,
+        user: { select: { id: true, nome: true, role: true, ativo: true } },
+      },
+    });
+
+    const userIds = configs.map((c) => c.user.id);
+    const vendas = userIds.length === 0 ? [] : await prisma.venda.findMany({
+      where: { status: "CONCLUIDA", userId: { in: userIds }, createdAt: { gte: inicio, lte: fim } },
+      select: { userId: true, total: true },
+    });
+
+    const realizadoPorUser = new Map();
+    const countPorUser = new Map();
+    for (const v of vendas) {
+      realizadoPorUser.set(v.userId, (realizadoPorUser.get(v.userId) || 0) + toNum(v.total));
+      countPorUser.set(v.userId, (countPorUser.get(v.userId) || 0) + 1);
+    }
+
+    const vendedores = configs.map((c) => {
+      const meta = toNum(c.metaMensal);
+      const realizado = realizadoPorUser.get(c.user.id) || 0;
+      const percentual = meta > 0 ? (realizado / meta) * 100 : 0;
+      // Projecao linear pelo ritmo atual.
+      const projecao = diasDecorridos > 0 ? (realizado / diasDecorridos) * diasNoMes : 0;
+      const percentualProjetado = meta > 0 ? (projecao / meta) * 100 : 0;
+      const falta = Math.max(0, meta - realizado);
+      // Quanto precisa vender por dia restante para bater a meta.
+      const diasRestantes = Math.max(0, diasNoMes - diasDecorridos);
+      const ritmoNecessarioDia = diasRestantes > 0 ? falta / diasRestantes : 0;
+
+      let status;
+      if (realizado >= meta) status = "BATIDA";
+      else if (!ehMesCorrente) status = "ABAIXO"; // mes fechado sem bater
+      else if (percentualProjetado >= 100) status = "NO_RITMO";
+      else if (percentualProjetado >= 80) status = "ATENCAO";
+      else status = "ATRASADO";
+
+      return {
+        id: c.user.id,
+        nome: c.user.nome,
+        role: c.user.role,
+        ativo: c.user.ativo,
+        meta: round2(meta),
+        realizado: round2(realizado),
+        vendasCount: countPorUser.get(c.user.id) || 0,
+        percentual: round2(percentual),
+        projecao: round2(projecao),
+        percentualProjetado: round2(percentualProjetado),
+        falta: round2(falta),
+        ritmoNecessarioDia: round2(ritmoNecessarioDia),
+        bonusPorMeta: toNum(c.bonusPorMeta),
+        status,
+      };
+    });
+
+    // Ranking: maior % de atingimento primeiro.
+    vendedores.sort((a, b) => b.percentual - a.percentual);
+
+    const totalMeta = vendedores.reduce((s, v) => s + v.meta, 0);
+    const totalRealizado = vendedores.reduce((s, v) => s + v.realizado, 0);
+
+    res.json({
+      mes: `${ano}-${String(mes + 1).padStart(2, "0")}`,
+      ehMesCorrente,
+      diasNoMes,
+      diasDecorridos,
+      diasRestantes: Math.max(0, diasNoMes - diasDecorridos),
+      resumo: {
+        totalMeta: round2(totalMeta),
+        totalRealizado: round2(totalRealizado),
+        percentual: totalMeta > 0 ? round2((totalRealizado / totalMeta) * 100) : 0,
+        vendedoresComMeta: vendedores.length,
+        vendedoresBateram: vendedores.filter((v) => v.status === "BATIDA").length,
+      },
+      vendedores,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // DELETE /comissoes/:userId
 export async function excluir(req, res, next) {
   try {

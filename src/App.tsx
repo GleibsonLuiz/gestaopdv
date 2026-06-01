@@ -42,6 +42,7 @@ const DashboardCrm = lazy(() => import("./DashboardCrm"));
 const Reativacao = lazy(() => import("./Reativacao"));
 const Nps = lazy(() => import("./Nps"));
 const PesquisaPublicaNps = lazy(() => import("./PesquisaPublicaNps"));
+const AceitePublicoOrcamento = lazy(() => import("./AceitePublicoOrcamento"));
 const InventarioMobile = lazy(() => import("./InventarioMobile"));
 const PdvVolante = lazy(() => import("./PdvVolante"));
 const PainelComandas = lazy(() => import("./PainelComandas"));
@@ -113,6 +114,15 @@ function getNpsToken() {
   } catch { return null; }
 }
 
+// Token de aceite online de orcamento (?orc=<token>). Mesmo padrao do NPS:
+// cliente externo aprova/recusa sem ver a tela de login.
+function getOrcamentoToken() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("orc") || null;
+  } catch { return null; }
+}
+
 // ETAPA#1 / #7: rotas mobile dedicadas via query string (mesmo padrao
 // do ?nps=token). Cada modulo mobile e um chunk separado, carregado
 // so quando ?mobile=<id> esta presente.
@@ -144,6 +154,8 @@ export default function App() {
   // Bypass de auth para pesquisa publica de NPS. Calculado uma vez via
   // useState para nao re-renderizar a cada update.
   const [npsToken] = useState(() => getNpsToken());
+  // Bypass de auth para aceite online de orcamento (?orc=token).
+  const [orcamentoToken] = useState(() => getOrcamentoToken());
   // ETAPA#1 / #7: bypass do shell desktop pra ir direto em uma UI mobile
   // (Inventario ou PDV Volante). Mantem a sessao JWT do usuario logado.
   const [modoMobile] = useState(() => detectarModoMobile());
@@ -325,6 +337,13 @@ export default function App() {
   if (npsToken) return (
     <Suspense fallback={<TelaCarregando />}>
       <PesquisaPublicaNps token={npsToken} />
+    </Suspense>
+  );
+
+  // Aceite online de orcamento: cliente externo aprova/recusa sem login.
+  if (orcamentoToken) return (
+    <Suspense fallback={<TelaCarregando />}>
+      <AceitePublicoOrcamento token={orcamentoToken} />
     </Suspense>
   );
 

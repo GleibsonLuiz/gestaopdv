@@ -693,6 +693,251 @@ export async function perfil(req, res, next) {
   }
 }
 
+// ============ TIMELINE UNIFICADA (CUSTOMER 360) ============
+//
+// Agrega num unico feed cronologico todos os eventos relevantes do cliente:
+// vendas, orcamentos, contas a receber, interacoes (CRM), oportunidades
+// (criacao + mudancas de etapa), respostas de NPS, movimentacoes de pontos
+// e tarefas. Cada evento tem um `tipo` que o front usa para escolher
+// icone/cor. Ordenado do mais recente para o mais antigo.
+//
+// E read-only e tolerante: se um modulo nao tiver dados, simplesmente nao
+// aparece. Cada fonte e limitada para manter o payload enxuto.
+export async function timeline(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    const cliente = await prisma.cliente.findUnique({
+      where: { id },
+      select: { id: true, nome: true },
+    });
+    if (!cliente) return res.status(404).json({ erro: "Cliente nao encontrado" });
+
+    const [vendas, orcamentos, contas, interacoes, oportunidades, historicos, nps, pontos, tarefas] =
+      await Promise.all([
+        prisma.venda.findMany({
+          where: { clienteId: id },
+          orderBy: { createdAt: "desc" },
+          take: 50,
+          select: {
+            id: true, numero: true, total: true, formaPagamento: true,
+            status: true, createdAt: true,
+            user: { select: { nome: true } },
+            itens: { select: { quantidade: true } },
+          },
+        }),
+        prisma.orcamento.findMany({
+          where: { clienteId: id },
+          orderBy: { createdAt: "desc" },
+          take: 30,
+          select: {
+            id: true, numero: true, tipo: true, total: true,
+            status: true, createdAt: true,
+            responsavel: { select: { nome: true } },
+            user: { select: { nome: true } },
+          },
+        }),
+        prisma.contaReceber.findMany({
+          where: { clienteId: id },
+          orderBy: { createdAt: "desc" },
+          take: 30,
+          select: {
+            id: true, descricao: true, valor: true, vencimento: true,
+            recebimento: true, status: true, parcelaAtual: true,
+            parcelaTotal: true, createdAt: true,
+          },
+        }),
+        prisma.interacao.findMany({
+          where: { clienteId: id },
+          orderBy: { data: "desc" },
+          take: 50,
+          select: {
+            id: true, tipo: true, descricao: true, data: true,
+            user: { select: { nome: true } },
+          },
+        }),
+        prisma.oportunidade.findMany({
+          where: { clienteId: id },
+          orderBy: { createdAt: "desc" },
+          take: 30,
+          select: {
+            id: true, numero: true, titulo: true, etapa: true,
+            valorEstimado: true, motivoPerda: true, createdAt: true,
+            responsavel: { select: { nome: true } },
+          },
+        }),
+        prisma.historicoOportunidade.findMany({
+          where: { oportunidade: { clienteId: id } },
+          orderBy: { createdAt: "desc" },
+          take: 50,
+          select: {
+            id: true, etapaAnterior: true, etapaNova: true, observacao: true,
+            createdAt: true,
+            oportunidade: { select: { numero: true, titulo: true } },
+            user: { select: { nome: true } },
+          },
+        }),
+        prisma.pesquisaNps.findMany({
+          where: { clienteId: id, respondidaEm: { not: null } },
+          orderBy: { respondidaEm: "desc" },
+          take: 30,
+          select: {
+            id: true, nota: true, comentario: true, respondidaEm: true,
+            venda: { select: { numero: true } },
+          },
+        }),
+        prisma.movimentacaoPontos.findMany({
+          where: { clienteId: id },
+          orderBy: { createdAt: "desc" },
+          take: 30,
+          select: {
+            id: true, tipo: true, pontos: true, descricao: true, createdAt: true,
+          },
+        }),
+        prisma.tarefa.findMany({
+          where: { clienteId: id },
+          orderBy: { createdAt: "desc" },
+          take: 30,
+          select: {
+            id: true, titulo: true, prioridade: true, status: true,
+            prazo: true, concluidaEm: true, createdAt: true,
+            responsavel: { select: { nome: true } },
+          },
+        }),
+      ]);
+
+    const eventos = [];
+
+    for (const v of vendas) {
+      const qtdItens = v.itens.reduce((s, i) => s + Number(i.quantidade), 0);
+      eventos.push({
+        id: `venda-${v.id}`,
+        tipo: "VENDA",
+        data: v.createdAt,
+        titulo: `Venda #${v.numero}`,
+        descricao: `${qtdItens} item(ns) · ${v.formaPagamento}`,
+        valor: Number(v.total),
+        status: v.status,
+        usuario: v.user?.nome || null,
+      });
+    }
+
+    for (const o of orcamentos) {
+      eventos.push({
+        id: `orcamento-${o.id}`,
+        tipo: "ORCAMENTO",
+        data: o.createdAt,
+        titulo: `${o.tipo === "ORDEM_SERVICO" ? "O.S." : "Orçamento"} #${o.numero}`,
+        descricao: null,
+        valor: Number(o.total),
+        status: o.status,
+        usuario: o.responsavel?.nome || o.user?.nome || null,
+      });
+    }
+
+    for (const c of contas) {
+      const parcela = c.parcelaAtual && c.parcelaTotal ? ` (${c.parcelaAtual}/${c.parcelaTotal})` : "";
+      eventos.push({
+        id: `conta-${c.id}`,
+        tipo: "CONTA_RECEBER",
+        data: c.createdAt,
+        titulo: `Conta a receber${parcela}`,
+        descricao: c.descricao || null,
+        valor: Number(c.valor),
+        status: c.status,
+        usuario: null,
+      });
+    }
+
+    for (const i of interacoes) {
+      eventos.push({
+        id: `interacao-${i.id}`,
+        tipo: "INTERACAO",
+        subtipo: i.tipo,
+        data: i.data,
+        titulo: null,
+        descricao: i.descricao,
+        valor: null,
+        status: null,
+        usuario: i.user?.nome || null,
+      });
+    }
+
+    for (const o of oportunidades) {
+      eventos.push({
+        id: `oportunidade-${o.id}`,
+        tipo: "OPORTUNIDADE",
+        data: o.createdAt,
+        titulo: `Oportunidade #${o.numero} — ${o.titulo}`,
+        descricao: o.motivoPerda ? `Motivo da perda: ${o.motivoPerda}` : null,
+        valor: o.valorEstimado != null ? Number(o.valorEstimado) : null,
+        status: o.etapa,
+        usuario: o.responsavel?.nome || null,
+      });
+    }
+
+    for (const h of historicos) {
+      eventos.push({
+        id: `histop-${h.id}`,
+        tipo: "OPORTUNIDADE_ETAPA",
+        data: h.createdAt,
+        titulo: `Oportunidade #${h.oportunidade?.numero}: ${h.etapaAnterior || "—"} → ${h.etapaNova}`,
+        descricao: h.observacao || null,
+        valor: null,
+        status: h.etapaNova,
+        usuario: h.user?.nome || null,
+      });
+    }
+
+    for (const n of nps) {
+      eventos.push({
+        id: `nps-${n.id}`,
+        tipo: "NPS",
+        data: n.respondidaEm,
+        titulo: `NPS: nota ${n.nota}`,
+        descricao: n.comentario || (n.venda ? `Referente à venda #${n.venda.numero}` : null),
+        valor: null,
+        status: n.nota >= 9 ? "PROMOTOR" : n.nota >= 7 ? "NEUTRO" : "DETRATOR",
+        usuario: null,
+      });
+    }
+
+    const LABEL_PONTOS = { GANHO: "Acúmulo", RESGATE: "Resgate", AJUSTE: "Ajuste" };
+    for (const p of pontos) {
+      eventos.push({
+        id: `pontos-${p.id}`,
+        tipo: "PONTOS",
+        data: p.createdAt,
+        titulo: `${LABEL_PONTOS[p.tipo] || "Pontos"}: ${p.pontos > 0 ? "+" : ""}${p.pontos}`,
+        descricao: p.descricao || null,
+        valor: null,
+        status: p.tipo,
+        usuario: null,
+      });
+    }
+
+    for (const t of tarefas) {
+      const concluida = t.status === "CONCLUIDA";
+      eventos.push({
+        id: `tarefa-${t.id}`,
+        tipo: "TAREFA",
+        data: concluida && t.concluidaEm ? t.concluidaEm : t.createdAt,
+        titulo: t.titulo,
+        descricao: concluida ? "Tarefa concluída" : (t.prazo ? `Prazo: ${new Date(t.prazo).toLocaleDateString("pt-BR")}` : "Tarefa criada"),
+        valor: null,
+        status: t.status,
+        usuario: t.responsavel?.nome || null,
+      });
+    }
+
+    eventos.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
+
+    res.json({ clienteId: id, total: eventos.length, eventos: eventos.slice(0, 120) });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // Soft-delete apenas: marca ativo=false. Hard-delete foi removido para
 // preservar a integridade historica de vendas, contas e orcamentos que
 // referenciam o cliente.

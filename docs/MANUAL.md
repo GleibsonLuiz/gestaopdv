@@ -255,7 +255,9 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 2. Salvar — barra de progresso mostra **% de preenchimento** (0-100% baseado em 10 campos).
 3. Cliente vira **Lead** por padrão. Ao fazer a 1ª venda, promove automaticamente para **Cliente Ativo**.
 
-**Tabela de clientes** exibe nome + chips de status, ações: editar, ver perfil (modal com 4 abas: Resumo, Contatos B2B, Interações, Tarefas), inativar (soft) ou excluir (permanente — só se não houver vendas).
+**Tabela de clientes** exibe nome + chips de status, ações: editar, ver perfil (modal com abas: Resumo, **Linha do tempo**, Contatos B2B, Interações, Compras, Financeiro, Orçamentos), inativar (soft) ou excluir (permanente — só se não houver vendas).
+
+**Linha do tempo (Customer 360):** aba que reúne **num único feed cronológico** tudo o que aconteceu com o cliente — vendas, orçamentos, contas a receber, interações registradas, oportunidades do funil (e suas mudanças de etapa), respostas de NPS, movimentações de pontos de fidelidade e tarefas. Cada evento mostra ícone, data/hora, responsável e valor (quando houver). Use os **chips no topo** para filtrar por tipo de evento (ex.: só Vendas, só Interações). É a visão "história completa do relacionamento" num lugar só, sem precisar abrir cada aba separadamente.
 
 **Botões de contato** em cada linha:
 - 💬 WhatsApp (abre wa.me/<telefone>)
@@ -463,6 +465,13 @@ O status alterna entre **ATIVO** (verde) e **INATIVO** (cinza). Use o filtro **"
 3. Pode anexar PDF/imagens.
 4. Botão "WhatsApp" envia link/texto formatado.
 
+**Aceite online (cliente aprova pela internet):** no detalhe do orçamento, clique em **🔗 Link de aprovação**. O sistema:
+
+- Gera um **link público** (e o copia para a área de transferência); se o orçamento estava em *Rascunho*, ele sobe automaticamente para *Aguardando aprovação*.
+- Mostra o link num campo para copiar manualmente e, se o cliente tem telefone, um botão **💬 Enviar** que abre o WhatsApp com a mensagem pronta.
+- O cliente abre o link **sem precisar logar** (rota pública `?orc=<token>`): vê os itens, totais e condições, e clica em **✅ Aprovar** ou **Recusar** (pode informar o motivo).
+- A resposta volta para o sistema na hora — o orçamento passa a **Aprovado** (com data) ou **Rejeitado** (com motivo). Cada link só pode ser respondido **uma vez**.
+
 ---
 
 #### 🎯 Funil de Vendas
@@ -480,7 +489,12 @@ O status alterna entre **ATIVO** (verde) e **INATIVO** (cinza). Use o filtro **"
 
 **Cores das colunas:** cinza/azul/roxo/laranja/verde/vermelho.
 
-**Dashboard CRM** consome esses dados para taxa de conversão etapa-a-etapa.
+**Forecast ponderado (valor × probabilidade):** cada oportunidade tem uma **probabilidade (%)** de fechar. Se você deixar o campo em branco ao criar/mover, o sistema usa um padrão por etapa (Lead 10% · Qualificado 30% · Proposta 50% · Negociação 75% · Ganho 100%). O **valor ponderado** = valor estimado × probabilidade dá uma previsão realista de quanto o funil deve gerar:
+- No topo da tela, o KPI **🔮 Forecast ponderado** soma o ponderado de todas as etapas em aberto.
+- No cabeçalho de cada coluna aparece, ao lado do valor bruto, o **🔮 ponderado daquela etapa** (só nas etapas em aberto).
+- Cada card mostra `probabilidade% · valor ponderado`.
+
+**Dashboard CRM** consome esses dados para taxa de conversão etapa-a-etapa e exibe o mesmo **🔮 forecast ponderado** por etapa.
 
 ---
 
@@ -589,6 +603,17 @@ O status alterna entre **ATIVO** (verde) e **INATIVO** (cinza). Use o filtro **"
 2. Cada venda registra o vendedor.
 3. Tela mostra ranking por período + valor total a pagar.
 
+**Abas da tela:**
+
+- **⚙️ Configuração** — regra de comissão, **meta mensal** e bônus por meta de cada vendedor.
+- **🎯 Metas do mês** — acompanhamento da meta no mês corrente (ou em meses anteriores, pelo seletor):
+  - **Resumo da equipe**: meta total, realizado, % de atingimento e quantos vendedores já bateram.
+  - **Ranking** (🥇🥈🥉) por % de atingimento, com **barra de progresso** por vendedor.
+  - **Pacing (projeção pelo ritmo)**: no mês corrente, um marcador branco na barra mostra onde o vendedor vai chegar se mantiver o ritmo atual; o sistema indica **quanto falta** e **quanto precisa vender por dia** para bater a meta.
+  - **Status**: 🏆 Meta batida · ✅ No ritmo · ⚠️ Atenção · 🔴 Atrasado.
+  - Só aparecem vendedores com **meta mensal configurada** (> 0) na aba Configuração.
+- **📈 Evolução** — série histórica de comissões por vendedor (gráfico).
+
 ---
 
 ### 5.5 Financeiro
@@ -665,7 +690,7 @@ Cada grupo tem header colapsável com contagem + subtotal.
 
 #### 📑 Relatórios
 
-**O que faz:** 7 abas de relatórios com filtros e **export PDF** com cabeçalho da empresa.
+**O que faz:** 8 abas de relatórios com filtros e **export PDF** com cabeçalho da empresa.
 
 **Abas:**
 
@@ -673,9 +698,10 @@ Cada grupo tem header colapsável com contagem + subtotal.
 2. **🛍 Compras** — período, fornecedor. Tabela + totais.
 3. **💰 Financeiro** — sub-abas Pagar / Receber, status, período.
 4. **🗃 Estoque** — situação atual por produto/categoria.
-5. **💵 Caixas (DRE)** — DRE diário com entradas/saídas/quebras/sobras + detalhe por caixa.
-6. **🏆 Comissões** — ranking por vendedor.
-7. **🎯 CRM** — 7 sub-relatórios:
+5. **🏭 Fabricantes** — produtos filtrados por fabricante/marca (e categoria), agrupados por fabricante com subtotais (nº de produtos, unidades e valor de estoque a custo/venda). Filtro "(Sem fabricante)" lista os produtos sem marca cadastrada; opção de incluir inativos.
+6. **💵 Caixas (DRE)** — DRE diário com entradas/saídas/quebras/sobras + detalhe por caixa.
+7. **🏆 Comissões** — ranking por vendedor.
+8. **🎯 CRM** — 7 sub-relatórios:
    - Funil de Vendas (conversão etapa-a-etapa)
    - Performance Comercial
    - Carteira (RFM detalhado)

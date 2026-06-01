@@ -28,6 +28,13 @@ const ORIGENS = [
   "WHATSAPP", "WALK_IN", "SITE", "TELEFONE", "OUTROS",
 ];
 
+// Probabilidade sugerida por etapa — espelha PROB_PADRAO do backend
+// (oportunidadeController.js). Usada apenas como dica no formulario: se o
+// usuario deixar o campo vazio, o backend aplica este mesmo default.
+const PROB_PADRAO: Record<EtapaId, number> = {
+  LEAD: 10, QUALIFICADO: 30, PROPOSTA: 50, NEGOCIACAO: 75, GANHO: 100, PERDIDO: 0,
+};
+
 const fmtBRL = (v: number | string | null | undefined): string =>
   Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -350,6 +357,13 @@ export default function Funil({ user, onConverterEmVenda }: FunilProps) {
           {ETAPAS.map((etapa) => {
             const cards = porEtapa[etapa.id] || [];
             const totalValor = cards.reduce((acc, op) => acc + Number(op.valorEstimado || 0), 0);
+            const totalPonderado = cards.reduce(
+              (acc, op) => acc + Number(op.valorEstimado || 0) * (Number(op.probabilidade || 0) / 100),
+              0,
+            );
+            // Forecast ponderado so faz sentido nas etapas em aberto; em
+            // GANHO/PERDIDO o valor ja esta realizado/zerado.
+            const mostraPonderado = etapa.id !== "GANHO" && etapa.id !== "PERDIDO" && totalPonderado > 0;
             const ehHover = etapaHover === etapa.id;
             return (
               <div
@@ -396,8 +410,16 @@ export default function Funil({ user, onConverterEmVenda }: FunilProps) {
                       {cards.length}
                     </span>
                   </div>
-                  <div className="text-gp-muted text-[11px] mt-1">
-                    {fmtBRL(totalValor)}
+                  <div className="text-gp-muted text-[11px] mt-1 flex items-center gap-2 flex-wrap">
+                    <span>{fmtBRL(totalValor)}</span>
+                    {mostraPonderado && (
+                      <span
+                        style={{ color: C.purple || "#7c3aed" }}
+                        title="Forecast ponderado: soma de (valor × probabilidade) desta etapa"
+                      >
+                        🔮 {fmtBRL(totalPonderado)}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -895,7 +917,8 @@ function ModalOportunidade({ oportunidade, vendedores, clientes, onFechar, onSal
                 type="number" min="0" max="100" step="5"
                 value={form.probabilidade}
                 onChange={(e) => set("probabilidade", e.target.value)}
-                placeholder="0"
+                placeholder={`Padrão ${PROB_PADRAO[form.etapa] ?? 0}%`}
+                title="Deixe vazio para usar a probabilidade padrão da etapa selecionada"
                 style={inputModalStyle}
               />
             </Campo>

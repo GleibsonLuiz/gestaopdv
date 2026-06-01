@@ -208,15 +208,15 @@ export default function Configuracoes({ user }: ConfiguracoesProps) {
       )}
 
       <form onSubmit={salvar}>
-        <div className="grid gap-5" style={{ gridTemplateColumns: "200px 1fr" }}>
+        <div className="grid gap-4" style={{ gridTemplateColumns: "180px 1fr" }}>
           {/* COLUNA ESQUERDA: LOGO */}
-          <div className="bg-gp-card border border-gp-border rounded-xl p-4 flex flex-col gap-[10px] items-center">
+          <div className="bg-gp-card border border-gp-border rounded-xl p-3 flex flex-col gap-2 items-center">
             <div className="text-gp-muted text-[11px] font-bold tracking-[0.4px]">
               LOGOTIPO
             </div>
             <div
               onClick={() => podeEditar && inputLogoRef.current?.click()}
-              className="w-[168px] h-[168px] rounded-xl bg-gp-surface flex items-center justify-center overflow-hidden"
+              className="w-[148px] h-[148px] rounded-xl bg-gp-surface flex items-center justify-center overflow-hidden"
               style={{
                 border: `2px dashed ${C.border}`,
                 cursor: podeEditar ? "pointer" : "default",
@@ -256,9 +256,9 @@ export default function Configuracoes({ user }: ConfiguracoesProps) {
           </div>
 
           {/* COLUNA DIREITA: FORMULARIO */}
-          <div className="bg-gp-card border border-gp-border rounded-xl p-5">
+          <div className="bg-gp-card border border-gp-border rounded-xl p-4">
             <Secao titulo="Identificação">
-              <div className="grid gap-3" style={{ gridTemplateColumns: "2fr 1fr" }}>
+              <div className="grid gap-2" style={{ gridTemplateColumns: "2fr 2fr 1.2fr 1fr" }}>
                 <Campo label="Razão social *">
                   <input
                     value={form.razaoSocial}
@@ -268,22 +268,20 @@ export default function Configuracoes({ user }: ConfiguracoesProps) {
                     style={inputStyle(podeEditar)}
                   />
                 </Campo>
+                <Campo label="Nome fantasia">
+                  <input
+                    value={form.nomeFantasia}
+                    onChange={(e) => setForm((f) => ({ ...f, nomeFantasia: e.target.value.toUpperCase() }))}
+                    disabled={!podeEditar}
+                    style={inputStyle(podeEditar)}
+                  />
+                </Campo>
                 <Campo label="CNPJ">
                   <input
                     value={form.cnpj}
                     onChange={(e) => setForm((f) => ({ ...f, cnpj: e.target.value }))}
                     disabled={!podeEditar}
                     placeholder="00.000.000/0000-00"
-                    style={inputStyle(podeEditar)}
-                  />
-                </Campo>
-              </div>
-              <div className="grid gap-3" style={{ gridTemplateColumns: "2fr 1fr" }}>
-                <Campo label="Nome fantasia">
-                  <input
-                    value={form.nomeFantasia}
-                    onChange={(e) => setForm((f) => ({ ...f, nomeFantasia: e.target.value.toUpperCase() }))}
-                    disabled={!podeEditar}
                     style={inputStyle(podeEditar)}
                   />
                 </Campo>
@@ -300,7 +298,7 @@ export default function Configuracoes({ user }: ConfiguracoesProps) {
             </Secao>
 
             <Secao titulo="Contato">
-              <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 2fr" }}>
+              <div className="grid gap-2" style={{ gridTemplateColumns: "1fr 1.4fr" }}>
                 <Campo label="Telefone">
                   <input
                     value={form.telefone}
@@ -323,7 +321,7 @@ export default function Configuracoes({ user }: ConfiguracoesProps) {
             </Secao>
 
             <Secao titulo="Endereço">
-              <div className="grid gap-3" style={{ gridTemplateColumns: "3fr 1fr 2fr" }}>
+              <div className="grid gap-2" style={{ gridTemplateColumns: "2.4fr 0.7fr 1.4fr 1.4fr 0.5fr 1fr" }}>
                 <Campo label="Logradouro">
                   <input
                     value={form.endereco}
@@ -348,8 +346,6 @@ export default function Configuracoes({ user }: ConfiguracoesProps) {
                     style={inputStyle(podeEditar)}
                   />
                 </Campo>
-              </div>
-              <div className="grid gap-3" style={{ gridTemplateColumns: "2fr 1fr 1fr" }}>
                 <Campo label="Cidade">
                   <input
                     value={form.cidade}
@@ -419,11 +415,11 @@ export default function Configuracoes({ user }: ConfiguracoesProps) {
             </Secao>
 
             {podeEditar && (
-              <div className="flex justify-end mt-[14px]">
+              <div className="flex justify-end mt-3">
                 <button
                   type="submit"
                   disabled={salvando}
-                  className="text-gp-white border-none rounded-lg px-6 py-3 font-bold text-sm"
+                  className="text-gp-white border-none rounded-lg px-5 py-2 font-bold text-sm"
                   style={{
                     background: salvando ? C.muted : `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
                     cursor: salvando ? "default" : "pointer",
@@ -439,7 +435,7 @@ export default function Configuracoes({ user }: ConfiguracoesProps) {
 
         {/* CARD INFORMATIVO: PROPRIETARIO */}
         <div
-          className="mt-5 p-4 rounded-[10px] flex items-center gap-3"
+          className="mt-4 p-3 rounded-[10px] flex items-center gap-3"
           style={{ background: C.purple + "22", border: `1px solid ${C.purple}55` }}
         >
           <div className="text-[28px]">👑</div>
@@ -459,8 +455,294 @@ export default function Configuracoes({ user }: ConfiguracoesProps) {
           (PUT /pagamentos-mp/config). Encapsulado em <BlocoMaquininhaMP> para
           nao inflar este componente. */}
       <BlocoMaquininhaMP podeEditar={podeEditar} />
+
+      {/* EMISSAO FISCAL NFC-e (modelo 65) — card separado com submit proprio
+          (PUT /fiscal/config). O CSC vai cifrado pelo backend e o GET sempre
+          devolve mascarado. fiscalAtivo so liga com a prontidao completa. */}
+      <BlocoFiscalNfce podeEditar={podeEditar} />
     </div>
   );
+}
+
+// ============ EMISSAO FISCAL NFC-e (modelo 65) ============
+//
+// Dados do emitente especificos da nota fiscal (CRT, codigos IBGE, serie,
+// CSC, provedor). Complementa a Identificacao/Endereco do formulario acima,
+// que ja gravam razaoSocial/cnpj/inscEstadual/endereco em ConfiguracaoEmpresa.
+
+interface ProntidaoFiscal {
+  pronta: boolean;
+  faltando: string[];
+}
+
+interface ConfigFiscalResposta {
+  fiscalAtivo: boolean;
+  ambienteFiscal: "HOMOLOGACAO" | "PRODUCAO";
+  provedorFiscal: string | null;
+  crt: number | null;
+  cnae: string | null;
+  inscMunicipal: string | null;
+  ieSubstitutoTrib: string | null;
+  regimeEspecialISSQN: number | null;
+  codMunicipioIBGE: string | null;
+  codUFIBGE: string | null;
+  codPais: string;
+  nomePais: string;
+  serieNfce: number;
+  proximoNumeroNfce: number;
+  cscId: string | null;
+  cscMascarado: string | null;
+  certificadoRef: string | null;
+  prontidao: ProntidaoFiscal;
+}
+
+const PROVEDORES_FISCAIS = [
+  { valor: "nuvemfiscal", nome: "NuvemFiscal" },
+  { valor: "focusnfe", nome: "Focus NFe" },
+  { valor: "plugnotas", nome: "PlugNotas" },
+];
+
+function BlocoFiscalNfce({ podeEditar }: { podeEditar: boolean }) {
+  const [carregando, setCarregando] = useState(true);
+  const [cfg, setCfg] = useState<ConfigFiscalResposta | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+  const [msg, setMsg] = useState("");
+  const [faltando, setFaltando] = useState<string[]>([]);
+
+  // Campos editaveis. cscInput vazio = "manter o atual" (so envia se digitar).
+  const [provedor, setProvedor] = useState("");
+  const [ambiente, setAmbiente] = useState<"HOMOLOGACAO" | "PRODUCAO">("HOMOLOGACAO");
+  const [crt, setCrt] = useState("");
+  const [cnae, setCnae] = useState("");
+  const [inscMunicipal, setInscMunicipal] = useState("");
+  const [codMun, setCodMun] = useState("");
+  const [codUf, setCodUf] = useState("");
+  const [serie, setSerie] = useState("1");
+  const [proxNum, setProxNum] = useState("1");
+  const [cscInput, setCscInput] = useState("");
+  const [cscId, setCscId] = useState("");
+  const [ativo, setAtivo] = useState(false);
+
+  function aplicar(c: ConfigFiscalResposta) {
+    setCfg(c);
+    setProvedor(c.provedorFiscal || "");
+    setAmbiente(c.ambienteFiscal || "HOMOLOGACAO");
+    setCrt(c.crt != null ? String(c.crt) : "");
+    setCnae(c.cnae || "");
+    setInscMunicipal(c.inscMunicipal || "");
+    setCodMun(c.codMunicipioIBGE || "");
+    setCodUf(c.codUFIBGE || "");
+    setSerie(String(c.serieNfce ?? 1));
+    setProxNum(String(c.proximoNumeroNfce ?? 1));
+    setCscId(c.cscId || "");
+    setAtivo(!!c.fiscalAtivo);
+    setFaltando(c.prontidao?.faltando || []);
+  }
+
+  function carregar() {
+    setCarregando(true);
+    api.obterConfigFiscal()
+      .then((raw) => aplicar(raw as ConfigFiscalResposta))
+      .catch((err: Error) => setErro(err.message))
+      .finally(() => setCarregando(false));
+  }
+
+  useEffect(() => { carregar(); }, []);
+
+  function flash(t: string) {
+    setMsg(t);
+    setTimeout(() => setMsg(""), 2500);
+  }
+
+  async function salvar() {
+    setErro("");
+    setSalvando(true);
+    try {
+      const body: Record<string, unknown> = {
+        provedorFiscal: provedor || null,
+        ambienteFiscal: ambiente,
+        crt: crt ? Number(crt) : null,
+        cnae: cnae.trim() || null,
+        inscMunicipal: inscMunicipal.trim() || null,
+        codMunicipioIBGE: codMun.trim() || null,
+        codUFIBGE: codUf.trim() || null,
+        serieNfce: Number(serie) || 0,
+        proximoNumeroNfce: Number(proxNum) || 1,
+        cscId: cscId.trim() || null,
+        fiscalAtivo: ativo,
+      };
+      if (cscInput.trim()) body.csc = cscInput.trim();
+      const resp = await api.salvarConfigFiscal(body) as ConfigFiscalResposta;
+      aplicar(resp);
+      setCscInput("");
+      flash("Configuração fiscal salva");
+    } catch (err) {
+      // O backend devolve { erro, faltando? } quando bloqueia a ativacao.
+      // O body completo chega em ApiError.data; a mensagem em .message.
+      const e = err as { message: string; data?: { faltando?: string[] } };
+      const lista = e.data?.faltando;
+      if (Array.isArray(lista) && lista.length) setFaltando(lista);
+      setErro(e.message);
+      setAtivo(cfg?.fiscalAtivo ?? false); // reverte o toggle otimista
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  if (carregando) {
+    return (
+      <div className="mt-4 p-5 rounded-xl border" style={{ background: C.card, borderColor: C.border }}>
+        <div className="text-gp-muted text-[12px]">Carregando configuração fiscal…</div>
+      </div>
+    );
+  }
+
+  const pronta = cfg?.prontidao?.pronta;
+
+  return (
+    <div className="mt-4 p-4 rounded-xl border" style={{ background: C.card, borderColor: C.border }}>
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <div className="text-gp-white font-extrabold text-[15px] flex items-center gap-2">
+            🧾 EMISSÃO FISCAL — NFC-e (modelo 65)
+            {cfg?.fiscalAtivo && (
+              <span style={badge(C.green)}>ATIVA · {cfg.ambienteFiscal === "PRODUCAO" ? "PRODUÇÃO" : "HOMOLOGAÇÃO"}</span>
+            )}
+            {!cfg?.fiscalAtivo && pronta && <span style={badge(C.yellow)}>PRONTA · DESLIGADA</span>}
+            {!cfg?.fiscalAtivo && !pronta && <span style={badge(C.muted)}>NÃO CONFIGURADA</span>}
+          </div>
+          <div className="text-gp-muted text-[12px] mt-[2px]">
+            Emissão da Nota Fiscal de Consumidor eletrônica via gateway fiscal.
+            Os dados da empresa (razão social, CNPJ, IE, endereço) vêm do formulário acima.
+          </div>
+        </div>
+      </div>
+
+      {msg && <div style={mpAlert(C.green)}>{msg}</div>}
+      {erro && <div style={mpAlert(C.red)}>{erro}</div>}
+
+      <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr" }}>
+        <div>
+          <label className="block text-gp-muted text-[11px] mb-1 font-semibold">Provedor fiscal (gateway)</label>
+          <select title="Provedor fiscal (gateway)" value={provedor} onChange={(e) => setProvedor(e.target.value)} disabled={!podeEditar} style={mpInput(podeEditar)}>
+            <option value="">— Selecione —</option>
+            {PROVEDORES_FISCAIS.map((p) => <option key={p.valor} value={p.valor}>{p.nome}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-gp-muted text-[11px] mb-1 font-semibold">Ambiente</label>
+          <select title="Ambiente fiscal" value={ambiente} onChange={(e) => setAmbiente(e.target.value as "HOMOLOGACAO" | "PRODUCAO")} disabled={!podeEditar} style={mpInput(podeEditar)}>
+            <option value="HOMOLOGACAO">Homologação (testes, sem valor fiscal)</option>
+            <option value="PRODUCAO">Produção (notas reais)</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="grid gap-3 mt-3" style={{ gridTemplateColumns: "1.4fr 1fr 1fr" }}>
+        <div>
+          <label className="block text-gp-muted text-[11px] mb-1 font-semibold">Regime tributário (CRT)</label>
+          <select title="Regime tributário (CRT)" value={crt} onChange={(e) => setCrt(e.target.value)} disabled={!podeEditar} style={mpInput(podeEditar)}>
+            <option value="">— Selecione —</option>
+            <option value="1">1 — Simples Nacional</option>
+            <option value="2">2 — Simples Nacional / Excesso de sublimite</option>
+            <option value="3">3 — Regime Normal</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-gp-muted text-[11px] mb-1 font-semibold">CNAE (opcional)</label>
+          <input value={cnae} onChange={(e) => setCnae(e.target.value)} disabled={!podeEditar} placeholder="7 dígitos" style={mpInput(podeEditar)} />
+        </div>
+        <div>
+          <label className="block text-gp-muted text-[11px] mb-1 font-semibold">Inscrição municipal (opcional)</label>
+          <input value={inscMunicipal} onChange={(e) => setInscMunicipal(e.target.value)} disabled={!podeEditar} style={mpInput(podeEditar)} />
+        </div>
+      </div>
+
+      <div className="grid gap-3 mt-3" style={{ gridTemplateColumns: "1.4fr 0.8fr 0.8fr 0.8fr" }}>
+        <div>
+          <label className="block text-gp-muted text-[11px] mb-1 font-semibold">Código IBGE do município</label>
+          <input value={codMun} onChange={(e) => setCodMun(e.target.value)} disabled={!podeEditar} placeholder="7 dígitos (ex.: 2927408 Salvador)" style={mpInput(podeEditar)} />
+        </div>
+        <div>
+          <label className="block text-gp-muted text-[11px] mb-1 font-semibold">Cód. UF (IBGE)</label>
+          <input value={codUf} onChange={(e) => setCodUf(e.target.value)} disabled={!podeEditar} placeholder="BA = 29" style={mpInput(podeEditar)} />
+        </div>
+        <div>
+          <label className="block text-gp-muted text-[11px] mb-1 font-semibold">Série</label>
+          <input title="Série da NFC-e" placeholder="1" value={serie} onChange={(e) => setSerie(e.target.value.replace(/\D/g, ""))} disabled={!podeEditar} style={mpInput(podeEditar)} />
+        </div>
+        <div>
+          <label className="block text-gp-muted text-[11px] mb-1 font-semibold">Próximo número</label>
+          <input title="Próximo número da NFC-e" placeholder="1" value={proxNum} onChange={(e) => setProxNum(e.target.value.replace(/\D/g, ""))} disabled={!podeEditar} style={mpInput(podeEditar)} />
+        </div>
+      </div>
+
+      <div className="grid gap-3 mt-3" style={{ gridTemplateColumns: "1.6fr 1fr" }}>
+        <div>
+          <label className="block text-gp-muted text-[11px] mb-1 font-semibold">CSC (Código de Segurança do Contribuinte)</label>
+          <input
+            type="password"
+            value={cscInput}
+            onChange={(e) => setCscInput(e.target.value)}
+            disabled={!podeEditar}
+            autoComplete="off"
+            placeholder={cfg?.cscMascarado ? `Atual: ${cfg.cscMascarado}` : "16 a 36 caracteres (não preencha para manter)"}
+            style={mpInput(podeEditar)}
+          />
+          <div className="text-gp-muted text-[10px] mt-1">
+            Gerado no portal da SEFAZ-BA. Usado no hash do QR Code. Guardado cifrado (AES-256-GCM) e nunca volta ao navegador.
+            <b> Homologação e produção usam CSC diferentes.</b>
+          </div>
+        </div>
+        <div>
+          <label className="block text-gp-muted text-[11px] mb-1 font-semibold">ID do CSC</label>
+          <input value={cscId} onChange={(e) => setCscId(e.target.value.replace(/\D/g, ""))} disabled={!podeEditar} placeholder="Ex.: 1" style={mpInput(podeEditar)} />
+        </div>
+      </div>
+
+      {/* Prontidao: lista o que falta para poder ativar */}
+      {faltando.length > 0 && (
+        <div className="mt-3 p-3 rounded-[10px]" style={{ background: C.yellow + "11", border: `1px solid ${C.yellow}44`, fontSize: 12, color: C.text }}>
+          <b style={{ color: C.yellow }}>Pendências para ativar a emissão:</b>
+          <ul style={{ marginTop: 6, paddingLeft: 18 }}>
+            {faltando.map((f) => <li key={f}>{f}</li>)}
+          </ul>
+          <div className="text-gp-muted text-[11px] mt-1">
+            Campos de empresa/endereço são preenchidos no formulário acima e salvos com "Salvar configurações".
+          </div>
+        </div>
+      )}
+
+      <div className="mt-3">
+        <label className="flex items-center gap-2" style={{ opacity: podeEditar ? 1 : 0.6, cursor: podeEditar ? "pointer" : "not-allowed" }}>
+          <input type="checkbox" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} disabled={!podeEditar} style={{ width: 18, height: 18 }} />
+          <span style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>Emissão fiscal ativa</span>
+          <span style={{ color: C.muted, fontSize: 11, marginLeft: 4 }}>(o PDV passa a emitir NFC-e nas vendas)</span>
+        </label>
+      </div>
+
+      {podeEditar && (
+        <div className="flex justify-end mt-4">
+          <button
+            type="button"
+            onClick={salvar}
+            disabled={salvando}
+            style={{ ...mpBtnPrimario, background: salvando ? C.muted : `linear-gradient(135deg, ${C.accent}, ${C.purple})`, cursor: salvando ? "default" : "pointer" }}
+          >
+            {salvando ? "Salvando…" : "💾 Salvar configuração fiscal"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function badge(cor: string): CSSProperties {
+  return {
+    fontSize: 10, padding: "2px 8px", borderRadius: 999,
+    background: cor + "22", color: cor, border: `1px solid ${cor}55`,
+  };
 }
 
 // ============ MAQUININHA MERCADO PAGO POINT ============
@@ -610,7 +892,7 @@ function BlocoMaquininhaMP({ podeEditar }: BlocoMaquininhaMPProps) {
 
   return (
     <div
-      className="mt-5 p-5 rounded-xl border"
+      className="mt-4 p-4 rounded-xl border"
       style={{ background: C.card, borderColor: C.border }}
     >
       <div className="flex items-center justify-between mb-3">
@@ -873,7 +1155,7 @@ function mpInput(habilitado: boolean): CSSProperties {
     background: habilitado ? C.surface : C.bg,
     border: `1px solid ${C.border}`,
     borderRadius: 8,
-    padding: "9px 12px",
+    padding: "7px 10px",
     color: habilitado ? C.text : C.muted,
     fontSize: 13,
     outline: "none",
@@ -916,11 +1198,11 @@ const mpBtnPerigo: CSSProperties = {
 
 function Secao({ titulo, children }: { titulo: string; children: ReactNode }) {
   return (
-    <div className="mb-4">
-      <div className="text-gp-muted text-[11px] font-extrabold tracking-[0.5px] mb-[10px] pb-[6px] border-b border-gp-border">
+    <div className="mb-[10px]">
+      <div className="text-gp-muted text-[11px] font-extrabold tracking-[0.5px] mb-[6px] pb-1 border-b border-gp-border">
         {titulo.toUpperCase()}
       </div>
-      <div className="flex flex-col gap-2">{children}</div>
+      <div className="flex flex-col gap-[6px]">{children}</div>
     </div>
   );
 }
@@ -986,7 +1268,7 @@ function inputStyle(habilitado: boolean = true): CSSProperties {
     background: habilitado ? C.surface : C.bg,
     border: `1px solid ${C.border}`,
     borderRadius: 8,
-    padding: "9px 12px",
+    padding: "7px 10px",
     color: habilitado ? C.text : C.muted,
     fontSize: 13,
     outline: "none",

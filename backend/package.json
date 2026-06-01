@@ -10,6 +10,7 @@
     "prestart": "prisma generate",
     "start": "tsx src/server.js",
     "typecheck": "tsc --noEmit",
+    "test": "node --test \"src/**/*.test.js\"",
     "build": "echo 'API only - public/ committed'",
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",

@@ -26,6 +26,7 @@ const Caixa = lazy(() => import("./Caixa"));
 const PDV = lazy(() => import("./PDV"));
 const Dashboard = lazy(() => import("./Dashboard"));
 const Relatorios = lazy(() => import("./Relatorios"));
+const NotasFiscais = lazy(() => import("./NotasFiscais"));
 const Projeto = lazy(() => import("./Projeto"));
 const Sistema = lazy(() => import("./Sistema"));
 const Backup = lazy(() => import("./Backup"));
@@ -304,6 +305,7 @@ export default function App() {
     automacoes: "AUTOMACOES",
     nps: "NPS",
     financeiro: "FINANCEIRO", relatorios: "RELATORIOS",
+    notasfiscais: "RELATORIOS",
     comissoes: "COMISSOES",
     painelcomandas: "COMANDAS",
     whatsapp: "WHATSAPP",
@@ -327,7 +329,7 @@ export default function App() {
     if (!user) return;
     if (!podeVer(tela)) {
       const primeira = ["pdv","dashboard","dashboardcrm","caixa","clientes","segmentos","reativacao","tarefas","fidelidade","funil","automacoes","nps","fornecedores","produtos","etiquetas",
-        "estoque","inventario","compras","orcamentos","financeiro","relatorios","comissoes","painelcomandas","whatsapp","funcionarios","projeto","sistema","backup","empresa","impressora"].find(podeVer);
+        "estoque","inventario","compras","orcamentos","financeiro","relatorios","notasfiscais","comissoes","painelcomandas","whatsapp","funcionarios","projeto","sistema","backup","empresa","impressora"].find(podeVer);
       if (primeira && primeira !== tela) setTela(primeira);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -597,6 +599,9 @@ export default function App() {
           )}
           {podeAcessar(user, "RELATORIOS") && (
             <Item icone="📑" label="Relatórios" ativo={tela === "relatorios"} onClick={() => navegar("relatorios")} />
+          )}
+          {podeAcessar(user, "RELATORIOS") && (
+            <Item icone="🧾" label="Notas Fiscais" ativo={tela === "notasfiscais"} onClick={() => navegar("notasfiscais")} />
           )}
           {podeAcessar(user, "COMISSOES") && (
             <Item icone="🏆" label="Comissões" ativo={tela === "comissoes"} onClick={() => navegar("comissoes")} />
@@ -877,6 +882,12 @@ export default function App() {
             <>
               <PageHeader titulo="Relatórios" subtitulo="Relatórios analíticos com exportação em PDF" />
               <Relatorios />
+            </>
+          )}
+          {tela === "notasfiscais" && (
+            <>
+              <PageHeader titulo="Notas Fiscais" subtitulo="NFC-e emitidas — reimpressão, cancelamento, inutilização e XML" />
+              <NotasFiscais user={user} />
             </>
           )}
           {tela === "tarefas" && (

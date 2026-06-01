@@ -1,0 +1,24 @@
+{
+  "_instrucoes": "Copie este arquivo para nuvemfiscal-empresa.json e preencha. NAO commitar o arquivo preenchido (contem segredos).",
+  "cpf_cnpj": "00000000000000",
+  "nome_razao_social": "SUA EMPRESA LTDA",
+  "nome_fantasia": "SUA EMPRESA",
+  "inscricao_estadual": "000000000",
+  "inscricao_municipal": "",
+  "email": "fiscal@suaempresa.com.br",
+  "endereco": {
+    "logradouro": "RUA EXEMPLO",
+    "numero": "100",
+    "complemento": "",
+    "bairro": "CENTRO",
+    "codigo_municipio": "2927408",
+    "cidade": "SALVADOR",
+    "uf": "BA",
+    "cep": "40000000"
+  },
+  "certificado_pfx_path": "./scripts/certificado.pfx",
+  "certificado_password": "SENHA_DO_CERTIFICADO",
+  "ambiente": "homologacao",
+  "csc_id": "1",
+  "csc": "CSC_DE_HOMOLOGACAO_DA_SEFAZ_BA"
+}

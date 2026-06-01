@@ -32,6 +32,7 @@
 //   status: um valor do enum StatusSefaz (AUTORIZADA, REJEITADA, ...).
 
 import * as nuvemfiscal from "./nuvemfiscal.js";
+import * as mock from "./mock.js";
 
 // Erro normalizado de qualquer provedor. O controller pega `cStat`/`xMotivo`
 // para gravar na NotaFiscal e devolver ao usuario sem vazar detalhe do gateway.
@@ -49,6 +50,7 @@ export class ErroFiscal extends Error {
 // Adapters registrados. A chave bate com ConfiguracaoEmpresa.provedorFiscal.
 const ADAPTERS = {
   nuvemfiscal,
+  mock, // simulador (dev/demo) — sem certificado, sem SEFAZ, sem valor fiscal
   // focusnfe: (a implementar)
   // plugnotas: (a implementar)
 };

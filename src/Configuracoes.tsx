@@ -497,6 +497,7 @@ interface ConfigFiscalResposta {
 }
 
 const PROVEDORES_FISCAIS = [
+  { valor: "mock", nome: "Simulador (testes — sem valor fiscal)" },
   { valor: "nuvemfiscal", nome: "NuvemFiscal" },
   { valor: "focusnfe", nome: "Focus NFe" },
   { valor: "plugnotas", nome: "PlugNotas" },

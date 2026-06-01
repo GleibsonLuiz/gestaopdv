@@ -14,7 +14,7 @@ import { cifrar, decifrar, mascarar } from "../lib/cripto.js";
 // O certificado A1 e gerenciado pelo PROVEDOR (gateway): guardamos so a
 // referencia (certificadoRef), nunca o .pfx nem a senha.
 
-const PROVEDORES_VALIDOS = new Set(["nuvemfiscal", "focusnfe", "plugnotas"]);
+const PROVEDORES_VALIDOS = new Set(["nuvemfiscal", "focusnfe", "plugnotas", "mock"]);
 const AMBIENTES_VALIDOS = new Set(["HOMOLOGACAO", "PRODUCAO"]);
 const CRTS_VALIDOS = new Set([1, 2, 3]);
 
@@ -49,9 +49,13 @@ export function avaliarProntidao(cfg) {
   if (!soDigitos(cfg.codMunicipioIBGE)) faltando.push("Codigo IBGE do municipio");
   if (!soDigitos(cfg.codUFIBGE)) faltando.push("Codigo IBGE da UF");
   if (!cfg.provedorFiscal) faltando.push("Provedor fiscal (gateway)");
-  // CSC: necessario para o hash do QR Code v2.00 (vigente na BA).
-  if (!cfg.cscEnc) faltando.push("CSC (Codigo de Seguranca do Contribuinte)");
-  if (!norm(cfg.cscId)) faltando.push("ID do CSC");
+  // CSC: necessario para o hash do QR Code v2.00 (vigente na BA). O simulador
+  // (mock) dispensa CSC/certificado — e so para dev/demo, sem valor fiscal.
+  const ehSimulador = cfg.provedorFiscal === "mock";
+  if (!ehSimulador) {
+    if (!cfg.cscEnc) faltando.push("CSC (Codigo de Seguranca do Contribuinte)");
+    if (!norm(cfg.cscId)) faltando.push("ID do CSC");
+  }
 
   return { pronta: faltando.length === 0, faltando };
 }

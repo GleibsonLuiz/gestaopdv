@@ -28,6 +28,7 @@ const Dashboard = lazy(() => import("./Dashboard"));
 const Relatorios = lazy(() => import("./Relatorios"));
 const NotasFiscais = lazy(() => import("./NotasFiscais"));
 const Crediario = lazy(() => import("./Crediario"));
+const OrdemServico = lazy(() => import("./OrdemServico"));
 const Projeto = lazy(() => import("./Projeto"));
 const Sistema = lazy(() => import("./Sistema"));
 const Backup = lazy(() => import("./Backup"));
@@ -320,6 +321,7 @@ export default function App() {
     financeiro: "FINANCEIRO", relatorios: "RELATORIOS",
     notasfiscais: "RELATORIOS",
     crediario: "CREDIARIO",
+    ordemservico: "ORDEM_SERVICO",
     comissoes: "COMISSOES",
     painelcomandas: "COMANDAS",
     whatsapp: "WHATSAPP",
@@ -345,7 +347,7 @@ export default function App() {
     if (!user) return;
     if (!podeVer(tela)) {
       const primeira = ["pdv","dashboard","dashboardcrm","caixa","clientes","segmentos","reativacao","tarefas","fidelidade","funil","automacoes","nps","fornecedores","produtos","etiquetas",
-        "estoque","inventario","compras","orcamentos","financeiro","crediario","relatorios","notasfiscais","comissoes","painelcomandas","whatsapp","funcionarios","projeto","sistema","backup","empresa","impressora"].find(podeVer);
+        "estoque","inventario","compras","orcamentos","ordemservico","financeiro","crediario","relatorios","notasfiscais","comissoes","painelcomandas","whatsapp","funcionarios","projeto","sistema","backup","empresa","impressora"].find(podeVer);
       if (primeira && primeira !== tela) setTela(primeira);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -622,6 +624,9 @@ export default function App() {
           )}
           {podeAcessar(user, "CREDIARIO") && (
             <Item icone="📒" label="Crediário" ativo={tela === "crediario"} onClick={() => navegar("crediario")} />
+          )}
+          {podeAcessar(user, "ORDEM_SERVICO") && (
+            <Item icone="🔧" label="Ordem de Serviço" ativo={tela === "ordemservico"} onClick={() => navegar("ordemservico")} />
           )}
           {podeAcessar(user, "RELATORIOS") && (
             <Item icone="📑" label="Relatórios" ativo={tela === "relatorios"} onClick={() => navegar("relatorios")} />
@@ -920,6 +925,12 @@ export default function App() {
             <>
               <PageHeader titulo="Crediário" subtitulo="Caderneta digital — fiado, limite de crédito e recebimentos" />
               <Crediario user={user} />
+            </>
+          )}
+          {tela === "ordemservico" && (
+            <>
+              <PageHeader titulo="Ordem de Serviço" subtitulo="Oficina e assistência técnica — peças, serviços e acompanhamento" />
+              <OrdemServico user={user} />
             </>
           )}
           {tela === "tarefas" && (

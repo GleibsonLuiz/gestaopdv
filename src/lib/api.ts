@@ -738,6 +738,14 @@ export const api = {
   excluirAnexoContaReceber: (id: string, anexoId: string) =>
     request(`/contas-receber/${id}/anexos/${anexoId}`, { method: "DELETE" }),
 
+  // ============ ORDEM DE SERVICO ============
+  osListar: (filtros: StringDict = {}) => request(`/ordens-servico${qsFrom(filtros)}`),
+  osObter: (id: string) => request(`/ordens-servico/${id}`),
+  osCriar: (dados: unknown) => request("/ordens-servico", { method: "POST", body: dados }),
+  osAtualizar: (id: string, dados: unknown) => request(`/ordens-servico/${id}`, { method: "PUT", body: dados }),
+  osMudarStatus: (id: string, status: string) => request(`/ordens-servico/${id}/status`, { method: "PATCH", body: { status } }),
+  osExcluir: (id: string) => request(`/ordens-servico/${id}`, { method: "DELETE" }),
+
   // ============ CARDAPIO DIGITAL ============
   // Admin (autenticado)
   cardapioStatus: () => request("/empresa/cardapio"),

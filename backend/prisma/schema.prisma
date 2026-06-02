@@ -470,6 +470,8 @@ model Empresa {
   whatsappLogs           WhatsappLog[]
   notasFiscais           NotaFiscal[]
   itensNotaFiscal        ItemNotaFiscal[]
+  ordensServico          OrdemServico[]
+  itensOrdemServico      ItemOrdemServico[]
 
   @@map("empresas")
 }
@@ -571,6 +573,7 @@ model User {
   comandas                 Comanda[]
   notasFiscais             NotaFiscal[]
   vendasEspera             VendaEspera[]
+  ordensServico            OrdemServico[] @relation("OSResponsavel")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -643,6 +646,7 @@ model Cliente {
   pesquisasNps        PesquisaNps[]
   comandas            Comanda[]
   vendasEspera        VendaEspera[]
+  ordensServico       OrdemServico[]
 
   @@unique([tenantId, cpfCnpj])
   @@index([tenantId])
@@ -858,6 +862,7 @@ model Produto {
   inventarioItens InventarioItem[]
   itensComanda    ItemComanda[]
   itensNotaFiscal ItemNotaFiscal[]
+  itensOrdemServico ItemOrdemServico[]
 
   @@unique([tenantId, codigo])
   @@unique([tenantId, codigoBarras])
@@ -2340,4 +2345,87 @@ model LoginThrottle {
 
   @@index([bloqueadoAte])
   @@map("login_throttle")
+}
+
+// ============ ORDEM DE SERVICO (oficina / assistencia tecnica) ============
+// Fluxo de reparo/servico: abre a OS com o equipamento e o defeito relatado,
+// adiciona pecas (produtos) e servicos (mao de obra), acompanha o status ate a
+// entrega. Encaixa no segmento AUTO_PECAS (mas serve qualquer assistencia).
+enum StatusOS {
+  ABERTA          // recem-aberta, aguardando diagnostico/inicio
+  EM_ANDAMENTO    // em execucao
+  AGUARDANDO_PECA // parada esperando peca/aprovacao
+  PRONTA          // servico concluido, aguardando o cliente retirar
+  ENTREGUE        // entregue ao cliente (encerrada)
+  CANCELADA
+}
+
+enum TipoItemOS {
+  PECA     // produto do estoque
+  SERVICO  // mao de obra / servico (descricao livre)
+}
+
+model OrdemServico {
+  id     String   @id @default(uuid())
+  numero Int      // sequencial por tenant (lib/proximoNumero.js)
+  status StatusOS @default(ABERTA)
+
+  // Cliente: pode ser cadastrado (clienteId) ou avulso (descricaoCliente).
+  clienteId        String?
+  cliente          Cliente? @relation(fields: [clienteId], references: [id])
+  descricaoCliente String?
+  telefone         String?
+
+  equipamento     String?  // o que esta em servico (veiculo, aparelho, etc)
+  defeitoRelatado String?  // o que o cliente relatou
+  diagnostico     String?  // o que o tecnico encontrou
+  observacoes     String?
+
+  responsavelId String?
+  responsavel   User?   @relation("OSResponsavel", fields: [responsavelId], references: [id])
+
+  valorPecas    Decimal @default(0) @db.Decimal(10, 2)
+  valorServicos Decimal @default(0) @db.Decimal(10, 2)
+  desconto      Decimal @default(0) @db.Decimal(10, 2)
+  total         Decimal @default(0) @db.Decimal(10, 2)
+
+  previsaoEntrega DateTime?
+  concluidaEm     DateTime?
+  entregueEm      DateTime?
+  canceladaEm     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  itens ItemOrdemServico[]
+
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, numero])
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+  @@map("ordens_servico")
+}
+
+model ItemOrdemServico {
+  id            String     @id @default(uuid())
+  tipo          TipoItemOS @default(PECA)
+  produtoId     String?
+  produto       Produto?   @relation(fields: [produtoId], references: [id])
+  descricao     String
+  quantidade    Decimal    @default(1) @db.Decimal(10, 3)
+  valorUnitario Decimal    @default(0) @db.Decimal(10, 2)
+  subtotal      Decimal    @default(0) @db.Decimal(10, 2)
+  ordem         Int        @default(0)
+
+  ordemServicoId String
+  ordemServico   OrdemServico @relation(fields: [ordemServicoId], references: [id], onDelete: Cascade)
+
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([ordemServicoId, ordem])
+  @@index([tenantId])
+  @@map("itens_ordem_servico")
 }

@@ -19,6 +19,7 @@ export type ModuloId =
   | "COMISSOES"
   | "COMANDAS"
   | "CREDIARIO"
+  | "ORDEM_SERVICO"
   | "WHATSAPP"
   | "FUNCIONARIOS"
   // FISCAL (NFC-e) e CARDAPIO (pedido online) NAO sao modulos de permissao de
@@ -59,6 +60,7 @@ export const MODULOS: readonly Modulo[] = [
   { id: "COMISSOES",     label: "Comissões",      icone: "🏆" },
   { id: "COMANDAS",      label: "Central de Comandas", icone: "🍽️" },
   { id: "CREDIARIO",     label: "Crediário (Fiado)", icone: "📒" },
+  { id: "ORDEM_SERVICO", label: "Ordem de Serviço", icone: "🔧" },
   { id: "WHATSAPP",      label: "Atendimento WhatsApp", icone: "💬" },
   { id: "FUNCIONARIOS",  label: "Funcionários",   icone: "🧑‍💼" },
 ];
@@ -114,7 +116,7 @@ export function permissoesPadrao(role: Role): ModuloId[] {
   if (role === "GERENTE") {
     return ["PDV","DASHBOARD","CAIXA","CLIENTES","FORNECEDORES","PRODUTOS",
             "ESTOQUE","INVENTARIO","COMPRAS","ORCAMENTOS","OPORTUNIDADES","AUTOMACOES","NPS",
-            "FINANCEIRO","RELATORIOS","COMISSOES","COMANDAS","CREDIARIO","WHATSAPP"];
+            "FINANCEIRO","RELATORIOS","COMISSOES","COMANDAS","CREDIARIO","ORDEM_SERVICO","WHATSAPP"];
   }
-  return ["PDV","CAIXA","CLIENTES","PRODUTOS","ORCAMENTOS","OPORTUNIDADES","COMANDAS","CREDIARIO"];
+  return ["PDV","CAIXA","CLIENTES","PRODUTOS","ORCAMENTOS","OPORTUNIDADES","COMANDAS","CREDIARIO","ORDEM_SERVICO"];
 }

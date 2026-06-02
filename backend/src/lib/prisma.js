@@ -49,6 +49,7 @@ const MODELOS_COM_TENANT = new Set([
   "VendaEspera",
   "NotaFiscal", "ItemNotaFiscal",
   "CobrancaAssinatura",
+  "OrdemServico", "ItemOrdemServico",
 ]);
 
 function tenantAtual() {

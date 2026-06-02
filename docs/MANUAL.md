@@ -680,6 +680,18 @@ Página pública onde o cliente final monta o próprio pedido, sem login. Os ped
 
 > Disponível a partir do plano **Pro**. Só ADMIN/GERENTE ativa/desativa.
 
+#### 🔧 Ordem de Serviço
+
+Para oficinas e assistências técnicas (encaixa no segmento **Auto-Peças**, mas serve qualquer reparo). Controla o ciclo do serviço da abertura à entrega.
+
+- **Abrir OS:** cliente/telefone, equipamento (veículo, aparelho…), defeito relatado.
+- **Itens:** adicione **peças** (🔩) e **serviços/mão de obra** (🛠️) com quantidade e valor — o total (peças + serviços − desconto) é calculado automaticamente.
+- **Diagnóstico:** registre o que o técnico encontrou.
+- **Status:** Aberta → Em andamento → Aguardando peça → Pronta → Entregue (ou Cancelada). Cada mudança fica registrada com data.
+- **Lista** com filtro por status e busca por nº, cliente ou equipamento.
+
+> Disponível a partir do plano **Pro**. OS entregue ou cancelada não pode ser editada (só ADMIN/GERENTE exclui).
+
 ---
 
 ### 5.6 Atendimento
@@ -1015,7 +1027,7 @@ Além dos limites de quantidade, **cada plano libera um conjunto de módulos** (
 |--------|------------------|
 | **Núcleo** (todos os planos) | PDV, Caixa, Dashboard, Produtos, Funcionários |
 | **Starter** | Núcleo + Clientes, Estoque, Fornecedores, Orçamentos, Crediário (Fiado) |
-| **Pro** | Starter + Compras, Inventário, Financeiro, Relatórios, Comissões, Central de Comandas, **NFC-e (emissão fiscal)**, **Cardápio digital** |
+| **Pro** | Starter + Compras, Inventário, Financeiro, Relatórios, Comissões, Central de Comandas, **Ordem de Serviço**, **NFC-e (emissão fiscal)**, **Cardápio digital** |
 | **Enterprise** | Pro + Funil de Vendas, Automações, NPS, Atendimento WhatsApp (todos) |
 
 > **NFC-e por plano:** a emissão de Nota Fiscal de Consumidor (modelo 65) é liberada a partir do plano **Pro**. Empresas em planos sem fiscal não veem a tela "Notas Fiscais" nem conseguem emitir/configurar — o sistema responde que o módulo não está incluído. Pode ser liberado avulso a uma empresa específica pelo Admin Master.

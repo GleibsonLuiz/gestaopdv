@@ -1668,12 +1668,17 @@ function ModalCriarNotificacao({ onCancelar, onCriada }: any) {
 
 // ============ MODAL: ALTERAR PLANO ============
 function ModalPlano({ empresa, onCancelar, onSalva }: any) {
-  const hoje = new Date();
-  const em30 = new Date(hoje); em30.setDate(em30.getDate() + 30);
   const [plano, setPlano] = useState(empresa.plano || "TRIAL");
+  // Default VAZIO quando nao ha expiracao — antes assumia hoje+30, o que fazia
+  // o campo "voltar" a uma data ao reabrir mesmo apos salvar sem expiracao.
   const [expiraEm, setExpiraEm] = useState(
-    empresa.expiraEm ? empresa.expiraEm.slice(0, 10) : em30.toISOString().slice(0, 10)
+    empresa.expiraEm ? empresa.expiraEm.slice(0, 10) : ""
   );
+  // Atalho de conveniencia: preenche hoje + N dias.
+  function definirEmDias(dias) {
+    const d = new Date(); d.setDate(d.getDate() + dias);
+    setExpiraEm(d.toISOString().slice(0, 10));
+  }
   const [observacoes, setObservacoes] = useState(empresa.observacoesPlano || "");
   const [statusAssinatura, setStatusAssinatura] = useState(empresa.statusAssinatura || "TRIAL");
   // ETAPA#6: segmento de negocio (alterar requer endpoint proprio)
@@ -1752,8 +1757,13 @@ function ModalPlano({ empresa, onCancelar, onSalva }: any) {
         <label style={{ ...labelStyle, marginTop: 10 }}>Expira em</label>
         <input type="date" value={expiraEm}
           onChange={e => setExpiraEm(e.target.value)} style={inputStyle} />
+        <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+          <button type="button" onClick={() => definirEmDias(30)} style={btnMini}>+30 dias</button>
+          <button type="button" onClick={() => definirEmDias(365)} style={btnMini}>+1 ano</button>
+          <button type="button" onClick={() => setExpiraEm("")} style={btnMini}>Limpar (sem expiração)</button>
+        </div>
         <div style={{ color: C.muted, fontSize: 10, marginTop: 4 }}>
-          Deixe vazio pra plano sem expiração (ex: Enterprise vitalício).
+          Vazio = plano sem expiração (ex: Enterprise vitalício). O campo só fica preenchido se houver uma data salva.
         </div>
 
         <label style={{ ...labelStyle, marginTop: 12 }}>Segmento (ETAPA#6)</label>
@@ -2460,4 +2470,10 @@ const btnSecundario = {
   background: C.surface, border: `1px solid ${C.border}`,
   color: C.text, borderRadius: 8, padding: "8px 14px",
   fontWeight: 600, fontSize: 12, cursor: "pointer",
+};
+
+const btnMini = {
+  background: C.surface, border: `1px solid ${C.border}`,
+  color: C.muted, borderRadius: 6, padding: "4px 8px",
+  fontWeight: 600, fontSize: 10, cursor: "pointer",
 };

@@ -738,6 +738,14 @@ export const api = {
   excluirAnexoContaReceber: (id: string, anexoId: string) =>
     request(`/contas-receber/${id}/anexos/${anexoId}`, { method: "DELETE" }),
 
+  // ============ CREDIARIO (FIADO) ============
+  crediarioListar: () => request("/crediario"),
+  crediarioCaderneta: (clienteId: string) => request(`/crediario/${clienteId}`),
+  crediarioLancar: (clienteId: string, dados: { valor: number; descricao?: string; vencimento?: string }) =>
+    request(`/crediario/${clienteId}/lancar`, { method: "POST", body: dados }),
+  crediarioDefinirLimite: (clienteId: string, limite: number | null) =>
+    request(`/crediario/${clienteId}/limite`, { method: "PATCH", body: { limite } }),
+
   resetarSistema: (confirmacao: string) =>
     request("/admin/reset", { method: "POST", body: { confirmacao } }),
 

@@ -27,6 +27,7 @@ const PDV = lazy(() => import("./PDV"));
 const Dashboard = lazy(() => import("./Dashboard"));
 const Relatorios = lazy(() => import("./Relatorios"));
 const NotasFiscais = lazy(() => import("./NotasFiscais"));
+const Crediario = lazy(() => import("./Crediario"));
 const Projeto = lazy(() => import("./Projeto"));
 const Sistema = lazy(() => import("./Sistema"));
 const Backup = lazy(() => import("./Backup"));
@@ -306,6 +307,7 @@ export default function App() {
     nps: "NPS",
     financeiro: "FINANCEIRO", relatorios: "RELATORIOS",
     notasfiscais: "RELATORIOS",
+    crediario: "CREDIARIO",
     comissoes: "COMISSOES",
     painelcomandas: "COMANDAS",
     whatsapp: "WHATSAPP",
@@ -331,7 +333,7 @@ export default function App() {
     if (!user) return;
     if (!podeVer(tela)) {
       const primeira = ["pdv","dashboard","dashboardcrm","caixa","clientes","segmentos","reativacao","tarefas","fidelidade","funil","automacoes","nps","fornecedores","produtos","etiquetas",
-        "estoque","inventario","compras","orcamentos","financeiro","relatorios","notasfiscais","comissoes","painelcomandas","whatsapp","funcionarios","projeto","sistema","backup","empresa","impressora"].find(podeVer);
+        "estoque","inventario","compras","orcamentos","financeiro","crediario","relatorios","notasfiscais","comissoes","painelcomandas","whatsapp","funcionarios","projeto","sistema","backup","empresa","impressora"].find(podeVer);
       if (primeira && primeira !== tela) setTela(primeira);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -598,6 +600,9 @@ export default function App() {
           )}
           {podeAcessar(user, "FINANCEIRO") && (
             <Item icone="💰" label="Financeiro" ativo={tela === "financeiro"} onClick={() => navegar("financeiro")} />
+          )}
+          {podeAcessar(user, "CREDIARIO") && (
+            <Item icone="📒" label="Crediário" ativo={tela === "crediario"} onClick={() => navegar("crediario")} />
           )}
           {podeAcessar(user, "RELATORIOS") && (
             <Item icone="📑" label="Relatórios" ativo={tela === "relatorios"} onClick={() => navegar("relatorios")} />
@@ -890,6 +895,12 @@ export default function App() {
             <>
               <PageHeader titulo="Notas Fiscais" subtitulo="NFC-e emitidas — reimpressão, cancelamento, inutilização e XML" />
               <NotasFiscais user={user} />
+            </>
+          )}
+          {tela === "crediario" && (
+            <>
+              <PageHeader titulo="Crediário" subtitulo="Caderneta digital — fiado, limite de crédito e recebimentos" />
+              <Crediario user={user} />
             </>
           )}
           {tela === "tarefas" && (

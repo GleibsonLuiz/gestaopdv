@@ -614,6 +614,11 @@ model Cliente {
   origem         String?
   statusFunil    StatusClienteFunil @default(LEAD)
   dataNascimento DateTime?
+  // CREDIARIO (fiado): limite de credito do cliente. null = sem limite definido
+  // (fiado livre, so acompanha saldo). Numero = teto; lancar fiado bloqueia se
+  // saldo devedor + novo valor ultrapassar. O saldo em si e a soma das contas
+  // a receber em aberto do cliente (nao e coluna — calculado).
+  limiteCredito  Decimal?           @db.Decimal(10, 2)
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 

@@ -18,6 +18,7 @@ export type ModuloId =
   | "RELATORIOS"
   | "COMISSOES"
   | "COMANDAS"
+  | "CREDIARIO"
   | "WHATSAPP"
   | "FUNCIONARIOS"
   // FISCAL (NFC-e) NAO e um modulo de permissao de usuario — e so um modulo de
@@ -56,6 +57,7 @@ export const MODULOS: readonly Modulo[] = [
   { id: "RELATORIOS",    label: "Relatórios",     icone: "📑" },
   { id: "COMISSOES",     label: "Comissões",      icone: "🏆" },
   { id: "COMANDAS",      label: "Central de Comandas", icone: "🍽️" },
+  { id: "CREDIARIO",     label: "Crediário (Fiado)", icone: "📒" },
   { id: "WHATSAPP",      label: "Atendimento WhatsApp", icone: "💬" },
   { id: "FUNCIONARIOS",  label: "Funcionários",   icone: "🧑‍💼" },
 ];
@@ -110,7 +112,7 @@ export function permissoesPadrao(role: Role): ModuloId[] {
   if (role === "GERENTE") {
     return ["PDV","DASHBOARD","CAIXA","CLIENTES","FORNECEDORES","PRODUTOS",
             "ESTOQUE","INVENTARIO","COMPRAS","ORCAMENTOS","OPORTUNIDADES","AUTOMACOES","NPS",
-            "FINANCEIRO","RELATORIOS","COMISSOES","COMANDAS","WHATSAPP"];
+            "FINANCEIRO","RELATORIOS","COMISSOES","COMANDAS","CREDIARIO","WHATSAPP"];
   }
-  return ["PDV","CAIXA","CLIENTES","PRODUTOS","ORCAMENTOS","OPORTUNIDADES","COMANDAS"];
+  return ["PDV","CAIXA","CLIENTES","PRODUTOS","ORCAMENTOS","OPORTUNIDADES","COMANDAS","CREDIARIO"];
 }

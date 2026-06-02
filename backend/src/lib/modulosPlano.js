@@ -29,8 +29,8 @@ export const IDS_MODULOS_PLANO = [...IDS_MODULOS, MODULO_FISCAL];
 // nao opera (vender e bater caixa).
 const NUCLEO = ["PDV", "CAIXA", "DASHBOARD", "PRODUTOS", "FUNCIONARIOS"];
 
-// Starter = nucleo + cadastros e operacao basica de loja.
-const STARTER = [...NUCLEO, "CLIENTES", "ESTOQUE", "FORNECEDORES", "ORCAMENTOS"];
+// Starter = nucleo + cadastros e operacao basica de loja + crediario (fiado).
+const STARTER = [...NUCLEO, "CLIENTES", "ESTOQUE", "FORNECEDORES", "ORCAMENTOS", "CREDIARIO"];
 
 // Pro = Starter + gestao completa (compras, inventario, financeiro, relatorios,
 // comissoes, comandas) + emissao fiscal NFC-e.

@@ -47,6 +47,7 @@ import whatsappRoutes, { webhookRouter as whatsappWebhookRouter } from "./routes
 import backupRoutes from "./routes/backup.js";
 import fiscalRoutes from "./routes/fiscal.js";
 import billingRoutes, { webhookRouter as billingWebhookRouter } from "./routes/billing.js";
+import crediarioRoutes from "./routes/crediario.js";
 import { auditoria } from "./middlewares/auditoria.js";
 
 dotenv.config();
@@ -160,6 +161,7 @@ app.use("/logs", logsRoutes);
 app.use("/backup", backupRoutes);
 app.use("/fiscal", fiscalRoutes);
 app.use("/billing", billingRoutes);
+app.use("/crediario", crediarioRoutes);
 // Cron endpoints — auth via header Bearer ${CRON_SECRET}, fora do middleware
 // authRequired/permissoes. Pensado pra Vercel Cron / scheduler externo.
 app.use("/cron", cronRoutes);

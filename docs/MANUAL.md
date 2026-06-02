@@ -656,6 +656,18 @@ Cada grupo tem header colapsável com contagem + subtotal.
 
 **Recorrência:** ao criar conta, marque **PARCELADA** (gera N contas mês a mês com `grupoRecorrenciaId` compartilhado) ou **RECORRENTE_MENSAL**.
 
+#### 📒 Crediário (Fiado)
+
+Caderneta digital de venda a prazo. Acompanha o saldo devedor de cada cliente sobre as contas a receber em aberto.
+
+- **Lista de clientes** com saldo devedor, limite de crédito, crédito disponível e total vencido (em vermelho).
+- **Caderneta do cliente** (clique no nome): resumo + todos os lançamentos (em aberto, pagos, vencidos).
+- **Lançar compra no fiado:** informe valor, descrição e vencimento (em branco = 30 dias). Gera uma conta a receber. Se o cliente tiver **limite de crédito** definido, o sistema bloqueia lançamentos que ultrapassem o limite.
+- **Receber:** dá baixa em uma compra (quita a conta a receber).
+- **Limite de crédito:** definido por ADMIN/GERENTE na caderneta. Vazio = sem limite (fiado livre, só acompanha o saldo).
+
+> O crediário usa as Contas a Receber por baixo — uma venda a prazo e o fiado aparecem no mesmo lugar do Financeiro.
+
 ---
 
 ### 5.6 Atendimento
@@ -990,7 +1002,7 @@ Além dos limites de quantidade, **cada plano libera um conjunto de módulos** (
 | Pacote | Módulos inclusos |
 |--------|------------------|
 | **Núcleo** (todos os planos) | PDV, Caixa, Dashboard, Produtos, Funcionários |
-| **Starter** | Núcleo + Clientes, Estoque, Fornecedores, Orçamentos |
+| **Starter** | Núcleo + Clientes, Estoque, Fornecedores, Orçamentos, Crediário (Fiado) |
 | **Pro** | Starter + Compras, Inventário, Financeiro, Relatórios, Comissões, Central de Comandas, **NFC-e (emissão fiscal)** |
 | **Enterprise** | Pro + Funil de Vendas, Automações, NPS, Atendimento WhatsApp (todos) |
 

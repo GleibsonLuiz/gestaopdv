@@ -31,6 +31,45 @@ const STATUS_FUNIL: StatusFunilMeta[] = [
 const STATUS_MAP: Record<string, StatusFunilMeta> =
   Object.fromEntries(STATUS_FUNIL.map((s) => [s.id, s]));
 
+// Seletor de status do funil em chips coloridos (substitui o <select> no
+// cadastro). Cada chip carrega a cor/icone do proprio status, deixando a
+// etapa do cliente visivel de relance. Estilos em pdv.css (.cli-status-*).
+function StatusFunilSeletor({
+  value,
+  onChange,
+}: {
+  value: StatusFunil;
+  onChange: (v: StatusFunil) => void;
+}) {
+  return (
+    <div className="cli-status-grupo" role="radiogroup" aria-label="Status no funil">
+      {STATUS_FUNIL.map((s) => {
+        const ativo = value === s.id;
+        return (
+          <button
+            key={s.id}
+            type="button"
+            role="radio"
+            aria-checked={ativo ? "true" : "false"}
+            data-ativo={ativo ? "true" : "false"}
+            onClick={() => onChange(s.id as StatusFunil)}
+            className="cli-status-chip"
+            style={
+              ativo
+                ? { borderColor: s.cor, background: `color-mix(in srgb, ${s.cor} 16%, transparent)` }
+                : undefined
+            }
+          >
+            <span className="cli-status-chip__dot" style={{ background: s.cor }} aria-hidden="true" />
+            <span aria-hidden="true">{s.icone}</span>
+            {s.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 const ORIGENS = [
   "INDICACAO", "INSTAGRAM", "FACEBOOK", "GOOGLE",
   "WHATSAPP", "WALK_IN", "SITE", "TELEFONE", "OUTROS",
@@ -731,17 +770,12 @@ export default function Clientes({ user }: ClientesProps) {
         </Secao>
 
         <Secao legenda="CRM / Funil">
-          <Linha cols={2}>
+          <Linha style={{ gridTemplateColumns: "1fr 200px" }}>
             <Campo label="Status no funil">
-              <select
-                className="lux-select"
+              <StatusFunilSeletor
                 value={form.statusFunil}
-                onChange={(e) => setForm({ ...form, statusFunil: e.target.value as StatusFunil })}
-              >
-                {STATUS_FUNIL.map((s) => (
-                  <option key={s.id} value={s.id}>{s.icone} {s.label}</option>
-                ))}
-              </select>
+                onChange={(v) => setForm({ ...form, statusFunil: v })}
+              />
             </Campo>
             <Campo label="Origem (como nos conheceu)">
               <select

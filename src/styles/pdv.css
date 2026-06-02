@@ -1682,3 +1682,23 @@
 .produto-modal .lux-legend, .cliente-modal .lux-legend { margin-bottom: 0; }
 .produto-modal .lux-row, .cliente-modal .lux-row { gap: 6px; }
 .produto-modal .lux-head, .cliente-modal .lux-head { padding-top: 10px; }
+
+/* Seletor de status do funil (cadastro de cliente): chips coloridos no lugar
+   do <select>. Cada chip usa a cor do proprio status (LEAD/ATIVO/etc.). */
+.cli-status-grupo { display: flex; flex-wrap: nowrap; gap: 5px; }
+.cli-status-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 0 9px; height: 34px; min-width: 0;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--muted);
+  font: inherit; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+  transition: border-color .16s ease, background .16s ease, color .16s ease, transform .12s ease;
+}
+.cli-status-chip:hover { color: var(--text); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.cli-status-chip:active { transform: translateY(1px); }
+.cli-status-chip:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.cli-status-chip__dot { width: 9px; height: 9px; border-radius: 999px; flex: 0 0 auto; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 0%, transparent); }
+.cli-status-chip[data-ativo="true"] { color: var(--text); font-weight: 700; }
+.cli-status-chip[data-ativo="true"] .cli-status-chip__dot { box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 12%, transparent); }
+.lux-stage--compact .cli-status-chip { height: 30px; font-size: 12px; }

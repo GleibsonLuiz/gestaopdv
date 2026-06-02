@@ -45,6 +45,7 @@ const Reativacao = lazy(() => import("./Reativacao"));
 const Nps = lazy(() => import("./Nps"));
 const PesquisaPublicaNps = lazy(() => import("./PesquisaPublicaNps"));
 const AceitePublicoOrcamento = lazy(() => import("./AceitePublicoOrcamento"));
+const CardapioPublico = lazy(() => import("./CardapioPublico"));
 const InventarioMobile = lazy(() => import("./InventarioMobile"));
 const PdvVolante = lazy(() => import("./PdvVolante"));
 const PainelComandas = lazy(() => import("./PainelComandas"));
@@ -125,6 +126,15 @@ function getOrcamentoToken() {
   } catch { return null; }
 }
 
+// Cardapio digital publico (?cardapio=<token>): cliente final monta o pedido
+// sem login. Mesmo padrao do ?orc / ?nps.
+function getCardapioToken() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("cardapio") || null;
+  } catch { return null; }
+}
+
 // ETAPA#1 / #7: rotas mobile dedicadas via query string (mesmo padrao
 // do ?nps=token). Cada modulo mobile e um chunk separado, carregado
 // so quando ?mobile=<id> esta presente.
@@ -158,6 +168,8 @@ export default function App() {
   const [npsToken] = useState(() => getNpsToken());
   // Bypass de auth para aceite online de orcamento (?orc=token).
   const [orcamentoToken] = useState(() => getOrcamentoToken());
+  // Bypass de auth para o cardapio digital publico (?cardapio=token).
+  const [cardapioToken] = useState(() => getCardapioToken());
   // ETAPA#1 / #7: bypass do shell desktop pra ir direto em uma UI mobile
   // (Inventario ou PDV Volante). Mantem a sessao JWT do usuario logado.
   const [modoMobile] = useState(() => detectarModoMobile());
@@ -350,6 +362,13 @@ export default function App() {
   if (orcamentoToken) return (
     <Suspense fallback={<TelaCarregando />}>
       <AceitePublicoOrcamento token={orcamentoToken} />
+    </Suspense>
+  );
+
+  // Cardapio digital: cliente final monta o pedido sem login.
+  if (cardapioToken) return (
+    <Suspense fallback={<TelaCarregando />}>
+      <CardapioPublico token={cardapioToken} />
     </Suspense>
   );
 

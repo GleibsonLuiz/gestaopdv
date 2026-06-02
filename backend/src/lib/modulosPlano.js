@@ -20,10 +20,13 @@ import { IDS_MODULOS } from "./permissoes.js";
 // PLANO (entitlement): so libera nos planos que incluem fiscal. Por isso entra
 // na lista de entitlement abaixo, mas fica fora de IDS_MODULOS (permissoes).
 export const MODULO_FISCAL = "FISCAL";
+// CARDAPIO (pedido online) tambem e modulo so-de-plano (nao e permissao de
+// usuario — a config fica na tela Empresa, a pagina de pedido e publica).
+export const MODULO_CARDAPIO = "CARDAPIO";
 
-// Lista de ids que o plano pode liberar = modulos de permissao + FISCAL.
+// Lista de ids que o plano pode liberar = modulos de permissao + os so-de-plano.
 // Usada pelo admin-master para validar/salvar a lista de modulos da empresa.
-export const IDS_MODULOS_PLANO = [...IDS_MODULOS, MODULO_FISCAL];
+export const IDS_MODULOS_PLANO = [...IDS_MODULOS, MODULO_FISCAL, MODULO_CARDAPIO];
 
 // Nucleo: presente em TODOS os planos pagos (e no free). Sem isso o sistema
 // nao opera (vender e bater caixa).
@@ -34,7 +37,7 @@ const STARTER = [...NUCLEO, "CLIENTES", "ESTOQUE", "FORNECEDORES", "ORCAMENTOS",
 
 // Pro = Starter + gestao completa (compras, inventario, financeiro, relatorios,
 // comissoes, comandas) + emissao fiscal NFC-e.
-const PRO = [...STARTER, "COMPRAS", "INVENTARIO", "FINANCEIRO", "RELATORIOS", "COMISSOES", "COMANDAS", "FISCAL"];
+const PRO = [...STARTER, "COMPRAS", "INVENTARIO", "FINANCEIRO", "RELATORIOS", "COMISSOES", "COMANDAS", "FISCAL", "CARDAPIO"];
 
 // Enterprise = Pro + CRM/relacionamento (funil, automacoes, NPS, WhatsApp).
 // Equivale a TODOS os modulos.

@@ -738,6 +738,17 @@ export const api = {
   excluirAnexoContaReceber: (id: string, anexoId: string) =>
     request(`/contas-receber/${id}/anexos/${anexoId}`, { method: "DELETE" }),
 
+  // ============ CARDAPIO DIGITAL ============
+  // Admin (autenticado)
+  cardapioStatus: () => request("/empresa/cardapio"),
+  cardapioConfigurar: (body: { ativo?: boolean; rotacionarToken?: boolean }) =>
+    request("/empresa/cardapio", { method: "PATCH", body }),
+  // Publico (sem auth) — pagina de pedido online
+  cardapioPublicoObter: (token: string) =>
+    request(`/cardapio/${encodeURIComponent(token)}`, { auth: false }),
+  cardapioPublicoPedido: (token: string, body: unknown) =>
+    request(`/cardapio/${encodeURIComponent(token)}/pedido`, { method: "POST", body, auth: false }),
+
   // ============ CREDIARIO (FIADO) ============
   crediarioListar: () => request("/crediario"),
   crediarioCaderneta: (clienteId: string) => request(`/crediario/${clienteId}`),

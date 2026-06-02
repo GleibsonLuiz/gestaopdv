@@ -48,6 +48,7 @@ import backupRoutes from "./routes/backup.js";
 import fiscalRoutes from "./routes/fiscal.js";
 import billingRoutes, { webhookRouter as billingWebhookRouter } from "./routes/billing.js";
 import crediarioRoutes from "./routes/crediario.js";
+import cardapioRoutes from "./routes/cardapio.js";
 import { auditoria } from "./middlewares/auditoria.js";
 
 dotenv.config();
@@ -155,6 +156,8 @@ app.use("/pagamentos-mp", pagamentosMpRoutes);
 // segredo dentro de cada handler).
 app.use("/webhooks", whatsappWebhookRouter);
 app.use("/webhooks", billingWebhookRouter);
+// Cardapio digital — pagina/pedido publico (sem auth; chave = cardapioToken).
+app.use("/cardapio", cardapioRoutes);
 // Rotas autenticadas de config/status do WhatsApp.
 app.use("/whatsapp", whatsappRoutes);
 app.use("/logs", logsRoutes);

@@ -21,10 +21,11 @@ export type ModuloId =
   | "CREDIARIO"
   | "WHATSAPP"
   | "FUNCIONARIOS"
-  // FISCAL (NFC-e) NAO e um modulo de permissao de usuario — e so um modulo de
-  // PLANO (entitlement). Por isso fica fora de MODULOS, mas e um ModuloId valido
-  // para o gate de plano (moduloNoPlano / MODULOS_PLANO).
-  | "FISCAL";
+  // FISCAL (NFC-e) e CARDAPIO (pedido online) NAO sao modulos de permissao de
+  // usuario — sao so modulos de PLANO (entitlement). Ficam fora de MODULOS, mas
+  // sao ModuloId validos para o gate de plano (moduloNoPlano / MODULOS_PLANO).
+  | "FISCAL"
+  | "CARDAPIO";
 
 export type Role = "ADMIN" | "GERENTE" | "VENDEDOR";
 
@@ -70,6 +71,7 @@ export const IDS_MODULOS: ModuloId[] = MODULOS.map((m) => m.id);
 export const MODULOS_PLANO: readonly Modulo[] = [
   ...MODULOS,
   { id: "FISCAL", label: "Nota Fiscal (NFC-e)", icone: "🧾" },
+  { id: "CARDAPIO", label: "Cardápio digital", icone: "🍔" },
 ];
 
 // ============ GATE DE PLANO (entitlements por empresa) ============

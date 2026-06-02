@@ -400,6 +400,11 @@ model Empresa {
   // preenchido, e a lista explicita (super-admin liberou/removeu modulos avulsos).
   // Ex.: ["PDV","CAIXA","PRODUTOS","ESTOQUE"]. Json array de ids de modulo.
   modulosHabilitados Json?
+  // CARDAPIO DIGITAL: link publico de pedido online. Token unico global (chave
+  // de acesso da pagina publica /?cardapio=<token>). cardapioAtivo liga/desliga
+  // a pagina. Pedidos caem na Central de Comandas como DELIVERY/VIAGEM NOVO.
+  cardapioToken    String?   @unique
+  cardapioAtivo    Boolean   @default(false)
   // MODULO ASSINATURA: cobranca recorrente automatica via gateway (Asaas/mock).
   // O `expiraEm` acima e a "verdade" de ate quando o acesso esta pago — o
   // webhook do gateway empurra essa data a cada pagamento confirmado. Os

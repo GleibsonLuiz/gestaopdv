@@ -668,6 +668,18 @@ Caderneta digital de venda a prazo. Acompanha o saldo devedor de cada cliente so
 
 > O crediário usa as Contas a Receber por baixo — uma venda a prazo e o fiado aparecem no mesmo lugar do Financeiro.
 
+#### 🍔 Cardápio digital (pedido online)
+
+Página pública onde o cliente final monta o próprio pedido, sem login. Os pedidos caem direto na **Central de Comandas** como DELIVERY ou Retirada (status NOVO).
+
+- **Ativar:** Empresa → bloco "Cardápio digital" → **Ativar cardápio** (gera um link público + QR Code).
+- **Divulgar:** imprima o **QR Code** nas mesas/balcão ou compartilhe o **link** no WhatsApp e redes.
+- **Cliente:** abre o link, escolhe os itens, informa nome/telefone e endereço (se entrega) e envia. Recebe o número do pedido.
+- **Loja:** o pedido aparece na Central de Comandas para preparo e entrega, com telefone e endereço do cliente.
+- Os preços são sempre os do cadastro de Produtos (o cliente não consegue alterar).
+
+> Disponível a partir do plano **Pro**. Só ADMIN/GERENTE ativa/desativa.
+
 ---
 
 ### 5.6 Atendimento
@@ -1003,7 +1015,7 @@ Além dos limites de quantidade, **cada plano libera um conjunto de módulos** (
 |--------|------------------|
 | **Núcleo** (todos os planos) | PDV, Caixa, Dashboard, Produtos, Funcionários |
 | **Starter** | Núcleo + Clientes, Estoque, Fornecedores, Orçamentos, Crediário (Fiado) |
-| **Pro** | Starter + Compras, Inventário, Financeiro, Relatórios, Comissões, Central de Comandas, **NFC-e (emissão fiscal)** |
+| **Pro** | Starter + Compras, Inventário, Financeiro, Relatórios, Comissões, Central de Comandas, **NFC-e (emissão fiscal)**, **Cardápio digital** |
 | **Enterprise** | Pro + Funil de Vendas, Automações, NPS, Atendimento WhatsApp (todos) |
 
 > **NFC-e por plano:** a emissão de Nota Fiscal de Consumidor (modelo 65) é liberada a partir do plano **Pro**. Empresas em planos sem fiscal não veem a tela "Notas Fiscais" nem conseguem emitir/configurar — o sistema responde que o módulo não está incluído. Pode ser liberado avulso a uma empresa específica pelo Admin Master.

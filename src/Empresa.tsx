@@ -36,6 +36,7 @@ interface DadosEmpresa extends SessionEmpresa {
   expiraEm?: string;
   uso?: Partial<Record<RecursoId, number>>;
   limites?: Partial<Record<RecursoId, number | null>>;
+  modulos?: string[];
 }
 
 function mascararCnpj(v: string | null | undefined): string {
@@ -289,6 +290,11 @@ export default function Empresa({ user }: EmpresaProps) {
 
       {/* ============ BLOCO 2b: ASSINATURA / COBRANCA RECORRENTE ============ */}
       <BlocoAssinatura podeAssinar={podeEditar} />
+
+      {/* ============ BLOCO 2c: CARDAPIO DIGITAL (se incluso no plano) ============ */}
+      {(dados.modulos || []).includes("CARDAPIO") && (
+        <BlocoCardapio podeEditar={user.role === "ADMIN" || user.role === "GERENTE"} />
+      )}
 
       {/* ETAPA#6: segmento (read-only) + preferencias locais — lado a lado */}
       <div
@@ -738,6 +744,99 @@ function BlocoAssinatura({ podeAssinar }: { podeAssinar: boolean }) {
       {!podeAssinar && (
         <div className="mt-1 px-3 py-[6px] bg-gp-bg rounded-lg text-[11px] text-gp-muted">
           Apenas o administrador da empresa pode contratar ou alterar o plano.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ BLOCO CARDAPIO DIGITAL ============
+// Liga/desliga o pedido online e mostra o link publico + QR Code para a loja
+// imprimir/compartilhar. Pedidos caem na Central de Comandas.
+function BlocoCardapio({ podeEditar }: { podeEditar: boolean }) {
+  const [ativo, setAtivo] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const [carregando, setCarregando] = useState(true);
+  const [salvando, setSalvando] = useState(false);
+  const [copiado, setCopiado] = useState(false);
+
+  async function carregar() {
+    try {
+      const r = await api.cardapioStatus() as { ativo: boolean; token: string | null };
+      setAtivo(r.ativo); setToken(r.token);
+    } catch { /* sem permissao/modulo — bloco nao deveria aparecer */ }
+    finally { setCarregando(false); }
+  }
+  useEffect(() => { carregar(); }, []);
+
+  const url = token ? `${window.location.origin}/?cardapio=${token}` : "";
+
+  async function alternar() {
+    setSalvando(true);
+    try {
+      const r = await api.cardapioConfigurar({ ativo: !ativo }) as { ativo: boolean; token: string | null };
+      setAtivo(r.ativo); setToken(r.token);
+    } catch (e) { alert((e as Error).message); }
+    finally { setSalvando(false); }
+  }
+
+  function copiar() {
+    if (!url) return;
+    navigator.clipboard?.writeText(url).then(() => {
+      setCopiado(true); setTimeout(() => setCopiado(false), 2000);
+    });
+  }
+
+  if (carregando) return null;
+
+  return (
+    <div className="bg-gp-card border border-gp-border rounded-xl p-4 mb-3">
+      <div className="flex justify-between items-start gap-3 flex-wrap mb-2">
+        <div>
+          <div className="text-gp-muted text-[11px] font-bold uppercase tracking-[0.5px]">Cardápio digital</div>
+          <div className="text-gp-white text-sm font-bold mt-1">🍔 Pedido online</div>
+          <div className="text-gp-muted text-xs mt-[2px]">
+            Link público onde o cliente monta o pedido sozinho. Os pedidos caem na Central de Comandas.
+          </div>
+        </div>
+        {podeEditar && (
+          <button
+            type="button"
+            onClick={alternar}
+            disabled={salvando}
+            className="border-none rounded-lg px-4 py-2 font-bold text-xs cursor-pointer text-gp-white"
+            style={{ background: ativo ? C.red : C.green, opacity: salvando ? 0.6 : 1 }}
+          >
+            {salvando ? "..." : ativo ? "Desativar" : "Ativar cardápio"}
+          </button>
+        )}
+      </div>
+
+      {ativo && token ? (
+        <div className="bg-gp-surface border border-gp-border rounded-[10px] p-3 mt-2 flex gap-3 items-center flex-wrap">
+          <img
+            src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(url)}`}
+            alt="QR Code do cardápio"
+            width={120} height={120}
+            style={{ borderRadius: 8, background: "#fff", padding: 4 }}
+          />
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div className="text-gp-muted text-[10px] font-bold uppercase tracking-[0.5px] mb-1">Link público</div>
+            <div className="text-gp-text text-xs break-all bg-gp-bg rounded-lg px-2 py-[6px] mb-2" style={{ fontFamily: "monospace" }}>{url}</div>
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={copiar} className="bg-gp-surface border border-gp-border rounded-lg px-3 py-[6px] text-xs font-bold cursor-pointer text-gp-text">
+                {copiado ? "✓ Copiado" : "📋 Copiar link"}
+              </button>
+              <a href={url} target="_blank" rel="noopener noreferrer" className="rounded-lg px-3 py-[6px] text-xs font-bold no-underline text-gp-white" style={{ background: C.accent }}>
+                Abrir cardápio →
+              </a>
+            </div>
+            <div className="text-gp-muted text-[10px] mt-2">Imprima o QR Code e coloque nas mesas / balcão, ou compartilhe o link no WhatsApp e redes.</div>
+          </div>
+        </div>
+      ) : (
+        <div className="text-gp-muted text-xs mt-2 px-3 py-2 bg-gp-bg rounded-lg">
+          {ativo ? "Gerando link..." : "Cardápio desativado. Ative para gerar o link público de pedidos."}
         </div>
       )}
     </div>

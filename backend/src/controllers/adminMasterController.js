@@ -4,6 +4,8 @@ import prisma, { prismaRaw } from "../lib/prisma.js";
 import { registrarEvento } from "../middlewares/auditoria.js";
 import { permissoesPadrao } from "../lib/permissoes.js";
 import { getProvedor } from "../lib/billing/provedor.js";
+import { modulosDaEmpresa, MODULOS_POR_PLANO } from "../lib/modulosPlano.js";
+import { IDS_MODULOS } from "../lib/permissoes.js";
 
 // prismaRaw = sem extension (cross-tenant). Use SEMPRE que precisar buscar
 // ou alterar registros de outros tenants. O `prisma` normal e mantido
@@ -47,6 +49,7 @@ export async function listarEmpresas(req, res, next) {
         e."valorMensal" AS valor_mensal,
         e."proximaCobrancaEm" AS proxima_cobranca_em,
         e."ultimoPagamentoEm" AS ultimo_pagamento_em,
+        e."modulosHabilitados" AS modulos_habilitados,
         e."createdAt" AS criada_em,
         e."updatedAt" AS atualizada_em,
         COALESCE(u.qtd, 0)::int AS qtd_users,
@@ -79,6 +82,9 @@ export async function listarEmpresas(req, res, next) {
       valorMensal: l.valor_mensal != null ? Number(l.valor_mensal) : null,
       proximaCobrancaEm: l.proxima_cobranca_em,
       ultimoPagamentoEm: l.ultimo_pagamento_em,
+      // Lista explicita (null = usa pacote do plano) + conjunto efetivo.
+      modulosHabilitados: Array.isArray(l.modulos_habilitados) ? l.modulos_habilitados : null,
+      modulos: modulosDaEmpresa({ plano: l.plano, modulosHabilitados: l.modulos_habilitados }),
       criadaEm: l.criada_em,
       atualizadaEm: l.atualizada_em,
       estatisticas: {
@@ -742,6 +748,58 @@ export async function alterarSegmento(req, res, next) {
     });
 
     res.json({ ok: true, empresa: { id: atualizada.id, segmento: atualizada.segmento } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// PATCH /admin-master/empresas/:id/modulos — define os modulos liberados para a
+// empresa (modelo hibrido). Body:
+//   { modulos: ["PDV","CAIXA",...] }  -> lista explicita (override do plano)
+//   { modulos: null }                 -> volta ao pacote padrao do plano
+const SET_MODULOS = new Set(IDS_MODULOS);
+export async function alterarModulos(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { modulos } = req.body || {};
+
+    let valor = null; // null = volta ao padrao do plano
+    if (modulos !== null && modulos !== undefined) {
+      if (!Array.isArray(modulos)) {
+        return res.status(400).json({ erro: "modulos deve ser um array de ids ou null" });
+      }
+      // Sanitiza: dedup, uppercase, so ids validos.
+      const limpos = [...new Set(
+        modulos.map(m => String(m).trim().toUpperCase()).filter(m => SET_MODULOS.has(m))
+      )];
+      valor = limpos;
+    }
+
+    const atualizada = await prismaRaw.empresa.update({
+      where: { id },
+      data: { modulosHabilitados: valor },
+      select: { id: true, plano: true, modulosHabilitados: true },
+    }).catch(err => {
+      if (err.code === "P2025") return null;
+      throw err;
+    });
+    if (!atualizada) return res.status(404).json({ erro: "Empresa nao encontrada" });
+
+    registrarEvento({
+      acao: "MODULOS_ALTERADOS", modulo: "ADMIN_MASTER", sucesso: true,
+      usuarioId: req.user.sub, usuarioNome: req.user.nome, tenantId: id,
+      mensagem: valor
+        ? `Modulos definidos manualmente (${valor.length}): ${valor.join(", ")}`
+        : `Modulos resetados para o pacote padrao do plano ${atualizada.plano}`,
+      req,
+    });
+
+    res.json({
+      ok: true,
+      modulosHabilitados: Array.isArray(atualizada.modulosHabilitados) ? atualizada.modulosHabilitados : null,
+      modulos: modulosDaEmpresa(atualizada),
+      padraoDoPlano: MODULOS_POR_PLANO[atualizada.plano] || [],
+    });
   } catch (err) {
     next(err);
   }

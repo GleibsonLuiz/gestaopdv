@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import prisma, { tenantStorage } from "../lib/prisma.js";
+import { empresaTemModulo } from "../lib/modulosPlano.js";
 
 export function authRequired(req, res, next) {
   const header = req.headers.authorization;
@@ -45,11 +46,35 @@ export function requireSuperAdmin(req, res, next) {
 }
 
 // Busca permissoes frescas do banco (mudancas refletem sem relogin) e bloqueia
-// se o usuario nao possui o modulo. ADMIN passa sempre. FUNCIONARIOS so ADMIN.
+// em DOIS niveis:
+//   1. PLANO (tenant): o modulo precisa estar habilitado para a empresa
+//      (pacote do plano + override do super-admin). Vale para TODOS, inclusive
+//      ADMIN — modulo nao contratado nao abre pra ninguem. Retorna 402.
+//   2. USUARIO: dentro dos modulos contratados, o user precisa ter permissao.
+//      ADMIN passa sempre. FUNCIONARIOS so ADMIN. Retorna 403.
 export function requirePermissao(modulo) {
   return async (req, res, next) => {
     try {
       if (!req.user) return res.status(401).json({ erro: "Nao autenticado" });
+
+      // --- Nivel 1: modulo liberado no plano da empresa ---
+      if (req.tenantId) {
+        const empresa = await prisma.empresa.findUnique({
+          where: { id: req.tenantId },
+          select: { plano: true, modulosHabilitados: true },
+        });
+        // Fail-open se a empresa sumiu (nao trava ninguem por erro de dado).
+        if (empresa && !empresaTemModulo(empresa, modulo)) {
+          return res.status(402).json({
+            erro: `O modulo ${modulo} nao esta incluido no plano atual. Faca upgrade para liberar.`,
+            moduloBloqueado: true,
+            modulo,
+            plano: empresa.plano,
+          });
+        }
+      }
+
+      // --- Nivel 2: permissao do usuario ---
       if (req.user.role === "ADMIN") return next();
       if (modulo === "FUNCIONARIOS") {
         return res.status(403).json({ erro: "Apenas administradores" });

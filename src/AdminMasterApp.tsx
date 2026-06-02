@@ -16,6 +16,7 @@
 import { useEffect, useState } from "react";
 import { C } from "./lib/theme";
 import { api, getToken, getUser, setSession, clearSession } from "./lib/api";
+import { MODULOS } from "./lib/permissoes";
 
 const fmtBRL = (v: any) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const fmtNum = (v: any) => Number(v || 0).toLocaleString("pt-BR");
@@ -1684,8 +1685,21 @@ function ModalPlano({ empresa, onCancelar, onSalva }: any) {
   // ETAPA#6: segmento de negocio (alterar requer endpoint proprio)
   const segmentoOriginal = empresa.segmento || "GERAL";
   const [segmento, setSegmento] = useState(segmentoOriginal);
+  // ENTITLEMENTS: modulos liberados. usarPadraoModulos = segue o pacote do
+  // plano (modulosHabilitados == null). Ao personalizar, vira lista explicita.
+  const [usarPadraoModulos, setUsarPadraoModulos] = useState(empresa.modulosHabilitados == null);
+  const [modulosSel, setModulosSel] = useState(new Set(empresa.modulos || []));
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
+
+  function toggleModulo(id) {
+    setUsarPadraoModulos(false);
+    setModulosSel(prev => {
+      const novo = new Set(prev);
+      if (novo.has(id)) novo.delete(id); else novo.add(id);
+      return novo;
+    });
+  }
 
   async function submit(e) {
     e.preventDefault();
@@ -1700,6 +1714,11 @@ function ModalPlano({ empresa, onCancelar, onSalva }: any) {
       if (segmento !== segmentoOriginal) {
         await api.adminMasterAlterarSegmento(empresa.id, segmento);
       }
+      // Modulos: padrao do plano (null) ou lista explicita (override).
+      await api.adminMasterAlterarModulos(
+        empresa.id,
+        usarPadraoModulos ? null : Array.from(modulosSel)
+      );
       onSalva();
     } catch (err) {
       setErro(err.message);
@@ -1776,6 +1795,52 @@ function ModalPlano({ empresa, onCancelar, onSalva }: any) {
         </select>
         <div style={{ color: C.muted, fontSize: 10, marginTop: 4 }}>
           Define os campos extras no cadastro de produto do cliente.
+        </div>
+
+        {/* ENTITLEMENTS: modulos liberados (modelo hibrido) */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, marginBottom: 2, gap: 8, flexWrap: "wrap" }}>
+          <label style={{ ...labelStyle, marginTop: 0, marginBottom: 0 }}>Módulos liberados</label>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button type="button" onClick={() => { setUsarPadraoModulos(true); setModulosSel(new Set(empresa.modulos || [])); }}
+              style={{ ...btnMini, ...(usarPadraoModulos ? { borderColor: C.accent, color: C.accent } : {}) }}>
+              Pacote do plano
+            </button>
+            <button type="button" onClick={() => setUsarPadraoModulos(false)}
+              style={{ ...btnMini, ...(!usarPadraoModulos ? { borderColor: C.purple, color: C.purple } : {}) }}>
+              Personalizado
+            </button>
+          </div>
+        </div>
+        <div style={{
+          color: C.muted, fontSize: 10, marginBottom: 6,
+        }}>
+          {usarPadraoModulos
+            ? `Seguindo o pacote padrão do plano ${plano} (${modulosSel.size} módulos). Clique num módulo para personalizar.`
+            : `Personalizado: ${modulosSel.size} módulos liberados para esta empresa.`}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 4 }}>
+          {MODULOS.map(m => {
+            const on = modulosSel.has(m.id);
+            return (
+              <button key={m.id} type="button" onClick={() => toggleModulo(m.id)} style={{
+                display: "flex", alignItems: "center", gap: 6, textAlign: "left",
+                padding: "6px 8px", borderRadius: 6,
+                background: on ? C.green + "22" : C.surface,
+                border: `1px solid ${on ? C.green + "77" : C.border}`,
+                color: on ? C.text : C.muted,
+                fontSize: 11, fontWeight: 600, cursor: "pointer",
+                opacity: usarPadraoModulos ? 0.85 : 1,
+              }}>
+                <span>{on ? "✅" : "⬜"}</span>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {m.icone} {m.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ color: C.muted, fontSize: 10, marginTop: 4 }}>
+          Cobra por plano (pacote padrão) ou por módulo avulso (personalizado). O cliente só vê e usa os módulos marcados.
         </div>
 
         <label style={{ ...labelStyle, marginTop: 12 }}>Observações (interno)</label>

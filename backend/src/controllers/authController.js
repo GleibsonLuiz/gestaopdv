@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import prisma from "../lib/prisma.js";
 import { registrarEvento } from "../middlewares/auditoria.js";
 import { registrarFalhaLogin, limparThrottleLogin } from "../middlewares/rateLimitLogin.js";
+import { modulosDaEmpresa } from "../lib/modulosPlano.js";
 
 export async function login(req, res, next) {
   try {
@@ -22,7 +23,7 @@ export async function login(req, res, next) {
             id: true, nome: true, cnpj: true, ativo: true,
             motivoSuspensao: true, suspensaEm: true,
             plano: true, expiraEm: true,
-            segmento: true,
+            segmento: true, modulosHabilitados: true,
           },
         },
       },
@@ -133,6 +134,8 @@ export async function login(req, res, next) {
         nome: user.tenant.nome,
         cnpj: user.tenant.cnpj,
         segmento: user.tenant.segmento,
+        // Modulos efetivos (pacote do plano + override) — frontend gateia a sidebar.
+        modulos: modulosDaEmpresa(user.tenant),
       },
     });
   } catch (err) {
@@ -149,14 +152,17 @@ export async function me(req, res, next) {
         superAdmin: true,
         preferencias: true,
         tenantId: true,
-        tenant: { select: { id: true, nome: true, cnpj: true, ativo: true, segmento: true } },
+        tenant: { select: { id: true, nome: true, cnpj: true, ativo: true, segmento: true, plano: true, modulosHabilitados: true } },
       },
     });
     if (!user) return res.status(404).json({ erro: "Usuario nao encontrado" });
     const { tenant, ...rest } = user;
     res.json({
       ...rest,
-      empresa: tenant ? { id: tenant.id, nome: tenant.nome, cnpj: tenant.cnpj, segmento: tenant.segmento } : null,
+      empresa: tenant ? {
+        id: tenant.id, nome: tenant.nome, cnpj: tenant.cnpj, segmento: tenant.segmento,
+        modulos: modulosDaEmpresa(tenant),
+      } : null,
     });
   } catch (err) {
     next(err);

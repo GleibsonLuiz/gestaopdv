@@ -395,6 +395,11 @@ model Empresa {
   observacoesPlano String?
   // ETAPA#6: segmento de negocio. So super-admin altera (via admin-master).
   segmento         Segmento  @default(GERAL)
+  // ENTITLEMENTS: modulos liberados para esta empresa (modelo hibrido). Quando
+  // null/vazio, vale o pacote padrao do plano (lib/modulosPlano.js). Quando
+  // preenchido, e a lista explicita (super-admin liberou/removeu modulos avulsos).
+  // Ex.: ["PDV","CAIXA","PRODUTOS","ESTOQUE"]. Json array de ids de modulo.
+  modulosHabilitados Json?
   // MODULO ASSINATURA: cobranca recorrente automatica via gateway (Asaas/mock).
   // O `expiraEm` acima e a "verdade" de ate quando o acesso esta pago — o
   // webhook do gateway empurra essa data a cada pagamento confirmado. Os

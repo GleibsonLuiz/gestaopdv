@@ -1,5 +1,6 @@
 import prisma from "../lib/prisma.js";
 import { obterUsoELimites } from "../lib/planoLimites.js";
+import { modulosDaEmpresa } from "../lib/modulosPlano.js";
 
 // ============ EMPRESA (TENANT) DO USUARIO LOGADO ============
 //
@@ -52,6 +53,8 @@ export async function obter(req, res, next) {
       // ETAPA#6: segmento e read-only para usuario comum (so super-admin altera).
       // Frontend usa pra renderizar campos extras no cadastro de produto.
       segmento: empresa.segmento,
+      // Modulos efetivos liberados para a empresa (pacote do plano + override).
+      modulos: modulosDaEmpresa(empresa),
     });
   } catch (err) {
     next(err);

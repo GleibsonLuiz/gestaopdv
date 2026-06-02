@@ -1,5 +1,7 @@
 // URL do backend. Em producao (Vercel), VITE_API_URL e injetado pela
 // variavel de ambiente do projeto. Em dev, default para o backend local.
+import { setModulosHabilitados } from "./permissoes";
+
 export const BASE_URL: string = import.meta.env.VITE_API_URL || "http://localhost:3333";
 
 // Multi-tenant: o JWT armazenado em localStorage carrega o `tid` (tenant id)
@@ -36,6 +38,9 @@ export interface SessionEmpresa {
   cnpj?: string;
   plano?: string;
   segmento?: SegmentoEmpresa;
+  // Modulos efetivos liberados pelo plano (+ overrides). Usado para gatear a
+  // sidebar via permissoes.setModulosHabilitados().
+  modulos?: string[];
   [extra: string]: unknown;
 }
 
@@ -152,6 +157,7 @@ export function setSession(token: string, user: SessionUser, empresa: SessionEmp
   localStorage.setItem(USER_KEY, JSON.stringify(user));
   if (empresa) {
     localStorage.setItem(EMPRESA_KEY, JSON.stringify(empresa));
+    sincronizarModulos(empresa);
   }
 }
 
@@ -162,6 +168,7 @@ export function setSession(token: string, user: SessionUser, empresa: SessionEmp
 export function setEmpresa(empresa: SessionEmpresa | null): void {
   if (empresa) {
     localStorage.setItem(EMPRESA_KEY, JSON.stringify(empresa));
+    sincronizarModulos(empresa);
   } else {
     localStorage.removeItem(EMPRESA_KEY);
   }
@@ -171,6 +178,20 @@ export function clearSession(): void {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
   localStorage.removeItem(EMPRESA_KEY);
+  setModulosHabilitados(null);
+}
+
+// Aplica os modulos efetivos da empresa no gate da sidebar (permissoes.ts).
+// Chamado sempre que a sessao/empresa e salva (login, /auth/me no boot).
+function sincronizarModulos(empresa: SessionEmpresa): void {
+  setModulosHabilitados(Array.isArray(empresa.modulos) ? empresa.modulos : null);
+}
+
+// Restaura o gate de modulos a partir do cache no carregamento do modulo, para
+// a sidebar ja nascer correta antes de /auth/me resolver (evita "piscar" itens).
+{
+  const cache = getEmpresa();
+  if (cache) setModulosHabilitados(Array.isArray(cache.modulos) ? cache.modulos : null);
 }
 
 // Interceptor de autenticacao multi-tenant: cada chamada autenticada
@@ -373,6 +394,10 @@ export const api = {
     request(`/admin-master/empresas/${id}/cobrancas/${cobrancaId}/marcar-paga`, { method: "POST" }),
   adminMasterCancelarAssinatura: (id: string) =>
     request(`/admin-master/empresas/${id}/assinatura/cancelar`, { method: "POST" }),
+  // Entitlements: define os modulos liberados de uma empresa. modulos=null
+  // volta ao pacote padrao do plano.
+  adminMasterAlterarModulos: (id: string, modulos: string[] | null) =>
+    request(`/admin-master/empresas/${id}/modulos`, { method: "PATCH", body: { modulos } }),
 
   // ETAPA 12
   adminMasterAlterarPlano: (id: string, dados: unknown) =>

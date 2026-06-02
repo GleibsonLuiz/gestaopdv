@@ -6,6 +6,7 @@ import {
   logsGlobal, metricas, alterarPlano, alterarSegmento, exportarEmpresa,
   financeiroDashboard,
   listarCobrancasEmpresa, marcarCobrancaPaga, cancelarAssinaturaEmpresa,
+  alterarModulos,
 } from "../controllers/adminMasterController.js";
 import {
   criar as criarNotificacao, listarTodas as listarTodasNotificacoes,
@@ -38,6 +39,8 @@ router.get("/empresas/:id/export", exportarEmpresa);
 // ETAPA#6 — segmento de negocio (define se cadastro de produto exibe
 // campos extras para Auto-Pecas / Farmacia / Papelaria).
 router.patch("/empresas/:id/segmento", alterarSegmento);
+// Entitlements: modulos liberados por empresa (modelo hibrido)
+router.patch("/empresas/:id/modulos", alterarModulos);
 router.get("/notificacoes", listarTodasNotificacoes);
 router.post("/notificacoes", criarNotificacao);
 router.patch("/notificacoes/:id", alterarAtivaNotificacao);

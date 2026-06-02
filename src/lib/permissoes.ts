@@ -58,9 +58,34 @@ export const MODULOS: readonly Modulo[] = [
 
 export const IDS_MODULOS: ModuloId[] = MODULOS.map((m) => m.id);
 
-// ADMIN sempre tem acesso a tudo (defesa contra "trancar fora").
+// ============ GATE DE PLANO (entitlements por empresa) ============
+//
+// Alem da permissao por usuario, ha o portao do PLANO: a empresa so tem acesso
+// aos modulos liberados pelo plano contratado (+ overrides do super-admin). O
+// backend manda a lista efetiva em empresa.modulos (login/me); o api.ts chama
+// setModulosHabilitados() ao salvar a sessao. null = sem restricao (compat com
+// sessao antiga / dados ausentes — libera tudo, o backend ainda protege).
+let modulosDoPlano: Set<ModuloId> | null = null;
+
+export function setModulosHabilitados(mods?: readonly string[] | null): void {
+  modulosDoPlano = (Array.isArray(mods) && mods.length > 0)
+    ? new Set(mods as ModuloId[])
+    : null;
+}
+
+// O modulo esta incluido no plano da empresa? (vale ate para ADMIN — modulo nao
+// contratado nao abre pra ninguem). Sem info (null) = libera, o backend protege.
+export function moduloNoPlano(modulo: ModuloId): boolean {
+  if (!modulosDoPlano) return true;
+  return modulosDoPlano.has(modulo);
+}
+
+// ADMIN sempre tem acesso a tudo DENTRO do plano (defesa contra "trancar fora").
 // FUNCIONARIOS so e acessivel para ADMIN, independente de permissoes.
 export function podeAcessar(user: UserPermissoes | null | undefined, modulo: ModuloId): boolean {
+  // Portao 1: o plano da empresa precisa incluir o modulo.
+  if (!moduloNoPlano(modulo)) return false;
+  // Portao 2: permissao do usuario.
   if (!user) return false;
   if (user.role === "ADMIN") return true;
   if (modulo === "FUNCIONARIOS") return false;

@@ -49,6 +49,8 @@ O sistema é uma **PWA** (instalável no celular) com fallback offline limitado:
 
 ## 2. Como entrar no sistema
 
+![Tela de login](img/login.png)
+
 1. Abra o sistema no navegador (ou no atalho da área de trabalho/celular).
 2. Digite seu **e-mail** e **senha**.
 3. Se for o **primeiro acesso** com senha temporária, o sistema vai pedir uma nova senha imediatamente (modal "Trocar senha").
@@ -114,6 +116,8 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 
 #### 🛒 PDV — Ponto de Venda
 
+![PDV — Ponto de Venda](img/pdv.png)
+
 **O que faz:** registra vendas no balcão com leitor de código de barras, cliente opcional, desconto, várias formas de pagamento e cupom impresso.
 
 **Para que serve:** é o coração do dia a dia. Toda venda começa e termina aqui.
@@ -168,6 +172,8 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 
 #### 🍽️ Central de Comandas
 
+![Central de Comandas](img/painelcomandas.png)
+
 **O que faz:** painel Kanban para bar/restaurante/lanchonete. Cada comanda passa pelas etapas Novos → Em preparação → Pronto → Servindo (mesa) / Em entrega (delivery) → Concluída.
 
 **Para que serve:** separar o **fluxo da cozinha** (produção) do **fluxo do caixa** (cobrança). A cozinha imprime o pedido; o garçom acompanha; o caixa fecha a venda.
@@ -209,6 +215,8 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 
 #### 💵 Caixa
 
+![Caixa](img/caixa.png)
+
 **O que faz:** controla o dinheiro físico que entra e sai do PDV no dia.
 
 **Para que serve:** garantir que o dinheiro contado no fim do dia bate com o que o sistema esperava (conferência cega). Evita roubo, esquecimento, troco errado.
@@ -242,6 +250,8 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 
 #### 👥 Clientes
 
+![Clientes (CRM)](img/clientes.png)
+
 **O que faz:** cadastro de clientes (PF e PJ), com histórico de compras, segmentação RFM, score de lead, tags, contatos múltiplos (B2B), interações e tarefas.
 
 **Para que serve:** identificar quem compra, calcular ticket médio e LTV, fazer campanhas direcionadas, gerar contas a receber em vendas a prazo.
@@ -268,6 +278,8 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 ---
 
 #### 📊 Segmentos (RFM + Lead Scoring)
+
+![Segmentos RFM](img/segmentos.png)
 
 **O que faz:** classifica clientes automaticamente em 6 segmentos baseados em comportamento de compra.
 
@@ -305,6 +317,8 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 
 #### 🎂 Aniversários / Reativação
 
+![Aniversários / Reativação](img/reativacao.png)
+
 **O que faz:** lista clientes aniversariantes do mês e clientes inativos (sem comprar há X dias).
 
 **Para que serve:** mandar parabéns no WhatsApp e tentar reativar quem sumiu.
@@ -319,6 +333,8 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 
 #### 🏭 Fornecedores
 
+![Fornecedores](img/fornecedores.png)
+
 **O que faz:** cadastro de fornecedores com dados fiscais e de contato.
 
 **Para que serve:** vincular a compras (entrada de mercadoria) e contas a pagar.
@@ -328,6 +344,8 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 ---
 
 #### 📦 Produtos
+
+![Produtos](img/produtos.png)
 
 **O que faz:** cadastro do que você vende ou usa internamente.
 
@@ -354,6 +372,10 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 4. **Preços e estoque** — preço de custo, cálculo de markup, preço de venda, estoque atual, estoque mínimo, unidade (UN, KG, M, L, PCT…).
 5. **Categorização** — categoria (cria inline se não existir), fornecedor padrão, tributação fiscal (NCM, CEST, CFOP, Origem, CST/CSOSN, PIS, COFINS, cBenef).
 
+**Preenchimento assistido da tributação (NF-e):** a aba **Tributação / NF-e** ajuda a evitar erro de digitação fiscal:
+- **NCM validado online** — ao sair do campo NCM (8 dígitos), o sistema consulta a tabela oficial e mostra a **descrição** do código logo abaixo (✓ verde quando válido, ✕ vermelho quando o NCM não existe). É só conferência — o valor digitado é mantido.
+- **Padrões por regime** — ao escolher o **Regime tributário do item** (Simples Nacional / Regime Normal), os campos **CSOSN ou CST do ICMS, CFOP e CST de PIS/COFINS** são preenchidos com os valores mais comuns daquele regime (ex.: Simples → CSOSN 102, CFOP 5102). **Só preenche o que estiver vazio** — nunca sobrescreve o que você já digitou. As **alíquotas** de PIS/COFINS não são sugeridas porque dependem do enquadramento (Lucro Presumido × Real); confirme com seu contador. O **CEST** continua manual (só se aplica a produtos com Substituição Tributária).
+
 **Cálculo de markup** — fica recolhido por padrão (clique em **🧮 Calculadora de markup / formação de preço** para abrir, deixando a aba *Dados Gerais* mais enxuta). Dois jeitos de chegar ao preço de venda:
 - **Margem sobre o custo** — digite a margem desejada (ex.: 120%) e o preço de venda é calculado na hora como `custo × (1 + margem%)` (custo 10,00 + 120% = 22,00). É bidirecional: se você digitar o preço de venda direto, o campo de margem mostra automaticamente qual margem aquele preço representa.
 - **Formação de preço (margem sobre a venda)** — informe impostos sobre venda, taxas de cartão e a margem desejada; o sistema sugere o preço "por dentro" (`custo ÷ (1 − soma%)`) e o botão **Aplicar ao preço de venda** preenche o campo. Como a margem aqui é sobre a venda, a soma dos percentuais precisa ser menor que 100%.
@@ -377,17 +399,29 @@ O status alterna entre **ATIVO** (verde) e **INATIVO** (cinza). Use o filtro **"
 
 #### 🏷️ Etiquetas
 
-**O que faz:** gera folhas de etiquetas de preço para impressão (papel A4 com várias etiquetas por folha).
+![Etiquetas](img/etiquetas.png)
 
-**Para que serve:** colar nos produtos da loja. Suporta vários formatos e layouts pré-definidos.
+**O que faz:** monta e imprime etiquetas de preço de **60×40mm** em lote, em folha **A4** (3 colunas × 7 linhas = **21 etiquetas por folha**). Cada etiqueta traz código, referência, nome, preço de venda em destaque e código de barras.
 
-**Como usar:** selecionar produtos, escolher template (3×7, 4×8, etc.), pré-visualizar, imprimir.
+**Para que serve:** colar nos produtos da loja / na prateleira. Só aparecem **produtos** ativos — serviços ficam de fora (etiqueta física não faz sentido para serviço).
+
+**Como usar:**
+
+1. **Filtre** por categoria e/ou use a **busca** (nome, código, referência ou código de barras).
+2. **Marque** os produtos. Use **✓ Selecionar visíveis** para marcar todos os filtrados de uma vez.
+3. Defina as **cópias** de cada item nos botões **− / +** (ou digite a quantidade). Marcar um produto já entra com 1 cópia.
+4. Acompanhe no painel da direita: a **prévia ao vivo** da etiqueta (mostra o último produto marcado) e o resumo do trabalho — **Produtos**, **Etiquetas** e **Folhas A4** (calculado automaticamente).
+5. Clique em **🖨️ Imprimir** — abre a caixa de impressão do navegador já com as etiquetas montadas. Use **Limpar tudo** para recomeçar.
+
+> **Dica de impressão:** na caixa do navegador, deixe as **margens em "Padrão"** e **desative cabeçalho/rodapé** para o alinhamento das etiquetas ficar correto. Confira na pré-visualização antes de imprimir.
 
 ---
 
 ### 5.3 Estoque
 
 #### 🗃️ Estoque
+
+![Estoque](img/estoque.png)
 
 **O que faz:** controle de entradas, saídas e ajustes manuais por produto.
 
@@ -414,6 +448,8 @@ O status alterna entre **ATIVO** (verde) e **INATIVO** (cinza). Use o filtro **"
 
 #### 📋 Inventário
 
+![Inventário](img/inventario.png)
+
 **O que faz:** contagem cíclica de estoque com 3 telas (lista, contagem, detalhe).
 
 **Para que serve:** auditar o estoque físico contra o sistema (geralmente 1x/mês).
@@ -431,6 +467,8 @@ O status alterna entre **ATIVO** (verde) e **INATIVO** (cinza). Use o filtro **"
 ### 5.4 Vendas & CRM
 
 #### 🛍️ Compras
+
+![Compras](img/compras.png)
 
 **O que faz:** registra entrada de mercadoria do fornecedor.
 
@@ -454,6 +492,8 @@ O status alterna entre **ATIVO** (verde) e **INATIVO** (cinza). Use o filtro **"
 
 #### 📝 Orçamentos
 
+![Orçamentos](img/orcamentos.png)
+
 **O que faz:** monta uma pré-venda com validade para o cliente decidir depois.
 
 **Para que serve:** pedidos grandes, orçamentos por e-mail, propostas.
@@ -475,6 +515,8 @@ O status alterna entre **ATIVO** (verde) e **INATIVO** (cinza). Use o filtro **"
 ---
 
 #### 🎯 Funil de Vendas
+
+![Funil de Vendas](img/funil.png)
 
 **O que faz:** Kanban de oportunidades comerciais em 6 etapas: LEAD → QUALIFICADO → PROPOSTA → NEGOCIAÇÃO → GANHO / PERDIDO.
 
@@ -500,6 +542,8 @@ O status alterna entre **ATIVO** (verde) e **INATIVO** (cinza). Use o filtro **"
 
 #### ⚡ Automações
 
+![Automações](img/automacoes.png)
+
 **O que faz:** dispara tarefas automaticamente conforme regras.
 
 **Tipos suportados:**
@@ -521,6 +565,8 @@ O status alterna entre **ATIVO** (verde) e **INATIVO** (cinza). Use o filtro **"
 ---
 
 #### ⭐ NPS pós-venda
+
+![NPS pós-venda](img/nps.png)
 
 **O que faz:** pesquisa de satisfação enviada ao cliente após cada venda.
 
@@ -548,6 +594,8 @@ O status alterna entre **ATIVO** (verde) e **INATIVO** (cinza). Use o filtro **"
 
 #### 🎯 Dashboard CRM
 
+![Dashboard CRM](img/dashboardcrm.png)
+
 **O que faz:** consolida funil + segmentos + LTV + tarefas + NPS + performance comercial numa tela só.
 
 **Para que serve:** visão de gestão comercial em tempo real.
@@ -565,6 +613,8 @@ O status alterna entre **ATIVO** (verde) e **INATIVO** (cinza). Use o filtro **"
 
 #### ✅ Tarefas
 
+![Tarefas](img/tarefas.png)
+
 **O que faz:** lista de tarefas com cliente vinculado, prazo, prioridade e responsável.
 
 **Para que serve:** cobranças, follow-ups, lembretes — manuais ou geradas por automações.
@@ -579,6 +629,8 @@ O status alterna entre **ATIVO** (verde) e **INATIVO** (cinza). Use o filtro **"
 
 #### 🏆 Fidelidade
 
+![Fidelidade](img/fidelidade.png)
+
 **O que faz:** pontos por compra + resgate por desconto.
 
 **Para que serve:** programa de fidelidade simples para reter clientes.
@@ -592,6 +644,8 @@ O status alterna entre **ATIVO** (verde) e **INATIVO** (cinza). Use o filtro **"
 ---
 
 #### 🏆 Comissões
+
+![Comissões](img/comissoes.png)
 
 **O que faz:** calcula comissão do vendedor por venda.
 
@@ -619,6 +673,8 @@ O status alterna entre **ATIVO** (verde) e **INATIVO** (cinza). Use o filtro **"
 ### 5.5 Financeiro
 
 #### 💰 Financeiro
+
+![Financeiro](img/financeiro.png)
 
 **O que faz:** gestão de **Contas a Pagar** (CP) e **Contas a Receber** (CR) com pagamentos parciais, recorrência, anexos e ações em lote.
 
@@ -658,6 +714,8 @@ Cada grupo tem header colapsável com contagem + subtotal.
 
 #### 📒 Crediário (Fiado)
 
+![Crediário (Fiado)](img/crediario.png)
+
 Caderneta digital de venda a prazo. Acompanha o saldo devedor de cada cliente sobre as contas a receber em aberto.
 
 - **Lista de clientes** com saldo devedor, limite de crédito, crédito disponível e total vencido (em vermelho).
@@ -682,6 +740,8 @@ Página pública onde o cliente final monta o próprio pedido, sem login. Os ped
 
 #### 🔧 Ordem de Serviço
 
+![Ordem de Serviço](img/ordemservico.png)
+
 Para oficinas e assistências técnicas (encaixa no segmento **Auto-Peças**, mas serve qualquer reparo). Controla o ciclo do serviço da abertura à entrega.
 
 - **Abrir OS:** cliente/telefone, equipamento (veículo, aparelho…), defeito relatado.
@@ -693,6 +753,8 @@ Para oficinas e assistências técnicas (encaixa no segmento **Auto-Peças**, ma
 > Disponível a partir do plano **Pro**. OS entregue ou cancelada não pode ser editada (só ADMIN/GERENTE exclui).
 
 #### 📄 NF-e 55 / NFS-e (fiscal avançado)
+
+![NF-e 55 / NFS-e](img/fiscalavancado.png)
 
 Documentos fiscais além da NFC-e, na tela **NF-e / NFS-e**:
 
@@ -707,6 +769,8 @@ Documentos fiscais além da NFC-e, na tela **NF-e / NFS-e**:
 
 #### 💬 WhatsApp
 
+![Atendimento WhatsApp](img/whatsapp.png)
+
 **O que faz:** atendimento integrado com mensagens diretas, templates e histórico de conversas.
 
 **Para que serve:** centralizar o atendimento via WhatsApp Business sem precisar abrir o aplicativo separadamente.
@@ -718,6 +782,8 @@ Documentos fiscais além da NFC-e, na tela **NF-e / NFS-e**:
 ### 5.7 Sistema
 
 #### 📊 Dashboard
+
+![Dashboard](img/dashboard.png)
 
 **O que faz:** painel principal com KPIs do dia/semana/mês.
 
@@ -734,6 +800,8 @@ Documentos fiscais além da NFC-e, na tela **NF-e / NFS-e**:
 ---
 
 #### 📑 Relatórios
+
+![Relatórios](img/relatorios.png)
 
 **O que faz:** 8 abas de relatórios com filtros e **export PDF** com cabeçalho da empresa.
 
@@ -776,6 +844,8 @@ Documentos fiscais além da NFC-e, na tela **NF-e / NFS-e**:
 
 #### 🏢 Empresa
 
+![Empresa](img/empresa.png)
+
 **O que faz:** cadastro singleton de **Dados do Emitente** (razão social, CNPJ, endereço, contato, logotipo) + **Plano + Limites de uso**.
 
 **Para que serve:** aparece no cupom do PDV, no extrato do Caixa e no cabeçalho dos PDFs de Relatórios. Tela única.
@@ -807,6 +877,8 @@ Documentos fiscais além da NFC-e, na tela **NF-e / NFS-e**:
 
 #### 🖨️ Configurações de Impressora
 
+![Configurações de Impressora](img/impressora.png)
+
 **O que faz:** configura impressora térmica (Bluetooth ou USB ESC/POS) usada para cupons e adendos.
 
 **Para que serve:** PDV imprimir cupom automático sem abrir caixa de diálogo do sistema operacional.
@@ -814,6 +886,8 @@ Documentos fiscais além da NFC-e, na tela **NF-e / NFS-e**:
 ---
 
 #### 🧑‍💼 Funcionários (ADMIN only)
+
+![Funcionários](img/funcionarios.png)
 
 **O que faz:** CRUD de usuários do sistema.
 
@@ -845,6 +919,8 @@ A partir daí, o PDV mostra o botão **📲 Maquininha MP** no modal de finaliza
 
 #### 📋 Projeto
 
+![Projeto](img/projeto.png)
+
 **O que faz:** acompanha as 14 etapas planejadas do sistema com status (✅ concluído / ⏳ em andamento / 🔜 planejado).
 
 **Para que serve:** transparência sobre o que está pronto e o que vem a seguir.
@@ -852,6 +928,8 @@ A partir daí, o PDV mostra o botão **📲 Maquininha MP** no modal de finaliza
 ---
 
 #### 📜 Logs de Auditoria (ADMIN only)
+
+![Logs de Auditoria](img/logs.png)
 
 **O que faz:** trilha completa de tudo que acontece no sistema.
 
@@ -872,6 +950,8 @@ A partir daí, o PDV mostra o botão **📲 Maquininha MP** no modal de finaliza
 
 #### 💾 Backup (ADMIN only)
 
+![Backup](img/backup.png)
+
 **O que faz:** baixa um JSON com todos os dados do tenant ou restaura a partir de um JSON.
 
 **Para que serve:** segurança contra perda de dados, migração entre ambientes.
@@ -887,6 +967,8 @@ A partir daí, o PDV mostra o botão **📲 Maquininha MP** no modal de finaliza
 
 #### 🛡 Sistema (ADMIN only)
 
+![Sistema](img/sistema.png)
+
 **O que faz:** ações administrativas críticas.
 
 **Inclui:**
@@ -898,6 +980,8 @@ A partir daí, o PDV mostra o botão **📲 Maquininha MP** no modal de finaliza
 ---
 
 #### 🎨 Aparência
+
+![Aparência](img/aparencia.png)
 
 **Acessado pelo avatar no header.**
 
@@ -1122,6 +1206,8 @@ No modal do cupom (após finalizar a venda), clique no botão **WhatsApp** — a
 ---
 
 ## 12. Como usar a Ajuda no sistema
+
+![Central de Ajuda](img/ajuda.png)
 
 O próprio sistema embute este manual numa tela de **Ajuda** integrada — você não precisa abrir esse arquivo Markdown para consultá-lo no dia a dia.
 

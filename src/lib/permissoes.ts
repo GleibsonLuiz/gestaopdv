@@ -26,7 +26,9 @@ export type ModuloId =
   // usuario — sao so modulos de PLANO (entitlement). Ficam fora de MODULOS, mas
   // sao ModuloId validos para o gate de plano (moduloNoPlano / MODULOS_PLANO).
   | "FISCAL"
-  | "CARDAPIO";
+  | "CARDAPIO"
+  | "NFE55"
+  | "NFSE";
 
 export type Role = "ADMIN" | "GERENTE" | "VENDEDOR";
 
@@ -74,6 +76,8 @@ export const MODULOS_PLANO: readonly Modulo[] = [
   ...MODULOS,
   { id: "FISCAL", label: "Nota Fiscal (NFC-e)", icone: "🧾" },
   { id: "CARDAPIO", label: "Cardápio digital", icone: "🍔" },
+  { id: "NFE55", label: "NF-e 55 (produto/B2B)", icone: "📄" },
+  { id: "NFSE", label: "NFS-e (serviços)", icone: "🧰" },
 ];
 
 // ============ GATE DE PLANO (entitlements por empresa) ============

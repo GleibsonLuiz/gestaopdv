@@ -29,6 +29,7 @@ const Relatorios = lazy(() => import("./Relatorios"));
 const NotasFiscais = lazy(() => import("./NotasFiscais"));
 const Crediario = lazy(() => import("./Crediario"));
 const OrdemServico = lazy(() => import("./OrdemServico"));
+const FiscalAvancado = lazy(() => import("./FiscalAvancado"));
 const Projeto = lazy(() => import("./Projeto"));
 const Sistema = lazy(() => import("./Sistema"));
 const Backup = lazy(() => import("./Backup"));
@@ -339,6 +340,8 @@ export default function App() {
     if (t === "impressora") return user?.role === "ADMIN" || user?.role === "GERENTE";
     // NFC-e: permissao de usuario (RELATORIOS) + plano precisa incluir FISCAL.
     if (t === "notasfiscais") return podeAcessar(user, "RELATORIOS") && moduloNoPlano("FISCAL");
+    // Fiscal avancado (NF-e 55 / NFS-e): so-de-plano, gerencial.
+    if (t === "fiscalavancado") return (user?.role === "ADMIN" || user?.role === "GERENTE") && (moduloNoPlano("NFE55") || moduloNoPlano("NFSE"));
     return podeAcessar(user, TELA_MODULO[t] as any);
   }
 
@@ -347,7 +350,7 @@ export default function App() {
     if (!user) return;
     if (!podeVer(tela)) {
       const primeira = ["pdv","dashboard","dashboardcrm","caixa","clientes","segmentos","reativacao","tarefas","fidelidade","funil","automacoes","nps","fornecedores","produtos","etiquetas",
-        "estoque","inventario","compras","orcamentos","ordemservico","financeiro","crediario","relatorios","notasfiscais","comissoes","painelcomandas","whatsapp","funcionarios","projeto","sistema","backup","empresa","impressora"].find(podeVer);
+        "estoque","inventario","compras","orcamentos","ordemservico","financeiro","crediario","relatorios","notasfiscais","fiscalavancado","comissoes","painelcomandas","whatsapp","funcionarios","projeto","sistema","backup","empresa","impressora"].find(podeVer);
       if (primeira && primeira !== tela) setTela(primeira);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -633,6 +636,9 @@ export default function App() {
           )}
           {podeAcessar(user, "RELATORIOS") && moduloNoPlano("FISCAL") && (
             <Item icone="🧾" label="Notas Fiscais" ativo={tela === "notasfiscais"} onClick={() => navegar("notasfiscais")} />
+          )}
+          {(user.role === "ADMIN" || user.role === "GERENTE") && (moduloNoPlano("NFE55") || moduloNoPlano("NFSE")) && (
+            <Item icone="📄" label="NF-e / NFS-e" ativo={tela === "fiscalavancado"} onClick={() => navegar("fiscalavancado")} />
           )}
           {podeAcessar(user, "COMISSOES") && (
             <Item icone="🏆" label="Comissões" ativo={tela === "comissoes"} onClick={() => navegar("comissoes")} />
@@ -931,6 +937,12 @@ export default function App() {
             <>
               <PageHeader titulo="Ordem de Serviço" subtitulo="Oficina e assistência técnica — peças, serviços e acompanhamento" />
               <OrdemServico user={user} />
+            </>
+          )}
+          {tela === "fiscalavancado" && (
+            <>
+              <PageHeader titulo="NF-e / NFS-e" subtitulo="Documentos fiscais avançados — produto (B2B) e serviços" />
+              <FiscalAvancado />
             </>
           )}
           {tela === "tarefas" && (

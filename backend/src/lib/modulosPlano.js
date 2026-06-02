@@ -23,10 +23,14 @@ export const MODULO_FISCAL = "FISCAL";
 // CARDAPIO (pedido online) tambem e modulo so-de-plano (nao e permissao de
 // usuario — a config fica na tela Empresa, a pagina de pedido e publica).
 export const MODULO_CARDAPIO = "CARDAPIO";
+// NF-e 55 (produto/B2B) e NFS-e (servicos) — fiscal avancado. So-de-plano;
+// emissao real via gateway depende de certificado/homologacao (em configuracao).
+export const MODULO_NFE55 = "NFE55";
+export const MODULO_NFSE = "NFSE";
 
 // Lista de ids que o plano pode liberar = modulos de permissao + os so-de-plano.
 // Usada pelo admin-master para validar/salvar a lista de modulos da empresa.
-export const IDS_MODULOS_PLANO = [...IDS_MODULOS, MODULO_FISCAL, MODULO_CARDAPIO];
+export const IDS_MODULOS_PLANO = [...IDS_MODULOS, MODULO_FISCAL, MODULO_CARDAPIO, MODULO_NFE55, MODULO_NFSE];
 
 // Nucleo: presente em TODOS os planos pagos (e no free). Sem isso o sistema
 // nao opera (vender e bater caixa).
@@ -39,9 +43,9 @@ const STARTER = [...NUCLEO, "CLIENTES", "ESTOQUE", "FORNECEDORES", "ORCAMENTOS",
 // comissoes, comandas) + emissao fiscal NFC-e.
 const PRO = [...STARTER, "COMPRAS", "INVENTARIO", "FINANCEIRO", "RELATORIOS", "COMISSOES", "COMANDAS", "ORDEM_SERVICO", "FISCAL", "CARDAPIO"];
 
-// Enterprise = Pro + CRM/relacionamento (funil, automacoes, NPS, WhatsApp).
-// Equivale a TODOS os modulos.
-const ENTERPRISE = [...PRO, "OPORTUNIDADES", "AUTOMACOES", "NPS", "WHATSAPP"];
+// Enterprise = Pro + CRM/relacionamento (funil, automacoes, NPS, WhatsApp) +
+// fiscal avancado (NF-e 55 e NFS-e).
+const ENTERPRISE = [...PRO, "OPORTUNIDADES", "AUTOMACOES", "NPS", "WHATSAPP", "NFE55", "NFSE"];
 
 export const MODULOS_POR_PLANO = {
   TRIAL: ENTERPRISE,                       // trial libera tudo (experiencia completa)

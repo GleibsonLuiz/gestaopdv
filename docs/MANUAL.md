@@ -692,6 +692,15 @@ Para oficinas e assistências técnicas (encaixa no segmento **Auto-Peças**, ma
 
 > Disponível a partir do plano **Pro**. OS entregue ou cancelada não pode ser editada (só ADMIN/GERENTE exclui).
 
+#### 📄 NF-e 55 / NFS-e (fiscal avançado)
+
+Documentos fiscais além da NFC-e, na tela **NF-e / NFS-e**:
+
+- **NF-e modelo 55** — nota de produto para vendas a outras empresas (B2B).
+- **NFS-e** — nota de serviço (combina com Ordem de Serviço), emitida junto à prefeitura.
+
+> Inclusos no plano **Enterprise**. A emissão exige **certificado digital A1**, dados do emitente e homologação junto à SEFAZ/prefeitura — por isso aparecem como **"em configuração"** até a ativação fiscal ser concluída com o suporte. A NFC-e (cupom) continua na tela Notas Fiscais.
+
 ---
 
 ### 5.6 Atendimento
@@ -1028,7 +1037,7 @@ Além dos limites de quantidade, **cada plano libera um conjunto de módulos** (
 | **Núcleo** (todos os planos) | PDV, Caixa, Dashboard, Produtos, Funcionários |
 | **Starter** | Núcleo + Clientes, Estoque, Fornecedores, Orçamentos, Crediário (Fiado) |
 | **Pro** | Starter + Compras, Inventário, Financeiro, Relatórios, Comissões, Central de Comandas, **Ordem de Serviço**, **NFC-e (emissão fiscal)**, **Cardápio digital** |
-| **Enterprise** | Pro + Funil de Vendas, Automações, NPS, Atendimento WhatsApp (todos) |
+| **Enterprise** | Pro + Funil de Vendas, Automações, NPS, Atendimento WhatsApp, **NF-e 55 / NFS-e** (todos) |
 
 > **NFC-e por plano:** a emissão de Nota Fiscal de Consumidor (modelo 65) é liberada a partir do plano **Pro**. Empresas em planos sem fiscal não veem a tela "Notas Fiscais" nem conseguem emitir/configurar — o sistema responde que o módulo não está incluído. Pode ser liberado avulso a uma empresa específica pelo Admin Master.
 

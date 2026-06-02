@@ -407,17 +407,18 @@ export async function cobrar(req, res, next) {
       const detalhe = errMp instanceof MercadoPagoError
         ? `[MP ${errMp.status}] ${errMp.message}`
         : `[MP] ${errMp.message}`;
-      // MP retorna mensagem confusa "payment.type does not match: credit_card"
-      // quando a conta nao tem debito habilitado via Point Integration. O
-      // payload esta correto — falta ativar no suporte MP. Traduzimos para
-      // algo acionavel pelo lojista.
-      const debitoSemHabilitacao =
+      // "payment.type does not match: credit_card" no debito normalmente
+      // significa payload invalido (installments/installments_cost enviados
+      // junto com debit_card) — ja corrigido em mercadoPago.js. Se ainda
+      // aparecer, pode ser conta sem debit_card habilitado: confira em
+      // GET /v1/payment_methods (payment_type_id=debit_card, status=active).
+      const debitoTypeMismatch =
         tipo === "DEBIT" &&
         errMp instanceof MercadoPagoError &&
         errMp.status === 400 &&
         /payment\.type/i.test(errMp.message || "");
-      const erroAmigavel = debitoSemHabilitacao
-        ? "Débito não habilitado nesta conta Mercado Pago. Ligue para o suporte MP e peça a ativação de débito via Point Integration. Use crédito enquanto isso."
+      const erroAmigavel = debitoTypeMismatch
+        ? "Falha no débito (payment.type). Verifique se a conta tem débito habilitado em payment_methods; se tiver, é payload. Use crédito enquanto isso."
         : "Falha ao enviar cobranca para a maquininha";
       await prisma.intencaoPagamentoMP.update({
         where: { id: intencao.id },
@@ -765,16 +766,26 @@ export async function webhook(req, res, next) {
 async function processarPaymentNotificacao({ tenantId, paymentId, accessToken }) {
   const payment = await obterPayment({ accessToken, paymentId });
   const externalReference = payment?.external_reference;
-  if (!externalReference) {
-    const e = new Error("Payment sem external_reference");
-    e.status = 404;
-    throw e;
-  }
+  // O Point NEM SEMPRE propaga additional_info.external_reference para o
+  // payment final — alguns devices sobrescrevem com um default ("Venda
+  // presencial"). Nesses casos o vinculo confiavel e payment.metadata
+  // .payment_intent_id, que casa com o intentId que salvamos na intencao.
+  const pointIntentId = payment?.metadata?.payment_intent_id;
 
   // Resolve a intencao usando o tenantId conhecido (cross-tenant via raw).
-  const intencao = await prismaRaw.intencaoPagamentoMP.findFirst({
-    where: { id: externalReference, tenantId },
-  });
+  // 1) Por external_reference (PIX e cartao quando propaga corretamente).
+  // 2) Fallback Point: por intentId (metadata.payment_intent_id).
+  let intencao = null;
+  if (externalReference) {
+    intencao = await prismaRaw.intencaoPagamentoMP.findFirst({
+      where: { id: externalReference, tenantId },
+    });
+  }
+  if (!intencao && pointIntentId) {
+    intencao = await prismaRaw.intencaoPagamentoMP.findFirst({
+      where: { intentId: String(pointIntentId), tenantId },
+    });
+  }
   if (!intencao) {
     const e = new Error("Intencao nao encontrada para esse tenant");
     e.status = 404;

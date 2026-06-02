@@ -983,6 +983,21 @@ O sistema é **PWA** — pode ser instalado como app no celular pelo banner do n
 
 **Como ver o uso atual:** Empresa → Bloco "Plano" → barras de progresso.
 
+### Módulos liberados por plano
+
+Além dos limites de quantidade, **cada plano libera um conjunto de módulos** (telas/funcionalidades). Módulos fora do plano ficam ocultos na barra lateral e bloqueados no acesso.
+
+| Pacote | Módulos inclusos |
+|--------|------------------|
+| **Núcleo** (todos os planos) | PDV, Caixa, Dashboard, Produtos, Funcionários |
+| **Starter** | Núcleo + Clientes, Estoque, Fornecedores, Orçamentos |
+| **Pro** | Starter + Compras, Inventário, Financeiro, Relatórios, Comissões, Central de Comandas |
+| **Enterprise** | Pro + Funil de Vendas, Automações, NPS, Atendimento WhatsApp (todos) |
+
+> **Módulos avulsos:** o administrador da plataforma pode liberar ou remover módulos individuais de uma empresa específica (ex.: vender só o WhatsApp a um cliente do plano Pro), independentemente do pacote padrão do plano. Feito no Admin Master → 🎫 Alterar plano → "Módulos liberados".
+
+Se um usuário tentar acessar um módulo fora do plano, o sistema responde que **o módulo não está incluído no plano atual** e sugere upgrade.
+
 ### Assinatura e cobrança mensal
 
 Os planos pagos são cobrados por **assinatura mensal recorrente**. O bloco **"Assinatura"** na tela **Empresa** mostra o estado da cobrança e permite contratar.

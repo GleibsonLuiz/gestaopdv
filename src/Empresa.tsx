@@ -155,6 +155,8 @@ export default function Empresa({ user }: EmpresaProps) {
     );
   }
 
+  const segmento = (dados as any).segmento as string | undefined;
+
   const stats: { rotulo: string; valor: number; cor: string }[] = [
     { rotulo: "Usuários", valor: dados.estatisticas?.usuarios ?? 0, cor: C.accent },
     { rotulo: "Clientes", valor: dados.estatisticas?.clientes ?? 0, cor: C.green },
@@ -165,13 +167,13 @@ export default function Empresa({ user }: EmpresaProps) {
   return (
     <div>
       {/* ============ BLOCO 1: IDENTIDADE DO TENANT ============ */}
-      <div className="bg-gp-card border border-gp-border rounded-xl p-5 mb-5">
-        <div className="flex justify-between items-start flex-wrap gap-3 mb-4">
+      <div className="bg-gp-card border border-gp-border rounded-xl p-4 mb-3">
+        <div className="flex justify-between items-start flex-wrap gap-3 mb-3">
           <div>
             <div className="text-gp-muted text-[11px] font-bold uppercase tracking-[0.5px]">
               Identidade da empresa
             </div>
-            <div className="text-gp-white text-2xl font-extrabold mt-1">{dados.nome}</div>
+            <div className="text-gp-white text-xl font-extrabold mt-1">{dados.nome}</div>
             <div className="text-gp-muted text-[13px] mt-1">
               {dados.cnpj ? `CNPJ ${mascararCnpj(dados.cnpj)}` : "Sem CNPJ cadastrado"}
               {" · "}
@@ -201,7 +203,7 @@ export default function Empresa({ user }: EmpresaProps) {
         {editando && (
           <form
             onSubmit={salvar}
-            className="bg-gp-surface border border-gp-border rounded-[10px] p-4 mb-4"
+            className="bg-gp-surface border border-gp-border rounded-[10px] p-3 mb-3"
           >
             <div className="grid gap-3 grid-cols-2">
               <div>
@@ -253,23 +255,23 @@ export default function Empresa({ user }: EmpresaProps) {
           </form>
         )}
 
-        {/* Estatisticas */}
+        {/* Estatisticas — strip compacto (rotulo + valor na mesma linha) */}
         <div
-          className="grid gap-[10px] mt-4"
-          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}
+          className="grid gap-2 mt-3"
+          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))" }}
         >
           {stats.map((s, i) => (
             <div
               key={i}
-              className="bg-gp-surface border border-gp-border rounded-[10px] px-[14px] py-3 relative overflow-hidden"
+              className="bg-gp-surface border border-gp-border rounded-lg pl-3 pr-[10px] py-[6px] relative overflow-hidden flex items-baseline justify-between gap-2"
             >
               <div className="absolute top-0 left-0 w-1 h-full" style={{ background: s.cor }} />
-              <div className="text-gp-muted text-[10px] font-bold uppercase tracking-[0.5px]">
+              <span className="text-gp-muted text-[10px] font-bold uppercase tracking-[0.5px]">
                 {s.rotulo}
-              </div>
-              <div className="text-[22px] font-extrabold mt-1" style={{ color: s.cor }}>
+              </span>
+              <span className="text-base font-extrabold" style={{ color: s.cor }}>
                 {fmtNum(s.valor)}
-              </div>
+              </span>
             </div>
           ))}
         </div>
@@ -285,35 +287,43 @@ export default function Empresa({ user }: EmpresaProps) {
         />
       )}
 
-      {/* ETAPA#6: segmento de negocio — read-only, alterado so pelo super-admin */}
-      {(dados as any).segmento && (
-        <div className="bg-gp-card border border-gp-border rounded-xl p-3 mb-5"
-             style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <div>
-            <div className="text-gp-white text-sm font-bold">
-              🏷️ Segmento de negócio: <span style={{ color: C.accent }}>{
-                ({
-                  GERAL: "Geral",
-                  AUTO_PECAS: "Auto-Peças",
-                  FARMACIA: "Farmácia",
-                  PAPELARIA: "Papelaria",
-                } as Record<string, string>)[(dados as any).segmento] || (dados as any).segmento
-              }</span>
-            </div>
-            <div className="text-gp-muted text-xs mt-[2px]">
-              Define quais campos extras aparecem no cadastro de produto.
-              Alteração só pelo administrador da plataforma.
+      {/* ============ BLOCO 2b: ASSINATURA / COBRANCA RECORRENTE ============ */}
+      <BlocoAssinatura podeAssinar={podeEditar} />
+
+      {/* ETAPA#6: segmento (read-only) + preferencias locais — lado a lado */}
+      <div
+        className="grid gap-3 mb-3 items-stretch"
+        style={{ gridTemplateColumns: segmento ? "1fr 1fr" : "1fr" }}
+      >
+        {segmento && (
+          <div className="bg-gp-card border border-gp-border rounded-xl p-4"
+               style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div>
+              <div className="text-gp-white text-sm font-bold">
+                🏷️ Segmento de negócio: <span style={{ color: C.accent }}>{
+                  ({
+                    GERAL: "Geral",
+                    AUTO_PECAS: "Auto-Peças",
+                    FARMACIA: "Farmácia",
+                    PAPELARIA: "Papelaria",
+                  } as Record<string, string>)[segmento] || segmento
+                }</span>
+              </div>
+              <div className="text-gp-muted text-xs mt-[2px]">
+                Define quais campos extras aparecem no cadastro de produto.
+                Alteração só pelo administrador da plataforma.
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ============ BLOCO PREFERENCIAS LOCAIS ============ */}
-      <BlocoPreferenciasUI />
+        {/* ============ BLOCO PREFERENCIAS LOCAIS ============ */}
+        <BlocoPreferenciasUI />
+      </div>
 
       {/* ============ BLOCO 3: DADOS FISCAIS (CONFIGURACAO EMPRESA) ============ */}
-      <div className="bg-gp-card border border-gp-border rounded-xl p-1 mb-5">
-        <div className="px-4 py-3 border-b border-gp-border">
+      <div className="bg-gp-card border border-gp-border rounded-xl p-1 mb-3">
+        <div className="px-4 py-2 border-b border-gp-border">
           <div className="text-gp-white text-sm font-bold">📄 Dados fiscais e de exibição</div>
           <div className="text-gp-muted text-xs mt-[2px]">
             Esses dados aparecem em recibos, comprovantes e cabeçalhos de relatórios PDF.
@@ -359,8 +369,8 @@ function BlocoPlano({ plano, expiraEm, uso, limites }: BlocoPlanoProps) {
   ];
 
   return (
-    <div className="bg-gp-card border border-gp-border rounded-xl p-5 mb-5">
-      <div className="flex justify-between items-start flex-wrap gap-3 mb-4">
+    <div className="bg-gp-card border border-gp-border rounded-xl p-4 mb-3">
+      <div className="flex justify-between items-start flex-wrap gap-3 mb-3">
         <div>
           <div className="text-gp-muted text-[11px] font-bold uppercase tracking-[0.5px]">
             Plano atual
@@ -406,7 +416,7 @@ function BlocoPlano({ plano, expiraEm, uso, limites }: BlocoPlanoProps) {
           return (
             <div
               key={r.id}
-              className="bg-gp-surface border border-gp-border rounded-[10px] px-[14px] py-3"
+              className="bg-gp-surface border border-gp-border rounded-[10px] px-3 py-2"
             >
               <div className="flex justify-between items-baseline mb-[6px]">
                 <div className="text-gp-text text-xs font-bold">
@@ -439,9 +449,297 @@ function BlocoPlano({ plano, expiraEm, uso, limites }: BlocoPlanoProps) {
         })}
       </div>
 
-      <div className="mt-3 px-3 py-2 bg-gp-bg rounded-lg text-[11px] text-gp-muted">
+      <div className="mt-2 px-3 py-[6px] bg-gp-bg rounded-lg text-[11px] text-gp-muted">
         Para alterar o plano ou ampliar limites, entre em contato com o suporte.
       </div>
+    </div>
+  );
+}
+
+// ============ BLOCO ASSINATURA / COBRANCA RECORRENTE ============
+//
+// Mostra o estado da assinatura do SaaS (status, valor, proxima cobranca),
+// permite ao ADMIN contratar/trocar de plano (gera link de pagamento ou ativa
+// na hora no provedor mock) e lista o historico de cobrancas. Distinto do
+// BlocoPlano (que mostra uso vs limites) — aqui e o lado financeiro/cobranca.
+
+type StatusAssinatura = "TRIAL" | "ATIVA" | "INADIMPLENTE" | "CANCELADA";
+
+interface PlanoCatalogo {
+  plano: string;
+  valorMensal: number;
+  rotulo: string;
+  descricao: string;
+  assinavel: boolean;
+}
+
+interface Cobranca {
+  id: string;
+  valor: number;
+  status: "PENDENTE" | "PAGA" | "VENCIDA" | "CANCELADA";
+  vencimento?: string;
+  pagoEm?: string;
+  metodo?: string;
+  linkPagamento?: string;
+  descricao?: string;
+  criadaEm?: string;
+}
+
+interface AssinaturaInfo {
+  plano: Plano;
+  expiraEm?: string;
+  statusAssinatura: StatusAssinatura;
+  provedor?: string;
+  valorMensal?: number | null;
+  ultimoPagamentoEm?: string;
+  proximaCobrancaEm?: string;
+  cobrancaPendente?: Cobranca | null;
+  historico?: Cobranca[];
+}
+
+const STATUS_ASSINATURA_INFO: Record<StatusAssinatura, { cor: string; label: string; icone: string }> = {
+  TRIAL: { cor: "#f59e0b", label: "Em período de teste", icone: "🎫" },
+  ATIVA: { cor: "#22c55e", label: "Assinatura ativa", icone: "✅" },
+  INADIMPLENTE: { cor: "#ef4444", label: "Pagamento em atraso", icone: "⚠️" },
+  CANCELADA: { cor: C.muted, label: "Assinatura cancelada", icone: "🚫" },
+};
+
+const STATUS_COBRANCA_COR: Record<Cobranca["status"], string> = {
+  PENDENTE: "#f59e0b",
+  PAGA: "#22c55e",
+  VENCIDA: "#ef4444",
+  CANCELADA: C.muted,
+};
+
+function fmtMoeda(n: number | null | undefined): string {
+  return Number(n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function BlocoAssinatura({ podeAssinar }: { podeAssinar: boolean }) {
+  const [info, setInfo] = useState<AssinaturaInfo | null>(null);
+  const [planos, setPlanos] = useState<PlanoCatalogo[]>([]);
+  const [cobrancaHabilitada, setCobrancaHabilitada] = useState(true);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState("");
+  const [assinando, setAssinando] = useState<string | null>(null);
+  const [msg, setMsg] = useState("");
+
+  async function carregar() {
+    setCarregando(true); setErro("");
+    try {
+      const [a, p] = await Promise.all([
+        api.billingAssinatura() as Promise<AssinaturaInfo>,
+        api.billingPlanos() as Promise<{ planos: PlanoCatalogo[]; cobrancaHabilitada?: boolean }>,
+      ]);
+      setInfo(a);
+      setPlanos(p.planos || []);
+      setCobrancaHabilitada(p.cobrancaHabilitada !== false);
+    } catch (err) {
+      setErro((err as Error).message || "Erro ao carregar assinatura");
+    } finally {
+      setCarregando(false);
+    }
+  }
+  useEffect(() => { carregar(); }, []);
+
+  async function assinar(plano: string) {
+    setAssinando(plano); setMsg(""); setErro("");
+    try {
+      const r = await api.billingAssinar(plano) as {
+        ativada?: boolean; linkPagamento?: string | null;
+      };
+      if (r.linkPagamento) {
+        // Provedor real: abre o link de pagamento (PIX/boleto/cartao).
+        window.open(r.linkPagamento, "_blank", "noopener");
+        setMsg("Cobrança gerada. Conclua o pagamento na aba aberta — o acesso é liberado automaticamente após a confirmação.");
+      } else if (r.ativada) {
+        setMsg("Plano ativado com sucesso! 🎉");
+      }
+      await carregar();
+    } catch (err) {
+      setErro((err as Error).message || "Não foi possível iniciar a assinatura");
+    } finally {
+      setAssinando(null);
+    }
+  }
+
+  if (carregando && !info) {
+    return (
+      <div className="bg-gp-card border border-gp-border rounded-xl p-4 mb-3 text-gp-muted text-sm">
+        Carregando assinatura...
+      </div>
+    );
+  }
+
+  const status = info?.statusAssinatura || "TRIAL";
+  const si = STATUS_ASSINATURA_INFO[status];
+  const pendente = info?.cobrancaPendente;
+  const historico = info?.historico || [];
+
+  return (
+    <div className="bg-gp-card border border-gp-border rounded-xl p-4 mb-3">
+      <div className="flex justify-between items-start flex-wrap gap-3 mb-3">
+        <div>
+          <div className="text-gp-muted text-[11px] font-bold uppercase tracking-[0.5px]">
+            Assinatura
+          </div>
+          <div className="flex items-center gap-[10px] mt-[6px]">
+            <span
+              className="px-[14px] py-[6px] rounded-xl text-sm font-extrabold"
+              style={{ background: si.cor + "22", color: si.cor }}
+            >
+              {si.icone} {si.label}
+            </span>
+            {info?.valorMensal ? (
+              <span className="text-gp-muted text-xs">
+                {fmtMoeda(info.valorMensal)}/mês
+              </span>
+            ) : null}
+          </div>
+          <div className="text-gp-muted text-xs mt-2">
+            {info?.proximaCobrancaEm
+              ? <>Próxima cobrança: <strong>{fmtData(info.proximaCobrancaEm)}</strong></>
+              : "Sem cobrança recorrente ativa."}
+            {info?.ultimoPagamentoEm && <> · Último pagamento: {fmtData(info.ultimoPagamentoEm)}</>}
+          </div>
+        </div>
+      </div>
+
+      {erro && (
+        <div
+          className="mb-3 px-3 py-2 rounded-lg text-gp-red text-xs"
+          style={{ background: C.red + "22", border: `1px solid ${C.red}55` }}
+        >
+          {erro}
+        </div>
+      )}
+      {msg && (
+        <div
+          className="mb-3 px-3 py-2 rounded-lg text-xs"
+          style={{ background: C.green + "22", border: `1px solid ${C.green}55`, color: C.green }}
+        >
+          {msg}
+        </div>
+      )}
+
+      {/* Cobranca em aberto — link para pagar agora */}
+      {pendente && pendente.linkPagamento && (
+        <div
+          className="mb-3 px-3 py-[10px] rounded-lg flex items-center justify-between gap-3 flex-wrap"
+          style={{ background: "#f59e0b22", border: "1px solid #f59e0b55" }}
+        >
+          <div className="text-xs" style={{ color: "#f59e0b" }}>
+            💳 Há uma cobrança em aberto de <strong>{fmtMoeda(pendente.valor)}</strong>
+            {pendente.vencimento && <> (vence {fmtData(pendente.vencimento)})</>}.
+          </div>
+          <a
+            href={pendente.linkPagamento}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-gp-white border-none rounded-lg px-4 py-2 font-bold text-xs no-underline whitespace-nowrap"
+            style={{ background: "#f59e0b" }}
+          >
+            Pagar agora →
+          </a>
+        </div>
+      )}
+
+      {/* Aviso quando a cobranca online ainda nao esta habilitada (provedor mock). */}
+      {podeAssinar && !cobrancaHabilitada && (
+        <div
+          className="mb-3 px-3 py-[10px] rounded-lg text-xs"
+          style={{ background: C.accent + "1a", border: `1px solid ${C.accent}44`, color: C.text }}
+        >
+          💬 O pagamento online ainda não está habilitado. Para contratar ou mudar de plano,
+          <strong> fale com o suporte</strong>.
+        </div>
+      )}
+
+      {/* Catalogo de planos — so ADMIN contrata */}
+      {podeAssinar && (
+        <div
+          className="grid gap-2 mb-1"
+          style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}
+        >
+          {planos.map((p) => {
+            const atual = info?.plano === p.plano && status === "ATIVA";
+            return (
+              <div
+                key={p.plano}
+                className="bg-gp-surface border border-gp-border rounded-[10px] px-3 py-[10px] flex flex-col gap-2"
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-gp-white text-sm font-bold">{p.rotulo}</span>
+                  <span className="text-gp-white text-sm font-extrabold">
+                    {p.valorMensal ? `${fmtMoeda(p.valorMensal)}` : "Sob consulta"}
+                  </span>
+                </div>
+                <div className="text-gp-muted text-[11px]" style={{ lineHeight: 1.4, minHeight: 30 }}>
+                  {p.descricao}
+                </div>
+                {atual ? (
+                  <div
+                    className="rounded-lg px-3 py-2 text-center font-bold text-xs"
+                    style={{ background: C.green + "22", color: C.green }}
+                  >
+                    ✓ Plano atual
+                  </div>
+                ) : (p.assinavel && cobrancaHabilitada) ? (
+                  <button
+                    type="button"
+                    disabled={assinando !== null}
+                    onClick={() => assinar(p.plano)}
+                    className="text-gp-white border-none rounded-lg px-3 py-2 font-bold text-xs cursor-pointer"
+                    style={{
+                      background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+                      opacity: assinando !== null ? 0.6 : 1,
+                    }}
+                  >
+                    {assinando === p.plano ? "Processando..." : (info?.plano === p.plano ? "Renovar" : "Assinar")}
+                  </button>
+                ) : (
+                  <div className="text-gp-muted text-[11px] text-center px-2 py-2">
+                    {p.assinavel && !cobrancaHabilitada ? "Em breve" : "Fale com o suporte"}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Historico de cobrancas */}
+      {historico.length > 0 && (
+        <details className="mt-2">
+          <summary className="text-gp-muted text-[11px] font-bold uppercase tracking-[0.5px] cursor-pointer">
+            Histórico de cobranças ({historico.length})
+          </summary>
+          <div className="mt-2 flex flex-col gap-1">
+            {historico.map((c) => (
+              <div
+                key={c.id}
+                className="bg-gp-surface border border-gp-border rounded-lg px-3 py-[6px] flex items-center justify-between gap-2 text-xs"
+              >
+                <span className="text-gp-text">{fmtData(c.criadaEm)}</span>
+                <span className="text-gp-muted">{c.metodo || "—"}</span>
+                <span className="text-gp-white font-bold">{fmtMoeda(c.valor)}</span>
+                <span
+                  className="font-bold"
+                  style={{ color: STATUS_COBRANCA_COR[c.status] }}
+                >
+                  {c.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+
+      {!podeAssinar && (
+        <div className="mt-1 px-3 py-[6px] bg-gp-bg rounded-lg text-[11px] text-gp-muted">
+          Apenas o administrador da empresa pode contratar ou alterar o plano.
+        </div>
+      )}
     </div>
   );
 }
@@ -461,13 +759,13 @@ function BlocoPreferenciasUI() {
   }
 
   return (
-    <div className="bg-gp-card border border-gp-border rounded-xl p-5 mb-5">
+    <div className="bg-gp-card border border-gp-border rounded-xl p-4">
       <div className="text-gp-muted text-[11px] font-bold uppercase tracking-[0.5px] mb-3">
         Preferencias deste dispositivo
       </div>
 
       <div
-        className="bg-gp-surface border border-gp-border rounded-[10px] p-4"
+        className="bg-gp-surface border border-gp-border rounded-[10px] p-3"
         style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}
       >
         <div style={{ flex: 1, minWidth: 0 }}>

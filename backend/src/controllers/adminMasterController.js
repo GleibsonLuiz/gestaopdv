@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import prisma, { prismaRaw } from "../lib/prisma.js";
 import { registrarEvento } from "../middlewares/auditoria.js";
 import { permissoesPadrao } from "../lib/permissoes.js";
+import { getProvedor } from "../lib/billing/provedor.js";
 
 // prismaRaw = sem extension (cross-tenant). Use SEMPRE que precisar buscar
 // ou alterar registros de outros tenants. O `prisma` normal e mantido
@@ -42,6 +43,10 @@ export async function listarEmpresas(req, res, next) {
         e.segmento,
         e."expiraEm" AS expira_em,
         e."observacoesPlano" AS observacoes_plano,
+        e."statusAssinatura" AS status_assinatura,
+        e."valorMensal" AS valor_mensal,
+        e."proximaCobrancaEm" AS proxima_cobranca_em,
+        e."ultimoPagamentoEm" AS ultimo_pagamento_em,
         e."createdAt" AS criada_em,
         e."updatedAt" AS atualizada_em,
         COALESCE(u.qtd, 0)::int AS qtd_users,
@@ -70,6 +75,10 @@ export async function listarEmpresas(req, res, next) {
       segmento: l.segmento,
       expiraEm: l.expira_em,
       observacoesPlano: l.observacoes_plano,
+      statusAssinatura: l.status_assinatura,
+      valorMensal: l.valor_mensal != null ? Number(l.valor_mensal) : null,
+      proximaCobrancaEm: l.proxima_cobranca_em,
+      ultimoPagamentoEm: l.ultimo_pagamento_em,
       criadaEm: l.criada_em,
       atualizadaEm: l.atualizada_em,
       estatisticas: {
@@ -122,7 +131,7 @@ export async function estatisticasGlobais(req, res, next) {
 // retornamos so contagens/series temporais que dao trabalho calcular no front.
 export async function financeiroDashboard(req, res, next) {
   try {
-    const [porPlano, cadastrosMes, [agg]] = await Promise.all([
+    const [porPlano, cadastrosMes, [agg], [billing]] = await Promise.all([
       // Distribuicao de planos (so empresas ativas — suspensas nao geram receita)
       prisma.$queryRaw`
         SELECT plano, COUNT(*)::int AS qtd
@@ -157,6 +166,24 @@ export async function financeiroDashboard(req, res, next) {
           (SELECT COUNT(*)::int FROM empresas
             WHERE ativo = true AND plano = 'TRIAL') AS em_trial
       `,
+      // Billing real: MRR = soma do valorMensal das assinaturas ATIVAS;
+      // inadimplencia; e o que entrou/esta a receber em cobrancas.
+      prisma.$queryRaw`
+        SELECT
+          (SELECT COALESCE(SUM("valorMensal"), 0)::float FROM empresas
+            WHERE "statusAssinatura" = 'ATIVA') AS mrr_real,
+          (SELECT COUNT(*)::int FROM empresas
+            WHERE "statusAssinatura" = 'ATIVA') AS assinaturas_ativas,
+          (SELECT COUNT(*)::int FROM empresas
+            WHERE "statusAssinatura" = 'INADIMPLENTE') AS inadimplentes,
+          (SELECT COUNT(*)::int FROM empresas
+            WHERE "statusAssinatura" = 'CANCELADA') AS canceladas,
+          (SELECT COALESCE(SUM(valor), 0)::float FROM cobrancas_assinatura
+            WHERE status = 'PAGA'
+              AND "pagoEm" >= DATE_TRUNC('month', NOW())) AS recebido_mes,
+          (SELECT COALESCE(SUM(valor), 0)::float FROM cobrancas_assinatura
+            WHERE status = 'PENDENTE') AS a_receber
+      `,
     ]);
 
     // Normaliza porPlano em objeto { TRIAL: N, FREE: N, ... } — facilita no front
@@ -178,6 +205,16 @@ export async function financeiroDashboard(req, res, next) {
         trialExpirando7d: agg.trial_expirando_7d,
         pagantes: agg.pagantes,
         emTrial: agg.em_trial,
+      },
+      // Billing real (assinaturas/cobrancas) — quando ha assinaturas ATIVAS o
+      // frontend usa mrrReal em vez do calculo por preco-de-referencia.
+      billing: {
+        mrrReal: billing.mrr_real,
+        assinaturasAtivas: billing.assinaturas_ativas,
+        inadimplentes: billing.inadimplentes,
+        canceladas: billing.canceladas,
+        recebidoMes: billing.recebido_mes,
+        aReceber: billing.a_receber,
       },
     });
   } catch (err) {
@@ -595,16 +632,28 @@ export async function logsGlobal(req, res, next) {
 // ============ ETAPA 12 ============
 
 const PLANOS = new Set(["TRIAL", "FREE", "STARTER", "PRO", "ENTERPRISE"]);
+const STATUS_ASSINATURA = new Set(["TRIAL", "ATIVA", "INADIMPLENTE", "CANCELADA"]);
 
-// PATCH /admin-master/empresas/:id/plano — altera plano + expiracao.
+// PATCH /admin-master/empresas/:id/plano — altera plano + expiracao +
+// (opcional) status de assinatura. Permite ao super-admin marcar ATIVA na mao
+// para clientes negociados/pagos por fora do gateway (ex.: Enterprise).
 export async function alterarPlano(req, res, next) {
   try {
     const { id } = req.params;
-    const { plano, expiraEm, observacoes } = req.body || {};
+    const { plano, expiraEm, observacoes, statusAssinatura } = req.body || {};
     if (!plano || !PLANOS.has(String(plano).toUpperCase())) {
       return res.status(400).json({
         erro: `Plano invalido. Use: ${[...PLANOS].join(", ")}`,
       });
+    }
+    let statusAssin = null;
+    if (statusAssinatura !== undefined && statusAssinatura !== null && statusAssinatura !== "") {
+      statusAssin = String(statusAssinatura).toUpperCase();
+      if (!STATUS_ASSINATURA.has(statusAssin)) {
+        return res.status(400).json({
+          erro: `Status de assinatura invalido. Use: ${[...STATUS_ASSINATURA].join(", ")}`,
+        });
+      }
     }
     let expira = null;
     if (expiraEm) {
@@ -616,13 +665,24 @@ export async function alterarPlano(req, res, next) {
     }
     const obs = observacoes ? String(observacoes).trim().slice(0, 500) : null;
 
+    const data = {
+      plano: String(plano).toUpperCase(),
+      expiraEm: expira,
+      observacoesPlano: obs,
+    };
+    // Se o super-admin mudou o status manualmente, persiste. Marcar ATIVA por
+    // fora do gateway registra a data de pagamento (baixa manual de contrato).
+    if (statusAssin) {
+      data.statusAssinatura = statusAssin;
+      if (statusAssin === "ATIVA") {
+        data.ultimoPagamentoEm = new Date();
+        data.ativo = true;
+      }
+    }
+
     const atualizada = await prismaRaw.empresa.update({
       where: { id },
-      data: {
-        plano: String(plano).toUpperCase(),
-        expiraEm: expira,
-        observacoesPlano: obs,
-      },
+      data,
     }).catch(err => {
       if (err.code === "P2025") return null;
       throw err;
@@ -633,7 +693,7 @@ export async function alterarPlano(req, res, next) {
       acao: "PLANO_ALTERADO", modulo: "ADMIN_MASTER", sucesso: true,
       usuarioId: req.user.sub, usuarioNome: req.user.nome,
       tenantId: id,
-      mensagem: `Plano alterado para ${atualizada.plano}${expira ? `, expira em ${expira.toISOString().slice(0, 10)}` : ""}`,
+      mensagem: `Plano alterado para ${atualizada.plano}${statusAssin ? `, assinatura ${statusAssin}` : ""}${expira ? `, expira em ${expira.toISOString().slice(0, 10)}` : ""}`,
       req,
     });
 
@@ -644,6 +704,7 @@ export async function alterarPlano(req, res, next) {
         plano: atualizada.plano,
         expiraEm: atualizada.expiraEm,
         observacoesPlano: atualizada.observacoesPlano,
+        statusAssinatura: atualizada.statusAssinatura,
       },
     });
   } catch (err) {
@@ -827,6 +888,153 @@ export async function metricas(req, res, next) {
         id: a.id, nome: a.nome, ultimoLogin: a.ultimo_login,
       })),
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ============ ASSINATURA / COBRANCAS (visao super-admin) ============
+//
+// Cross-tenant (prismaRaw) — o super-admin enxerga a assinatura e o historico
+// de cobranca de qualquer empresa. Distinto de /billing/* (que e a visao do
+// proprio cliente sobre a SUA assinatura).
+
+const CICLO_DIAS = 30;
+
+function empurrarValidade(expiraEmAtual) {
+  const agora = new Date();
+  const base = expiraEmAtual && new Date(expiraEmAtual) > agora ? new Date(expiraEmAtual) : agora;
+  return new Date(base.getTime() + CICLO_DIAS * 86400000);
+}
+
+// GET /admin-master/empresas/:id/cobrancas — assinatura + historico de faturas.
+export async function listarCobrancasEmpresa(req, res, next) {
+  try {
+    const { id } = req.params;
+    const empresa = await prismaRaw.empresa.findUnique({
+      where: { id },
+      select: {
+        id: true, nome: true, plano: true, expiraEm: true,
+        statusAssinatura: true, gatewayProvedor: true, gatewayAssinaturaId: true,
+        valorMensal: true, ultimoPagamentoEm: true, proximaCobrancaEm: true,
+      },
+    });
+    if (!empresa) return res.status(404).json({ erro: "Empresa nao encontrada" });
+
+    const cobrancas = await prismaRaw.cobrancaAssinatura.findMany({
+      where: { tenantId: id },
+      orderBy: { createdAt: "desc" },
+      take: 24,
+    });
+
+    res.json({
+      assinatura: {
+        plano: empresa.plano,
+        expiraEm: empresa.expiraEm,
+        statusAssinatura: empresa.statusAssinatura,
+        provedor: empresa.gatewayProvedor,
+        valorMensal: empresa.valorMensal != null ? Number(empresa.valorMensal) : null,
+        ultimoPagamentoEm: empresa.ultimoPagamentoEm,
+        proximaCobrancaEm: empresa.proximaCobrancaEm,
+        temAssinaturaGateway: Boolean(empresa.gatewayAssinaturaId),
+      },
+      cobrancas: cobrancas.map(c => ({
+        id: c.id,
+        valor: Number(c.valor),
+        status: c.status,
+        vencimento: c.vencimento,
+        pagoEm: c.pagoEm,
+        metodo: c.metodo,
+        linkPagamento: c.linkPagamento,
+        descricao: c.descricao,
+        criadaEm: c.createdAt,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /admin-master/empresas/:id/cobrancas/:cobrancaId/marcar-paga — baixa
+// manual de uma cobranca (ex.: cliente pagou por fora/PIX direto). Marca PAGA,
+// ativa a assinatura e empurra o expiraEm +30d.
+export async function marcarCobrancaPaga(req, res, next) {
+  try {
+    const { id, cobrancaId } = req.params;
+    const empresa = await prismaRaw.empresa.findUnique({ where: { id } });
+    if (!empresa) return res.status(404).json({ erro: "Empresa nao encontrada" });
+
+    const cobranca = await prismaRaw.cobrancaAssinatura.findUnique({ where: { id: cobrancaId } });
+    if (!cobranca || cobranca.tenantId !== id) {
+      return res.status(404).json({ erro: "Cobranca nao encontrada para esta empresa" });
+    }
+    if (cobranca.status === "PAGA") {
+      return res.status(409).json({ erro: "Cobranca ja esta paga" });
+    }
+
+    const agora = new Date();
+    await prismaRaw.$transaction([
+      prismaRaw.cobrancaAssinatura.update({
+        where: { id: cobrancaId },
+        data: { status: "PAGA", pagoEm: agora, metodo: cobranca.metodo || "MANUAL" },
+      }),
+      prismaRaw.empresa.update({
+        where: { id },
+        data: {
+          statusAssinatura: "ATIVA",
+          ativo: true,
+          ultimoPagamentoEm: agora,
+          expiraEm: empurrarValidade(empresa.expiraEm),
+          proximaCobrancaEm: new Date(agora.getTime() + CICLO_DIAS * 86400000),
+        },
+      }),
+    ]);
+
+    registrarEvento({
+      acao: "COBRANCA_BAIXA_MANUAL", modulo: "ADMIN_MASTER", sucesso: true,
+      usuarioId: req.user.sub, usuarioNome: req.user.nome, tenantId: id,
+      mensagem: `Baixa manual de cobranca (${Number(cobranca.valor)}) — assinatura reativada +30d`,
+      req,
+    });
+
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /admin-master/empresas/:id/assinatura/cancelar — cancela a assinatura
+// no gateway (se houver) e marca CANCELADA. Nao suspende o acesso na hora —
+// o cliente continua ate o expiraEm vigente.
+export async function cancelarAssinaturaEmpresa(req, res, next) {
+  try {
+    const { id } = req.params;
+    const empresa = await prismaRaw.empresa.findUnique({ where: { id } });
+    if (!empresa) return res.status(404).json({ erro: "Empresa nao encontrada" });
+
+    // Tenta cancelar no gateway que originou a assinatura (best-effort).
+    if (empresa.gatewayAssinaturaId && empresa.gatewayProvedor) {
+      try {
+        const provedor = getProvedor(empresa.gatewayProvedor);
+        await provedor.cancelarAssinatura({ assinaturaId: empresa.gatewayAssinaturaId });
+      } catch (e) {
+        console.error("Falha ao cancelar no gateway (segue marcando CANCELADA):", e.message);
+      }
+    }
+
+    await prismaRaw.empresa.update({
+      where: { id },
+      data: { statusAssinatura: "CANCELADA" },
+    });
+
+    registrarEvento({
+      acao: "ASSINATURA_CANCELADA", modulo: "ADMIN_MASTER", sucesso: true,
+      usuarioId: req.user.sub, usuarioNome: req.user.nome, tenantId: id,
+      mensagem: `Assinatura cancelada pelo super-admin (acesso mantido ate ${empresa.expiraEm ? new Date(empresa.expiraEm).toISOString().slice(0, 10) : "—"})`,
+      req,
+    });
+
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

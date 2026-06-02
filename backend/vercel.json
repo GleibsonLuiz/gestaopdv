@@ -10,6 +10,10 @@
     {
       "path": "/cron/automacoes",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/cron/assinaturas",
+      "schedule": "0 6 * * *"
     }
   ]
 }

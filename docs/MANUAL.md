@@ -983,6 +983,26 @@ O sistema é **PWA** — pode ser instalado como app no celular pelo banner do n
 
 **Como ver o uso atual:** Empresa → Bloco "Plano" → barras de progresso.
 
+### Assinatura e cobrança mensal
+
+Os planos pagos são cobrados por **assinatura mensal recorrente**. O bloco **"Assinatura"** na tela **Empresa** mostra o estado da cobrança e permite contratar.
+
+| Status | O que significa |
+|--------|-----------------|
+| 🎫 **Em período de teste** | Trial gratuito; ainda não há cobrança recorrente |
+| ✅ **Assinatura ativa** | Pagamento em dia; o acesso é renovado automaticamente a cada pagamento |
+| ⚠️ **Pagamento em atraso** | A cobrança venceu; há um período de carência antes da suspensão |
+| 🚫 **Cancelada** | A assinatura foi encerrada |
+
+**Como contratar (apenas o administrador):** Empresa → bloco "Assinatura" → escolha o plano → **Assinar**. O sistema gera uma cobrança (PIX, boleto ou cartão) e abre o link de pagamento. **Assim que o pagamento é confirmado, o acesso é liberado/renovado automaticamente** — não é preciso avisar o suporte.
+
+- **Preços de referência:** Starter R$ 49,90/mês · Pro R$ 149,90/mês · Enterprise sob consulta.
+- **Cobrança em aberto:** se houver uma fatura pendente, aparece um aviso com o botão **"Pagar agora"**.
+- **Histórico:** o bloco lista as últimas cobranças (data, método, valor e situação).
+- **Atraso:** se uma cobrança vencer e não for paga, a assinatura fica *em atraso* e, após a carência, o acesso é suspenso até a regularização. Pague a fatura em aberto para reativar.
+
+> O **certificado digital A1** necessário para emitir NFC-e é contratado e pago separadamente pela própria empresa (não está incluso na mensalidade do sistema).
+
 ---
 
 ## 11. Perguntas frequentes

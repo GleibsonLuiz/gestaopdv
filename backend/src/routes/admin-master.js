@@ -5,6 +5,7 @@ import {
   resetarEmpresa, listarUsers, alterarSuperAdmin, impersonate,
   logsGlobal, metricas, alterarPlano, alterarSegmento, exportarEmpresa,
   financeiroDashboard,
+  listarCobrancasEmpresa, marcarCobrancaPaga, cancelarAssinaturaEmpresa,
 } from "../controllers/adminMasterController.js";
 import {
   criar as criarNotificacao, listarTodas as listarTodasNotificacoes,
@@ -44,5 +45,10 @@ router.delete("/notificacoes/:id", deletarNotificacao);
 
 // Dashboard financeiro do SaaS
 router.get("/financeiro", financeiroDashboard);
+
+// Assinatura / cobrancas por empresa (visao super-admin)
+router.get("/empresas/:id/cobrancas", listarCobrancasEmpresa);
+router.post("/empresas/:id/cobrancas/:cobrancaId/marcar-paga", marcarCobrancaPaga);
+router.post("/empresas/:id/assinatura/cancelar", cancelarAssinaturaEmpresa);
 
 export default router;

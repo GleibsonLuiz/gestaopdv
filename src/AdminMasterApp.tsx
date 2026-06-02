@@ -187,6 +187,22 @@ const PLANOS_INFO = {
   ENTERPRISE: { cor: "#22c55e", icone: "🏆", label: "Enterprise" },
 };
 
+// Estado da cobranca recorrente (assinatura do SaaS). Distinto do `plano`
+// (qual produto) e do `ativo` (suspensao manual).
+const STATUS_ASSINATURA_INFO = {
+  TRIAL:        { cor: "#f59e0b", icone: "🎫", label: "Trial" },
+  ATIVA:        { cor: "#22c55e", icone: "✅", label: "Ativa" },
+  INADIMPLENTE: { cor: "#ef4444", icone: "⚠️", label: "Inadimplente" },
+  CANCELADA:    { cor: "#64748b", icone: "🚫", label: "Cancelada" },
+};
+
+const STATUS_COBRANCA_COR = {
+  PENDENTE: "#f59e0b",
+  PAGA: "#22c55e",
+  VENCIDA: "#ef4444",
+  CANCELADA: "#64748b",
+};
+
 // Espelho da matriz em backend/src/lib/planoLimites.js — usado pelos chips de
 // alerta de saude (≥90% do limite). Se mudar backend, atualizar aqui tambem.
 // `vendasMes` omitido porque depende de query do mes corrente que nao vem
@@ -464,6 +480,7 @@ function AbaEmpresas({ onMudou }: any) {
     { id: "nome", label: "Empresa", align: "left", sort: true },
     { id: "plano", label: "Plano", align: "left", sort: true },
     { id: "status", label: "Status", align: "left", sort: false },
+    { id: "assinatura", label: "Assinatura", align: "left", sort: false },
     { id: "users", label: "Users", align: "right", sort: true },
     { id: "vendas", label: "Vendas", align: "right", sort: true },
     { id: "faturamento", label: "Faturamento", align: "right", sort: true },
@@ -666,6 +683,25 @@ function AbaEmpresas({ onMudou }: any) {
                           color: e.ativo ? C.green : C.red,
                         }}>{e.ativo ? "● ATIVA" : "● SUSPENSA"}</span>
                       </td>
+                      <td style={{ padding: "9px 10px" }}>
+                        {(() => {
+                          const sa = STATUS_ASSINATURA_INFO[e.statusAssinatura] || STATUS_ASSINATURA_INFO.TRIAL;
+                          return (
+                            <>
+                              <span style={{
+                                display: "inline-block", padding: "2px 8px", borderRadius: 10,
+                                fontSize: 10, fontWeight: 700,
+                                background: sa.cor + "33", color: sa.cor,
+                              }}>{sa.icone} {sa.label}</span>
+                              {e.valorMensal != null && e.valorMensal > 0 && (
+                                <div style={{ color: C.muted, fontSize: 10, marginTop: 2 }}>
+                                  {fmtBRL(e.valorMensal)}/mês
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </td>
                       <td style={{ padding: "9px 10px", textAlign: "right", color: C.text }}>{fmtNum(e.estatisticas.usuarios)}</td>
                       <td style={{ padding: "9px 10px", textAlign: "right", color: C.text }}>{fmtNum(e.estatisticas.vendas)}</td>
                       <td style={{ padding: "9px 10px", textAlign: "right", color: C.green, fontWeight: 600 }}>
@@ -728,6 +764,7 @@ function AbaEmpresas({ onMudou }: any) {
           onReativar={async () => { const e = modalDetalhes; setModalDetalhes(null); await ativar(e); }}
           onImpersonar={() => { const e = modalDetalhes; setModalDetalhes(null); impersonar(e); }}
           onMensagem={() => { const e = modalDetalhes; setModalDetalhes(null); setModalMensagem(e); }}
+          onMudou={() => { carregar(); onMudou?.(); }}
         />
       )}
       {modalMensagem && (
@@ -785,17 +822,24 @@ function AbaFinanceiro() {
     );
   }
 
-  const { porPlano = {}, cadastrosPorMes = [], totais = {} } = dados || {};
+  const { porPlano = {}, cadastrosPorMes = [], totais = {}, billing = {} } = dados || {};
 
-  // MRR = soma dos precos dos planos ativos. ARR = MRR * 12.
-  const mrr = Object.entries(porPlano).reduce((acc, [plano, qtd]) => {
+  // MRR estimado (por preco-de-referencia dos planos ativos) — usado como
+  // fallback quando ainda nao ha assinaturas pagas de fato.
+  const mrrEstimado = Object.entries(porPlano).reduce((acc, [plano, qtd]) => {
     const preco = PRECO_PLANO_MES[plano] ?? 0;
     return acc + preco * qtd;
   }, 0);
+
+  // MRR REAL = soma do valorMensal das assinaturas ATIVAS (cobranca de verdade).
+  // Quando ha assinaturas ativas, usamos o real; senao caimos no estimado.
+  const temAssinaturasReais = (billing.assinaturasAtivas ?? 0) > 0;
+  const mrr = temAssinaturasReais ? (billing.mrrReal ?? 0) : mrrEstimado;
   const arr = mrr * 12;
 
-  // ARPU = receita media por cliente pagante (exclui TRIAL e FREE).
-  const arpu = totais.pagantes > 0 ? mrr / totais.pagantes : 0;
+  // ARPU = receita media por assinatura ativa (real) ou por pagante (estimado).
+  const baseArpu = temAssinaturasReais ? billing.assinaturasAtivas : totais.pagantes;
+  const arpu = baseArpu > 0 ? mrr / baseArpu : 0;
 
   // Churn aproximado: suspensas nos ultimos 30d sobre base ativa + suspensas.
   // Nao e churn contabil de SaaS (precisa de historico) mas serve de proxy.
@@ -806,11 +850,13 @@ function AbaFinanceiro() {
   const maxCadastros = Math.max(1, ...cadastrosPorMes.map(c => c.qtd));
 
   const KPIS = [
-    { label: "MRR",                  valor: fmtBRL(mrr),               cor: C.green,   sub: "Receita recorrente mensal" },
+    { label: "MRR",                  valor: fmtBRL(mrr),               cor: C.green,   sub: temAssinaturasReais ? `Real · ${fmtNum(billing.assinaturasAtivas)} assinaturas ativas` : "Estimado (sem assinaturas pagas)" },
     { label: "ARR",                  valor: fmtBRL(arr),               cor: C.green,   sub: "Anualizado (MRR × 12)" },
-    { label: "Pagantes",             valor: fmtNum(totais.pagantes),   cor: C.accent,  sub: "Planos pagos ativos" },
+    { label: "Recebido no mês",      valor: fmtBRL(billing.recebidoMes ?? 0), cor: C.green, sub: "Cobranças pagas neste mês" },
+    { label: "A receber",            valor: fmtBRL(billing.aReceber ?? 0), cor: "#f59e0b", sub: "Cobranças pendentes em aberto" },
+    { label: "Inadimplentes",        valor: fmtNum(billing.inadimplentes ?? 0), cor: (billing.inadimplentes ?? 0) > 0 ? C.red : C.muted, sub: "Assinaturas em atraso" },
     { label: "Em trial",             valor: fmtNum(totais.emTrial),    cor: "#f59e0b", sub: "Trials ativos" },
-    { label: "ARPU",                 valor: fmtBRL(arpu),              cor: C.purple,  sub: "Receita média por pagante" },
+    { label: "ARPU",                 valor: fmtBRL(arpu),              cor: C.purple,  sub: "Receita média por assinatura" },
     { label: "Churn 30d (aprox.)",   valor: churnPct.toFixed(1) + "%", cor: churnPct > 5 ? C.red : C.muted, sub: `${totais.suspensas30d} suspensas / ${denomChurn} base` },
   ];
 
@@ -893,8 +939,8 @@ function AbaFinanceiro() {
             marginTop: 14, paddingTop: 10, borderTop: `1px solid ${C.border}`,
             fontSize: 10, color: C.muted, lineHeight: 1.5,
           }}>
-            Preços de referência: TRIAL R$0 · FREE R$0 · STARTER R$49,90 · PRO R$149,90 · ENTERPRISE R$499,90.
-            Ajuste em <code style={{ color: C.text }}>PRECO_PLANO_MES</code> no AdminMasterApp.jsx.
+            Esta distribuição usa <strong>preços de referência</strong> (STARTER R$49,90 · PRO R$149,90 · ENTERPRISE R$499,90) por
+            quantidade de planos. Os KPIs acima (MRR, Recebido, A receber) usam a <strong>cobrança real</strong> das assinaturas quando há assinaturas ativas.
           </div>
         </div>
 
@@ -1629,6 +1675,7 @@ function ModalPlano({ empresa, onCancelar, onSalva }: any) {
     empresa.expiraEm ? empresa.expiraEm.slice(0, 10) : em30.toISOString().slice(0, 10)
   );
   const [observacoes, setObservacoes] = useState(empresa.observacoesPlano || "");
+  const [statusAssinatura, setStatusAssinatura] = useState(empresa.statusAssinatura || "TRIAL");
   // ETAPA#6: segmento de negocio (alterar requer endpoint proprio)
   const segmentoOriginal = empresa.segmento || "GERAL";
   const [segmento, setSegmento] = useState(segmentoOriginal);
@@ -1643,6 +1690,7 @@ function ModalPlano({ empresa, onCancelar, onSalva }: any) {
         plano,
         expiraEm: expiraEm || null,
         observacoes: observacoes.trim() || null,
+        statusAssinatura,
       });
       if (segmento !== segmentoOriginal) {
         await api.adminMasterAlterarSegmento(empresa.id, segmento);
@@ -1683,6 +1731,22 @@ function ModalPlano({ empresa, onCancelar, onSalva }: any) {
               fontWeight: 700, fontSize: 11, cursor: "pointer",
             }}>{info.icone}<br />{info.label}</button>
           ))}
+        </div>
+
+        <label style={{ ...labelStyle, marginTop: 10 }}>Status da assinatura</label>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 6, marginBottom: 4 }}>
+          {Object.entries(STATUS_ASSINATURA_INFO).map(([k, info]) => (
+            <button key={k} type="button" onClick={() => setStatusAssinatura(k)} style={{
+              padding: "8px 6px", borderRadius: 8,
+              background: statusAssinatura === k ? info.cor + "33" : C.surface,
+              border: `2px solid ${statusAssinatura === k ? info.cor : C.border}`,
+              color: statusAssinatura === k ? info.cor : C.muted,
+              fontWeight: 700, fontSize: 11, cursor: "pointer",
+            }}>{info.icone} {info.label}</button>
+          ))}
+        </div>
+        <div style={{ color: C.muted, fontSize: 10, marginBottom: 4 }}>
+          Marque <strong>Ativa</strong> para clientes pagos por fora do gateway (ex: Enterprise negociado, pago por boleto/contrato). Isso registra o pagamento de hoje e reativa o acesso.
         </div>
 
         <label style={{ ...labelStyle, marginTop: 10 }}>Expira em</label>
@@ -1738,28 +1802,67 @@ function ModalPlano({ empresa, onCancelar, onSalva }: any) {
 // ============ MODAL: DETALHES DA EMPRESA (DRILL-DOWN) ============
 // Painel unificado pra investigar uma empresa especifica sem ter que pular
 // entre as abas Empresas/Users/Logs. Busca users e logs ao montar.
-function ModalDetalhesEmpresa({ empresa, onCancelar, onAlterarPlano, onSuspender, onReativar, onImpersonar, onMensagem }: any) {
+function ModalDetalhesEmpresa({ empresa, onCancelar, onAlterarPlano, onSuspender, onReativar, onImpersonar, onMensagem, onMudou }: any) {
   const [users, setUsers] = useState(null);
   const [logs, setLogs] = useState(null);
+  const [billing, setBilling] = useState(null); // { assinatura, cobrancas }
+  const [acaoBilling, setAcaoBilling] = useState(false);
   const [erro, setErro] = useState("");
+
+  async function carregarBilling() {
+    try {
+      const b = await api.adminMasterCobrancasEmpresa(empresa.id);
+      setBilling(b);
+    } catch { /* silencioso — secao some se falhar */ }
+  }
 
   useEffect(() => {
     let cancelado = false;
     (async () => {
       try {
-        const [u, l] = await Promise.all([
+        const [u, l, b] = await Promise.all([
           api.adminMasterListarUsers(empresa.id),
           api.adminMasterLogs({ tenantId: empresa.id, limit: 20 }),
+          api.adminMasterCobrancasEmpresa(empresa.id).catch(() => null),
         ]);
         if (cancelado) return;
         setUsers(u.users || []);
         setLogs(l.logs || []);
+        setBilling(b);
       } catch (err) {
         if (!cancelado) setErro(err.message);
       }
     })();
     return () => { cancelado = true; };
   }, [empresa.id]);
+
+  async function marcarPaga(cobrancaId: string) {
+    if (!confirm("Marcar esta cobrança como PAGA?\nIsso reativa a assinatura e estende o acesso em +30 dias.")) return;
+    setAcaoBilling(true);
+    try {
+      await api.adminMasterMarcarCobrancaPaga(empresa.id, cobrancaId);
+      await carregarBilling();
+      onMudou?.();
+    } catch (err) {
+      alert(`Erro: ${(err as Error).message}`);
+    } finally {
+      setAcaoBilling(false);
+    }
+  }
+
+  async function cancelarAssinatura() {
+    if (!confirm("Cancelar a assinatura desta empresa?\nO acesso é mantido até a data de expiração atual; não há novas cobranças.")) return;
+    setAcaoBilling(true);
+    try {
+      await api.adminMasterCancelarAssinatura(empresa.id);
+      await carregarBilling();
+      onMudou?.();
+    } catch (err) {
+      alert(`Erro: ${(err as Error).message}`);
+    } finally {
+      setAcaoBilling(false);
+    }
+  }
 
   const planoInfo = PLANOS_INFO[empresa.plano] || PLANOS_INFO.TRIAL;
   const limites = LIMITES_PLANO_UI[empresa.plano] || LIMITES_PLANO_UI.TRIAL;
@@ -1891,6 +1994,81 @@ function ModalDetalhesEmpresa({ empresa, onCancelar, onAlterarPlano, onSuspender
             {empresa.observacoesPlano}
           </div>
         )}
+
+        {/* Assinatura & Cobrancas */}
+        {billing?.assinatura && (() => {
+          const a = billing.assinatura;
+          const sa = STATUS_ASSINATURA_INFO[a.statusAssinatura] || STATUS_ASSINATURA_INFO.TRIAL;
+          const cobrancas = billing.cobrancas || [];
+          const pendentes = cobrancas.filter((c: any) => c.status === "PENDENTE" || c.status === "VENCIDA");
+          return (
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8, flexWrap: "wrap" }}>
+                <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                  Assinatura & cobranças
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {pendentes.length > 0 && (
+                    <button
+                      onClick={() => marcarPaga(pendentes[0].id)}
+                      disabled={acaoBilling}
+                      style={{
+                        background: C.green + "22", color: C.green, border: `1px solid ${C.green}55`,
+                        borderRadius: 8, padding: "5px 10px", fontWeight: 700, fontSize: 11, cursor: "pointer",
+                      }}
+                    >✓ Marcar cobrança como paga</button>
+                  )}
+                  {a.statusAssinatura !== "CANCELADA" && a.temAssinaturaGateway && (
+                    <button
+                      onClick={cancelarAssinatura}
+                      disabled={acaoBilling}
+                      style={{
+                        background: C.red + "22", color: C.red, border: `1px solid ${C.red}55`,
+                        borderRadius: 8, padding: "5px 10px", fontWeight: 700, fontSize: 11, cursor: "pointer",
+                      }}
+                    >🚫 Cancelar assinatura</button>
+                  )}
+                </div>
+              </div>
+
+              {/* Resumo da assinatura */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, marginBottom: 10 }}>
+                {[
+                  { label: "Situação", node: <span style={{ color: sa.cor, fontWeight: 800 }}>{sa.icone} {sa.label}</span> },
+                  { label: "Valor/mês", node: <span style={{ color: C.text, fontWeight: 800 }}>{a.valorMensal ? fmtBRL(a.valorMensal) : "—"}</span> },
+                  { label: "Próxima cobrança", node: <span style={{ color: C.text, fontWeight: 800 }}>{a.proximaCobrancaEm ? fmtData(a.proximaCobrancaEm) : "—"}</span> },
+                  { label: "Último pagamento", node: <span style={{ color: C.text, fontWeight: 800 }}>{a.ultimoPagamentoEm ? fmtData(a.ultimoPagamentoEm) : "—"}</span> },
+                ].map((k, i) => (
+                  <div key={i} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px" }}>
+                    <div style={{ color: C.muted, fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{k.label}</div>
+                    <div style={{ fontSize: 13, marginTop: 2 }}>{k.node}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Historico de cobrancas */}
+              {cobrancas.length === 0 ? (
+                <div style={{ color: C.muted, fontSize: 12 }}>Sem cobranças registradas.</div>
+              ) : (
+                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden", maxHeight: 200, overflowY: "auto" }}>
+                  {cobrancas.map((c: any) => (
+                    <div key={c.id} style={{
+                      display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8,
+                      padding: "6px 10px", borderBottom: `1px solid ${C.border}55`, fontSize: 11,
+                    }}>
+                      <span style={{ color: C.text }}>{fmtData(c.criadaEm)}</span>
+                      <span style={{ color: C.muted }}>{c.metodo || "—"}</span>
+                      <span style={{ color: C.text, fontWeight: 700 }}>{fmtBRL(c.valor)}</span>
+                      <span style={{ color: STATUS_COBRANCA_COR[c.status] || C.muted, fontWeight: 700, minWidth: 70, textAlign: "right" }}>
+                        {c.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Users */}
         <div style={{ marginBottom: 18 }}>

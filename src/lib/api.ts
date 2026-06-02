@@ -327,6 +327,13 @@ export const api = {
   obterEmpresa: () => request("/empresa"),
   atualizarEmpresa: (dados: unknown) => request("/empresa", { method: "PUT", body: dados }),
 
+  // ============ ASSINATURA (billing do SaaS) ============
+  // Estado da assinatura da empresa logada, catalogo de planos e contratacao.
+  billingPlanos: () => request("/billing/planos"),
+  billingAssinatura: () => request("/billing/assinatura"),
+  billingAssinar: (plano: string) =>
+    request("/billing/assinar", { method: "POST", body: { plano } }),
+
   // ============ ADMIN MASTER (super-admin only) ============
   // Endpoints exclusivos do desenvolvedor do sistema. Todos retornam 403
   // se o JWT nao tem `sa: true`.
@@ -359,6 +366,13 @@ export const api = {
     request(`/admin-master/metricas?diasAtras=${diasAtras}`),
   adminMasterFinanceiro: () =>
     request("/admin-master/financeiro"),
+  // Assinatura / cobrancas por empresa (super-admin)
+  adminMasterCobrancasEmpresa: (id: string) =>
+    request(`/admin-master/empresas/${id}/cobrancas`),
+  adminMasterMarcarCobrancaPaga: (id: string, cobrancaId: string) =>
+    request(`/admin-master/empresas/${id}/cobrancas/${cobrancaId}/marcar-paga`, { method: "POST" }),
+  adminMasterCancelarAssinatura: (id: string) =>
+    request(`/admin-master/empresas/${id}/assinatura/cancelar`, { method: "POST" }),
 
   // ETAPA 12
   adminMasterAlterarPlano: (id: string, dados: unknown) =>

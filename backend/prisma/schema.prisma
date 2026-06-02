@@ -222,6 +222,33 @@ enum Plano {
   ENTERPRISE
 }
 
+// MODULO ASSINATURA: estado do ciclo de cobranca recorrente do SaaS (a
+// plataforma cobrando a EMPRESA-cliente). Distinto de `plano` (qual produto
+// ela tem) e de `ativo` (suspensao manual pelo super-admin).
+//   TRIAL        - periodo gratis, ainda nao assinou (default)
+//   ATIVA        - assinatura paga em dia; expiraEm empurrado a cada pagamento
+//   INADIMPLENTE - cobranca venceu e nao foi paga (carencia antes de suspender)
+//   CANCELADA    - cliente cancelou ou assinatura encerrada no gateway
+enum StatusAssinatura {
+  TRIAL
+  ATIVA
+  INADIMPLENTE
+  CANCELADA
+}
+
+// Ciclo de vida de uma cobranca individual (fatura) gerada pelo gateway de
+// pagamento para a assinatura do SaaS.
+//   PENDENTE  - fatura criada, aguardando pagamento (link/boleto/pix em aberto)
+//   PAGA      - gateway confirmou (webhook PAYMENT_CONFIRMED/RECEIVED)
+//   VENCIDA   - passou do vencimento sem pagamento (PAYMENT_OVERDUE)
+//   CANCELADA - fatura cancelada/estornada no gateway
+enum StatusCobranca {
+  PENDENTE
+  PAGA
+  VENCIDA
+  CANCELADA
+}
+
 // ETAPA#6: Segmento de negocio da empresa. Define se o cadastro de produto
 // exibe campos extras (OEM/Marca para Auto-Pecas; Lote/Validade/Anvisa/PMC
 // para Farmacia). Default GERAL nao expande nada.
@@ -368,6 +395,17 @@ model Empresa {
   observacoesPlano String?
   // ETAPA#6: segmento de negocio. So super-admin altera (via admin-master).
   segmento         Segmento  @default(GERAL)
+  // MODULO ASSINATURA: cobranca recorrente automatica via gateway (Asaas/mock).
+  // O `expiraEm` acima e a "verdade" de ate quando o acesso esta pago — o
+  // webhook do gateway empurra essa data a cada pagamento confirmado. Os
+  // campos abaixo guardam o vinculo com o gateway e o estado da assinatura.
+  statusAssinatura StatusAssinatura @default(TRIAL)
+  gatewayProvedor  String?   // "asaas" | "mock" — qual adapter gerencia esta assinatura
+  gatewayClienteId String?   // id do customer no gateway
+  gatewayAssinaturaId String? // id da subscription recorrente no gateway
+  valorMensal      Decimal?  @db.Decimal(10, 2) // valor cobrado/mes (snapshot do preco contratado)
+  ultimoPagamentoEm   DateTime?
+  proximaCobrancaEm   DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -411,6 +449,7 @@ model Empresa {
   historicoOportunidades HistoricoOportunidade[]
   logsAuditoria          LogAuditoria[]
   notificacoesRecebidas  Notificacao[]
+  cobrancasAssinatura    CobrancaAssinatura[]
   inventarios            Inventario[]
   inventarioItens        InventarioItem[]
   intencoesPagamentoMP   IntencaoPagamentoMP[]
@@ -423,6 +462,35 @@ model Empresa {
   itensNotaFiscal        ItemNotaFiscal[]
 
   @@map("empresas")
+}
+
+// ============ COBRANCAS DA ASSINATURA (SaaS) ============
+//
+// Historico de faturas geradas pelo gateway de pagamento para a assinatura
+// recorrente de cada empresa-cliente. Uma linha por fatura/mes. Alimentada
+// pelo webhook do gateway e exibida na tela "Minha Assinatura".
+//
+// Possui tenantId (e esta em MODELOS_COM_TENANT) para que a leitura pelo
+// cliente filtre automaticamente. O webhook/cron usam prismaRaw (cross-tenant)
+// pois rodam fora do contexto de um tenant logado.
+model CobrancaAssinatura {
+  id              String         @id @default(uuid())
+  gatewayCobrancaId String?      @unique // id da fatura/payment no gateway (idempotencia do webhook)
+  valor           Decimal        @db.Decimal(10, 2)
+  status          StatusCobranca @default(PENDENTE)
+  vencimento      DateTime?
+  pagoEm          DateTime?
+  metodo          String?        // "PIX" | "BOLETO" | "CARTAO" — informado pelo gateway
+  linkPagamento   String?        // invoiceUrl / fatura para o cliente pagar
+  descricao       String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@map("cobrancas_assinatura")
 }
 
 // ============ FORMAS DE PAGAMENTO CUSTOM ============

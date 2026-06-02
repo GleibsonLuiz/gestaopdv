@@ -46,6 +46,7 @@ import pagamentosMpRoutes from "./routes/pagamentos-mp.js";
 import whatsappRoutes, { webhookRouter as whatsappWebhookRouter } from "./routes/whatsapp.js";
 import backupRoutes from "./routes/backup.js";
 import fiscalRoutes from "./routes/fiscal.js";
+import billingRoutes, { webhookRouter as billingWebhookRouter } from "./routes/billing.js";
 import { auditoria } from "./middlewares/auditoria.js";
 
 dotenv.config();
@@ -149,13 +150,16 @@ app.use("/comandas", comandasRoutes);
 app.use("/tarefas", tarefasRoutes);
 app.use("/fidelidade", fidelidadeRoutes);
 app.use("/pagamentos-mp", pagamentosMpRoutes);
-// Webhook publico do WhatsApp (sem auth — gateway externo chama).
+// Webhooks publicos (sem auth — gateways externos chamam; validacao por
+// segredo dentro de cada handler).
 app.use("/webhooks", whatsappWebhookRouter);
+app.use("/webhooks", billingWebhookRouter);
 // Rotas autenticadas de config/status do WhatsApp.
 app.use("/whatsapp", whatsappRoutes);
 app.use("/logs", logsRoutes);
 app.use("/backup", backupRoutes);
 app.use("/fiscal", fiscalRoutes);
+app.use("/billing", billingRoutes);
 // Cron endpoints — auth via header Bearer ${CRON_SECRET}, fora do middleware
 // authRequired/permissoes. Pensado pra Vercel Cron / scheduler externo.
 app.use("/cron", cronRoutes);

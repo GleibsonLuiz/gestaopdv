@@ -153,7 +153,10 @@ export async function atualizar(req, res, next) {
       previsaoEntrega: b.previsaoEntrega ? new Date(b.previsaoEntrega) : null,
       valorPecas: calc.valorPecas, valorServicos: calc.valorServicos,
       desconto: calc.desconto, total: calc.total,
-      itens: { deleteMany: {}, create: calc.prep },
+      // tenantId explicito: o Prisma extension so propaga tenantId em CREATE de
+      // topo, nao em nested create dentro de UPDATE — sem isso o create dos
+      // itens falha ("Argument tenantId is missing").
+      itens: { deleteMany: {}, create: calc.prep.map(it => ({ ...it, tenantId: req.tenantId })) },
     };
     const os = await prisma.ordemServico.update({ where: { id: req.params.id }, data, include: INCLUDE });
     res.json(serializar(os));

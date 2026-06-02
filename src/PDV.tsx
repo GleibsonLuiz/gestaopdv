@@ -337,6 +337,9 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
   const [busca, setBusca] = useState("");
   const [carrinho, setCarrinho] = useState([]);
   const [clienteId, setClienteId] = useState("");
+  // Crediario do cliente selecionado (saldo/limite/disponivel) — mostrado pro
+  // operador antes de fechar no fiado. null = sem info / modulo indisponivel.
+  const [crediarioCliente, setCrediarioCliente] = useState(null);
   // Rastreia conversao Oportunidade -> Venda (vindo do Funil). Quando setado,
   // a finalizacao da venda passa `oportunidadeId` no payload pro backend
   // vincular automaticamente. Limpo ao cancelar conversao ou apos sucesso.
@@ -551,6 +554,20 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
       api.pontosFidelidade(clienteId)
         .then(d => setSaldoPontos(d.saldo ?? 0))
         .catch(() => setSaldoPontos(null));
+    }
+    // Crediario do cliente (saldo/limite). Best-effort: se o modulo nao estiver
+    // no plano ou o user sem permissao, simplesmente nao mostra.
+    setCrediarioCliente(null);
+    if (clienteId) {
+      api.crediarioCaderneta(clienteId)
+        .then(d => setCrediarioCliente({
+          saldo: d.saldoDevedor ?? 0,
+          limite: d.cliente?.limiteCredito ?? null,
+          disponivel: d.creditoDisponivel,
+          vencido: d.vencido ?? 0,
+          acimaDoLimite: d.acimaDoLimite,
+        }))
+        .catch(() => setCrediarioCliente(null));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clienteId]);
@@ -2072,6 +2089,36 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
                   className="pdv-field-input"
                 />
               </div>
+
+              {/* Crediario do cliente: saldo/limite/disponivel (pro fiado) */}
+              {clienteId && crediarioCliente && (crediarioCliente.limite != null || crediarioCliente.saldo > 0) && (
+                <div style={{
+                  padding: "10px 12px", borderRadius: 10,
+                  background: crediarioCliente.acimaDoLimite ? "rgba(244,63,94,.08)" : "rgba(99,102,241,.08)",
+                  border: `1px solid ${crediarioCliente.acimaDoLimite ? "rgba(244,63,94,.35)" : "rgba(99,102,241,.3)"}`,
+                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 15 }}>📒</span>
+                    <div>
+                      <div style={{ color: "var(--pdv-t1)", fontWeight: 700, fontSize: 13 }}>
+                        Crediário · deve {fmtBRL(crediarioCliente.saldo)}
+                        {crediarioCliente.vencido > 0 && (
+                          <span style={{ color: "var(--pdv-c-rose)", fontWeight: 700 }}> · {fmtBRL(crediarioCliente.vencido)} vencido</span>
+                        )}
+                      </div>
+                      <div style={{ color: "var(--pdv-t3)", fontSize: 11 }}>
+                        {crediarioCliente.limite != null
+                          ? <>Limite {fmtBRL(crediarioCliente.limite)} · disponível <strong style={{ color: crediarioCliente.acimaDoLimite ? "var(--pdv-c-rose)" : "var(--pdv-c-emerald)" }}>{fmtBRL(crediarioCliente.disponivel)}</strong></>
+                          : "Sem limite definido (fiado livre)"}
+                      </div>
+                    </div>
+                  </div>
+                  {crediarioCliente.acimaDoLimite && (
+                    <span style={{ color: "var(--pdv-c-rose)", fontSize: 11, fontWeight: 700 }}>⚠️ Acima do limite</span>
+                  )}
+                </div>
+              )}
 
               {configFidelidade?.ativo && clienteId && saldoPontos !== null && (
                 <div style={{

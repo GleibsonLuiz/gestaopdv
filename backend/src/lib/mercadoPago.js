@@ -84,11 +84,12 @@ export async function criarPaymentIntent({
     // do MP. O valor "buyer" e recusado pela API com erro 400.
     payment = { installments: 1, type: "credit_card", installments_cost: "seller" };
   } else if (tipo === "DEBIT") {
-    // Debito via Point API exige habilitacao da conta MP (alguns sellers tem
-    // so credit habilitado por default — precisa pedir ativacao no suporte
-    // MP). Se a conta nao tiver, a API responde 400 com mensagem confusa
-    // tipo "payment.type does not match credit_card".
-    payment = { installments: 1, type: "debit_card", installments_cost: "seller" };
+    // Debito NAO tem parcelamento. Enviar `installments`/`installments_cost`
+    // (campos exclusivos de credito) faz o MP inferir contexto credit_card e
+    // recusar com 400 "payment.type does not match: credit_card" — mesmo com
+    // a conta tendo debito habilitado. Por isso o payload de debito leva
+    // apenas o type.
+    payment = { type: "debit_card" };
   } else if (tipo === "PIX") {
     // PIX via Point Integration NAO e suportado por todos os devices.
     // Quando o device aceita, type "pix" exibe um QR Code dinamico no

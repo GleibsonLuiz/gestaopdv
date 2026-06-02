@@ -45,6 +45,33 @@ export function requireSuperAdmin(req, res, next) {
   next();
 }
 
+// Gate APENAS de plano (entitlement), sem checar permissao de usuario. Usado
+// para recursos que nao sao modulos de permissao mas sao cobrados por plano —
+// ex.: NFC-e (a emissao e liberada a qualquer vendedor, mas so se o plano
+// incluir fiscal). Bloqueia com 402 quando o plano nao inclui o modulo.
+export function requireModulo(modulo) {
+  return async (req, res, next) => {
+    try {
+      if (!req.tenantId) return next();
+      const empresa = await prisma.empresa.findUnique({
+        where: { id: req.tenantId },
+        select: { plano: true, modulosHabilitados: true },
+      });
+      if (empresa && !empresaTemModulo(empresa, modulo)) {
+        return res.status(402).json({
+          erro: `O modulo ${modulo} nao esta incluido no plano atual. Faca upgrade para liberar.`,
+          moduloBloqueado: true,
+          modulo,
+          plano: empresa.plano,
+        });
+      }
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
 // Busca permissoes frescas do banco (mudancas refletem sem relogin) e bloqueia
 // em DOIS niveis:
 //   1. PLANO (tenant): o modulo precisa estar habilitado para a empresa

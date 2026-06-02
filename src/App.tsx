@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, lazy, Suspense, type CSSProperties } from 
 import { C, hidratarAparenciaDoUser } from "./lib/theme";
 import Alertas from "./Alertas";
 import { getUser, getToken, clearSession, setEmpresa, api } from "./lib/api";
-import { podeAcessar } from "./lib/permissoes";
+import { podeAcessar, moduloNoPlano } from "./lib/permissoes";
 import PwaUpdateBanner from "./components/PwaUpdateBanner";
 import IndicadorRede from "./components/IndicadorRede";
 import { TELA_AJUDA } from "./Ajuda";
@@ -321,6 +321,8 @@ export default function App() {
     if (t === "sistema" || t === "logs" || t === "backup") return user?.role === "ADMIN";
     if (t === "empresa") return user?.role === "ADMIN" || user?.role === "GERENTE";
     if (t === "impressora") return user?.role === "ADMIN" || user?.role === "GERENTE";
+    // NFC-e: permissao de usuario (RELATORIOS) + plano precisa incluir FISCAL.
+    if (t === "notasfiscais") return podeAcessar(user, "RELATORIOS") && moduloNoPlano("FISCAL");
     return podeAcessar(user, TELA_MODULO[t] as any);
   }
 
@@ -600,7 +602,7 @@ export default function App() {
           {podeAcessar(user, "RELATORIOS") && (
             <Item icone="📑" label="Relatórios" ativo={tela === "relatorios"} onClick={() => navegar("relatorios")} />
           )}
-          {podeAcessar(user, "RELATORIOS") && (
+          {podeAcessar(user, "RELATORIOS") && moduloNoPlano("FISCAL") && (
             <Item icone="🧾" label="Notas Fiscais" ativo={tela === "notasfiscais"} onClick={() => navegar("notasfiscais")} />
           )}
           {podeAcessar(user, "COMISSOES") && (

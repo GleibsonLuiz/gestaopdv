@@ -19,7 +19,11 @@ export type ModuloId =
   | "COMISSOES"
   | "COMANDAS"
   | "WHATSAPP"
-  | "FUNCIONARIOS";
+  | "FUNCIONARIOS"
+  // FISCAL (NFC-e) NAO e um modulo de permissao de usuario — e so um modulo de
+  // PLANO (entitlement). Por isso fica fora de MODULOS, mas e um ModuloId valido
+  // para o gate de plano (moduloNoPlano / MODULOS_PLANO).
+  | "FISCAL";
 
 export type Role = "ADMIN" | "GERENTE" | "VENDEDOR";
 
@@ -57,6 +61,14 @@ export const MODULOS: readonly Modulo[] = [
 ];
 
 export const IDS_MODULOS: ModuloId[] = MODULOS.map((m) => m.id);
+
+// Lista de modulos que o PLANO pode liberar (entitlements). Inclui os 19 de
+// permissao + FISCAL (NFC-e), que e cobrado por plano mas nao e permissao de
+// usuario. Usada pelo Admin Master para ligar/desligar modulos por empresa.
+export const MODULOS_PLANO: readonly Modulo[] = [
+  ...MODULOS,
+  { id: "FISCAL", label: "Nota Fiscal (NFC-e)", icone: "🧾" },
+];
 
 // ============ GATE DE PLANO (entitlements por empresa) ============
 //

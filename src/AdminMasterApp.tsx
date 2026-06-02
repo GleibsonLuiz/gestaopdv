@@ -16,7 +16,7 @@
 import { useEffect, useState } from "react";
 import { C } from "./lib/theme";
 import { api, getToken, getUser, setSession, clearSession } from "./lib/api";
-import { MODULOS } from "./lib/permissoes";
+import { MODULOS_PLANO } from "./lib/permissoes";
 
 const fmtBRL = (v: any) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const fmtNum = (v: any) => Number(v || 0).toLocaleString("pt-BR");
@@ -1819,7 +1819,7 @@ function ModalPlano({ empresa, onCancelar, onSalva }: any) {
             : `Personalizado: ${modulosSel.size} módulos liberados para esta empresa.`}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 4 }}>
-          {MODULOS.map(m => {
+          {MODULOS_PLANO.map(m => {
             const on = modulosSel.has(m.id);
             return (
               <button key={m.id} type="button" onClick={() => toggleModulo(m.id)} style={{

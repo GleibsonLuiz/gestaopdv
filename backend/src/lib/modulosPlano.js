@@ -13,6 +13,18 @@
 //
 // Manter os ids em sincronia com lib/permissoes.js (IDS_MODULOS).
 
+import { IDS_MODULOS } from "./permissoes.js";
+
+// NFC-e (emissao fiscal) NAO e um modulo de PERMISSAO de usuario (a emissao
+// no PDV e liberada a qualquer vendedor, como as vendas). Mas E um modulo de
+// PLANO (entitlement): so libera nos planos que incluem fiscal. Por isso entra
+// na lista de entitlement abaixo, mas fica fora de IDS_MODULOS (permissoes).
+export const MODULO_FISCAL = "FISCAL";
+
+// Lista de ids que o plano pode liberar = modulos de permissao + FISCAL.
+// Usada pelo admin-master para validar/salvar a lista de modulos da empresa.
+export const IDS_MODULOS_PLANO = [...IDS_MODULOS, MODULO_FISCAL];
+
 // Nucleo: presente em TODOS os planos pagos (e no free). Sem isso o sistema
 // nao opera (vender e bater caixa).
 const NUCLEO = ["PDV", "CAIXA", "DASHBOARD", "PRODUTOS", "FUNCIONARIOS"];
@@ -21,8 +33,8 @@ const NUCLEO = ["PDV", "CAIXA", "DASHBOARD", "PRODUTOS", "FUNCIONARIOS"];
 const STARTER = [...NUCLEO, "CLIENTES", "ESTOQUE", "FORNECEDORES", "ORCAMENTOS"];
 
 // Pro = Starter + gestao completa (compras, inventario, financeiro, relatorios,
-// comissoes, comandas).
-const PRO = [...STARTER, "COMPRAS", "INVENTARIO", "FINANCEIRO", "RELATORIOS", "COMISSOES", "COMANDAS"];
+// comissoes, comandas) + emissao fiscal NFC-e.
+const PRO = [...STARTER, "COMPRAS", "INVENTARIO", "FINANCEIRO", "RELATORIOS", "COMISSOES", "COMANDAS", "FISCAL"];
 
 // Enterprise = Pro + CRM/relacionamento (funil, automacoes, NPS, WhatsApp).
 // Equivale a TODOS os modulos.

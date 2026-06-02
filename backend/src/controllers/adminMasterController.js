@@ -4,8 +4,7 @@ import prisma, { prismaRaw } from "../lib/prisma.js";
 import { registrarEvento } from "../middlewares/auditoria.js";
 import { permissoesPadrao } from "../lib/permissoes.js";
 import { getProvedor } from "../lib/billing/provedor.js";
-import { modulosDaEmpresa, MODULOS_POR_PLANO } from "../lib/modulosPlano.js";
-import { IDS_MODULOS } from "../lib/permissoes.js";
+import { modulosDaEmpresa, MODULOS_POR_PLANO, IDS_MODULOS_PLANO } from "../lib/modulosPlano.js";
 
 // prismaRaw = sem extension (cross-tenant). Use SEMPRE que precisar buscar
 // ou alterar registros de outros tenants. O `prisma` normal e mantido
@@ -757,7 +756,7 @@ export async function alterarSegmento(req, res, next) {
 // empresa (modelo hibrido). Body:
 //   { modulos: ["PDV","CAIXA",...] }  -> lista explicita (override do plano)
 //   { modulos: null }                 -> volta ao pacote padrao do plano
-const SET_MODULOS = new Set(IDS_MODULOS);
+const SET_MODULOS = new Set(IDS_MODULOS_PLANO);
 export async function alterarModulos(req, res, next) {
   try {
     const { id } = req.params;

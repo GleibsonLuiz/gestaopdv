@@ -991,8 +991,10 @@ Além dos limites de quantidade, **cada plano libera um conjunto de módulos** (
 |--------|------------------|
 | **Núcleo** (todos os planos) | PDV, Caixa, Dashboard, Produtos, Funcionários |
 | **Starter** | Núcleo + Clientes, Estoque, Fornecedores, Orçamentos |
-| **Pro** | Starter + Compras, Inventário, Financeiro, Relatórios, Comissões, Central de Comandas |
+| **Pro** | Starter + Compras, Inventário, Financeiro, Relatórios, Comissões, Central de Comandas, **NFC-e (emissão fiscal)** |
 | **Enterprise** | Pro + Funil de Vendas, Automações, NPS, Atendimento WhatsApp (todos) |
+
+> **NFC-e por plano:** a emissão de Nota Fiscal de Consumidor (modelo 65) é liberada a partir do plano **Pro**. Empresas em planos sem fiscal não veem a tela "Notas Fiscais" nem conseguem emitir/configurar — o sistema responde que o módulo não está incluído. Pode ser liberado avulso a uma empresa específica pelo Admin Master.
 
 > **Módulos avulsos:** o administrador da plataforma pode liberar ou remover módulos individuais de uma empresa específica (ex.: vender só o WhatsApp a um cliente do plano Pro), independentemente do pacote padrão do plano. Feito no Admin Master → 🎫 Alterar plano → "Módulos liberados".
 

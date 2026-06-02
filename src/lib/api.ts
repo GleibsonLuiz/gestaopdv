@@ -503,6 +503,26 @@ export const api = {
 
   historicoComprasProduto: (id: string) =>
     request(`/produtos/${id}/compras`),
+  // Valida um NCM (8 digitos) na BrasilAPI e devolve a descricao oficial.
+  // Usado no cadastro de produto (aba Tributacao) ao sair do campo NCM.
+  consultarNcm: (codigo: string) =>
+    request<{ ncm: string; codigoFormatado: string; descricao: string }>(
+      `/produtos/ncm/${encodeURIComponent(codigo)}`,
+    ),
+  // Sugere NCMs pelo nome/descricao do produto (proxy da BrasilAPI por termo).
+  // Usado no cadastro (aba Tributacao) por quem nao sabe o codigo de cabeca.
+  buscarNcm: (q: string) =>
+    request<{
+      termo: string | null;
+      resultados: { ncm: string; codigoFormatado: string; descricao: string }[];
+    }>(`/produtos/ncm?q=${encodeURIComponent(q)}`),
+  // Sugere CEST a partir do NCM (tabela local Conv. 142/2018). CEST so se
+  // aplica a itens com Substituicao Tributaria — lista vazia e comum/correto.
+  sugerirCest: (ncm: string) =>
+    request<{
+      ncm: string;
+      sugestoes: { cest: string; cestFormatado: string; descricao: string }[];
+    }>(`/produtos/cest?ncm=${encodeURIComponent(ncm)}`),
 
   listarMovimentacoes: (filtros: StringDict = {}) =>
     request(`/estoque/movimentacoes${qsFrom(filtros)}`),

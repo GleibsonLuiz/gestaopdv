@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authRequired, requireRole, requirePermissao } from "../middlewares/auth.js";
-import { listar, obter, criar, atualizar, excluir, historicoCompras } from "../controllers/produtoController.js";
+import { listar, obter, criar, atualizar, excluir, historicoCompras, consultarNcm, buscarNcm, buscarCest } from "../controllers/produtoController.js";
 import {
   uploadImagem, tratarErroUploadImagem, enviarImagem, excluirImagem,
 } from "../controllers/produtoImagemController.js";
@@ -11,6 +11,13 @@ router.use(authRequired);
 
 // GETs liberados (PDV/Compras/Estoque consultam produtos).
 router.get("/", listar);
+// Consulta de NCM (BrasilAPI) — usada no cadastro p/ validar/descrever o NCM.
+// Vem antes de "/:id" para que "ncm" nao seja interpretado como um id.
+// Busca por descricao (?q=) vem antes de "/ncm/:codigo" para nao colidir.
+router.get("/ncm", buscarNcm);
+router.get("/ncm/:codigo", consultarNcm);
+// Sugestao de CEST a partir do NCM (tabela local Conv. 142/2018).
+router.get("/cest", buscarCest);
 router.get("/:id/compras", historicoCompras);
 router.get("/:id", obter);
 router.post("/", requirePermissao("PRODUTOS"), requireRole("ADMIN", "GERENTE"), criar);

@@ -1480,26 +1480,236 @@ interface AbaFiscalProps {
   setForm: React.Dispatch<React.SetStateAction<FormProduto>>;
 }
 
+// Defaults fiscais por regime — preenchidos ao escolher o regime, mas SEM
+// sobrescrever o que o usuario ja digitou. Cobrem os campos que nao vem de
+// consulta online (dependem da empresa/operacao, nao do produto). Sempre
+// editaveis; o contador deve confirmar aliquotas conforme o enquadramento
+// (Presumido x Real definem PIS/COFINS, por isso so sugerimos o CST, nao a %).
+const DEFAULTS_REGIME: Record<RegimeTributario, Partial<FormProduto>> = {
+  SIMPLES_NACIONAL:          { csosnIcms: "102", cfopPadrao: "5102", cstPis: "49", cstCofins: "49" },
+  SIMPLES_EXCESSO_SUBLIMITE: { csosnIcms: "102", cfopPadrao: "5102", cstPis: "49", cstCofins: "49" },
+  REGIME_NORMAL:             { cstIcms: "00",    cfopPadrao: "5102", cstPis: "01", cstCofins: "01" },
+};
+
+type NcmStatus = { tipo: "idle" | "carregando" | "ok" | "erro"; msg: string };
+type NcmSugestao = { ncm: string; codigoFormatado: string; descricao: string };
+type CestSugestao = { cest: string; cestFormatado: string; descricao: string };
+
 function AbaFiscal({ form, setForm }: AbaFiscalProps) {
   const set = (k: keyof FormProduto) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
   const ehSimples = form.regimeTributario !== "REGIME_NORMAL";
+
+  const [ncmStatus, setNcmStatus] = useState<NcmStatus>({ tipo: "idle", msg: "" });
+
+  // Busca de NCM pelo nome do produto (sugestao via BrasilAPI).
+  const [buscaAberta, setBuscaAberta] = useState(false);
+  const [buscaTermo, setBuscaTermo] = useState("");
+  const [buscaStatus, setBuscaStatus] = useState<"idle" | "carregando" | "ok" | "erro" | "vazio">("idle");
+  const [buscaMsg, setBuscaMsg] = useState("");
+  const [buscaResultados, setBuscaResultados] = useState<NcmSugestao[]>([]);
+
+  // Sugestao de CEST a partir do NCM (Conv. 142/2018).
+  const [cestSugestoes, setCestSugestoes] = useState<CestSugestao[]>([]);
+  const [cestStatus, setCestStatus] = useState<"idle" | "carregando" | "ok" | "vazio">("idle");
+
+  // Quando o NCM chega a 8 digitos (digitado, escolhido na busca ou ao abrir
+  // um produto existente), busca os CEST candidatos. Lista vazia e comum e
+  // correto: a maioria dos produtos nao esta sujeita a ST.
+  useEffect(() => {
+    const ncm = (form.ncm || "").replace(/\D/g, "");
+    if (ncm.length !== 8) { setCestStatus("idle"); setCestSugestoes([]); return; }
+    let vivo = true;
+    setCestStatus("carregando");
+    api.sugerirCest(ncm)
+      .then((r) => {
+        if (!vivo) return;
+        setCestSugestoes(r.sugestoes);
+        setCestStatus(r.sugestoes.length ? "ok" : "vazio");
+      })
+      .catch(() => { if (!vivo) return; setCestStatus("idle"); setCestSugestoes([]); });
+    return () => { vivo = false; };
+  }, [form.ncm]);
+
+  // Ao sair do campo NCM: valida na BrasilAPI e mostra a descricao oficial.
+  async function validarNcmOnline() {
+    const codigo = form.ncm.replace(/\D/g, "");
+    if (codigo.length !== 8) { setNcmStatus({ tipo: "idle", msg: "" }); return; }
+    setNcmStatus({ tipo: "carregando", msg: "Consultando NCM…" });
+    try {
+      const r = await api.consultarNcm(codigo);
+      setNcmStatus({ tipo: "ok", msg: r.descricao });
+    } catch (e) {
+      setNcmStatus({ tipo: "erro", msg: (e as Error)?.message || "Nao foi possivel validar o NCM" });
+    }
+  }
+
+  // Troca de regime: aplica os defaults do regime nos campos AINDA vazios.
+  function trocarRegime(e: ChangeEvent<HTMLSelectElement>) {
+    const regime = e.target.value as RegimeTributario;
+    const def = DEFAULTS_REGIME[regime] || {};
+    setForm((f) => {
+      const novo: FormProduto = { ...f, regimeTributario: regime };
+      for (const [k, v] of Object.entries(def)) {
+        const chave = k as keyof FormProduto;
+        if (!f[chave]) (novo as unknown as Record<string, unknown>)[chave] = v;
+      }
+      return novo;
+    });
+  }
+
+  // Abre o painel de busca ja preenchido com o nome do produto e dispara a busca.
+  function abrirBuscaNcm() {
+    const inicial = (form.nome || "").trim();
+    setBuscaAberta(true);
+    setBuscaTermo(inicial);
+    if (inicial.length >= 3) executarBuscaNcm(inicial);
+    else { setBuscaStatus("idle"); setBuscaResultados([]); }
+  }
+
+  async function executarBuscaNcm(termo: string) {
+    const q = termo.trim();
+    if (q.length < 3) { setBuscaStatus("erro"); setBuscaMsg("Digite ao menos 3 caracteres"); return; }
+    setBuscaStatus("carregando");
+    try {
+      const r = await api.buscarNcm(q);
+      if (r.resultados.length === 0) {
+        setBuscaResultados([]);
+        setBuscaMsg(r.termo || q);
+        setBuscaStatus("vazio");
+      } else {
+        setBuscaResultados(r.resultados);
+        setBuscaStatus("ok");
+      }
+    } catch (e) {
+      setBuscaStatus("erro");
+      setBuscaMsg((e as Error)?.message || "Falha na busca de NCM");
+    }
+  }
+
+  // Aplica o NCM escolhido: preenche o campo, mostra a descricao como validada
+  // e fecha o painel. Continua sendo o usuario que confirma a escolha.
+  function escolherNcm(r: NcmSugestao) {
+    setForm((f) => ({ ...f, ncm: r.ncm }));
+    setNcmStatus({ tipo: "ok", msg: r.descricao });
+    setBuscaAberta(false);
+  }
+
   return (
     <>
       <Secao legenda="Identificação fiscal">
         <Linha cols={3}>
-          <CampoLux label="NCM" hint="8 dígitos (Nomenclatura Comum do Mercosul)">
+          <CampoLux label="NCM" hint="8 dígitos — sai do campo p/ validar online">
             <input
               className="lux-input"
               value={form.ncm}
-              onChange={(e) => setForm({ ...form, ncm: e.target.value.replace(/\D/g, "").slice(0, 8) })}
+              onChange={(e) => {
+                setForm({ ...form, ncm: e.target.value.replace(/\D/g, "").slice(0, 8) });
+                if (ncmStatus.tipo !== "idle") setNcmStatus({ tipo: "idle", msg: "" });
+              }}
+              onBlur={validarNcmOnline}
               placeholder="00000000"
               inputMode="numeric"
               maxLength={8}
               style={{ fontFamily: "ui-monospace, monospace" }}
             />
+            {ncmStatus.tipo !== "idle" && (
+              <div
+                style={{
+                  marginTop: 4, fontSize: 11, lineHeight: 1.3,
+                  color: ncmStatus.tipo === "ok" ? "#34d399"
+                    : ncmStatus.tipo === "erro" ? "#f87171"
+                    : "rgba(255,255,255,0.55)",
+                }}
+              >
+                {ncmStatus.tipo === "ok" ? `✓ ${ncmStatus.msg}`
+                  : ncmStatus.tipo === "erro" ? `✕ ${ncmStatus.msg}`
+                  : ncmStatus.msg}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={abrirBuscaNcm}
+              style={{
+                marginTop: 5, background: "none", border: "none", padding: 0,
+                color: "#f5c451", fontSize: 11, cursor: "pointer", textDecoration: "underline",
+              }}
+            >
+              🔎 Não sabe o NCM? Buscar pelo nome
+            </button>
+            {buscaAberta && (
+              <div
+                style={{
+                  marginTop: 6, padding: 8, borderRadius: 8,
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.10)",
+                }}
+              >
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input
+                    className="lux-input"
+                    value={buscaTermo}
+                    onChange={(e) => setBuscaTermo(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") { e.preventDefault(); executarBuscaNcm(buscaTermo); }
+                    }}
+                    placeholder="ex.: caneta, arroz, parafuso…"
+                    style={{ flex: 1, fontSize: 12 }}
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => executarBuscaNcm(buscaTermo)}
+                    style={{
+                      whiteSpace: "nowrap", padding: "0 10px", borderRadius: 6,
+                      border: "1px solid rgba(245,196,81,0.5)", background: "rgba(245,196,81,0.12)",
+                      color: "#f5c451", fontSize: 12, cursor: "pointer",
+                    }}
+                  >
+                    Buscar
+                  </button>
+                </div>
+                {buscaStatus === "carregando" && (
+                  <p style={{ margin: "6px 2px 0", fontSize: 11, color: "rgba(255,255,255,0.55)" }}>Buscando NCMs…</p>
+                )}
+                {buscaStatus === "erro" && (
+                  <p style={{ margin: "6px 2px 0", fontSize: 11, color: "#f87171" }}>✕ {buscaMsg}</p>
+                )}
+                {buscaStatus === "vazio" && (
+                  <p style={{ margin: "6px 2px 0", fontSize: 11, color: "rgba(255,255,255,0.55)" }}>
+                    Nenhum NCM para “{buscaMsg}”. Tente uma palavra mais genérica (só o tipo do produto).
+                  </p>
+                )}
+                {buscaStatus === "ok" && (
+                  <ul style={{ listStyle: "none", margin: "6px 0 0", padding: 0, maxHeight: 168, overflowY: "auto" }}>
+                    {buscaResultados.map((r) => (
+                      <li key={r.ncm}>
+                        <button
+                          type="button"
+                          onClick={() => escolherNcm(r)}
+                          style={{
+                            width: "100%", textAlign: "left", padding: "5px 6px",
+                            background: "none", border: "none", borderRadius: 6,
+                            cursor: "pointer", color: "rgba(255,255,255,0.85)",
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+                        >
+                          <span style={{ fontFamily: "ui-monospace, monospace", color: "#f5c451", fontSize: 12 }}>
+                            {r.codigoFormatado}
+                          </span>
+                          <span style={{ display: "block", fontSize: 11, lineHeight: 1.3, color: "rgba(255,255,255,0.6)" }}>
+                            {r.descricao}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </CampoLux>
-          <CampoLux label="CEST" hint="Só p/ produtos com ST (Conv. 92/2015)">
+          <CampoLux label="CEST" hint="Só p/ produtos com ST (sugerido pelo NCM)">
             <input
               className="lux-input"
               value={form.cest}
@@ -1509,6 +1719,49 @@ function AbaFiscal({ form, setForm }: AbaFiscalProps) {
               maxLength={7}
               style={{ fontFamily: "ui-monospace, monospace" }}
             />
+            {cestStatus === "carregando" && (
+              <p style={{ margin: "4px 2px 0", fontSize: 11, color: "rgba(255,255,255,0.5)" }}>Buscando CEST…</p>
+            )}
+            {cestStatus === "vazio" && (
+              <p style={{ margin: "4px 2px 0", fontSize: 11, color: "rgba(255,255,255,0.5)", lineHeight: 1.3 }}>
+                Nenhum CEST previsto para este NCM — produto provavelmente fora de Substituição Tributária.
+              </p>
+            )}
+            {cestStatus === "ok" && (
+              <>
+                <p style={{ margin: "5px 2px 2px", fontSize: 11, color: "#34d399" }}>
+                  {cestSugestoes.length === 1 ? "CEST sugerido:" : `${cestSugestoes.length} CEST possíveis — clique no certo:`}
+                </p>
+                <ul style={{ listStyle: "none", margin: 0, padding: 0, maxHeight: 132, overflowY: "auto" }}>
+                  {cestSugestoes.map((s) => {
+                    const ativo = form.cest === s.cest;
+                    return (
+                      <li key={s.cest}>
+                        <button
+                          type="button"
+                          onClick={() => setForm((f) => ({ ...f, cest: ativo ? "" : s.cest }))}
+                          style={{
+                            width: "100%", textAlign: "left", padding: "4px 6px",
+                            background: ativo ? "rgba(52,211,153,0.12)" : "none",
+                            border: ativo ? "1px solid rgba(52,211,153,0.4)" : "1px solid transparent",
+                            borderRadius: 6, cursor: "pointer", color: "rgba(255,255,255,0.85)",
+                          }}
+                          onMouseEnter={(e) => { if (!ativo) e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+                          onMouseLeave={(e) => { if (!ativo) e.currentTarget.style.background = "none"; }}
+                        >
+                          <span style={{ fontFamily: "ui-monospace, monospace", color: ativo ? "#34d399" : "#f5c451", fontSize: 12 }}>
+                            {ativo ? "✓ " : ""}{s.cestFormatado}
+                          </span>
+                          <span style={{ display: "block", fontSize: 10.5, lineHeight: 1.3, color: "rgba(255,255,255,0.6)" }}>
+                            {s.descricao}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
           </CampoLux>
           <CampoLux label="CFOP padrão de saída" hint="Inicia com 5, 6 ou 7">
             <input
@@ -1536,8 +1789,8 @@ function AbaFiscal({ form, setForm }: AbaFiscalProps) {
               <option value="NACIONAL_IMP_SUP_70">8 — Nacional, CI &gt; 70%</option>
             </select>
           </CampoLux>
-          <CampoLux label="Regime tributário do item">
-            <select className="lux-input lux-select" value={form.regimeTributario} onChange={set("regimeTributario")}>
+          <CampoLux label="Regime tributário do item" hint="Preenche CSOSN/CFOP/PIS/COFINS padrão ao trocar">
+            <select className="lux-input lux-select" value={form.regimeTributario} onChange={trocarRegime}>
               <option value="SIMPLES_NACIONAL">Simples Nacional</option>
               <option value="SIMPLES_EXCESSO_SUBLIMITE">Simples — excesso sublimite</option>
               <option value="REGIME_NORMAL">Regime Normal (Presumido/Real)</option>

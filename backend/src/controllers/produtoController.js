@@ -5,6 +5,7 @@ import {
   validarTributacaoIcms, validarCst2Digitos,
   ORIGENS_VALIDAS, REGIMES_VALIDOS,
 } from "../lib/validacoesFiscais.js";
+import { sugerirCest } from "../lib/fiscal/cestLookup.js";
 
 const norm = (v) => (v === undefined || v === null || v === "" ? null : v);
 
@@ -73,6 +74,180 @@ const INCLUDE_REL = {
   fornecedor: { select: { id: true, nome: true } },
   fabricante: { select: { id: true, nome: true } },
 };
+
+// ============ CONSULTA DE NCM (BrasilAPI) ============
+//
+// Proxy para a BrasilAPI (gratuita, sem chave) que valida um NCM e devolve a
+// descricao oficial da tabela. Usado pelo cadastro de produto (aba Tributacao)
+// para o usuario confirmar que digitou o NCM certo ao sair do campo (onBlur).
+//
+// Por que via backend e nao direto do front: evita problema de CORS/cache do
+// service worker (PWA) e nos deixa cachear em memoria — varios produtos do
+// mesmo segmento repetem o mesmo NCM, entao o cache evita bater na BrasilAPI
+// a cada digitacao. A BrasilAPI NAO devolve CEST; esse campo segue manual.
+const BRASILAPI_NCM_URL = "https://brasilapi.com.br/api/ncm/v1";
+// Cache de modulo (vive enquanto a instancia serverless viver). codigo -> resultado.
+const cacheNcm = new Map();
+
+export async function consultarNcm(req, res, next) {
+  try {
+    const { ok, valor: codigo, erro } = validarNcm(req.params.codigo);
+    if (!ok) return res.status(400).json({ erro });
+    if (!codigo) return res.status(400).json({ erro: "Informe um NCM" });
+
+    if (cacheNcm.has(codigo)) return res.json(cacheNcm.get(codigo));
+
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 8000);
+    let resp;
+    try {
+      resp = await fetch(`${BRASILAPI_NCM_URL}/${codigo}`, {
+        headers: { Accept: "application/json" },
+        signal: ac.signal,
+      });
+    } catch {
+      clearTimeout(timer);
+      return res.status(502).json({ erro: "Servico de consulta de NCM indisponivel" });
+    }
+    clearTimeout(timer);
+
+    if (resp.status === 404) {
+      return res.status(404).json({ erro: "NCM nao encontrado na tabela oficial" });
+    }
+    if (!resp.ok) {
+      return res.status(502).json({ erro: "Falha ao consultar NCM" });
+    }
+
+    const dados = await resp.json().catch(() => null);
+    if (!dados || !dados.descricao) {
+      return res.status(404).json({ erro: "NCM nao encontrado na tabela oficial" });
+    }
+    const resultado = {
+      ncm: codigo,
+      codigoFormatado: dados.codigo || codigo,
+      descricao: dados.descricao,
+    };
+    cacheNcm.set(codigo, resultado);
+    return res.json(resultado);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ============ BUSCA DE NCM POR DESCRICAO (BrasilAPI) ============
+//
+// O inverso de consultarNcm: recebe um termo (nome do produto) e sugere os
+// NCMs candidatos. Usado pelo botao "buscar pelo nome" na aba Tributacao para
+// quem nao sabe o codigo de cabeca.
+//
+// A BrasilAPI faz match por SUBSTRING na descricao oficial (sensivel a acento),
+// entao a frase inteira do produto quase nunca casa ("caneta esferografica" ->
+// vazio). Por isso tentamos uma sequencia de termos: a frase completa primeiro
+// e, se nao houver acerto, cada palavra significativa (>=3 letras, fora as de
+// ligacao). Paramos no primeiro termo que retorna algum NCM de 8 digitos —
+// os unicos que servem para preencher o campo (posicoes de 2/4/6 digitos da
+// hierarquia sao descartadas). E so SUGESTAO: o usuario confirma o codigo.
+const STOPWORDS_NCM = new Set([
+  "de", "da", "do", "das", "dos", "com", "sem", "para", "por", "the",
+  "ml", "kg", "cx", "un", "pct", "und", "lt", "litro", "litros", "tipo",
+]);
+// Cache de modulo: termo normalizado -> lista de sugestoes.
+const cacheBuscaNcm = new Map();
+
+// Extrai os termos candidatos do texto, em ordem de tentativa: frase completa
+// (se tiver mais de uma palavra) e depois cada palavra significativa NA ORDEM
+// EM QUE APARECE. No varejo o substantivo do produto vem quase sempre primeiro
+// ("Caneta BIC azul", "Arroz Tio Joao", "Parafuso sextavado"), entao a primeira
+// palavra costuma ser a mais relevante — ordenar por tamanho erraria o alvo
+// (pegaria "Cristal" em vez de "Caneta", p.ex.).
+function termosBuscaNcm(texto) {
+  const limpo = String(texto || "").trim().replace(/\s+/g, " ");
+  if (!limpo) return [];
+  const palavras = limpo
+    .split(" ")
+    .map(p => p.replace(/[^\p{L}\p{N}]/gu, ""))
+    .filter(p => p.length >= 3 && !STOPWORDS_NCM.has(p.toLowerCase()) && !/^\d+$/.test(p));
+  const termos = [];
+  if (limpo.includes(" ")) termos.push(limpo);
+  for (const p of [...new Set(palavras)]) if (!termos.includes(p)) termos.push(p);
+  return termos.slice(0, 4); // limita a 4 chamadas a BrasilAPI por busca
+}
+
+async function fetchNcmSearch(termo) {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 8000);
+  try {
+    const resp = await fetch(
+      `${BRASILAPI_NCM_URL}?search=${encodeURIComponent(termo)}`,
+      { headers: { Accept: "application/json" }, signal: ac.signal },
+    );
+    if (!resp.ok) return null;
+    const dados = await resp.json().catch(() => null);
+    return Array.isArray(dados) ? dados : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function buscarNcm(req, res, next) {
+  try {
+    const q = String(req.query.q || "").trim();
+    if (q.length < 3) return res.status(400).json({ erro: "Informe ao menos 3 caracteres" });
+
+    const chave = q.toLowerCase();
+    if (cacheBuscaNcm.has(chave)) return res.json(cacheBuscaNcm.get(chave));
+
+    const termos = termosBuscaNcm(q);
+    if (termos.length === 0) return res.json({ termo: null, resultados: [] });
+
+    for (const termo of termos) {
+      const dados = await fetchNcmSearch(termo);
+      if (!dados) continue;
+      // Mantem so os codigos de 8 digitos (folhas da tabela, validos no XML).
+      const resultados = dados
+        .map(d => {
+          const cod = String(d.codigo || "").replace(/\D/g, "");
+          return cod.length === 8
+            ? {
+                ncm: cod,
+                codigoFormatado: d.codigo,
+                descricao: String(d.descricao || "").replace(/<[^>]+>/g, "").trim(),
+              }
+            : null;
+        })
+        .filter(Boolean)
+        .slice(0, 25);
+      if (resultados.length > 0) {
+        const payload = { termo, resultados };
+        cacheBuscaNcm.set(chave, payload);
+        return res.json(payload);
+      }
+    }
+
+    const vazio = { termo: termos[0], resultados: [] };
+    cacheBuscaNcm.set(chave, vazio);
+    return res.json(vazio);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ============ SUGESTAO DE CEST POR NCM (Conv. 142/2018) ============
+//
+// Tabela local (sem API externa): dado o NCM escolhido, devolve os CEST
+// candidatos. Sincrono e barato. Ver cestLookup.js para a ressalva fiscal
+// (CEST so se aplica a itens com Substituicao Tributaria).
+export async function buscarCest(req, res, next) {
+  try {
+    const ncm = String(req.query.ncm || "").replace(/\D/g, "");
+    if (ncm.length !== 8) return res.status(400).json({ erro: "Informe um NCM de 8 digitos" });
+    return res.json({ ncm, sugestoes: sugerirCest(ncm) });
+  } catch (err) {
+    next(err);
+  }
+}
 
 export async function listar(req, res, next) {
   try {

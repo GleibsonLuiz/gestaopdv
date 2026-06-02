@@ -4,7 +4,7 @@ import { compararSegredo } from "../lib/timingSafe.js";
 import {
   PRECOS_PLANO, catalogoPublico, ehPlanoAssinavel, valorDoPlano, DIAS_CARENCIA,
 } from "../lib/billing/precos.js";
-import { getProvedor, provedorAtivo } from "../lib/billing/provedor.js";
+import { getProvedor, provedorAtivo, cobrancaHabilitada } from "../lib/billing/provedor.js";
 
 // ============ MODULO ASSINATURA (billing do SaaS) ============
 //
@@ -60,6 +60,9 @@ export async function listarPlanos(req, res, next) {
     });
     res.json({
       planos: catalogoPublico(),
+      // Cobranca online liberada? (false = provedor mock sem override → o front
+      // desabilita o botao "Assinar" e mostra "fale com o suporte").
+      cobrancaHabilitada: cobrancaHabilitada(),
       atual: empresa ? {
         plano: empresa.plano,
         statusAssinatura: empresa.statusAssinatura,
@@ -123,6 +126,14 @@ export async function assinarPlano(req, res, next) {
     if (!ehPlanoAssinavel(plano)) {
       return res.status(400).json({
         erro: `O plano ${plano} nao e auto-contratavel. Fale com o suporte.`,
+      });
+    }
+    // Guarda critica: sem provedor real configurado, NAO permite auto-contratar
+    // (o mock ativaria de graca). Protege producao mesmo se o front escapar.
+    if (!cobrancaHabilitada()) {
+      return res.status(503).json({
+        erro: "Pagamento online ainda nao habilitado. Fale com o suporte para contratar.",
+        cobrancaHabilitada: false,
       });
     }
     const valorMensal = valorDoPlano(plano);

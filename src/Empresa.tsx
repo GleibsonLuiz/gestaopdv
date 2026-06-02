@@ -518,6 +518,7 @@ function fmtMoeda(n: number | null | undefined): string {
 function BlocoAssinatura({ podeAssinar }: { podeAssinar: boolean }) {
   const [info, setInfo] = useState<AssinaturaInfo | null>(null);
   const [planos, setPlanos] = useState<PlanoCatalogo[]>([]);
+  const [cobrancaHabilitada, setCobrancaHabilitada] = useState(true);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [assinando, setAssinando] = useState<string | null>(null);
@@ -528,10 +529,11 @@ function BlocoAssinatura({ podeAssinar }: { podeAssinar: boolean }) {
     try {
       const [a, p] = await Promise.all([
         api.billingAssinatura() as Promise<AssinaturaInfo>,
-        api.billingPlanos() as Promise<{ planos: PlanoCatalogo[] }>,
+        api.billingPlanos() as Promise<{ planos: PlanoCatalogo[]; cobrancaHabilitada?: boolean }>,
       ]);
       setInfo(a);
       setPlanos(p.planos || []);
+      setCobrancaHabilitada(p.cobrancaHabilitada !== false);
     } catch (err) {
       setErro((err as Error).message || "Erro ao carregar assinatura");
     } finally {
@@ -642,6 +644,17 @@ function BlocoAssinatura({ podeAssinar }: { podeAssinar: boolean }) {
         </div>
       )}
 
+      {/* Aviso quando a cobranca online ainda nao esta habilitada (provedor mock). */}
+      {podeAssinar && !cobrancaHabilitada && (
+        <div
+          className="mb-3 px-3 py-[10px] rounded-lg text-xs"
+          style={{ background: C.accent + "1a", border: `1px solid ${C.accent}44`, color: C.text }}
+        >
+          💬 O pagamento online ainda não está habilitado. Para contratar ou mudar de plano,
+          <strong> fale com o suporte</strong>.
+        </div>
+      )}
+
       {/* Catalogo de planos — so ADMIN contrata */}
       {podeAssinar && (
         <div
@@ -671,7 +684,7 @@ function BlocoAssinatura({ podeAssinar }: { podeAssinar: boolean }) {
                   >
                     ✓ Plano atual
                   </div>
-                ) : p.assinavel ? (
+                ) : (p.assinavel && cobrancaHabilitada) ? (
                   <button
                     type="button"
                     disabled={assinando !== null}
@@ -686,7 +699,7 @@ function BlocoAssinatura({ podeAssinar }: { podeAssinar: boolean }) {
                   </button>
                 ) : (
                   <div className="text-gp-muted text-[11px] text-center px-2 py-2">
-                    Fale com o suporte
+                    {p.assinavel && !cobrancaHabilitada ? "Em breve" : "Fale com o suporte"}
                   </div>
                 )}
               </div>

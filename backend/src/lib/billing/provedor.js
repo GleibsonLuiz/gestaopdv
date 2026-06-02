@@ -53,6 +53,15 @@ export function provedorAtivo() {
   return String(process.env.BILLING_PROVEDOR || "mock").toLowerCase();
 }
 
+// A cobranca self-service (cliente clicando "Assinar") so e liberada quando ha
+// um provedor REAL configurado. Com o mock a assinatura ativaria de graca na
+// hora — perigoso em producao. Para testar o fluxo mock em dev/homolog, defina
+// BILLING_PERMITIR_MOCK=true explicitamente.
+export function cobrancaHabilitada() {
+  if (provedorAtivo() !== "mock") return true;
+  return process.env.BILLING_PERMITIR_MOCK === "true";
+}
+
 export function getProvedor(nome = provedorAtivo()) {
   const adapter = ADAPTERS[String(nome).toLowerCase()];
   if (!adapter) {

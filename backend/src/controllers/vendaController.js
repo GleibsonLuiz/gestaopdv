@@ -314,6 +314,38 @@ export async function criar(req, res, next) {
     }
     const { pagamentos: pagamentosNorm, formaPrincipal, valorAPrazo } = splitPagamentos;
 
+    // CREDIARIO (fiado): exige cliente identificado e respeita o limite de
+    // credito. Distinto de BOLETO/CARTAO a prazo (operadora cobre) — fiado e
+    // divida pessoal do cliente. Bloqueia (402) se estourar o limite.
+    const valorCrediario = pagamentosNorm
+      .filter(p => p.forma === "CREDIARIO")
+      .reduce((s, p) => s + Number(p.valor), 0);
+    if (valorCrediario > 0) {
+      if (!clienteId) {
+        return res.status(400).json({ erro: "Selecione o cliente para vender no crediário (fiado)." });
+      }
+      const cli = await prisma.cliente.findUnique({
+        where: { id: clienteId },
+        select: { id: true, nome: true, limiteCredito: true },
+      });
+      if (!cli) return res.status(404).json({ erro: "Cliente nao encontrado" });
+      if (cli.limiteCredito != null) {
+        const agg = await prisma.contaReceber.aggregate({
+          where: { clienteId, status: { in: ["PENDENTE", "ATRASADA"] } },
+          _sum: { valor: true },
+        });
+        const saldo = Number(agg._sum.valor || 0);
+        const limite = Number(cli.limiteCredito);
+        if (saldo + valorCrediario > limite + 0.005) {
+          return res.status(402).json({
+            erro: `Limite de crédito de ${cli.nome} excedido. Limite ${limite.toFixed(2)}, saldo atual ${saldo.toFixed(2)}, disponível ${Math.max(0, limite - saldo).toFixed(2)}.`,
+            limiteExcedido: true,
+            limite, saldo, disponivel: Math.max(0, limite - saldo),
+          });
+        }
+      }
+    }
+
     // Conta a receber so e gerada se HOUVER pagamento em forma a prazo no
     // split (e o usuario tiver enviado config). O valor da conta e o
     // valorAPrazo, NAO o total — ex: R$ 60 PIX + R$ 40 CREDIARIO gera conta

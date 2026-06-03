@@ -150,6 +150,10 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 
 **Maquininha Mercado Pago Point** (se ativada em Configurações): botão "📲 Maquininha MP" cobra direto na máquina física, com polling de aprovação a cada 2s. A venda só é criada **após** o pagamento ser aprovado pelo MP.
 
+**Produtos vendidos por peso (kg):** cadastre o produto com **unidade KG** (ou G) e o preço por quilo em "Preço de venda". No PDV, ao adicionar esse produto abre um **teclado de balança**: o vendedor digita o **peso em gramas** (ex.: `400`) e o sistema mostra ao vivo a quantidade convertida (`0,400 kg`) e o valor calculado pelo preço/kg. Ao confirmar, a venda baixa o estoque **fracionado** (o saldo aceita até 3 casas decimais). Há atalhos de peso (100g, 250g, 500g, 1kg).
+
+- **Etiqueta de balança:** se você usa uma balança que imprime etiqueta com código de barras (padrão Toledo/Filizola — EAN-13 começando com `2`, com o código do produto e o peso embutidos), basta **bipar a etiqueta**: o item já entra na cestinha com o peso correto, sem digitar nada. O código interno da etiqueta é casado com o **código do produto** cadastrado.
+
 **Recuperação de rascunho:** se você fechar o navegador no meio de uma venda, ao reabrir o PDV aparece um banner azul "Você tinha N itens — Recuperar / Descartar". O carrinho é salvo a cada 600ms.
 
 **Atendimentos em espera (salvar para depois):** está atendendo um cliente que precisou sair (foi buscar outro produto, esqueceu o cartão no carro)? Clique em **"Salvar atendimento"** (ou **F9**) no topo da cestinha. O carrinho atual é congelado e a tela fica livre para o próximo cliente.
@@ -259,7 +263,7 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 **Como usar (cadastro):**
 
 1. Botão **+ Novo cliente** abre modal "luxuoso" em 3 seções:
-   - **Identificação** — nome (obrigatório), CPF/CNPJ (com máscara automática), tipo (PF/PJ), e-mail, telefone, data de nascimento, origem (Indicação, Instagram, Google…), status do funil (Lead, Cliente Ativo, Inativo, Perdido).
+   - **Identificação** — nome (obrigatório), CPF/CNPJ (com máscara automática), tipo (PF/PJ), e-mail, telefone, data de nascimento, origem (Indicação, Instagram, Google…), status do funil (Lead, Cliente Ativo, Inativo, Perdido). **Auto-preenchimento por CNPJ:** ao digitar os 14 dígitos de um CNPJ, o sistema busca na Receita Federal (BrasilAPI) e preenche automaticamente razão social e endereço — se o documento for CPF (11 dígitos) nada é buscado. Se o CNPJ não existir ou o serviço estiver fora do ar, aparece um aviso amigável e você segue preenchendo à mão.
    - **Endereço** — CEP autocompleta via ViaCEP (rua, bairro, cidade, UF). Complemento separado.
    - **Observações** — anotações livres.
 2. Salvar — barra de progresso mostra **% de preenchimento** (0-100% baseado em 10 campos).
@@ -339,7 +343,7 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 
 **Para que serve:** vincular a compras (entrada de mercadoria) e contas a pagar.
 
-**Como usar:** mesmo padrão de Clientes (modal luxuoso, máscaras CNPJ/CEP/telefone, ViaCEP, soft-delete vs delete permanente).
+**Como usar:** mesmo padrão de Clientes (modal luxuoso, máscaras CNPJ/CEP/telefone, ViaCEP, soft-delete vs delete permanente). **Auto-preenchimento por CNPJ:** com o tipo **Pessoa Jurídica** selecionado, ao completar os 14 dígitos do CNPJ o sistema consulta a Receita Federal (BrasilAPI) e preenche razão social, nome fantasia e endereço (logradouro, número, complemento, bairro, cidade, UF, CEP e código IBGE da UF). Erros (CNPJ inexistente ou serviço indisponível) aparecem como aviso amigável abaixo do campo.
 
 ---
 
@@ -369,7 +373,7 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 1. **Identificação** — código (sugestão automática), nome, descrição, código de barras, referência, fabricante/marca. O **Fabricante / Marca** é um cadastro reutilizável: selecione um já existente na busca ou clique no botão **+ Novo** ao lado para cadastrar um novo sem sair da tela — ele já fica selecionado e disponível para os próximos produtos.
 2. **Imagem** — dropzone (arraste ou clique). Até 2 MB, JPG/PNG/WebP.
 3. **Tipo do item** — radio cards Produto/Serviço.
-4. **Preços e estoque** — preço de custo, cálculo de markup, preço de venda, estoque atual, estoque mínimo, unidade (UN, KG, M, L, PCT…).
+4. **Preços e estoque** — preço de custo, cálculo de markup, preço de venda, estoque atual, estoque mínimo, **unidade**. A unidade é um **menu de seleção** com as unidades já pré-cadastradas (UN, KG, G, L, ML, M, M², CX, PCT, PAR, DZ, KIT…), evitando erro de digitação que poderia divergir o estoque ou ser rejeitado na NF-e. Na aba **Tributação / NF-e** há também a **unidade tributável** (mesmo menu; deixe em branco para usar a comercial).
 5. **Categorização** — categoria (cria inline se não existir), fornecedor padrão, tributação fiscal (NCM, CEST, CFOP, Origem, CST/CSOSN, PIS, COFINS, cBenef).
 
 **Preenchimento assistido da tributação (NF-e):** a aba **Tributação / NF-e** ajuda a evitar erro de digitação fiscal:
@@ -711,6 +715,30 @@ Cada grupo tem header colapsável com contagem + subtotal.
 **Ações em lote:** marcar checkbox de várias contas → barra flutuante mostra "X selecionadas · R$ Y" → botões "Pagar selecionadas" / "Cancelar contas".
 
 **Recorrência:** ao criar conta, marque **PARCELADA** (gera N contas mês a mês com `grupoRecorrenciaId` compartilhado) ou **RECORRENTE_MENSAL**.
+
+#### 🧾 Despesas
+
+**O que faz:** lançamento **rápido** de despesas operacionais do dia a dia que **não** entram no estoque — café, água, material de limpeza, taxas, manutenção, etc. — já classificadas pelo **Plano de Contas**.
+
+**Para que serve:** registrar gastos em segundos (pensado para ser tão rápido quanto mandar um WhatsApp) e deixar tudo organizado para o contador.
+
+**Diferença para "Financeiro":** o Financeiro controla o que **vai vencer** (boletos, parcelas). Despesas é o que **você já gastou** agora. Os dois alimentam os relatórios, mas não se misturam.
+
+**Como usar:**
+
+1. **Valor em destaque** — digite o valor (Enter já lança).
+2. **Categoria** — escolha no seletor ou toque em um dos **chips de categorias recentes** (atalho de 1 toque para o gasto do dia a dia). As categorias vêm do Plano de Contas.
+3. **Data** (padrão hoje) e **Forma de pagamento** (Dinheiro, Pix, Débito, Crédito, Boleto).
+4. **Descrição** (opcional) e **📷 Comprovante** (foto ou PDF até 5 MB — no celular abre a câmera direto).
+5. **Lançar despesa.**
+
+**Baixa no caixa:** se houver um caixa **aberto**, a despesa sai dele automaticamente (movimentação `DESPESA`). Excluir a despesa **estorna** o valor no caixa (se ainda estiver aberto).
+
+**Plano de Contas:** na primeira vez, o sistema cria um plano padrão para comércio/serviço (Ocupação, Pessoal, Administrativas, Comerciais, Financeiras, Impostos). Admin/Gerente podem editar as categorias.
+
+**Comprovante:** clique no 📎 na lista para abrir/baixar o comprovante anexado.
+
+> Acesso: módulo **Despesas** (incluído no plano PRO). Lançar/editar/excluir exige Admin ou Gerente; vendedores com a permissão só visualizam.
 
 #### 📒 Crediário (Fiado)
 

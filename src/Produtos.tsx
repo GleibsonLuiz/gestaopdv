@@ -9,6 +9,7 @@ import EtiquetaPrecoModal from "./components/EtiquetaPrecoModal";
 import { FormularioLuxuoso, Secao, Linha, Campo as CampoLux } from "./components/FormularioLuxuoso";
 import SelectBusca from "./components/SelectBusca";
 import { Abas } from "./components/AbasFormulario";
+import { UNIDADES_MEDIDA, SIGLAS_UNIDADE } from "./lib/unidades";
 
 // ============ TIPOS ============
 
@@ -163,6 +164,25 @@ const CAMPOS_PROGRESSO: (keyof FormProduto)[] = [
 ];
 
 // ============ HELPERS ============
+
+/**
+ * Opções para os selects de unidade de medida. Lista as unidades
+ * pré-cadastradas e, se o produto já tiver uma sigla fora da lista (ex.: dado
+ * legado), inclui essa sigla como opção extra para não perder o valor.
+ */
+function OpcoesUnidade({ atual }: { atual?: string | null }) {
+  const a = (atual || "").trim().toUpperCase();
+  return (
+    <>
+      {a && !SIGLAS_UNIDADE.has(a) && <option value={a}>{a}</option>}
+      {UNIDADES_MEDIDA.map((u) => (
+        <option key={u.sigla} value={u.sigla}>
+          {u.sigla} — {u.descricao}
+        </option>
+      ))}
+    </>
+  );
+}
 
 export function urlImagem(imagem: string | null | undefined): string | null {
   if (!imagem) return null;
@@ -910,12 +930,14 @@ export default function Produtos({ user }: ProdutosProps) {
                         />
                       </CampoLux>
                       <CampoLux label="Unidade">
-                        <input
-                          className="lux-input"
+                        <select
+                          className="lux-input lux-select"
                           value={form.unidade}
-                          onChange={(e) => setForm({ ...form, unidade: e.target.value.toUpperCase().slice(0, 6) })}
-                          placeholder="UN, KG…"
-                        />
+                          onChange={(e) => setForm({ ...form, unidade: e.target.value })}
+                          aria-label="Unidade de medida"
+                        >
+                          <OpcoesUnidade atual={form.unidade} />
+                        </select>
                       </CampoLux>
                       <CampoLux label="Código de barras">
                         <input
@@ -1895,12 +1917,15 @@ function AbaFiscal({ form, setForm }: AbaFiscalProps) {
             />
           </CampoLux>
           <CampoLux label="Unidade tributável" hint="Vazio = usa comercial">
-            <input
-              className="lux-input"
+            <select
+              className="lux-input lux-select"
               value={form.unidadeTributavel}
-              onChange={(e) => setForm({ ...form, unidadeTributavel: e.target.value.toUpperCase().slice(0, 6) })}
-              placeholder="UN, KG..."
-            />
+              onChange={(e) => setForm({ ...form, unidadeTributavel: e.target.value })}
+              aria-label="Unidade tributável"
+            >
+              <option value="">— usa a comercial —</option>
+              <OpcoesUnidade atual={form.unidadeTributavel} />
+            </select>
           </CampoLux>
           <CampoLux label="Peso (líquido / bruto kg)">
             <div className="flex gap-1.5">

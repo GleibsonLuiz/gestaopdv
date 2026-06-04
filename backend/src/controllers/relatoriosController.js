@@ -228,7 +228,7 @@ export async function relatorioCompras(req, res, next) {
 
 export async function relatorioFinanceiro(req, res, next) {
   try {
-    const { dataInicio, dataFim, tipo, clienteId, fornecedorId } = req.query;
+    const { dataInicio, dataFim, tipo, clienteId, fornecedorId, status } = req.query;
     const di = parseDataInicio(dataInicio);
     const df = parseDataFim(dataFim);
 
@@ -249,6 +249,14 @@ export async function relatorioFinanceiro(req, res, next) {
     if (fornecedorId) wherePagar.fornecedorId = fornecedorId;
     if (clienteId) whereReceber.clienteId = clienteId;
 
+    // O filtro de status afeta apenas as listas detalhadas (contas a pagar/
+    // receber). O "Resumo por status" continua usando wherePagar/whereReceber
+    // sem status, para manter a visao geral completa de todos os status.
+    const STATUS_VALIDOS = ["PENDENTE", "PAGA", "ATRASADA", "CANCELADA"];
+    const statusFiltro = STATUS_VALIDOS.includes(status) ? status : null;
+    const wherePagarDetalhe = statusFiltro ? { ...wherePagar, status: statusFiltro } : wherePagar;
+    const whereReceberDetalhe = statusFiltro ? { ...whereReceber, status: statusFiltro } : whereReceber;
+
     const incluirPagar = !tipo || tipo === "pagar";
     const incluirReceber = !tipo || tipo === "receber";
 
@@ -259,12 +267,12 @@ export async function relatorioFinanceiro(req, res, next) {
       receberPorStatusRaw,
     ] = await Promise.all([
       incluirPagar ? prisma.contaPagar.findMany({
-        where: wherePagar,
+        where: wherePagarDetalhe,
         orderBy: { vencimento: "asc" },
         include: { fornecedor: { select: { nome: true } } },
       }) : Promise.resolve([]),
       incluirReceber ? prisma.contaReceber.findMany({
-        where: whereReceber,
+        where: whereReceberDetalhe,
         orderBy: { vencimento: "asc" },
         include: { cliente: { select: { nome: true } } },
       }) : Promise.resolve([]),
@@ -301,6 +309,7 @@ export async function relatorioFinanceiro(req, res, next) {
         tipo: tipo || "ambos",
         clienteId: clienteId || null,
         fornecedorId: fornecedorId || null,
+        status: statusFiltro || "todos",
       },
       resumo: {
         pagar: resumoPagar,

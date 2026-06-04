@@ -809,7 +809,7 @@ Documentos fiscais além da NFC-e, na tela **NF-e / NFS-e**:
 
 1. **📦 Vendas** — período, vendedor, forma, cliente. Tabela + totais.
 2. **🛍 Compras** — período, fornecedor. Tabela + totais.
-3. **💰 Financeiro** — sub-abas Pagar / Receber, status, período.
+3. **💰 Financeiro** — filtros de período (vencimento), **Tipo** (Ambos / Apenas a pagar / Apenas a receber), **Situação** (Todas / Pendentes / Pagas-Recebidas / Atrasadas / Canceladas) e **Cliente** ou **Fornecedor** (campo de busca largo, conforme o Tipo escolhido). Mostra cards de saldo previsto / fluxo realizado / pendentes, o "Resumo por status" (visão geral sempre completa) e o detalhamento de contas — este último respeita o filtro de Situação.
 4. **🗃 Estoque** — situação atual por produto/categoria.
 5. **🏭 Fabricantes** — produtos filtrados por fabricante/marca (e categoria), agrupados por fabricante com subtotais (nº de produtos, unidades e valor de estoque a custo/venda). Filtro "(Sem fabricante)" lista os produtos sem marca cadastrada; opção de incluir inativos.
 6. **💵 Caixas (DRE)** — DRE diário com entradas/saídas/quebras/sobras + detalhe por caixa.

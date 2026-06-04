@@ -455,6 +455,7 @@ function RelatorioFinanceiro() {
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
   const [tipo, setTipo] = useState("");
+  const [status, setStatus] = useState("");
   const [clienteId, setClienteId] = useState("");
   const [fornecedorId, setFornecedorId] = useState("");
   const [clientes, setClientes] = useState([]);
@@ -471,16 +472,17 @@ function RelatorioFinanceiro() {
   const gerar = useCallback(async () => {
     setCarregando(true); setErro("");
     try {
-      const r = await api.relatorioFinanceiro({ dataInicio, dataFim, tipo, clienteId, fornecedorId });
+      const r = await api.relatorioFinanceiro({ dataInicio, dataFim, tipo, status, clienteId, fornecedorId });
       setDados(r);
     } catch (err) { setErro(err.message); }
     finally { setCarregando(false); }
-  }, [dataInicio, dataFim, tipo, clienteId, fornecedorId]);
+  }, [dataInicio, dataFim, tipo, status, clienteId, fornecedorId]);
 
   async function exportar() {
     if (!dados) return;
     const doc = await criarPDF("Relatório Financeiro");
     addPeriodo(doc, dataInicio, dataFim);
+    if (status) addLinha(doc, `Situação (detalhamento): ${ROTULO_STATUS[status]}`);
 
     autoTable(doc, {
       startY: doc.lastAutoTable.finalY + 4,
@@ -566,11 +568,18 @@ function RelatorioFinanceiro() {
             <option value="pagar">Apenas a pagar</option>
             <option value="receber">Apenas a receber</option>
           </CampoSelect>
+          <CampoSelect label="Situação" value={status} onChange={setStatus}>
+            <option value="">Todas</option>
+            <option value="PENDENTE">Pendentes</option>
+            <option value="PAGA">Pagas / Recebidas</option>
+            <option value="ATRASADA">Atrasadas</option>
+            <option value="CANCELADA">Canceladas</option>
+          </CampoSelect>
           {tipo === "receber" && (
-            <CampoSelectBusca label="Cliente" opcoes={clientes} value={clienteId} onChange={setClienteId} placeholder="Todos" />
+            <CampoSelectBusca label="Cliente" opcoes={clientes} value={clienteId} onChange={setClienteId} placeholder="Todos" minWidth={280} />
           )}
           {tipo === "pagar" && (
-            <CampoSelectBusca label="Fornecedor" opcoes={fornecedores} value={fornecedorId} onChange={setFornecedorId} subLabelFn={f => f.cnpj} placeholder="Todos" />
+            <CampoSelectBusca label="Fornecedor" opcoes={fornecedores} value={fornecedorId} onChange={setFornecedorId} subLabelFn={f => f.cnpj} placeholder="Todos" minWidth={280} />
           )}
         </>
       }
@@ -601,7 +610,7 @@ function RelatorioFinanceiro() {
 
           {dados.contasPagar.length > 0 && (
             <Tabela
-              titulo={`Contas a pagar (${dados.contasPagar.length})`}
+              titulo={`Contas a pagar (${dados.contasPagar.length})${status ? ` — ${ROTULO_STATUS[status]}s` : ""}`}
               colunas={["Descrição", "Fornecedor", "Vencimento", "Status", "Valor"]}
               alinhamentos={["left", "left", "left", "center", "right"]}
               linhas={dados.contasPagar.map(c => [
@@ -613,7 +622,7 @@ function RelatorioFinanceiro() {
 
           {dados.contasReceber.length > 0 && (
             <Tabela
-              titulo={`Contas a receber (${dados.contasReceber.length})`}
+              titulo={`Contas a receber (${dados.contasReceber.length})${status ? ` — ${ROTULO_STATUS[status]}s` : ""}`}
               colunas={["Descrição", "Cliente", "Vencimento", "Status", "Valor"]}
               alinhamentos={["left", "left", "left", "center", "right"]}
               linhas={dados.contasReceber.map(c => [
@@ -3399,20 +3408,20 @@ function CampoData({ label, value, onChange }: any) {
   );
 }
 
-function CampoSelect({ label, value, onChange, children }: any) {
+function CampoSelect({ label, value, onChange, children, minWidth }: any) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", minWidth: 160 }}>
+    <div style={{ display: "flex", flexDirection: "column", minWidth: minWidth || 160 }}>
       <label style={labelStyle}>{label}</label>
-      <select value={value} onChange={e => onChange(e.target.value)} style={inputStyle}>
+      <select value={value} onChange={e => onChange(e.target.value)} style={{ ...inputStyle, minWidth: minWidth || inputStyle.minWidth }}>
         {children}
       </select>
     </div>
   );
 }
 
-function CampoSelectBusca({ label, opcoes, value, onChange, labelFn, subLabelFn, placeholder }: any) {
+function CampoSelectBusca({ label, opcoes, value, onChange, labelFn, subLabelFn, placeholder, minWidth }: any) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", minWidth: 160 }}>
+    <div style={{ display: "flex", flexDirection: "column", minWidth: minWidth || 160 }}>
       <label style={labelStyle}>{label}</label>
       <SelectBusca
         opcoes={opcoes}
@@ -3421,7 +3430,7 @@ function CampoSelectBusca({ label, opcoes, value, onChange, labelFn, subLabelFn,
         labelFn={labelFn}
         subLabelFn={subLabelFn}
         placeholder={placeholder || "Todos"}
-        style={inputStyle}
+        style={{ ...inputStyle, minWidth: minWidth || inputStyle.minWidth }}
       />
     </div>
   );

@@ -24,6 +24,7 @@ import { gerarComandosPedido } from "./lib/escposPedido";
 import { imprimirViaBluetooth, bluetoothDisponivel } from "./lib/webBluetoothPrint";
 import { getEmpresa } from "./lib/api";
 import { gerarLink } from "./lib/templates";
+import { ehUnidadePeso, pesoGramasParaEstoque, resolverEtiquetaBalanca, PRESETS_PESO_G } from "./lib/unidades";
 
 function urlImagem(imagem) {
   if (!imagem) return null;
@@ -669,7 +670,9 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
       return;
     }
     setQtdModalProduto(produto);
-    setQtdModalValor("1");
+    // Produto por peso abre o teclado de balança vazio (vendedor digita os
+    // gramas); demais começam em 1 unidade.
+    setQtdModalValor(ehUnidadePeso(produto.unidade) ? "" : "1");
     setTimeout(() => {
       qtdInputRef.current?.focus();
       qtdInputRef.current?.select();
@@ -684,11 +687,23 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
 
   function confirmarQtdModal() {
     if (!qtdModalProduto) return;
-    // Quantidade fracionaria — produtos por metro/kg confirmam 1,5; 2,25 etc.
-    const raw = parseFloat(String(qtdModalValor).replace(",", "."));
-    const n = Number.isFinite(raw) && raw > 0
-      ? Math.max(0.001, Math.round(raw * 1000) / 1000)
-      : 1;
+    let n;
+    if (ehUnidadePeso(qtdModalProduto.unidade)) {
+      // Produto por peso: o campo guarda GRAMAS. Converte para a unidade de
+      // estoque (KG/G) — 400 g → 0,400 kg.
+      const gramas = parseFloat(String(qtdModalValor).replace(",", "."));
+      n = pesoGramasParaEstoque(gramas, qtdModalProduto.unidade);
+      if (!(n > 0)) {
+        flashErro(`Informe o peso de "${qtdModalProduto.nome}".`);
+        return;
+      }
+    } else {
+      // Quantidade fracionaria — produtos por metro/litro confirmam 1,5; 2,25 etc.
+      const raw = parseFloat(String(qtdModalValor).replace(",", "."));
+      n = Number.isFinite(raw) && raw > 0
+        ? Math.max(0.001, Math.round(raw * 1000) / 1000)
+        : 1;
+    }
     const estoqueProduto = Number(qtdModalProduto.estoque) || 0;
     if (qtdModalProduto.tipoItem !== "SERVICO" && n > estoqueProduto + 1e-9) {
       flashErro(`Estoque insuficiente de "${qtdModalProduto.nome}" (disponível: ${estoqueProduto}).`);
@@ -706,6 +721,19 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
   function biparOuConfirmar() {
     const q = busca.trim();
     if (!q) return;
+    // Etiqueta de balança (EAN-13 de peso/preço embutido) — bipou, já entra
+    // com o peso embutido, sem abrir modal. Padrão de supermercado.
+    const etiqueta = resolverEtiquetaBalanca(q, produtos);
+    if (etiqueta) {
+      const prod = etiqueta.produto;
+      if (prod.tipoItem !== "SERVICO" && Number(prod.estoque) + 1e-9 < etiqueta.quantidade) {
+        flashErro(`Estoque insuficiente de "${prod.nome}" (disponível: ${prod.estoque} ${prod.unidade || ""}).`);
+        setBusca("");
+        return;
+      }
+      adicionarProduto(prod, etiqueta.quantidade);
+      return;
+    }
     const ql = q.toLowerCase();
     const exato = produtos.find(p =>
       p.ativo && (
@@ -1987,36 +2015,125 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
             </div>
 
             <div className="pdv-modal-body" style={{ paddingBottom: 12 }}>
-              <label className="pdv-field-label">Quantidade</label>
-              <input
-                ref={qtdInputRef}
-                type="number"
-                step="0.001"
-                min="0.001"
-                max={qtdModalProduto.tipoItem === "SERVICO" ? undefined : Number(qtdModalProduto.estoque) || undefined}
-                value={qtdModalValor}
-                onChange={e => setQtdModalValor(e.target.value)}
-                className="pdv-qty-input"
-              />
-
-              {(() => {
-                // Quantidade fracionaria — produtos vendidos por metro/kg
-                // multiplicam direto (1.5m * R$1,80 = R$2,70).
-                const raw = parseFloat(String(qtdModalValor).replace(",", "."));
-                const n = Number.isFinite(raw) && raw > 0 ? Math.round(raw * 1000) / 1000 : 0;
-                const sub = n * Number(qtdModalProduto.precoVenda);
+              {ehUnidadePeso(qtdModalProduto.unidade) ? (() => {
+                // ===== Produto por PESO: teclado de balança (gramas) =====
+                // O campo guarda os GRAMAS digitados; o sistema converte para
+                // a unidade de estoque (KG/G) e calcula o valor pelo preço/kg.
+                const gramas = parseFloat(String(qtdModalValor).replace(",", ".")) || 0;
+                const qtdEstoque = pesoGramasParaEstoque(gramas, qtdModalProduto.unidade);
+                const un = (qtdModalProduto.unidade || "KG").toUpperCase();
+                const sub = qtdEstoque * Number(qtdModalProduto.precoVenda);
+                const append = (d) => setQtdModalValor(v => {
+                  const s = String(v || "") + d;
+                  return s.replace(/^0+(?=\d)/, "");
+                });
+                const tecla = {
+                  padding: "13px 0", borderRadius: 10, border: "1px solid var(--pdv-line)",
+                  color: "var(--pdv-t1)", fontSize: 19, fontWeight: 600, cursor: "pointer",
+                  fontVariantNumeric: "tabular-nums",
+                };
                 return (
-                  <div className="pdv-modal-amount" style={{ margin: "12px 0 0" }}>
-                    <div>
-                      <div className="pdv-modal-amount-lbl">Subtotal</div>
-                      <div className="pdv-modal-amount-sub">{n} × {fmtBRL(qtdModalProduto.precoVenda)}</div>
+                  <>
+                    <label className="pdv-field-label">Peso (gramas)</label>
+                    <input
+                      ref={qtdInputRef}
+                      type="text"
+                      inputMode="numeric"
+                      value={qtdModalValor}
+                      onChange={e => setQtdModalValor(e.target.value.replace(/[^0-9.,]/g, ""))}
+                      placeholder="0"
+                      className="pdv-qty-input"
+                      style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}
+                    />
+
+                    {/* Atalhos de peso */}
+                    <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                      {PRESETS_PESO_G.map(g => (
+                        <button
+                          key={g}
+                          type="button"
+                          onClick={() => setQtdModalValor(String(g))}
+                          style={{
+                            flex: 1, padding: "8px 0", borderRadius: 8,
+                            border: "1px solid var(--pdv-line)", background: "var(--pdv-surf-2)",
+                            color: "var(--pdv-t2)", fontSize: 12.5, cursor: "pointer",
+                          }}
+                        >
+                          {g >= 1000 ? `${g / 1000}kg` : `${g}g`}
+                        </button>
+                      ))}
                     </div>
-                    <div className="pdv-modal-amount-num">
-                      {(() => { const { int, dec } = fmtPartes(sub); return <><span className="cur">R$</span>{int}<span className="cents">,{dec}</span></>; })()}
+
+                    {/* Teclado numérico (estilo balança) */}
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, marginTop: 8 }}>
+                      {["7", "8", "9", "4", "5", "6", "1", "2", "3", ",", "0", "⌫"].map(k => (
+                        <button
+                          key={k}
+                          type="button"
+                          onClick={() => {
+                            if (k === "⌫") setQtdModalValor(v => String(v || "").slice(0, -1));
+                            else if (k === ",") setQtdModalValor(v => {
+                              const s = String(v || "");
+                              return s.includes(",") || s.includes(".") ? s : (s || "0") + ",";
+                            });
+                            else append(k);
+                          }}
+                          style={{ ...tecla, background: k === "⌫" ? "var(--pdv-surf-1)" : "var(--pdv-surf-2)" }}
+                        >
+                          {k}
+                        </button>
+                      ))}
                     </div>
-                  </div>
+
+                    <div className="pdv-modal-amount" style={{ margin: "12px 0 0" }}>
+                      <div>
+                        <div className="pdv-modal-amount-lbl">
+                          {gramas > 0 ? `${fmtQtd(qtdEstoque)} ${un} × ${fmtBRL(qtdModalProduto.precoVenda)}` : "Informe o peso"}
+                        </div>
+                        <div className="pdv-modal-amount-sub">
+                          {gramas > 0 ? `${fmtQtd(gramas)} g` : `R$ ${fmtBRL(qtdModalProduto.precoVenda)} por ${un}`}
+                        </div>
+                      </div>
+                      <div className="pdv-modal-amount-num">
+                        {(() => { const { int, dec } = fmtPartes(sub); return <><span className="cur">R$</span>{int}<span className="cents">,{dec}</span></>; })()}
+                      </div>
+                    </div>
+                  </>
                 );
-              })()}
+              })() : (
+                <>
+                  <label className="pdv-field-label">Quantidade</label>
+                  <input
+                    ref={qtdInputRef}
+                    type="number"
+                    step="0.001"
+                    min="0.001"
+                    max={qtdModalProduto.tipoItem === "SERVICO" ? undefined : Number(qtdModalProduto.estoque) || undefined}
+                    value={qtdModalValor}
+                    onChange={e => setQtdModalValor(e.target.value)}
+                    className="pdv-qty-input"
+                  />
+
+                  {(() => {
+                    // Quantidade fracionaria — produtos vendidos por metro/litro
+                    // multiplicam direto (1.5m * R$1,80 = R$2,70).
+                    const raw = parseFloat(String(qtdModalValor).replace(",", "."));
+                    const n = Number.isFinite(raw) && raw > 0 ? Math.round(raw * 1000) / 1000 : 0;
+                    const sub = n * Number(qtdModalProduto.precoVenda);
+                    return (
+                      <div className="pdv-modal-amount" style={{ margin: "12px 0 0" }}>
+                        <div>
+                          <div className="pdv-modal-amount-lbl">Subtotal</div>
+                          <div className="pdv-modal-amount-sub">{n} × {fmtBRL(qtdModalProduto.precoVenda)}</div>
+                        </div>
+                        <div className="pdv-modal-amount-num">
+                          {(() => { const { int, dec } = fmtPartes(sub); return <><span className="cur">R$</span>{int}<span className="cents">,{dec}</span></>; })()}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </>
+              )}
             </div>
 
             <div className="pdv-modal-foot">

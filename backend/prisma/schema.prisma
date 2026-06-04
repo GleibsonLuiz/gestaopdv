@@ -105,7 +105,20 @@ enum TipoMovimentacaoCaixa {
   RECEBER_CONTA
   ESTORNO_PAGAR_CONTA
   ESTORNO_RECEBER_CONTA
+  // DESPESA = saida de caixa por despesa operacional (modulo Contabilidade);
+  // ESTORNO_DESPESA devolve o valor quando a despesa e excluida/estornada.
+  DESPESA
+  ESTORNO_DESPESA
   FECHAMENTO
+}
+
+// Natureza da conta no Plano de Contas. O modulo de despesas usa DESPESA;
+// RECEITA fica disponivel para classificar entradas no relatorio do contador.
+// Enum (em vez de boolean) permite expandir para ATIVO/PASSIVO no futuro sem
+// nova migration de tipo.
+enum NaturezaConta {
+  RECEITA
+  DESPESA
 }
 
 enum TipoOrcamento {
@@ -328,6 +341,7 @@ enum RegimeTributario {
 enum ModeloDocFiscal {
   NFCE_65 // NFC-e — cupom fiscal eletronico (modelo 65)
   NFE_55 // NF-e (modelo 55)
+  NFSE // NFS-e — nota fiscal de servico eletronica (municipal / ISS)
 }
 
 // Ambiente de transmissao SEFAZ. tpAmb no XML: PRODUCAO=1, HOMOLOGACAO=2.
@@ -364,6 +378,20 @@ enum StatusSefaz {
   CONTINGENCIA
   INUTILIZADA
   ERRO
+}
+
+// Ciclo da ENTRADA de NF-e de fornecedor (importacao de compra — Epico Entrada).
+enum StatusNotaEntrada {
+  RECEBIDA // XML parseado e validado, aguardando conciliacao (de-para)
+  IMPORTADA // virou Compra (estoque + financeiro lancados)
+  DESCARTADA // usuario descartou a nota
+}
+
+// Documento recebido da distribuicao de DF-e (NF-e emitida contra o nosso CNPJ).
+enum StatusDocDFe {
+  PENDENTE // resumo recebido da SEFAZ, ainda sem XML completo
+  XML_BAIXADO // XML completo obtido -> virou NotaFiscalEntrada (conciliacao)
+  IGNORADO // usuario marcou pra ignorar
 }
 
 // ============ MULTI-TENANT ============
@@ -470,8 +498,14 @@ model Empresa {
   whatsappLogs           WhatsappLog[]
   notasFiscais           NotaFiscal[]
   itensNotaFiscal        ItemNotaFiscal[]
+  documentosFiscaisEventos DocumentoFiscalEvento[]
+  notasFiscaisEntrada    NotaFiscalEntrada[]
+  deParaProdutoFornecedor DeParaProdutoFornecedor[]
+  documentosRecebidosDFe DocumentoRecebidoDFe[]
   ordensServico          OrdemServico[]
   itensOrdemServico      ItemOrdemServico[]
+  planosContas           PlanoConta[]
+  despesas               Despesa[]
 
   @@map("empresas")
 }
@@ -572,8 +606,10 @@ model User {
   intencoesPagamentoMP     IntencaoPagamentoMP[]
   comandas                 Comanda[]
   notasFiscais             NotaFiscal[]
+  notasFiscaisEntrada      NotaFiscalEntrada[]
   vendasEspera             VendaEspera[]
   ordensServico            OrdemServico[] @relation("OSResponsavel")
+  despesas                 Despesa[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -710,6 +746,9 @@ model Fornecedor {
   produtos    Produto[]
   compras     Compra[]
   contasPagar ContaPagar[]
+  despesas    Despesa[]
+  notasEntrada NotaFiscalEntrada[]
+  deParaProdutos DeParaProdutoFornecedor[]
 
   @@unique([tenantId, cnpj])
   @@index([tenantId])
@@ -862,6 +901,7 @@ model Produto {
   inventarioItens InventarioItem[]
   itensComanda    ItemComanda[]
   itensNotaFiscal ItemNotaFiscal[]
+  deParaFornecedores DeParaProdutoFornecedor[]
   itensOrdemServico ItemOrdemServico[]
 
   @@unique([tenantId, codigo])
@@ -1021,8 +1061,26 @@ model NotaFiscal {
   valorCofins     Decimal? @db.Decimal(10, 2)
 
   // --- Snapshot do destinatario (NFC-e: opcional, "consumidor") ---
+  // Na NFS-e (modelo NFSE) estes campos guardam o TOMADOR do servico.
   destCpfCnpj String?
   destNome    String?
+
+  // --- NFS-e (modelo NFSE): identificacao e ISS ---
+  // Numero/codigo de verificacao atribuidos pela prefeitura (analogos a
+  // chaveAcesso/protocolo da NFC-e, mas no padrao municipal). Os campos de
+  // ICMS acima ficam null nas NFS-e; estes ficam null nas NFC-e/NF-e.
+  numeroNfse             String?
+  codigoVerificacao      String?
+  valorServicos          Decimal? @db.Decimal(10, 2)
+  valorDeducoes          Decimal? @db.Decimal(10, 2)
+  baseCalculoIss         Decimal? @db.Decimal(10, 2)
+  aliquotaIss            Decimal? @db.Decimal(5, 2)
+  valorIss               Decimal? @db.Decimal(10, 2)
+  issRetido              Boolean?
+  itemListaServico       String? // item da lista de servicos (LC 116)
+  codTributacaoMunicipio String? // codigo de tributacao do municipio
+  codMunicipioPrestacao  String? // IBGE do municipio de prestacao do servico
+  discriminacao          String? @db.Text // descricao do servico prestado
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1032,19 +1090,169 @@ model NotaFiscal {
   vendaId String?
   venda   Venda?  @relation(fields: [vendaId], references: [id], onDelete: SetNull)
 
+  // Ordem de servico de origem (NFS-e). SetNull preserva a nota se a OS sumir.
+  ordemServicoId String?
+  ordemServico   OrdemServico? @relation(fields: [ordemServicoId], references: [id], onDelete: SetNull)
+
   userId String?
   user   User?   @relation(fields: [userId], references: [id])
 
   tenantId String
   tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  itens ItemNotaFiscal[]
+  itens   ItemNotaFiscal[]
+  eventos DocumentoFiscalEvento[]
 
   @@unique([tenantId, modelo, serie, numeroFiscal])
   @@index([tenantId, status])
   @@index([tenantId, createdAt])
   @@index([vendaId])
+  @@index([ordemServicoId])
   @@map("notas_fiscais")
+}
+
+// ============ EVENTOS DA NOTA FISCAL (auditoria + fila de retry) ============
+//
+// Uma linha por interacao com a SEFAZ/gateway (transmissao, consulta,
+// cancelamento, inutilizacao, validacao). E a TRILHA legivel da nota e a base
+// do worker de reconsulta. Gravada por lib/fiscal/eventos.js (best-effort).
+//
+//   tipo      VALIDACAO | TRANSMISSAO | CONSULTA | CANCELAMENTO | INUTILIZACAO | RETRY
+//   resultado OK | REJEITADO | TIMEOUT | ERRO_REDE | OFFLINE | ERRO
+//
+// cStat e TEXT (nao VarChar(3) como em NotaFiscal): aqui guardamos tambem
+// codigos textuais que o gateway pode devolver, alem do cStat numerico da SEFAZ.
+model DocumentoFiscalEvento {
+  id        String @id @default(uuid())
+  tipo      String
+  resultado String
+
+  cStat            String? // codigo SEFAZ (numerico) ou do gateway (textual)
+  xMotivo          String? @db.Text // texto cru da SEFAZ/gateway (auditoria)
+  mensagemAmigavel String? @db.Text // traducao pt-BR (lib/fiscal/rejeicoes.js)
+
+  // --- Fila de retry (Onda 3): o worker varre por proximaTentativaEm ---
+  tentativa          Int       @default(1)
+  proximaTentativaEm DateTime?
+  payloadHash        String? // idempotencia / detectar reenvio no timeout
+
+  createdAt DateTime @default(now())
+
+  notaFiscalId String
+  nota         NotaFiscal @relation(fields: [notaFiscalId], references: [id], onDelete: Cascade)
+
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([notaFiscalId, createdAt])
+  @@index([resultado, proximaTentativaEm])
+  @@map("documentos_fiscais_eventos")
+}
+
+// ============ ENTRADA DE NF-e DE FORNECEDOR (importacao de compra) ============
+//
+// Staging da NF-e (modelo 55) recebida de um fornecedor. O XML e validado
+// (lib/fiscal/validarEntradaNfe.js) ANTES de virar registro; o que passa fica
+// RECEBIDA com o modelo intermediario em dadosJson, aguardando o de-para
+// (conciliacao fornecedor/produtos). Ao efetivar, vira Compra (estoque +
+// ContaPagar). Idempotente pela chave de acesso (@@unique[tenant, chave]).
+model NotaFiscalEntrada {
+  id          String            @id @default(uuid())
+  chaveAcesso String            @db.VarChar(44)
+  status      StatusNotaEntrada @default(RECEBIDA)
+
+  // Snapshot do cabecalho (p/ listar sem reparsear o XML)
+  numero       String?
+  serie        String?
+  dataEmissao  DateTime?
+  emitenteCnpj String?
+  emitenteNome String?
+  valorTotal   Decimal? @db.Decimal(10, 2)
+
+  xml       String @db.Text // XML cru, fonte da verdade
+  dadosJson Json // modelo intermediario extraido (itens, duplicatas, totais)
+
+  // Vinculos resolvidos no de-para / efetivacao
+  fornecedorId String?
+  fornecedor   Fornecedor? @relation(fields: [fornecedorId], references: [id], onDelete: SetNull)
+
+  compraId String? @unique
+  compra   Compra? @relation(fields: [compraId], references: [id], onDelete: SetNull)
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Origem na distribuicao DF-e (quando a nota veio da SEFAZ, nao de upload).
+  docDFe DocumentoRecebidoDFe?
+
+  @@unique([tenantId, chaveAcesso])
+  @@index([tenantId, status])
+  @@map("notas_fiscais_entrada")
+}
+
+// Memoria do de-para: codigo do produto no XML do fornecedor -> nosso produtoId.
+// Na proxima NF-e do mesmo fornecedor o item ja vem pre-casado.
+model DeParaProdutoFornecedor {
+  id              String  @id @default(uuid())
+  cProdFornecedor String // cProd do item no XML do fornecedor
+  cEAN            String? // GTIN, quando houver (matching alternativo)
+
+  fornecedorId String
+  fornecedor   Fornecedor @relation(fields: [fornecedorId], references: [id], onDelete: Cascade)
+
+  produtoId String
+  produto   Produto @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, fornecedorId, cProdFornecedor])
+  @@index([tenantId])
+  @@map("depara_produto_fornecedor")
+}
+
+// ============ DISTRIBUICAO DF-e (NF-e recebidas contra o CNPJ) ============
+//
+// "Caixa de entrada" da SEFAZ: cada documento que a distribuicao de DF-e
+// entrega para o nosso CNPJ (resumo ou NF-e completa). O resumo (chave +
+// emitente + valor) chega primeiro; ao baixar o XML completo, o documento vira
+// uma NotaFiscalEntrada (RECEBIDA) e segue o fluxo de conciliacao normal.
+// Idempotente pelo NSU (numero sequencial unico da SEFAZ).
+model DocumentoRecebidoDFe {
+  id          String       @id @default(uuid())
+  nsu         String // numero sequencial unico atribuido pela SEFAZ
+  tipo        String // RESUMO_NFE | NFE | EVENTO
+  chaveAcesso String?      @db.VarChar(44)
+  status      StatusDocDFe @default(PENDENTE)
+
+  emitenteCnpj String?
+  emitenteNome String?
+  valorTotal   Decimal?  @db.Decimal(10, 2)
+  dataEmissao  DateTime?
+  resumoJson   Json? // payload bruto do resumo (auditoria)
+
+  // NotaFiscalEntrada criada quando o XML completo e baixado.
+  notaEntradaId String?            @unique
+  notaEntrada   NotaFiscalEntrada? @relation(fields: [notaEntradaId], references: [id], onDelete: SetNull)
+
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, nsu])
+  @@index([tenantId, status])
+  @@map("documentos_recebidos_dfe")
 }
 
 model ItemNotaFiscal {
@@ -1113,6 +1321,7 @@ model Compra {
 
   itens       ItemCompra[]
   contasPagar ContaPagar[]
+  notaEntrada NotaFiscalEntrada?
 
   @@unique([tenantId, numero])
   @@index([tenantId])
@@ -1263,6 +1472,11 @@ model ContaPagar {
   compraId String?
   compra   Compra? @relation(fields: [compraId], references: [id], onDelete: SetNull)
 
+  // Classificacao contabil (Plano de Contas) — opcional. Quando preenchida,
+  // a conta a pagar entra classificada no relatorio/exportacao do contador.
+  planoContaId String?
+  planoConta   PlanoConta? @relation(fields: [planoContaId], references: [id])
+
   tenantId String
   tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -1271,6 +1485,7 @@ model ContaPagar {
 
   @@index([grupoRecorrenciaId])
   @@index([compraId])
+  @@index([planoContaId])
   @@index([tenantId])
   @@map("contas_pagar")
 }
@@ -1327,13 +1542,99 @@ model Anexo {
   contaReceberId String?
   contaReceber   ContaReceber? @relation(fields: [contaReceberId], references: [id], onDelete: Cascade)
 
+  despesaId String?
+  despesa   Despesa? @relation(fields: [despesaId], references: [id], onDelete: Cascade)
+
   tenantId String
   tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([contaPagarId])
   @@index([contaReceberId])
+  @@index([despesaId])
   @@index([tenantId])
   @@map("anexos")
+}
+
+// ============ CONTABILIDADE: PLANO DE CONTAS + DESPESAS ============
+//
+// Plano de Contas hierarquico (auto-relacionavel). Contas SINTETICAS apenas
+// agrupam (nao recebem lancamento); ANALITICAS sao folhas e recebem despesas
+// e contas a pagar. `codigo` segue o padrao contabil "3.1.01.001".
+// `codigoContabilExterno` guarda o de-para com o codigo no sistema do contador
+// (Dominio/Alterdata) para a exportacao sair pronta para importar.
+model PlanoConta {
+  id                    String        @id @default(uuid())
+  codigo                String        // "3.1.01.001"
+  nome                  String        // "Material de limpeza"
+  natureza              NaturezaConta @default(DESPESA)
+  analitica             Boolean       @default(true) // false = sintetica (so agrupa)
+  codigoContabilExterno String? // de-para p/ o sistema do contador
+  ativo                 Boolean       @default(true)
+
+  // Auto-relacao hierarquica. SetNull para nao apagar filhos ao remover o pai
+  // (o controller bloqueia remover conta com filhos/lancamentos de qualquer forma).
+  paiId  String?
+  pai    PlanoConta?  @relation("PlanoContaHierarquia", fields: [paiId], references: [id], onDelete: SetNull)
+  filhos PlanoConta[] @relation("PlanoContaHierarquia")
+
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  despesas    Despesa[]
+  contasPagar ContaPagar[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, codigo])
+  @@index([tenantId])
+  @@index([paiId])
+  @@map("plano_contas")
+}
+
+// Despesa operacional (NAO ligada a estoque): cafe, agua, limpeza, etc.
+// Lancamento rapido — normalmente ja paga (sai do caixa na hora). Para gasto
+// a vencer/parcelado, usa-se ContaPagar. `numero` e sequencial por tenant
+// (lib/proximoNumero.js, mesmo padrao de Venda/Compra). `origem` registra se
+// o lancamento foi MANUAL ou veio do OCR de comprovante (auditoria/UX).
+model Despesa {
+  id             String         @id @default(uuid())
+  numero         Int
+  data           DateTime       // data do gasto (competencia)
+  valor          Decimal        @db.Decimal(10, 2)
+  descricao      String
+  observacoes    String?
+  formaPagamento FormaPagamento @default(DINHEIRO)
+  origem         String         @default("MANUAL") // MANUAL | OCR
+
+  planoContaId String
+  planoConta   PlanoConta @relation(fields: [planoContaId], references: [id])
+
+  fornecedorId String?
+  fornecedor   Fornecedor? @relation(fields: [fornecedorId], references: [id])
+
+  // Caixa de onde a despesa baixou (quando registrada no PDV). null = lancada
+  // "fora do caixa" (so registro contabil, sem movimentacao de caixa).
+  caixaId String?
+  caixa   Caixa?  @relation(fields: [caixaId], references: [id])
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  anexos             Anexo[]
+  movimentacoesCaixa MovimentacaoCaixa[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, numero])
+  @@index([tenantId, data])
+  @@index([planoContaId])
+  @@index([tenantId])
+  @@map("despesas")
 }
 
 // ============ CAIXA ============
@@ -1362,6 +1663,7 @@ model Caixa {
   vendas        Venda[]
   movimentacoes MovimentacaoCaixa[]
   intencoesMP   IntencaoPagamentoMP[]
+  despesas      Despesa[]
 
   @@unique([tenantId, numero])
   @@index([userId, status])
@@ -1453,6 +1755,33 @@ model ConfiguracaoEmpresa {
   // Referencia ao certificado digital A1 (.pfx) — ex: chave no Blob ou nome
   // do secret. NUNCA guardar o .pfx nem a senha em texto aqui.
   certificadoRef      String?
+  // Monitoramento de validade do A1 (Onda 5). O certificado vive no gateway;
+  // o cron /cron/fiscal-certificados consulta a validade e cacheia aqui.
+  // certificadoAlertaNivel = ultima banda ja notificada (30/15/7/1/0), p/ nao
+  // repetir o aviso todo dia; null = nenhuma notificacao pendente.
+  certificadoValidade        DateTime?
+  certificadoUltimaChecagem  DateTime?
+  certificadoAlertaNivel     Int?
+
+  // --- Distribuicao de DF-e (NF-e recebidas contra o CNPJ) ---
+  // Cursor NSU (numero sequencial unico) da ultima consulta de distribuicao na
+  // SEFAZ. A proxima consulta pagina a partir daqui. dfeUltimaConsulta alimenta
+  // o backoff (a SEFAZ rejeita consultas frequentes demais — cStat 656).
+  dfeUltimoNSU       String?
+  dfeUltimaConsulta  DateTime?
+
+  // --- Configuracao da emissao NFS-e (servicos / ISS, municipal) ---
+  // Liga/desliga a NFS-e independente da NFC-e (fiscalAtivo). Default false.
+  nfseAtivo                    Boolean @default(false)
+  // Numeracao do RPS/DPS — propria, contigua por serie (independente da NFC-e).
+  serieNfse                    Int     @default(1)
+  proximoNumeroNfse            Int     @default(1)
+  // Classificacao fiscal padrao do servico (a maioria dos prestadores tem 1-2
+  // tipos). Pode ser sobrescrita no modal de emissao. itemListaServico = item
+  // da LC 116; codTributacaoMunicipio = codigo do servico na prefeitura.
+  itemListaServicoPadrao       String?
+  codTributacaoMunicipioPadrao String?
+  aliquotaIssPadrao            Decimal? @db.Decimal(5, 2)
 
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -1539,6 +1868,8 @@ model MovimentacaoCaixa {
   contaPagar     ContaPagar?   @relation(fields: [contaPagarId], references: [id])
   contaReceberId String?
   contaReceber   ContaReceber? @relation(fields: [contaReceberId], references: [id])
+  despesaId      String?
+  despesa        Despesa?      @relation(fields: [despesaId], references: [id])
 
   tenantId String
   tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -2398,6 +2729,8 @@ model OrdemServico {
   updatedAt DateTime @updatedAt
 
   itens ItemOrdemServico[]
+  // NFS-e emitidas a partir desta OS (modelo NFSE).
+  notasFiscais NotaFiscal[]
 
   tenantId String
   tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)

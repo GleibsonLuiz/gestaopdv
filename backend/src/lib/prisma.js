@@ -47,9 +47,11 @@ const MODELOS_COM_TENANT = new Set([
   "Comanda", "ItemComanda",
   "WhatsappSettings", "WhatsappLog",
   "VendaEspera",
-  "NotaFiscal", "ItemNotaFiscal",
+  "NotaFiscal", "ItemNotaFiscal", "DocumentoFiscalEvento",
+  "NotaFiscalEntrada", "DeParaProdutoFornecedor", "DocumentoRecebidoDFe",
   "CobrancaAssinatura",
   "OrdemServico", "ItemOrdemServico",
+  "PlanoConta", "Despesa",
 ]);
 
 function tenantAtual() {

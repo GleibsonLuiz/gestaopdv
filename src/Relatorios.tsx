@@ -51,6 +51,7 @@ const ABAS = [
   { id: "compras", label: "🛍️ Compras", cor: C.yellow },
   { id: "financeiro", label: "💰 Financeiro", cor: C.green },
   { id: "estoque", label: "📦 Estoque", cor: C.purple },
+  { id: "fabricantes", label: "🏭 Fabricantes", cor: C.accent },
   { id: "caixas", label: "💵 Caixas (DRE)", cor: C.red },
   { id: "lucratividade", label: "📈 Lucratividade", cor: C.green },
   { id: "comissoes", label: "🏆 Comissões", cor: C.purple },
@@ -107,6 +108,7 @@ export default function Relatorios() {
       {aba === "compras" && <RelatorioCompras key="c" />}
       {aba === "financeiro" && <RelatorioFinanceiro key="f" />}
       {aba === "estoque" && <RelatorioEstoque key="e" />}
+      {aba === "fabricantes" && <RelatorioProdutosFabricante key="fb" />}
       {aba === "caixas" && <RelatorioCaixas key="x" />}
       {aba === "lucratividade" && <RelatorioLucratividade key="l" />}
       {aba === "comissoes" && <RelatorioComissoesLista key="m" />}
@@ -729,6 +731,143 @@ function RelatorioEstoque() {
               p.precoCusto != null ? fmtBRL(p.precoCusto) : "—",
               fmtBRL(p.precoVenda),
               fmtBRL(p.valorEmEstoqueVenda),
+            ])}
+            vazioTexto="Nenhum produto encontrado com os filtros."
+          />
+        </>
+      )}
+    </BlocoRelatorio>
+  );
+}
+
+// ============ RELATÓRIO DE PRODUTOS POR FABRICANTE / MARCA ============
+function RelatorioProdutosFabricante() {
+  const [fabricanteId, setFabricanteId] = useState("");
+  const [categoriaId, setCategoriaId] = useState("");
+  const [incluirInativos, setIncluirInativos] = useState("");
+  const [fabricantes, setFabricantes] = useState([]);
+  const [categorias, setCategorias] = useState([]);
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    api.listarFabricantes().then(setFabricantes).catch(() => {});
+    api.listarCategorias().then(setCategorias).catch(() => {});
+  }, []);
+
+  const gerar = useCallback(async () => {
+    setCarregando(true); setErro("");
+    try {
+      const r = await api.relatorioProdutosPorFabricante({ fabricanteId, categoriaId, incluirInativos });
+      setDados(r);
+    } catch (err) { setErro(err.message); }
+    finally { setCarregando(false); }
+  }, [fabricanteId, categoriaId, incluirInativos]);
+
+  async function exportar() {
+    if (!dados) return;
+    const doc = await criarPDF("Relatório de Produtos por Fabricante");
+    addLinha(doc, `Gerado em ${fmtDataHora(dados.geradoEm)}`);
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 4,
+      head: [["Indicador", "Valor"]],
+      body: [
+        ["Fabricantes", fmtNum(dados.resumo.totalFabricantes)],
+        ["Produtos", fmtNum(dados.resumo.totalProdutos)],
+        ["Unidades em estoque", fmtNum(dados.resumo.unidadesEmEstoque)],
+        ["Valor em estoque (custo)", fmtBRL(dados.resumo.valorEstoqueCusto)],
+        ["Valor em estoque (venda)", fmtBRL(dados.resumo.valorEstoqueVenda)],
+      ],
+      theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+      styles: { fontSize: 10 },
+    });
+
+    if (dados.porFabricante.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["Fabricante", "Produtos", "Unidades", "Valor custo", "Valor venda"]],
+        body: dados.porFabricante.map(f => [
+          f.fabricante, fmtNum(f.qtdProdutos), fmtNum(f.unidades),
+          fmtBRL(f.valorCusto), fmtBRL(f.valorVenda),
+        ]),
+        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        styles: { fontSize: 9 },
+      });
+    }
+
+    if (dados.produtos.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["Código", "Produto", "Fabricante", "Categoria", "Estoque", "Custo", "Venda"]],
+        body: dados.produtos.map(p => [
+          p.codigo, p.nome, p.fabricante || "—", p.categoria || "—",
+          `${p.estoque} ${p.unidade}`,
+          p.precoCusto != null ? fmtBRL(p.precoCusto) : "—",
+          fmtBRL(p.precoVenda),
+        ]),
+        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        styles: { fontSize: 8 },
+      });
+    }
+
+    doc.save(`relatorio-produtos-fabricante-${hoje()}.pdf`);
+  }
+
+  return (
+    <BlocoRelatorio
+      titulo="Relatório de Produtos por Fabricante" cor={C.accent}
+      filtros={
+        <>
+          <CampoSelectBusca
+            label="Fabricante / Marca"
+            opcoes={[{ id: "__sem__", nome: "(Sem fabricante)" }, ...fabricantes]}
+            value={fabricanteId} onChange={setFabricanteId} placeholder="Todos"
+          />
+          <CampoSelectBusca label="Categoria" opcoes={categorias} value={categoriaId} onChange={setCategoriaId} placeholder="Todas" />
+          <CampoSelect label="Inativos" value={incluirInativos} onChange={setIncluirInativos}>
+            <option value="">Só ativos</option>
+            <option value="true">Incluir inativos</option>
+          </CampoSelect>
+        </>
+      }
+      onGerar={gerar} onExportar={exportar} carregando={carregando}
+      erro={erro} dados={dados}
+    >
+      {dados && (
+        <>
+          <Resumo cards={[
+            { rotulo: "Fabricantes", valor: fmtNum(dados.resumo.totalFabricantes), cor: C.accent },
+            { rotulo: "Produtos", valor: fmtNum(dados.resumo.totalProdutos), cor: C.purple },
+            { rotulo: "Unidades", valor: fmtNum(dados.resumo.unidadesEmEstoque), cor: C.muted },
+            { rotulo: "Valor (custo)", valor: fmtBRL(dados.resumo.valorEstoqueCusto), cor: C.yellow },
+            { rotulo: "Valor (venda)", valor: fmtBRL(dados.resumo.valorEstoqueVenda), cor: C.green },
+          ]} />
+
+          {dados.porFabricante.length > 0 && (
+            <Tabela
+              titulo="Resumo por fabricante"
+              colunas={["Fabricante", "Produtos", "Unidades", "Valor custo", "Valor venda"]}
+              alinhamentos={["left", "right", "right", "right", "right"]}
+              linhas={dados.porFabricante.map(f => [
+                f.fabricante, fmtNum(f.qtdProdutos), fmtNum(f.unidades),
+                fmtBRL(f.valorCusto), fmtBRL(f.valorVenda),
+              ])}
+            />
+          )}
+
+          <Tabela
+            titulo={`Produtos (${dados.produtos.length})`}
+            colunas={["Código", "Produto", "Fabricante", "Categoria", "Estoque", "Custo", "Venda"]}
+            alinhamentos={["left", "left", "left", "left", "right", "right", "right"]}
+            linhas={dados.produtos.map(p => [
+              p.codigo,
+              p.ativo ? p.nome : `${p.nome} (inativo)`,
+              p.fabricante || "—", p.categoria || "—",
+              `${p.estoque} ${p.unidade}`,
+              p.precoCusto != null ? fmtBRL(p.precoCusto) : "—",
+              fmtBRL(p.precoVenda),
             ])}
             vazioTexto="Nenhum produto encontrado com os filtros."
           />

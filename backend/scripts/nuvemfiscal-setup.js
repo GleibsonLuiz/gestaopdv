@@ -62,7 +62,7 @@ async function obterToken() {
     abortar("Defina FISCAL_NUVEMFISCAL_CLIENT_ID e FISCAL_NUVEMFISCAL_CLIENT_SECRET no backend/.env.");
   }
   const body = new URLSearchParams({
-    grant_type: "client_credentials", client_id: id, client_secret: secret, scope: "empresa nfce",
+    grant_type: "client_credentials", client_id: id, client_secret: secret, scope: "empresa nfce nfse",
   });
   const resp = await fetch(AUTH_URL, {
     method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body,
@@ -145,6 +145,29 @@ async function main() {
       `⚠️  Falha ao configurar NFC-e/CSC (${r.status}): ${JSON.stringify(r.data)}\n` +
       `   Confira os nomes dos campos em https://dev.nuvemfiscal.com.br/docs/empresas e ajuste nfceBody.`
     );
+  }
+
+  // 5) Configurar NFS-e (opcional) ----------------------------------------
+  // So roda se o config.json tiver um bloco "nfse". Estrutura usual do gateway:
+  // { ambiente, rps: { lote, serie, numero }, prefeitura: { login, senha, token },
+  //   incentivo_fiscal }. Confirmar nomes em /docs/empresas (config NFS-e).
+  if (config.nfse) {
+    const nfseBody = {
+      ambiente: config.nfse.ambiente || config.ambiente || "homologacao",
+      ...config.nfse,
+    };
+    delete nfseBody._comentario;
+    r = await chamar(token, "PUT", `/empresas/${cnpj}/nfse`, nfseBody);
+    if (r.ok) {
+      console.log("✅ NFS-e configurada (inscricao municipal / regime / RPS).");
+    } else {
+      console.warn(
+        `⚠️  Falha ao configurar NFS-e (${r.status}): ${JSON.stringify(r.data)}\n` +
+        `   Confira os campos em https://dev.nuvemfiscal.com.br/docs/empresas e o municipio suportado (CidadesAtendidas).`
+      );
+    }
+  } else {
+    console.log("ℹ️  Bloco \"nfse\" ausente no config — pulando configuracao de NFS-e.");
   }
 
   console.log("\n🏁 Setup concluido. Proximo passo: ligar a emissao no sistema e rodar o checklist de homologacao.\n");

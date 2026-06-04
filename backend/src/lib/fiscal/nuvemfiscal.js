@@ -23,7 +23,7 @@ import { ErroFiscal } from "./provedor.js";
 
 const BASE_URL = process.env.FISCAL_NUVEMFISCAL_BASE_URL || "https://api.nuvemfiscal.com.br";
 const AUTH_URL = process.env.FISCAL_NUVEMFISCAL_AUTH_URL || "https://auth.nuvemfiscal.com.br/oauth/token";
-const SCOPE = "nfce empresa";
+const SCOPE = "nfce nfse empresa";
 
 // Cache do token (escopo do modulo — vive enquanto a instancia serverless viver).
 let tokenCache = { value: null, expiraEm: 0 };
@@ -258,4 +258,117 @@ export async function obterXml({ idIntegracao }) {
   if (!idIntegracao) throw new ErroFiscal("idIntegracao ausente ao obter XML.");
   const resp = await chamar("GET", `/nfce/${encodeURIComponent(idIntegracao)}/xml`, { raw: true });
   return resp.text();
+}
+
+// ============ NFS-e (servicos / ISS — padrao DPS nacional) ============
+//
+// Endpoints simetricos aos da NFC-e (POST /nfse, GET /nfse/{id}, .../cancelamento,
+// .../pdf, .../xml). O corpo de emissao e { ambiente, referencia, infDPS } — o
+// infDPS ja vem montado por lib/fiscal/montarNfse.js no leiaute nacional.
+//
+// RESSALVA (igual a da NFC-e): os nomes dos campos da RESPOSTA NFS-e
+// (numero, codigo_verificacao, data_emissao, mensagens[].codigo/descricao...)
+// seguem a referencia da API e sao lidos de forma DEFENSIVA. Conferir contra a
+// conta/doc real durante a homologacao antes do go-live.
+
+// Normaliza o documento NFS-e para o ResultadoEmissaoNfse do contrato.
+function mapearResultadoNfse(doc) {
+  const msg = Array.isArray(doc?.mensagens) ? doc.mensagens[0] : null;
+  return {
+    status: mapearStatus(pick(doc, "status")),
+    cStat: String(pick(doc, "codigo_status", "cStat") ?? (msg ? pick(msg, "codigo") : "") ?? "") || null,
+    xMotivo: pick(doc, "motivo_status", "xMotivo") || (msg ? pick(msg, "descricao") : null),
+    numeroNfse: pick(doc, "numero", "numero_nfse") || null,
+    codigoVerificacao: pick(doc, "codigo_verificacao", "codigoVerificacao") || null,
+    protocolo: pick(doc, "numero_protocolo", "protocolo") || null,
+    dataAutorizacao: pick(doc, "data_emissao", "data_autorizacao", "data_processamento"),
+    xmlAutorizado: null, // baixado sob demanda via obterXmlNfse()
+    idIntegracao: pick(doc, "id"),
+  };
+}
+
+export async function emitirNfse({ ambiente, payload, referencia }) {
+  const doc = await chamar("POST", "/nfse", {
+    body: {
+      ambiente: ambiente === "PRODUCAO" ? "producao" : "homologacao",
+      referencia: referencia || undefined,
+      infDPS: payload,
+    },
+  });
+  return mapearResultadoNfse(doc);
+}
+
+export async function consultarNfse({ idIntegracao }) {
+  if (!idIntegracao) throw new ErroFiscal("idIntegracao ausente na consulta NFS-e.");
+  const doc = await chamar("GET", `/nfse/${encodeURIComponent(idIntegracao)}`);
+  return mapearResultadoNfse(doc);
+}
+
+export async function cancelarNfse({ idIntegracao, justificativa }) {
+  if (!idIntegracao) throw new ErroFiscal("idIntegracao ausente no cancelamento NFS-e.");
+  if (!justificativa || String(justificativa).trim().length < 15) {
+    throw new ErroFiscal("Justificativa de cancelamento deve ter ao menos 15 caracteres.");
+  }
+  const doc = await chamar("POST", `/nfse/${encodeURIComponent(idIntegracao)}/cancelamento`, {
+    body: { justificativa: String(justificativa).trim() },
+  });
+  return mapearResultadoNfse(doc);
+}
+
+export async function obterPdfNfse({ idIntegracao }) {
+  if (!idIntegracao) throw new ErroFiscal("idIntegracao ausente ao obter DANFSE.");
+  const resp = await chamar("GET", `/nfse/${encodeURIComponent(idIntegracao)}/pdf`, { raw: true });
+  const arrayBuf = await resp.arrayBuffer();
+  return Buffer.from(arrayBuf);
+}
+
+export async function obterXmlNfse({ idIntegracao }) {
+  if (!idIntegracao) throw new ErroFiscal("idIntegracao ausente ao obter XML NFS-e.");
+  const resp = await chamar("GET", `/nfse/${encodeURIComponent(idIntegracao)}/xml`, { raw: true });
+  return resp.text();
+}
+
+// Cadastra/atualiza a empresa para NFS-e no gateway (PUT /empresas/{cnpj}/nfse).
+// Usado pelo script de setup (Fase 8), nao pelo fluxo de emissao.
+export async function configurarEmpresaNfse({ cnpjEmitente, config }) {
+  const cnpj = String(cnpjEmitente || "").replace(/\D/g, "");
+  if (!cnpj) throw new ErroFiscal("CNPJ do emitente ausente ao configurar NFS-e.");
+  return chamar("PUT", `/empresas/${cnpj}/nfse`, { body: config });
+}
+
+// ============ CERTIFICADO A1 (monitoramento de validade — Onda 5) ============
+//
+// O A1 fica no gateway (nao no nosso banco). Consultamos a validade para o cron
+// alertar antes do vencimento. GET /empresas/{cnpj}/certificado costuma devolver
+// not_valid_after / not_valid_before / serial_number / issuer_name. Leitura
+// DEFENSIVA (varios nomes possiveis) — confirmar contra a conta real.
+export async function consultarCertificado({ cnpjEmitente }) {
+  const cnpj = String(cnpjEmitente || "").replace(/\D/g, "");
+  if (!cnpj) throw new ErroFiscal("CNPJ do emitente ausente ao consultar certificado.");
+  const doc = await chamar("GET", `/empresas/${cnpj}/certificado`);
+  return {
+    validade: pick(doc, "not_valid_after", "vencimento", "validade", "valid_to", "data_validade", "expiration"),
+    emissor: pick(doc, "issuer_name", "emissor"),
+    serial: pick(doc, "serial_number", "serial"),
+  };
+}
+
+// ============ DISTRIBUICAO DF-e (Fase B — NF-e recebidas contra o CNPJ) ============
+//
+// A distribuicao real exige (1) certificado A1 do CNPJ cadastrado no gateway em
+// PRODUCAO e (2) confirmar os endpoints/plano da NuvemFiscal (DistribuicaoNFe +
+// manifestacao do destinatario). Enquanto isso, o sistema usa o provedor `mock`.
+// Estes metodos ficam como contrato; ligar na Fase B = implementar as chamadas
+// HTTP reais (GET /distribuicao/nfe?ult_nsu=..., POST manifestacao, GET xml) e
+// confirmar os nomes dos campos da resposta — mesma ressalva dos demais.
+const ERRO_FASE_B = "Distribuicao de DF-e ainda nao habilitada para a NuvemFiscal (Fase B: requer certificado A1 em producao + confirmacao do endpoint). Use o provedor simulador para testar o fluxo.";
+
+export async function distribuirDFe() {
+  throw new ErroFiscal(ERRO_FASE_B);
+}
+export async function manifestar() {
+  throw new ErroFiscal(ERRO_FASE_B);
+}
+export async function baixarXmlEntrada() {
+  throw new ErroFiscal(ERRO_FASE_B);
 }

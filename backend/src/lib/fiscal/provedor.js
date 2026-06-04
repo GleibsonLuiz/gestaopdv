@@ -19,8 +19,16 @@
 //   inutilizarNumeracao({ cnpjEmitente, ambiente, serie,
 //                         numeroInicial, numeroFinal, justificativa }) -> ResultadoInutilizacao
 //   consultarStatusServico({ cnpjEmitente, ambiente })      -> { online, cStat, xMotivo }
+//   consultarCertificado({ cnpjEmitente })                  -> { validade, emissor, serial }
 //   obterPdfDanfe({ cnpjEmitente, idIntegracao })           -> Buffer (PDF)
 //   obterXml({ cnpjEmitente, idIntegracao })                -> string (XML)
+//
+//   ---- Distribuicao DF-e (NF-e recebidas CONTRA o nosso CNPJ — Epico Entrada) ----
+//   distribuirDFe({ cnpjEmitente, ultimoNSU })
+//     -> { ultimoNSU, maxNSU, documentos: [{ nsu, tipo, chave, emitenteCnpj,
+//          emitenteNome, valorTotal, dataEmissao }] }
+//   manifestar({ cnpjEmitente, chave, tipoEvento, justificativa }) -> { ok, cStat, xMotivo }
+//   baixarXmlEntrada({ cnpjEmitente, chave })               -> string (XML completo)
 //
 //   ambiente: "HOMOLOGACAO" | "PRODUCAO" (nosso enum AmbienteFiscal)
 //   payload: objeto da NFC-e ja montado pela Fase 3 (lib/fiscal/montarNfce.js)
@@ -30,6 +38,24 @@
 //   { status, cStat, xMotivo, chaveAcesso, protocolo, dataAutorizacao,
 //     digestValue, qrCode, urlConsulta, xmlAutorizado, idIntegracao }
 //   status: um valor do enum StatusSefaz (AUTORIZADA, REJEITADA, ...).
+//
+// ---- NFS-e (servicos / ISS, municipal) — contrato paralelo ao da NFC-e ----
+// A NFS-e e documento MUNICIPAL (imposto ISS, leiaute DPS) e tem ciclo proprio:
+// nao ha inutilizacao nem QR/CSC; o "numero" e o "codigo de verificacao" sao
+// atribuidos pela prefeitura. Metodos:
+//
+//   emitirNfse({ ambiente, payload, referencia })   -> ResultadoEmissaoNfse
+//   consultarNfse({ idIntegracao })                 -> ResultadoEmissaoNfse
+//   cancelarNfse({ idIntegracao, justificativa })   -> ResultadoEmissaoNfse
+//   obterPdfNfse({ idIntegracao })                  -> Buffer (PDF DANFSE)
+//   obterXmlNfse({ idIntegracao })                  -> string (XML)
+//   configurarEmpresaNfse({ cnpjEmitente, ... })    -> objeto (opcional, setup)
+//
+//   payload: objeto infDPS ja montado por lib/fiscal/montarNfse.js
+//
+// ResultadoEmissaoNfse (campos 1:1 com os campos NFS-e do model NotaFiscal):
+//   { status, cStat, xMotivo, numeroNfse, codigoVerificacao, protocolo,
+//     dataAutorizacao, xmlAutorizado, idIntegracao }
 
 import * as nuvemfiscal from "./nuvemfiscal.js";
 import * as mock from "./mock.js";

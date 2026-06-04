@@ -69,12 +69,21 @@ export default function FiscalAvancado() {
             <ul className="text-gp-text text-xs" style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
               {d.bullets.map((b, i) => <li key={i}>{b}</li>)}
             </ul>
-            <div
-              className="mt-3 px-3 py-2 rounded-lg text-xs font-bold text-center"
-              style={{ background: "#f59e0b22", border: "1px solid #f59e0b55", color: "#f59e0b" }}
-            >
-              ⏳ Em configuração — emissão disponível em breve
-            </div>
+            {d.id === "NFSE" ? (
+              <div
+                className="mt-3 px-3 py-2 rounded-lg text-xs font-bold text-center"
+                style={{ background: C.green + "22", border: `1px solid ${C.green}55`, color: C.green }}
+              >
+                ✅ Disponível — ative em Configurações &gt; Emissão Fiscal e emita pela Ordem de Serviço ou em Notas Fiscais
+              </div>
+            ) : (
+              <div
+                className="mt-3 px-3 py-2 rounded-lg text-xs font-bold text-center"
+                style={{ background: "#f59e0b22", border: "1px solid #f59e0b55", color: "#f59e0b" }}
+              >
+                ⏳ Em configuração — emissão disponível em breve
+              </div>
+            )}
           </div>
         ))}
       </div>

@@ -41,7 +41,7 @@ const STARTER = [...NUCLEO, "CLIENTES", "ESTOQUE", "FORNECEDORES", "ORCAMENTOS",
 
 // Pro = Starter + gestao completa (compras, inventario, financeiro, relatorios,
 // comissoes, comandas) + emissao fiscal NFC-e.
-const PRO = [...STARTER, "COMPRAS", "INVENTARIO", "FINANCEIRO", "RELATORIOS", "COMISSOES", "COMANDAS", "ORDEM_SERVICO", "FISCAL", "CARDAPIO"];
+const PRO = [...STARTER, "COMPRAS", "INVENTARIO", "FINANCEIRO", "DESPESAS", "CONTABILIDADE", "RELATORIOS", "COMISSOES", "COMANDAS", "ORDEM_SERVICO", "FISCAL", "CARDAPIO"];
 
 // Enterprise = Pro + CRM/relacionamento (funil, automacoes, NPS, WhatsApp) +
 // fiscal avancado (NF-e 55 e NFS-e).

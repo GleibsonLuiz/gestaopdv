@@ -5,6 +5,8 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { C } from "./lib/theme";
 import { api, type SessionUser } from "./lib/api";
+import { moduloNoPlano } from "./lib/permissoes";
+import EmitirNfseModal from "./EmitirNfseModal";
 
 const brl = (n: unknown) => Number(n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const fmtData = (iso: string | null | undefined) => iso ? new Date(iso).toLocaleDateString("pt-BR") : "—";
@@ -133,8 +135,10 @@ function ModalOS({ os, podeGerenciar, onFechar, onSalvo }: { os: OS | null; pode
   const [itens, setItens] = useState<ItemOS[]>(ed?.itens?.length ? ed.itens.map(i => ({ ...i })) : []);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+  const [emitirNF, setEmitirNF] = useState(false);
 
   const bloqueada = ed?.status === "ENTREGUE" || ed?.status === "CANCELADA";
+  const podeEmitirNfse = !!ed && moduloNoPlano("NFSE");
 
   function setItem(i: number, campo: keyof ItemOS, valor: unknown) {
     setItens(prev => prev.map((it, idx) => idx === i ? { ...it, [campo]: valor } : it));
@@ -176,6 +180,7 @@ function ModalOS({ os, podeGerenciar, onFechar, onSalvo }: { os: OS | null; pode
   }
 
   return (
+    <>
     <div onClick={onFechar} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 200 }}>
       <div onClick={e => e.stopPropagation()} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, width: "100%", maxWidth: 720, maxHeight: "92vh", overflow: "auto", padding: 20 }}>
         <div className="flex justify-between items-start gap-3 mb-3">
@@ -187,6 +192,18 @@ function ModalOS({ os, podeGerenciar, onFechar, onSalvo }: { os: OS | null; pode
         </div>
 
         {erro && <div className="px-3 py-2 mb-3 rounded-lg text-gp-red text-xs" style={{ background: C.red + "22", border: `1px solid ${C.red}55` }}>{erro}</div>}
+
+        {/* Emissao de NFS-e (servicos) — OS existente, modulo NFSE no plano */}
+        {podeEmitirNfse && (
+          <div className="mb-3">
+            <button
+              onClick={() => setEmitirNF(true)}
+              style={{ background: C.accent + "1c", color: C.accent, border: `1px solid ${C.accent}55`, borderRadius: 8, padding: "6px 12px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
+            >
+              🧾 Emitir NFS-e
+            </button>
+          </div>
+        )}
 
         {/* Mudanca de status (OS existente) */}
         {ed && !bloqueada && (
@@ -262,6 +279,21 @@ function ModalOS({ os, podeGerenciar, onFechar, onSalvo }: { os: OS | null; pode
         )}
       </div>
     </div>
+
+    {emitirNF && ed && (
+      <EmitirNfseModal
+        ordemServico={{
+          id: ed.id,
+          numero: ed.numero,
+          tomadorNome: ed.cliente?.nome || ed.descricaoCliente || null,
+          valorServicos,
+          discriminacao: itens.filter(i => i.tipo === "SERVICO").map(i => i.descricao).filter(Boolean).join("; "),
+        }}
+        onFechar={() => setEmitirNF(false)}
+        onEmitida={() => { /* nota emitida — a lista fica em Notas Fiscais */ }}
+      />
+    )}
+    </>
   );
 }
 

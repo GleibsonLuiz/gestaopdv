@@ -494,6 +494,14 @@ interface ConfigFiscalResposta {
   cscMascarado: string | null;
   certificadoRef: string | null;
   prontidao: ProntidaoFiscal;
+  // NFS-e (servicos / ISS)
+  nfseAtivo: boolean;
+  serieNfse: number;
+  proximoNumeroNfse: number;
+  itemListaServicoPadrao: string | null;
+  codTributacaoMunicipioPadrao: string | null;
+  aliquotaIssPadrao: number | null;
+  prontidaoNfse: ProntidaoFiscal;
 }
 
 const PROVEDORES_FISCAIS = [
@@ -524,6 +532,14 @@ function BlocoFiscalNfce({ podeEditar }: { podeEditar: boolean }) {
   const [cscInput, setCscInput] = useState("");
   const [cscId, setCscId] = useState("");
   const [ativo, setAtivo] = useState(false);
+  // NFS-e (servicos / ISS)
+  const [nfseAtivo, setNfseAtivo] = useState(false);
+  const [serieNfse, setSerieNfse] = useState("1");
+  const [proxNumNfse, setProxNumNfse] = useState("1");
+  const [itemLC116, setItemLC116] = useState("");
+  const [codTribMun, setCodTribMun] = useState("");
+  const [aliqIss, setAliqIss] = useState("");
+  const [faltandoNfse, setFaltandoNfse] = useState<string[]>([]);
 
   function aplicar(c: ConfigFiscalResposta) {
     setCfg(c);
@@ -539,6 +555,13 @@ function BlocoFiscalNfce({ podeEditar }: { podeEditar: boolean }) {
     setCscId(c.cscId || "");
     setAtivo(!!c.fiscalAtivo);
     setFaltando(c.prontidao?.faltando || []);
+    setNfseAtivo(!!c.nfseAtivo);
+    setSerieNfse(String(c.serieNfse ?? 1));
+    setProxNumNfse(String(c.proximoNumeroNfse ?? 1));
+    setItemLC116(c.itemListaServicoPadrao || "");
+    setCodTribMun(c.codTributacaoMunicipioPadrao || "");
+    setAliqIss(c.aliquotaIssPadrao != null ? String(c.aliquotaIssPadrao) : "");
+    setFaltandoNfse(c.prontidaoNfse?.faltando || []);
   }
 
   function carregar() {
@@ -572,6 +595,13 @@ function BlocoFiscalNfce({ podeEditar }: { podeEditar: boolean }) {
         proximoNumeroNfce: Number(proxNum) || 1,
         cscId: cscId.trim() || null,
         fiscalAtivo: ativo,
+        // NFS-e
+        nfseAtivo,
+        serieNfse: Number(serieNfse) || 0,
+        proximoNumeroNfse: Number(proxNumNfse) || 1,
+        itemListaServicoPadrao: itemLC116.trim() || null,
+        codTributacaoMunicipioPadrao: codTribMun.trim() || null,
+        aliquotaIssPadrao: aliqIss.trim() === "" ? null : Number(aliqIss),
       };
       if (cscInput.trim()) body.csc = cscInput.trim();
       const resp = await api.salvarConfigFiscal(body) as ConfigFiscalResposta;
@@ -583,9 +613,10 @@ function BlocoFiscalNfce({ podeEditar }: { podeEditar: boolean }) {
       // O body completo chega em ApiError.data; a mensagem em .message.
       const e = err as { message: string; data?: { faltando?: string[] } };
       const lista = e.data?.faltando;
-      if (Array.isArray(lista) && lista.length) setFaltando(lista);
+      if (Array.isArray(lista) && lista.length) { setFaltando(lista); setFaltandoNfse(lista); }
       setErro(e.message);
       setAtivo(cfg?.fiscalAtivo ?? false); // reverte o toggle otimista
+      setNfseAtivo(cfg?.nfseAtivo ?? false);
     } finally {
       setSalvando(false);
     }
@@ -721,6 +752,59 @@ function BlocoFiscalNfce({ podeEditar }: { podeEditar: boolean }) {
           <span style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>Emissão fiscal ativa</span>
           <span style={{ color: C.muted, fontSize: 11, marginLeft: 4 }}>(o PDV passa a emitir NFC-e nas vendas)</span>
         </label>
+      </div>
+
+      {/* ============ NFS-e (servicos / ISS) ============ */}
+      <div className="mt-4 pt-4" style={{ borderTop: `1px dashed ${C.border}` }}>
+        <div className="text-gp-white font-extrabold text-[14px] flex items-center gap-2 mb-1">
+          🧰 NFS-e (serviços)
+          {cfg?.nfseAtivo && <span style={badge(C.green)}>ATIVA</span>}
+          {!cfg?.nfseAtivo && cfg?.prontidaoNfse?.pronta && <span style={badge(C.yellow)}>PRONTA · DESLIGADA</span>}
+          {!cfg?.nfseAtivo && !cfg?.prontidaoNfse?.pronta && <span style={badge(C.muted)}>NÃO CONFIGURADA</span>}
+        </div>
+        <div className="text-gp-muted text-[12px] mb-3">
+          Nota fiscal de serviço (ISS, municipal). Usa o mesmo provedor, ambiente, CRT, inscrição municipal
+          e código IBGE configurados acima. Emita pela <b>Ordem de Serviço</b> ou avulsa na tela <b>Notas Fiscais</b>.
+        </div>
+
+        <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr 0.8fr 0.8fr" }}>
+          <div>
+            <label className="block text-gp-muted text-[11px] mb-1 font-semibold">Item da lista de serviços (LC 116)</label>
+            <input value={itemLC116} onChange={(e) => setItemLC116(e.target.value)} disabled={!podeEditar} placeholder="ex.: 1401" style={mpInput(podeEditar)} />
+          </div>
+          <div>
+            <label className="block text-gp-muted text-[11px] mb-1 font-semibold">Cód. tributação município (opcional)</label>
+            <input value={codTribMun} onChange={(e) => setCodTribMun(e.target.value)} disabled={!podeEditar} placeholder="código do serviço na prefeitura" style={mpInput(podeEditar)} />
+          </div>
+          <div>
+            <label className="block text-gp-muted text-[11px] mb-1 font-semibold">Alíquota ISS (%)</label>
+            <input value={aliqIss} onChange={(e) => setAliqIss(e.target.value.replace(",", "."))} disabled={!podeEditar} placeholder="ex.: 5" inputMode="decimal" style={mpInput(podeEditar)} />
+          </div>
+          <div>
+            <label className="block text-gp-muted text-[11px] mb-1 font-semibold">Série / Próx. nº</label>
+            <div className="flex gap-1">
+              <input title="Série da NFS-e" value={serieNfse} onChange={(e) => setSerieNfse(e.target.value.replace(/\D/g, ""))} disabled={!podeEditar} placeholder="1" style={mpInput(podeEditar)} />
+              <input title="Próximo número da NFS-e" value={proxNumNfse} onChange={(e) => setProxNumNfse(e.target.value.replace(/\D/g, ""))} disabled={!podeEditar} placeholder="1" style={mpInput(podeEditar)} />
+            </div>
+          </div>
+        </div>
+
+        {faltandoNfse.length > 0 && !cfg?.nfseAtivo && (
+          <div className="mt-3 p-3 rounded-[10px]" style={{ background: C.yellow + "11", border: `1px solid ${C.yellow}44`, fontSize: 12, color: C.text }}>
+            <b style={{ color: C.yellow }}>Pendências para ativar a NFS-e:</b>
+            <ul style={{ marginTop: 6, paddingLeft: 18 }}>
+              {faltandoNfse.map((f) => <li key={f}>{f}</li>)}
+            </ul>
+          </div>
+        )}
+
+        <div className="mt-3">
+          <label className="flex items-center gap-2" style={{ opacity: podeEditar ? 1 : 0.6, cursor: podeEditar ? "pointer" : "not-allowed" }}>
+            <input type="checkbox" checked={nfseAtivo} onChange={(e) => setNfseAtivo(e.target.checked)} disabled={!podeEditar} style={{ width: 18, height: 18 }} />
+            <span style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>Emissão de NFS-e ativa</span>
+            <span style={{ color: C.muted, fontSize: 11, marginLeft: 4 }}>(habilita o botão "Emitir NFS-e")</span>
+          </label>
+        </div>
       </div>
 
       {podeEditar && (

@@ -20,11 +20,14 @@ const Orcamentos = lazy(() => import("./Orcamentos"));
 const Funcionarios = lazy(() => import("./Funcionarios"));
 const Comissoes = lazy(() => import("./Comissoes"));
 const FinanceiroPage = lazy(() => import("./pages/financeiro/FinanceiroPage"));
+const Despesas = lazy(() => import("./Despesas"));
+const Contabilidade = lazy(() => import("./Contabilidade"));
 const Caixa = lazy(() => import("./Caixa"));
 const PDV = lazy(() => import("./PDV"));
 const Dashboard = lazy(() => import("./Dashboard"));
 const Relatorios = lazy(() => import("./Relatorios"));
 const NotasFiscais = lazy(() => import("./NotasFiscais"));
+const EntradaNfe = lazy(() => import("./EntradaNfe"));
 const Crediario = lazy(() => import("./Crediario"));
 const OrdemServico = lazy(() => import("./OrdemServico"));
 const FiscalAvancado = lazy(() => import("./FiscalAvancado"));
@@ -317,8 +320,9 @@ export default function App() {
     funil: "OPORTUNIDADES",
     automacoes: "AUTOMACOES",
     nps: "NPS",
-    financeiro: "FINANCEIRO", relatorios: "RELATORIOS",
+    financeiro: "FINANCEIRO", despesas: "DESPESAS", contabilidade: "CONTABILIDADE", relatorios: "RELATORIOS",
     notasfiscais: "RELATORIOS",
+    entradanfe: "COMPRAS",
     crediario: "CREDIARIO",
     ordemservico: "ORDEM_SERVICO",
     comissoes: "COMISSOES",
@@ -338,6 +342,8 @@ export default function App() {
     if (t === "impressora") return user?.role === "ADMIN" || user?.role === "GERENTE";
     // NFC-e: permissao de usuario (RELATORIOS) + plano precisa incluir FISCAL.
     if (t === "notasfiscais") return podeAcessar(user, "RELATORIOS") && moduloNoPlano("FISCAL");
+    // Entrada de NF-e: importacao de compra. Permissao COMPRAS + plano FISCAL.
+    if (t === "entradanfe") return podeAcessar(user, "COMPRAS") && moduloNoPlano("FISCAL");
     // Fiscal avancado (NF-e 55 / NFS-e): so-de-plano, gerencial.
     if (t === "fiscalavancado") return (user?.role === "ADMIN" || user?.role === "GERENTE") && (moduloNoPlano("NFE55") || moduloNoPlano("NFSE"));
     return podeAcessar(user, TELA_MODULO[t] as any);
@@ -348,7 +354,7 @@ export default function App() {
     if (!user) return;
     if (!podeVer(tela)) {
       const primeira = ["pdv","dashboard","dashboardcrm","caixa","clientes","segmentos","reativacao","tarefas","fidelidade","funil","automacoes","nps","fornecedores","produtos","etiquetas",
-        "estoque","inventario","compras","orcamentos","ordemservico","financeiro","crediario","relatorios","notasfiscais","fiscalavancado","comissoes","painelcomandas","whatsapp","funcionarios","projeto","sistema","backup","empresa","impressora"].find(podeVer);
+        "estoque","inventario","compras","orcamentos","ordemservico","financeiro","despesas","contabilidade","crediario","relatorios","notasfiscais","entradanfe","fiscalavancado","comissoes","painelcomandas","whatsapp","funcionarios","projeto","sistema","backup","empresa","impressora"].find(podeVer);
       if (primeira && primeira !== tela) setTela(primeira);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -615,6 +621,12 @@ export default function App() {
           {podeAcessar(user, "FINANCEIRO") && (
             <Item icone="💰" label="Financeiro" ativo={tela === "financeiro"} onClick={() => navegar("financeiro")} />
           )}
+          {podeAcessar(user, "DESPESAS") && (
+            <Item icone="🧾" label="Despesas" ativo={tela === "despesas"} onClick={() => navegar("despesas")} />
+          )}
+          {podeAcessar(user, "CONTABILIDADE") && (
+            <Item icone="📚" label="Contabilidade" ativo={tela === "contabilidade"} onClick={() => navegar("contabilidade")} />
+          )}
           {podeAcessar(user, "CREDIARIO") && (
             <Item icone="📒" label="Crediário" ativo={tela === "crediario"} onClick={() => navegar("crediario")} />
           )}
@@ -626,6 +638,9 @@ export default function App() {
           )}
           {podeAcessar(user, "RELATORIOS") && moduloNoPlano("FISCAL") && (
             <Item icone="🧾" label="Notas Fiscais" ativo={tela === "notasfiscais"} onClick={() => navegar("notasfiscais")} />
+          )}
+          {podeAcessar(user, "COMPRAS") && moduloNoPlano("FISCAL") && (
+            <Item icone="📥" label="Entrada NF-e" ativo={tela === "entradanfe"} onClick={() => navegar("entradanfe")} />
           )}
           {(user.role === "ADMIN" || user.role === "GERENTE") && (moduloNoPlano("NFE55") || moduloNoPlano("NFSE")) && (
             <Item icone="📄" label="NF-e / NFS-e" ativo={tela === "fiscalavancado"} onClick={() => navegar("fiscalavancado")} />
@@ -887,6 +902,18 @@ export default function App() {
           {tela === "financeiro" && (
             <FinanceiroPage user={user} />
           )}
+          {tela === "despesas" && (
+            <>
+              <PageHeader titulo="Despesas" subtitulo="Lançamento rápido de despesas operacionais (não-estoque) classificadas pelo plano de contas" />
+              <Despesas user={user} />
+            </>
+          )}
+          {tela === "contabilidade" && (
+            <>
+              <PageHeader titulo="Contabilidade" subtitulo="Fechamento do período e exportação para o contador (CSV / layout Domínio·Alterdata)" />
+              <Contabilidade user={user} />
+            </>
+          )}
           {tela === "caixa" && (
             <>
               <PageHeader titulo="Caixa" subtitulo="Abertura, fechamento e extrato — controle do dinheiro físico no PDV" />
@@ -915,6 +942,12 @@ export default function App() {
             <>
               <PageHeader titulo="Notas Fiscais" subtitulo="NFC-e emitidas — reimpressão, cancelamento, inutilização e XML" />
               <NotasFiscais user={user} />
+            </>
+          )}
+          {tela === "entradanfe" && (
+            <>
+              <PageHeader titulo="Entrada de NF-e" subtitulo="Importar NF-e do fornecedor — vira compra, estoque e contas a pagar" />
+              <EntradaNfe user={user} />
             </>
           )}
           {tela === "crediario" && (

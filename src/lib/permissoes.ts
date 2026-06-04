@@ -15,6 +15,8 @@ export type ModuloId =
   | "AUTOMACOES"
   | "NPS"
   | "FINANCEIRO"
+  | "DESPESAS"
+  | "CONTABILIDADE"
   | "RELATORIOS"
   | "COMISSOES"
   | "COMANDAS"
@@ -58,6 +60,8 @@ export const MODULOS: readonly Modulo[] = [
   { id: "AUTOMACOES",    label: "Automações",     icone: "⚡" },
   { id: "NPS",           label: "NPS pós-venda",  icone: "⭐" },
   { id: "FINANCEIRO",    label: "Financeiro",     icone: "💰" },
+  { id: "DESPESAS",      label: "Despesas",       icone: "🧾" },
+  { id: "CONTABILIDADE", label: "Contabilidade",  icone: "📚" },
   { id: "RELATORIOS",    label: "Relatórios",     icone: "📑" },
   { id: "COMISSOES",     label: "Comissões",      icone: "🏆" },
   { id: "COMANDAS",      label: "Central de Comandas", icone: "🍽️" },
@@ -120,7 +124,7 @@ export function permissoesPadrao(role: Role): ModuloId[] {
   if (role === "GERENTE") {
     return ["PDV","DASHBOARD","CAIXA","CLIENTES","FORNECEDORES","PRODUTOS",
             "ESTOQUE","INVENTARIO","COMPRAS","ORCAMENTOS","OPORTUNIDADES","AUTOMACOES","NPS",
-            "FINANCEIRO","RELATORIOS","COMISSOES","COMANDAS","CREDIARIO","ORDEM_SERVICO","WHATSAPP"];
+            "FINANCEIRO","DESPESAS","CONTABILIDADE","RELATORIOS","COMISSOES","COMANDAS","CREDIARIO","ORDEM_SERVICO","WHATSAPP"];
   }
   return ["PDV","CAIXA","CLIENTES","PRODUTOS","ORCAMENTOS","OPORTUNIDADES","COMANDAS","CREDIARIO","ORDEM_SERVICO"];
 }

@@ -31,6 +31,8 @@ export const TELA_AJUDA: Record<string, string> = {
   painelcomandas: "central-de-comandas",
   whatsapp: "whatsapp",
   financeiro: "financeiro",
+  despesas: "despesas",
+  contabilidade: "contabilidade",
   relatorios: "relatorios",
   empresa: "empresa",
   impressora: "configuracoes-de-impressora",
@@ -102,6 +104,8 @@ const GRUPOS: Grupo[] = [
     titulo: "Financeiro",
     topicos: [
       { id: "financeiro", icone: "💰", label: "Financeiro" },
+      { id: "despesas", icone: "🧾", label: "Despesas" },
+      { id: "contabilidade", icone: "📚", label: "Contabilidade" },
     ],
   },
   {
@@ -296,6 +300,13 @@ export default function Ajuda({ topicoInicial }: Props) {
               th: (props) => <th style={estilos.th} {...props} />,
               td: (props) => <td style={estilos.td} {...props} />,
               hr: () => <hr style={estilos.hr} />,
+              img: (props) => {
+                // No MANUAL.md as imagens sao "img/x.png" (relativo a docs/,
+                // funciona no preview do VS Code / GitHub). Dentro do app, os
+                // PNGs sao servidos de public/manual-img/, entao reescrevemos.
+                const src = String((props as any).src || "").replace(/^img\//, "/manual-img/");
+                return <img {...props} src={src} loading="lazy" style={estilos.img} />;
+              },
               a:  (props) => {
                 const href = (props as any).href || "";
                 // Ancoras internas (#topico) — fazem scroll dentro do painel
@@ -483,6 +494,12 @@ const estilos: Record<string, CSSProperties> = {
     margin: "24px 0",
   },
   link: { color: C.accent, textDecoration: "underline" },
+  img: {
+    display: "block", maxWidth: "100%", height: "auto",
+    margin: "14px 0", borderRadius: 10,
+    border: `1px solid ${C.border}`,
+    boxShadow: "0 6px 20px rgba(0,0,0,0.25)",
+  },
   botaoTopo: {
     position: "absolute",
     right: 24,

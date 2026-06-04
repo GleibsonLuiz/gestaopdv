@@ -758,6 +758,55 @@ export const api = {
   excluirAnexoContaReceber: (id: string, anexoId: string) =>
     request(`/contas-receber/${id}/anexos/${anexoId}`, { method: "DELETE" }),
 
+  // ============ CONTABILIDADE: PLANO DE CONTAS + DESPESAS ============
+  // Plano de contas (categorias). A primeira chamada cria o plano padrao.
+  listarPlanosContas: (filtros: StringDict = {}) =>
+    request(`/planos-contas${qsFrom(filtros)}`),
+  arvorePlanosContas: () => request("/planos-contas/arvore"),
+  criarPlanoConta: (data: unknown) => request("/planos-contas", { method: "POST", body: data }),
+  atualizarPlanoConta: (id: string, data: unknown) =>
+    request(`/planos-contas/${id}`, { method: "PUT", body: data }),
+  excluirPlanoConta: (id: string) => request(`/planos-contas/${id}`, { method: "DELETE" }),
+  restaurarPlanoContasPadrao: () =>
+    request("/planos-contas/restaurar-padrao", { method: "POST" }),
+
+  // Despesas operacionais. A criacao aceita comprovante (File) opcional e vai
+  // como multipart (mesmo padrao dos anexos de contas).
+  listarDespesas: (filtros: StringDict = {}) =>
+    request(`/despesas${qsFrom(filtros)}`),
+  obterDespesa: (id: string) => request(`/despesas/${id}`),
+  criarDespesa: (data: Record<string, unknown>, file?: File | null) => {
+    const fd = new FormData();
+    for (const [k, v] of Object.entries(data)) {
+      if (v === undefined || v === null || v === "") continue;
+      fd.append(k, String(v));
+    }
+    if (file) fd.append("arquivo", file);
+    return uploadForm("/despesas", fd);
+  },
+  atualizarDespesa: (id: string, data: unknown) =>
+    request(`/despesas/${id}`, { method: "PUT", body: data }),
+  excluirDespesa: (id: string) => request(`/despesas/${id}`, { method: "DELETE" }),
+  anexarDespesa: (id: string, file: File) => {
+    const fd = new FormData();
+    fd.append("arquivo", file);
+    return uploadForm(`/despesas/${id}/anexos`, fd);
+  },
+  excluirAnexoDespesa: (id: string, anexoId: string) =>
+    request(`/despesas/${id}/anexos/${anexoId}`, { method: "DELETE" }),
+  // OCR de comprovante: envia a foto/PDF e recebe campos sugeridos
+  // { valor, data, descricao, cnpj, planoContaSugeridaId } para pre-preencher.
+  lerComprovanteOCR: (file: File) => {
+    const fd = new FormData();
+    fd.append("arquivo", file);
+    return uploadForm("/despesas/ocr", fd);
+  },
+
+  // Consolidacao contabil do periodo (portal do contador). Retorna
+  // { inicio, fim, resumo, linhas[] }. O CSV/layout Dominio sai client-side.
+  contabilidadeLancamentos: (filtros: StringDict = {}) =>
+    request(`/contabilidade/lancamentos${qsFrom(filtros)}`),
+
   // ============ ORDEM DE SERVICO ============
   osListar: (filtros: StringDict = {}) => request(`/ordens-servico${qsFrom(filtros)}`),
   osObter: (id: string) => request(`/ordens-servico/${id}`),
@@ -865,6 +914,13 @@ export const api = {
     cscId?: string | null;
     csc?: string | null;
     fiscalAtivo?: boolean;
+    // NFS-e (servicos / ISS)
+    nfseAtivo?: boolean;
+    serieNfse?: number;
+    proximoNumeroNfse?: number;
+    itemListaServicoPadrao?: string | null;
+    codTributacaoMunicipioPadrao?: string | null;
+    aliquotaIssPadrao?: number | null;
   }) => request("/fiscal/config", { method: "PUT", body: dados }),
 
   // Emissao / consulta de NFC-e (modelo 65).
@@ -887,6 +943,84 @@ export const api = {
     serie: number; numeroInicial: number; numeroFinal: number; justificativa: string;
   }) => request("/fiscal/inutilizar", { method: "POST", body: dados }),
   statusServicoFiscal: () => request("/fiscal/status-servico"),
+
+  // ==================== FISCAL — NFS-e (servicos / ISS) ====================
+  // Emissao a partir de uma Ordem de Servico ({ ordemServicoId }) ou avulsa
+  // ({ avulsa: { tomador, valorServicos, discriminacao, ... } }). Overrides de
+  // classificacao (itemListaServico, aliquotaIss, ...) podem ir no nivel raiz.
+  emitirNfse: (dados: {
+    ordemServicoId?: string;
+    avulsa?: Record<string, unknown>;
+    valorServicos?: number;
+    discriminacao?: string;
+    itemListaServico?: string;
+    codTributacaoMunicipio?: string;
+    codMunicipioPrestacao?: string;
+    aliquotaIss?: number;
+    issRetido?: boolean;
+    valorDeducoes?: number;
+    tomadorCpfCnpj?: string;
+    tomadorNome?: string;
+  }) => request("/fiscal/nfse", { method: "POST", body: dados }),
+  listarNfse: (params?: { status?: string; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set("status", params.status);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    const s = qs.toString();
+    return request(`/fiscal/nfse${s ? `?${s}` : ""}`);
+  },
+  obterNfse: (id: string, comXml = false) =>
+    request(`/fiscal/nfse/${id}${comXml ? "?xml=1" : ""}`),
+  consultarNfse: (id: string) =>
+    request(`/fiscal/nfse/${id}/consultar`, { method: "POST" }),
+  cancelarNfse: (id: string, justificativa: string) =>
+    request(`/fiscal/nfse/${id}/cancelar`, { method: "POST", body: { justificativa } }),
+  // Baixa o DANFSE (PDF do gateway) com Authorization e abre numa nova aba.
+  abrirPdfNfse: async (id: string): Promise<void> => {
+    const headers: Record<string, string> = {};
+    const token = getToken();
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch(`${BASE_URL}/fiscal/nfse/${id}/pdf`, { headers });
+    if (!res.ok) throw new Error("Falha ao baixar o DANFSE.");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  },
+
+  // ============ FISCAL — ENTRADA de NF-e de fornecedor (importacao de compra) ============
+  // Upload do XML -> valida (422 com `erros` se reprovar) -> staging RECEBIDA
+  // com `conciliacao` (sugestoes de de-para). efetivar transforma em Compra.
+  uploadEntradaNfe: (xml: string) =>
+    request("/fiscal/entrada", { method: "POST", body: { xml } }),
+  listarEntradasNfe: (params?: { status?: string; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set("status", params.status);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    const s = qs.toString();
+    return request(`/fiscal/entrada${s ? `?${s}` : ""}`);
+  },
+  obterEntradaNfe: (id: string) => request(`/fiscal/entrada/${id}`),
+  efetivarEntradaNfe: (
+    id: string,
+    body: { fornecedorId?: string; itens: { numero: number; produtoId: string; precoUnitario?: number }[] },
+  ) => request(`/fiscal/entrada/${id}/efetivar`, { method: "POST", body }),
+  estornarEntradaNfe: (id: string, motivo?: string) =>
+    request(`/fiscal/entrada/${id}/estornar`, { method: "POST", body: { motivo } }),
+  descartarEntradaNfe: (id: string) =>
+    request(`/fiscal/entrada/${id}/descartar`, { method: "POST" }),
+
+  // Distribuicao DF-e — NF-e recebidas contra o CNPJ (caixa de entrada da SEFAZ).
+  sincronizarDfe: () => request("/fiscal/dfe/sincronizar", { method: "POST" }),
+  listarDfe: (params?: { status?: string; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set("status", params.status);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    const s = qs.toString();
+    return request(`/fiscal/dfe${s ? `?${s}` : ""}`);
+  },
+  baixarDfe: (id: string) => request(`/fiscal/dfe/${id}/baixar`, { method: "POST" }),
+  ignorarDfe: (id: string) => request(`/fiscal/dfe/${id}/ignorar`, { method: "POST" }),
 
   // ==================== CAIXA ====================
   obterCaixaAtual: () => request("/caixas/atual"),

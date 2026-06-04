@@ -1,6 +1,10 @@
 import prisma from "../lib/prisma.js";
 import { getProvedor, ErroFiscal } from "../lib/fiscal/provedor.js";
 import { montarNfce } from "../lib/fiscal/montarNfce.js";
+import { corpoErroFiscal } from "../lib/fiscal/rejeicoes.js";
+import { registrarEventoFiscal, classificarFalhaTransmissao } from "../lib/fiscal/eventos.js";
+import { validarNfce } from "../lib/fiscal/validarPayload.js";
+import { checarPrazoCancelamento } from "../lib/fiscal/prazoCancelamento.js";
 import { avaliarProntidao } from "./configuracaoFiscalController.js";
 
 // ============ EMISSAO DE NFC-e (modelo 65) — Fase 3 ============
@@ -27,7 +31,8 @@ function gerarCNF(nNF) {
 }
 
 // Mapeia o ResultadoEmissao do provedor para os campos persistidos.
-function dadosDoResultado(resultado) {
+// Exportado p/ o worker de reconsulta (fiscalCronController) reusar sem drift.
+export function dadosDoResultado(resultado) {
   return {
     status: resultado.status,
     cStat: resultado.cStat || null,
@@ -85,6 +90,27 @@ export async function emitirNfce(req, res, next) {
       : null;
 
     const argsBase = { config, venda, itens: venda.itens, pagamentos: venda.pagamentos, dest, ambiente, serie };
+
+    // --- Gate A: validacao semantica ANTES de reservar numero (Onda 3) ---
+    // Monta uma previa (o numero nao afeta NCM/CFOP/itens/dest) e valida. Se
+    // reprovar, devolve os erros sem gastar numeracao nem chamar o gateway —
+    // pega o NCM "00000000"/CFOP default que viraria rejeicao na SEFAZ.
+    try {
+      const numeroPrevia = existente?.numeroFiscal || 1;
+      const previa = montarNfce({ ...argsBase, numeroFiscal: numeroPrevia, codigoNumerico: gerarCNF(numeroPrevia) });
+      const gate = validarNfce(previa.payload);
+      if (!gate.ok) {
+        const lista = [...new Set(gate.erros.map((e) => e.msg))];
+        return res.status(422).json({
+          erro: "Corrija antes de emitir a NFC-e: " + lista.join("; "),
+          erros: gate.erros,
+        });
+      }
+    } catch (err) {
+      // Guardas do proprio montarNfce (sem itens, pagamento < total, etc).
+      if (err instanceof ErroFiscal) return res.status(422).json(corpoErroFiscal(err));
+      throw err;
+    }
 
     let nota, built;
 
@@ -167,6 +193,10 @@ export async function emitirNfce(req, res, next) {
           where: { id: nota.id },
           data: { status: "PROCESSANDO", mensagemErro: err.message, cStat: err.cStat, xMotivo: err.xMotivo },
         });
+        await registrarEventoFiscal({
+          notaFiscalId: nota.id, tipo: "TRANSMISSAO",
+          resultado: classificarFalhaTransmissao(err), cStat: err.cStat, xMotivo: err.xMotivo || err.message,
+        });
         return res.status(202).json({
           nota: atual,
           aviso: "NFC-e enviada, mas sem confirmacao do provedor. Consulte o status em instantes.",
@@ -181,10 +211,15 @@ export async function emitirNfce(req, res, next) {
       catch { /* XML e best-effort — pode ser baixado depois */ }
     }
     const atualizada = await prisma.notaFiscal.update({ where: { id: nota.id }, data: dados });
+    await registrarEventoFiscal({
+      notaFiscalId: nota.id, tipo: "TRANSMISSAO",
+      resultado: resultado.status === "AUTORIZADA" ? "OK" : "REJEITADO",
+      cStat: resultado.cStat, xMotivo: resultado.xMotivo,
+    });
     res.json({ nota: atualizada });
   } catch (err) {
     if (err instanceof ErroFiscal) {
-      return res.status(422).json({ erro: err.message, cStat: err.cStat, xMotivo: err.xMotivo });
+      return res.status(422).json(corpoErroFiscal(err));
     }
     next(err);
   }
@@ -219,6 +254,8 @@ export async function obterNfce(req, res, next) {
     });
     if (!nota) return res.status(404).json({ erro: "Nota nao encontrada." });
     if (!incluirXml) { nota.xmlAutorizado = undefined; nota.xmlCancelamento = undefined; }
+    // Janela de cancelamento (Onda 4) — p/ a UI mostrar o contador/alerta.
+    if (nota.status === "AUTORIZADA") nota.cancelamento = checarPrazoCancelamento(nota);
     res.json(nota);
   } catch (err) { next(err); }
 }
@@ -242,10 +279,15 @@ export async function consultarNfce(req, res, next) {
       catch { /* best-effort */ }
     }
     const atualizada = await prisma.notaFiscal.update({ where: { id: nota.id }, data: dados });
+    await registrarEventoFiscal({
+      notaFiscalId: nota.id, tipo: "CONSULTA",
+      resultado: ["REJEITADA", "DENEGADA"].includes(resultado.status) ? "REJEITADO" : "OK",
+      cStat: resultado.cStat, xMotivo: resultado.xMotivo,
+    });
     res.json({ nota: atualizada });
   } catch (err) {
     if (err instanceof ErroFiscal) {
-      return res.status(422).json({ erro: err.message, cStat: err.cStat, xMotivo: err.xMotivo });
+      return res.status(422).json(corpoErroFiscal(err));
     }
     next(err);
   }
@@ -268,6 +310,15 @@ export async function cancelarNfce(req, res, next) {
     if (nota.status === "CANCELADA") return res.json({ nota, aviso: "Nota ja esta cancelada." });
     if (nota.status !== "AUTORIZADA") {
       return res.status(400).json({ erro: "So e possivel cancelar uma NFC-e AUTORIZADA." });
+    }
+    // Pre-bloqueio por prazo (Onda 4): evita ida inutil a SEFAZ quando o prazo
+    // legal ja expirou. A SEFAZ ainda e a autoridade final se passar daqui.
+    const prazo = checarPrazoCancelamento(nota);
+    if (!prazo.permitido) {
+      return res.status(409).json({
+        erro: `${prazo.mensagem} ${prazo.alternativa}`,
+        prazoExpirado: true, decorridoMin: prazo.decorridoMin, limiteMin: prazo.limiteMin,
+      });
     }
     if (!nota.idIntegracaoProvedor) {
       return res.status(400).json({ erro: "Nota sem id de integracao no provedor." });
@@ -297,10 +348,14 @@ export async function cancelarNfce(req, res, next) {
         xmlCancelamento,
       },
     });
+    await registrarEventoFiscal({
+      notaFiscalId: nota.id, tipo: "CANCELAMENTO", resultado: "OK",
+      cStat: r.cStat, xMotivo: r.xMotivo || "Cancelamento homologado",
+    });
     res.json({ nota: atualizada });
   } catch (err) {
     if (err instanceof ErroFiscal) {
-      return res.status(422).json({ erro: err.message, cStat: err.cStat, xMotivo: err.xMotivo });
+      return res.status(422).json(corpoErroFiscal(err));
     }
     next(err);
   }
@@ -365,7 +420,7 @@ export async function inutilizarNumeracao(req, res, next) {
     res.json({ inutilizadas, resultado: r });
   } catch (err) {
     if (err instanceof ErroFiscal) {
-      return res.status(422).json({ erro: err.message, cStat: err.cStat, xMotivo: err.xMotivo });
+      return res.status(422).json(corpoErroFiscal(err));
     }
     next(err);
   }
@@ -385,7 +440,7 @@ export async function statusServico(req, res, next) {
     res.json(r);
   } catch (err) {
     if (err instanceof ErroFiscal) {
-      return res.status(422).json({ erro: err.message, cStat: err.cStat, xMotivo: err.xMotivo });
+      return res.status(422).json(corpoErroFiscal(err));
     }
     next(err);
   }

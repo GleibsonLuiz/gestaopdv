@@ -4,6 +4,8 @@ import { api, type SessionUser } from "./lib/api";
 import { emitirToast } from "./lib/toast";
 import { imprimirDanfeNfce } from "./lib/danfeNfce";
 import { fmtBRL, fmtData } from "./components/cupons/fmt";
+import { moduloNoPlano } from "./lib/permissoes";
+import EmitirNfseModal from "./EmitirNfseModal";
 
 // Tela de histórico de NFC-e (Fase 6). Lista as notas emitidas, permite
 // reimprimir o DANFE, consultar status (notas PROCESSANDO), cancelar
@@ -48,6 +50,8 @@ export default function NotasFiscais({ user }: { user: SessionUser }) {
   const [acaoEm, setAcaoEm] = useState<string | null>(null);
   const [cancelarAlvo, setCancelarAlvo] = useState<NotaItem | null>(null);
   const [modalInutilizar, setModalInutilizar] = useState(false);
+  const verNfse = moduloNoPlano("NFSE");
+  const [aba, setAba] = useState<"NFCE" | "NFSE">("NFCE");
 
   const podeGerenciar = user.role === "ADMIN" || user.role === "GERENTE";
 
@@ -104,6 +108,17 @@ export default function NotasFiscais({ user }: { user: SessionUser }) {
 
   return (
     <div>
+      {verNfse && (
+        <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+          <button onClick={() => setAba("NFCE")} style={aba === "NFCE" ? tabAtiva : tabInativa}>NFC-e (consumidor)</button>
+          <button onClick={() => setAba("NFSE")} style={aba === "NFSE" ? tabAtiva : tabInativa}>NFS-e (serviços)</button>
+        </div>
+      )}
+
+      {aba === "NFSE" ? (
+        <SecaoNfse user={user} />
+      ) : (
+      <>
       {erro && <div style={alerta(C.red)}>{erro}</div>}
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
@@ -194,6 +209,208 @@ export default function NotasFiscais({ user }: { user: SessionUser }) {
       {modalInutilizar && (
         <ModalInutilizar onFechar={() => setModalInutilizar(false)} onConcluido={() => { setModalInutilizar(false); carregar(); }} />
       )}
+      </>
+      )}
+    </div>
+  );
+}
+
+// ============ Seção NFS-e (serviços / ISS) ============
+type NfseItem = {
+  id: string;
+  serie: number;
+  numeroFiscal: number;
+  status: string;
+  ambiente: string;
+  numeroNfse?: string | null;
+  dataAutorizacao?: string | null;
+  xMotivo?: string | null;
+  valorTotal: number | string;
+  valorServicos?: number | string | null;
+  valorIss?: number | string | null;
+  destNome?: string | null;
+  destCpfCnpj?: string | null;
+  discriminacao?: string | null;
+  createdAt: string;
+};
+
+function SecaoNfse({ user }: { user: SessionUser }) {
+  const [notas, setNotas] = useState<NfseItem[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState("");
+  const [filtro, setFiltro] = useState("");
+  const [acaoEm, setAcaoEm] = useState<string | null>(null);
+  const [cancelarAlvo, setCancelarAlvo] = useState<NfseItem | null>(null);
+  const [avulsa, setAvulsa] = useState(false);
+
+  const podeGerenciar = user.role === "ADMIN" || user.role === "GERENTE";
+
+  const carregar = useCallback(() => {
+    setCarregando(true); setErro("");
+    api.listarNfse({ status: filtro || undefined, limit: 300 })
+      .then((r) => setNotas(r as NfseItem[]))
+      .catch((e: Error) => setErro(e.message))
+      .finally(() => setCarregando(false));
+  }, [filtro]);
+
+  useEffect(() => { carregar(); }, [carregar]);
+
+  function flashErro(e: unknown) {
+    emitirToast({ tipo: "erro", titulo: "Erro", mensagem: (e as Error).message, duracao: 7000 });
+  }
+
+  async function consultar(n: NfseItem) {
+    setAcaoEm(n.id);
+    try {
+      const r = await api.consultarNfse(n.id) as { nota: NfseItem };
+      emitirToast({ tipo: "info", titulo: "Status atualizado", mensagem: r.nota?.status || "" });
+      carregar();
+    } catch (e) { flashErro(e); }
+    finally { setAcaoEm(null); }
+  }
+
+  async function abrirPdf(n: NfseItem) {
+    setAcaoEm(n.id);
+    try { await api.abrirPdfNfse(n.id); }
+    catch (e) { flashErro(e); }
+    finally { setAcaoEm(null); }
+  }
+
+  async function baixarXml(n: NfseItem) {
+    setAcaoEm(n.id);
+    try {
+      const full = await api.obterNfse(n.id, true) as { xmlAutorizado?: string | null };
+      if (!full.xmlAutorizado) {
+        emitirToast({ tipo: "aviso", titulo: "Sem XML", mensagem: "Esta NFS-e ainda não tem XML." });
+        return;
+      }
+      const blob = new Blob([full.xmlAutorizado], { type: "application/xml" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `nfse-${n.serie}-${n.numeroFiscal}.xml`; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) { flashErro(e); }
+    finally { setAcaoEm(null); }
+  }
+
+  return (
+    <div>
+      {erro && <div style={alerta(C.red)}>{erro}</div>}
+
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+        <label className="text-gp-muted text-[12px] font-semibold">Status:</label>
+        <select title="Filtrar por status" value={filtro} onChange={(e) => setFiltro(e.target.value)} style={selectStyle}>
+          {FILTROS.map((f) => <option key={f} value={f}>{f || "Todos"}</option>)}
+        </select>
+        <button onClick={carregar} style={btnGhost}>↻ Atualizar</button>
+        <div style={{ flex: 1 }} />
+        <button onClick={() => setAvulsa(true)} style={{ ...btnGhost, color: C.accent, borderColor: C.accent + "55" }}>＋ Nova NFS-e avulsa</button>
+      </div>
+
+      {carregando ? (
+        <div className="text-gp-muted text-center p-[30px]">Carregando…</div>
+      ) : notas.length === 0 ? (
+        <div className="text-gp-muted text-center p-[30px]">Nenhuma NFS-e encontrada. Emita pela Ordem de Serviço ou avulsa.</div>
+      ) : (
+        <div className="bg-gp-card border border-gp-border rounded-xl overflow-hidden">
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: C.surface, color: C.muted, textAlign: "left" }}>
+                <th style={th}>Nº NFS-e</th>
+                <th style={th}>Data</th>
+                <th style={th}>Status</th>
+                <th style={{ ...th, textAlign: "right" }}>Serviço</th>
+                <th style={{ ...th, textAlign: "right" }}>ISS</th>
+                <th style={th}>Tomador</th>
+                <th style={{ ...th, textAlign: "right" }}>Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {notas.map((n) => {
+                const ocupado = acaoEm === n.id;
+                return (
+                  <tr key={n.id} style={{ borderTop: `1px solid ${C.border}` }}>
+                    <td style={td}>
+                      <b>{n.numeroNfse || n.numeroFiscal}</b> <span className="text-gp-muted">/ {n.serie}</span>
+                      {n.ambiente === "HOMOLOGACAO" && <div style={{ fontSize: 9, color: C.yellow }}>HOMOLOGAÇÃO</div>}
+                    </td>
+                    <td style={td}>{fmtData(n.createdAt)}</td>
+                    <td style={td}>
+                      <span style={badge(STATUS_COR[n.status] || C.muted)}>{n.status}</span>
+                      {n.status === "REJEITADA" && n.xMotivo && <div style={{ fontSize: 10, color: C.red, maxWidth: 240 }}>{n.xMotivo}</div>}
+                    </td>
+                    <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtBRL(n.valorServicos ?? n.valorTotal)}</td>
+                    <td style={{ ...td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{n.valorIss != null ? fmtBRL(n.valorIss) : "—"}</td>
+                    <td style={td}>{n.destNome || n.destCpfCnpj || <span className="text-gp-muted">—</span>}</td>
+                    <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
+                      {n.status === "AUTORIZADA" && (
+                        <>
+                          <button disabled={ocupado} onClick={() => abrirPdf(n)} style={btnMini} title="Abrir DANFSE (PDF)">📄</button>
+                          <button disabled={ocupado} onClick={() => baixarXml(n)} style={btnMini} title="Baixar XML">⬇️</button>
+                          {podeGerenciar && (
+                            <button disabled={ocupado} onClick={() => setCancelarAlvo(n)} style={btnMiniPerigo} title="Cancelar NFS-e">✕</button>
+                          )}
+                        </>
+                      )}
+                      {(n.status === "PROCESSANDO" || n.status === "PENDENTE") && (
+                        <button disabled={ocupado} onClick={() => consultar(n)} style={btnMini} title="Consultar status">🔄</button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {avulsa && (
+        <EmitirNfseModal onFechar={() => setAvulsa(false)} onEmitida={() => carregar()} />
+      )}
+      {cancelarAlvo && (
+        <ModalCancelarNfse
+          nota={cancelarAlvo}
+          onFechar={() => setCancelarAlvo(null)}
+          onCancelado={() => { setCancelarAlvo(null); carregar(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ModalCancelarNfse({ nota, onFechar, onCancelado }: { nota: NfseItem; onFechar: () => void; onCancelado: () => void }) {
+  const [justificativa, setJustificativa] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  async function confirmar() {
+    if (justificativa.trim().length < 15) { setErro("A justificativa precisa ter ao menos 15 caracteres."); return; }
+    setSalvando(true); setErro("");
+    try {
+      await api.cancelarNfse(nota.id, justificativa.trim());
+      emitirToast({ tipo: "sucesso", titulo: "NFS-e cancelada", mensagem: `NFS-e ${nota.numeroNfse || nota.numeroFiscal} cancelada.` });
+      onCancelado();
+    } catch (e) { setErro((e as Error).message); }
+    finally { setSalvando(false); }
+  }
+
+  return (
+    <div style={modalBg} onClick={onFechar}>
+      <div style={modalBox} onClick={(e) => e.stopPropagation()}>
+        <div className="text-gp-white font-bold text-[15px] mb-1">Cancelar NFS-e nº {nota.numeroNfse || nota.numeroFiscal}</div>
+        <div className="text-gp-muted text-[12px] mb-3">
+          O cancelamento é enviado à prefeitura e sujeito ao prazo municipal. Informe a justificativa (15 a 255 caracteres).
+        </div>
+        {erro && <div style={alerta(C.red)}>{erro}</div>}
+        <textarea value={justificativa} onChange={(e) => setJustificativa(e.target.value)} rows={3} placeholder="Motivo do cancelamento" style={{ ...inputBase, resize: "vertical", fontFamily: "inherit" }} />
+        <div className="text-gp-muted text-[10px] mt-1">{justificativa.trim().length}/255</div>
+        <div className="flex justify-end gap-2 mt-3">
+          <button onClick={onFechar} style={btnGhost}>Voltar</button>
+          <button onClick={confirmar} disabled={salvando} style={btnPerigo}>
+            {salvando ? "Cancelando…" : "Confirmar cancelamento"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -312,6 +529,9 @@ function alerta(cor: string): CSSProperties {
   return { marginBottom: 12, padding: "10px 14px", borderRadius: 8, background: cor + "22", border: `1px solid ${cor}55`, color: cor, fontSize: 13 };
 }
 const selectStyle: CSSProperties = { background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "6px 10px", color: C.text, fontSize: 13 };
+const tabBase: CSSProperties = { borderRadius: 8, padding: "7px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" };
+const tabAtiva: CSSProperties = { ...tabBase, background: C.accent + "22", border: `1px solid ${C.accent}66`, color: C.accent };
+const tabInativa: CSSProperties = { ...tabBase, background: C.surface, border: `1px solid ${C.border}`, color: C.muted };
 const inputBase: CSSProperties = { width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "7px 10px", color: C.text, fontSize: 13, outline: "none", boxSizing: "border-box" };
 const btnGhost: CSSProperties = { background: C.surface, border: `1px solid ${C.border}`, color: C.text, borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" };
 const btnPerigo: CSSProperties = { background: "transparent", border: `1px solid ${C.red}55`, color: C.red, borderRadius: 8, padding: "7px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" };

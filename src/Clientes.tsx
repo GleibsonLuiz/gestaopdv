@@ -4,6 +4,7 @@ import { api, type SessionUser } from "./lib/api";
 import ActionsMenu from "./components/ActionsMenu";
 import { FormularioLuxuoso, Secao, Linha, Campo } from "./components/FormularioLuxuoso";
 import PerfilClienteModal from "./components/PerfilClienteModal";
+import { consultarCnpj } from "./lib/cnpj";
 
 // ============ CONSTANTES ============
 
@@ -236,6 +237,8 @@ export default function Clientes({ user }: ClientesProps) {
   const [mensagem, setMensagem] = useState("");
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [cepNaoEncontrado, setCepNaoEncontrado] = useState(false);
+  const [buscandoCnpj, setBuscandoCnpj] = useState(false);
+  const [cnpjErro, setCnpjErro] = useState("");
   const [nomeInvalido, setNomeInvalido] = useState(false);
   const [perfilClienteId, setPerfilClienteId] = useState<string | null>(null);
 
@@ -283,6 +286,7 @@ export default function Clientes({ user }: ClientesProps) {
     setErroForm("");
     setNomeInvalido(false);
     setCepNaoEncontrado(false);
+    setCnpjErro("");
     setModalAberto(true);
   }
 
@@ -311,7 +315,39 @@ export default function Clientes({ user }: ClientesProps) {
     setErroForm("");
     setNomeInvalido(false);
     setCepNaoEncontrado(false);
+    setCnpjErro("");
     setModalAberto(true);
+  }
+
+  // Auto-preenchimento por CNPJ (BrasilAPI). O campo aceita CPF ou CNPJ, entao
+  // a busca so dispara quando ha 14 digitos (CNPJ completo). Preenche razao
+  // social e endereco; CPF (11 digitos) e ignorado.
+  async function aplicarCpfCnpj(valor: string) {
+    const masked = mascararCpfCnpj(valor);
+    setForm((prev) => ({ ...prev, cpfCnpj: masked }));
+    setCnpjErro("");
+    const digitos = masked.replace(/\D/g, "");
+    if (digitos.length !== 14) return;
+    setBuscandoCnpj(true);
+    try {
+      const d = await consultarCnpj(digitos);
+      setForm((prev) => ({
+        ...prev,
+        nome: d.razaoSocial || prev.nome,
+        endereco: d.logradouro || prev.endereco,
+        numero: d.numero || prev.numero,
+        complemento: d.complemento || prev.complemento,
+        bairro: d.bairro || prev.bairro,
+        cidade: d.cidade || prev.cidade,
+        estado: d.estado || prev.estado,
+        cep: d.cep ? mascararCep(d.cep) : prev.cep,
+      }));
+      if (nomeInvalido && (d.razaoSocial || "").trim()) setNomeInvalido(false);
+    } catch (e) {
+      setCnpjErro((e as Error).message);
+    } finally {
+      setBuscandoCnpj(false);
+    }
   }
 
   async function aplicarCep(valor: string) {
@@ -651,14 +687,24 @@ export default function Clientes({ user }: ClientesProps) {
             </Campo>
           </Linha>
           <Linha style={{ gridTemplateColumns: "185px 160px 1fr" }}>
-            <Campo label="CPF / CNPJ">
+            <Campo
+              label="CPF / CNPJ"
+              hint={
+                buscandoCnpj
+                  ? "Buscando dados na Receita…"
+                  : "Informe um CNPJ para preencher automaticamente."
+              }
+              erro={cnpjErro || undefined}
+            >
               <input
                 className="lux-input"
                 value={form.cpfCnpj}
-                onChange={(e) => setForm({ ...form, cpfCnpj: mascararCpfCnpj(e.target.value) })}
+                onChange={(e) => aplicarCpfCnpj(e.target.value)}
+                onBlur={(e) => aplicarCpfCnpj(e.target.value)}
                 placeholder="000.000.000-00"
                 inputMode="numeric"
                 maxLength={18}
+                disabled={buscandoCnpj}
               />
             </Campo>
             <Campo label="Telefone">

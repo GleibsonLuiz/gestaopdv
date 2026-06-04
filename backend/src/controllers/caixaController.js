@@ -488,7 +488,8 @@ export async function registrarEmCaixa(tx, caixaId, userId, dados) {
   const totais = await calcularTotaisCaixa(caixa.id, Number(caixa.saldoInicial), tx);
   const saldoAntes = toDecimal(totais.saldoEsperadoDinheiro);
   const ehEntrada = dados.tipo === "VENDA" || dados.tipo === "SUPRIMENTO"
-    || dados.tipo === "RECEBER_CONTA" || dados.tipo === "ESTORNO_PAGAR_CONTA";
+    || dados.tipo === "RECEBER_CONTA" || dados.tipo === "ESTORNO_PAGAR_CONTA"
+    || dados.tipo === "ESTORNO_DESPESA";
   const ehDinheiro = (dados.formaPagamento || "DINHEIRO") === "DINHEIRO";
   const delta = ehDinheiro ? (ehEntrada ? Number(dados.valor) : -Number(dados.valor)) : 0;
   const saldoDepois = toDecimal(saldoAntes + delta);
@@ -506,6 +507,7 @@ export async function registrarEmCaixa(tx, caixaId, userId, dados) {
       vendaId: dados.vendaId || null,
       contaPagarId: dados.contaPagarId || null,
       contaReceberId: dados.contaReceberId || null,
+      despesaId: dados.despesaId || null,
     },
   });
 }

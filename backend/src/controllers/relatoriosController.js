@@ -342,6 +342,101 @@ export async function relatorioFinanceiro(req, res, next) {
   }
 }
 
+// ============ RELATORIO DE PRODUTOS POR FABRICANTE / MARCA ============
+//
+// Lista produtos filtrando por fabricante/marca (e opcionalmente categoria),
+// agrupando-os por fabricante com subtotais (qtd de produtos, unidades em
+// estoque, valor de estoque a custo e a venda).
+//
+// Filtros: fabricanteId, categoriaId, incluirInativos. fabricanteId="__sem__"
+// traz apenas produtos SEM fabricante cadastrado.
+
+export async function relatorioProdutosPorFabricante(req, res, next) {
+  try {
+    const { fabricanteId, categoriaId, incluirInativos } = req.query;
+
+    const where = { tipoItem: "PRODUTO" };
+    if (incluirInativos !== "true") where.ativo = true;
+    if (categoriaId) where.categoriaId = categoriaId;
+    if (fabricanteId === "__sem__") where.fabricanteId = null;
+    else if (fabricanteId) where.fabricanteId = fabricanteId;
+
+    const produtos = await prisma.produto.findMany({
+      where,
+      orderBy: [{ fabricante: { nome: "asc" } }, { nome: "asc" }],
+      include: {
+        fabricante: { select: { nome: true } },
+        categoria: { select: { nome: true } },
+      },
+    });
+
+    const porFabricante = new Map();
+    let unidadesEmEstoque = 0;
+    let valorEstoqueCusto = 0;
+    let valorEstoqueVenda = 0;
+
+    const linhasProdutos = produtos.map(p => {
+      const estoque = Number(p.estoque);
+      const pcusto = p.precoCusto != null ? Number(p.precoCusto) : 0;
+      const pvenda = Number(p.precoVenda);
+      const valCusto = estoque * pcusto;
+      const valVenda = estoque * pvenda;
+
+      unidadesEmEstoque += estoque;
+      valorEstoqueCusto += valCusto;
+      valorEstoqueVenda += valVenda;
+
+      const fab = p.fabricante?.nome || "Sem fabricante";
+      if (!porFabricante.has(fab)) {
+        porFabricante.set(fab, {
+          fabricante: fab, qtdProdutos: 0,
+          unidades: 0, valorCusto: 0, valorVenda: 0,
+        });
+      }
+      const g = porFabricante.get(fab);
+      g.qtdProdutos++;
+      g.unidades += estoque;
+      g.valorCusto += valCusto;
+      g.valorVenda += valVenda;
+
+      return {
+        id: p.id,
+        codigo: p.codigo,
+        nome: p.nome,
+        unidade: p.unidade,
+        fabricante: p.fabricante?.nome || null,
+        categoria: p.categoria?.nome || null,
+        ativo: p.ativo,
+        estoque,
+        precoCusto: p.precoCusto != null ? Number(p.precoCusto) : null,
+        precoVenda: pvenda,
+        valorEmEstoqueVenda: valVenda,
+      };
+    });
+
+    res.json({
+      geradoEm: new Date().toISOString(),
+      filtros: {
+        fabricanteId: fabricanteId || null,
+        categoriaId: categoriaId || null,
+        incluirInativos: incluirInativos === "true",
+      },
+      resumo: {
+        totalProdutos: produtos.length,
+        totalFabricantes: porFabricante.size,
+        unidadesEmEstoque,
+        valorEstoqueCusto,
+        valorEstoqueVenda,
+      },
+      porFabricante: Array.from(porFabricante.values())
+        .sort((a, b) => b.valorVenda - a.valorVenda),
+      produtos: linhasProdutos,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function relatorioEstoque(req, res, next) {
   try {
     const { categoriaId, fornecedorId, situacao } = req.query;

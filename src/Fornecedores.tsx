@@ -3,6 +3,7 @@ import { C } from "./lib/theme";
 import { api, type SessionUser } from "./lib/api";
 import ActionsMenu from "./components/ActionsMenu";
 import { FormularioLuxuoso, Secao, Linha, Campo } from "./components/FormularioLuxuoso";
+import { consultarCnpj } from "./lib/cnpj";
 
 // ============ CONSTANTES ============
 
@@ -107,13 +108,6 @@ interface ViaCepDados {
   codMunicipioIBGE: string;
 }
 
-interface CnpjCadastral {
-  razao_social?: string;
-  razaoSocial?: string;
-  nome_fantasia?: string;
-  nomeFantasia?: string;
-}
-
 const VAZIO: FormFornecedor = {
   nome: "", nomeFantasia: "", tipoPessoa: "PJ", cnpj: "",
   email: "", telefone: "",
@@ -189,11 +183,6 @@ async function buscarCepViaCEP(cepMascarado: string): Promise<ViaCepDados | null
   }
 }
 
-// Stub para futura integracao com a Receita Federal / BrasilAPI / SerproIO.
-async function consultarCnpjCadastral(_cnpjDigits: string): Promise<CnpjCadastral | null> {
-  return null;
-}
-
 // ============ COMPONENTE PRINCIPAL ============
 
 interface FornecedoresProps {
@@ -215,6 +204,8 @@ export default function Fornecedores({ user }: FornecedoresProps) {
   const [nomeInvalido, setNomeInvalido] = useState(false);
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [cepNaoEncontrado, setCepNaoEncontrado] = useState(false);
+  const [buscandoCnpj, setBuscandoCnpj] = useState(false);
+  const [cnpjErro, setCnpjErro] = useState("");
 
   const podeEditar = user.role === "ADMIN" || user.role === "GERENTE";
   const podeExcluir = user.role === "ADMIN";
@@ -259,19 +250,35 @@ export default function Fornecedores({ user }: FornecedoresProps) {
     }));
   }
 
+  // Auto-preenchimento por CNPJ (BrasilAPI). Dispara ao completar os 14 digitos
+  // de um fornecedor PJ; preenche razao social, nome fantasia e endereco.
   async function aplicarCnpj(valor: string) {
     const masked = mascararCnpj(valor);
     setForm((prev) => ({ ...prev, cnpj: masked }));
+    setCnpjErro("");
     const digitos = masked.replace(/\D/g, "");
-    if (digitos.length === 14 && form.tipoPessoa === "PJ") {
-      const cadastro = await consultarCnpjCadastral(digitos);
-      if (cadastro) {
-        setForm((prev) => ({
-          ...prev,
-          nome: prev.nome || cadastro.razao_social || cadastro.razaoSocial || "",
-          nomeFantasia: prev.nomeFantasia || cadastro.nome_fantasia || cadastro.nomeFantasia || "",
-        }));
-      }
+    if (digitos.length !== 14 || form.tipoPessoa !== "PJ") return;
+    setBuscandoCnpj(true);
+    try {
+      const d = await consultarCnpj(digitos);
+      setForm((prev) => ({
+        ...prev,
+        nome: d.razaoSocial || prev.nome,
+        nomeFantasia: d.nomeFantasia || prev.nomeFantasia,
+        endereco: d.logradouro || prev.endereco,
+        numero: d.numero || prev.numero,
+        complemento: d.complemento || prev.complemento,
+        bairro: d.bairro || prev.bairro,
+        cidade: d.cidade || prev.cidade,
+        estado: d.estado || prev.estado,
+        codUFIBGE: d.estado ? (COD_UF_IBGE[d.estado] || prev.codUFIBGE) : prev.codUFIBGE,
+        cep: d.cep ? mascararCep(d.cep) : prev.cep,
+      }));
+      if (nomeInvalido && (d.razaoSocial || "").trim()) setNomeInvalido(false);
+    } catch (e) {
+      setCnpjErro((e as Error).message);
+    } finally {
+      setBuscandoCnpj(false);
     }
   }
 
@@ -313,6 +320,7 @@ export default function Fornecedores({ user }: FornecedoresProps) {
     setErroForm("");
     setNomeInvalido(false);
     setCepNaoEncontrado(false);
+    setCnpjErro("");
     setModalAberto(true);
   }
 
@@ -349,6 +357,7 @@ export default function Fornecedores({ user }: FornecedoresProps) {
     setErroForm("");
     setNomeInvalido(false);
     setCepNaoEncontrado(false);
+    setCnpjErro("");
     setModalAberto(true);
   }
 
@@ -604,6 +613,7 @@ export default function Fornecedores({ user }: FornecedoresProps) {
                 value={form.tipoPessoa}
                 onChange={(e) => {
                   const novoTipo = e.target.value as TipoPessoa;
+                  setCnpjErro("");
                   setForm((prev) => ({
                     ...prev,
                     tipoPessoa: novoTipo,
@@ -617,14 +627,26 @@ export default function Fornecedores({ user }: FornecedoresProps) {
             </Campo>
           </Linha>
           <Linha style={{ gridTemplateColumns: "185px 160px 1fr" }}>
-            <Campo label={form.tipoPessoa === "PF" ? "CPF" : "CNPJ"}>
+            <Campo
+              label={form.tipoPessoa === "PF" ? "CPF" : "CNPJ"}
+              hint={
+                form.tipoPessoa !== "PJ"
+                  ? undefined
+                  : buscandoCnpj
+                    ? "Buscando dados na Receita…"
+                    : "Preenche nome e endereço automaticamente."
+              }
+              erro={cnpjErro || undefined}
+            >
               <input
                 className="lux-input"
                 value={form.cnpj}
                 onChange={(e) => aplicarCnpj(e.target.value)}
+                onBlur={(e) => aplicarCnpj(e.target.value)}
                 placeholder={form.tipoPessoa === "PF" ? "000.000.000-00" : "00.000.000/0000-00"}
                 inputMode="numeric"
                 maxLength={form.tipoPessoa === "PF" ? 14 : 18}
+                disabled={buscandoCnpj}
               />
             </Campo>
             <Campo label="Telefone">

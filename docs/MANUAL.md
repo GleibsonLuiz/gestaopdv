@@ -734,6 +734,8 @@ Cada grupo tem header colapsável com contagem + subtotal.
 4. **Descrição** (opcional) e **📷 Comprovante** (foto ou PDF até 5 MB — no celular abre a câmera direto).
 5. **Lançar despesa.**
 
+**📷 Leitura automática do comprovante (OCR com IA):** ao escolher a foto/PDF do cupom, o sistema **lê o comprovante com inteligência artificial** e preenche sozinho o **valor, a data, a descrição e sugere a categoria**. Aparece a marca *"preenchido por IA — confira"*: revise e ajuste se precisar antes de lançar (a IA nunca grava sozinha). Despesas lançadas assim ficam marcadas com a etiqueta **OCR** na lista. Requer a chave da IA configurada no servidor (`ANTHROPIC_API_KEY`); se a leitura falhar, é só preencher na mão normalmente.
+
 **Baixa no caixa:** se houver um caixa **aberto**, a despesa sai dele automaticamente (movimentação `DESPESA`). Excluir a despesa **estorna** o valor no caixa (se ainda estiver aberto).
 
 **Plano de Contas:** na primeira vez, o sistema cria um plano padrão para comércio/serviço (Ocupação, Pessoal, Administrativas, Comerciais, Financeiras, Impostos). Admin/Gerente podem editar as categorias.
@@ -741,6 +743,29 @@ Cada grupo tem header colapsável com contagem + subtotal.
 **Comprovante:** clique no 📎 na lista para abrir/baixar o comprovante anexado.
 
 > Acesso: módulo **Despesas** (incluído no plano PRO). Lançar/editar/excluir exige Admin ou Gerente; vendedores com a permissão só visualizam.
+
+#### 📚 Contabilidade
+
+**O que faz:** consolida, num período, tudo que interessa à contabilidade (fechamento) e gera os arquivos para o contador.
+
+**O que entra na consolidação:**
+- **Despesas** do período (saídas);
+- **Contas a pagar quitadas** no período (saídas);
+- **Notas fiscais autorizadas** no período (receita/entradas).
+
+**Como usar:**
+1. Escolha o período (padrão: mês corrente).
+2. Veja os **KPIs** (entradas, saídas, resultado, nº de lançamentos) e o gráfico de **despesas por categoria**.
+3. Confira a lista de lançamentos (com link 📎 para o comprovante das despesas).
+4. Exporte:
+   - **⬇ Planilha (CSV)** — detalhe completo para conferência (abre no Excel).
+   - **⬇ CSV Contábil (Domínio/Alterdata)** — lançamento enxuto (Data; Conta; Histórico; Valor; D/C). Usa o **código contábil externo** da categoria (campo de-para no Plano de Contas) quando preenchido — é o que deixa o arquivo pronto para importar no sistema do contador.
+
+**Acesso do contador:** crie o contador em **Funcionários** como *Vendedor* e marque **apenas** a permissão **Contabilidade**. Ele entra e vê só esta tela — sem PDV, sem caixa, sem configurações e sem nenhum botão de edição. É um acesso de leitura/exportação.
+
+**Fechamento mensal automático:** todo dia 1º o sistema apura o mês anterior e dispara uma **notificação** (sino no topo) avisando que o mês fechou, com os totais de receitas e despesas — um lembrete para exportar o pacote do contador. Só chega para empresas que tiveram movimento no mês.
+
+> Os dois CSV são gerados no próprio navegador (como os relatórios em PDF), com acento correto no Excel. Acesso: módulo **Contabilidade** (plano PRO).
 
 #### 📒 Crediário (Fiado)
 

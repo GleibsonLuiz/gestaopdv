@@ -1,5 +1,6 @@
 import prisma from "../lib/prisma.js";
 import { cifrar, decifrar, mascarar } from "../lib/cripto.js";
+import { avaliarCertificado } from "../lib/fiscal/certificado.js";
 
 // ============ CONFIGURACAO FISCAL DO EMITENTE (NFC-e modelo 65) ============
 //
@@ -60,9 +61,33 @@ export function avaliarProntidao(cfg) {
   return { pronta: faltando.length === 0, faltando };
 }
 
+// Avalia se o emitente esta pronto para LIGAR a NFS-e (nfseAtivo=true). NFS-e e
+// MUNICIPAL/ISS: exige Inscricao Municipal, municipio (IBGE), provedor e uma
+// classificacao fiscal de servico padrao (item LC 116 + aliquota ISS). O `mock`
+// dispensa credencial real (igual ao CSC na NFC-e). Nao valida credenciamento
+// na prefeitura (externo).
+export function avaliarProntidaoNfse(cfg) {
+  const faltando = [];
+  if (!cfg) return { pronta: false, faltando: ["Cadastro da empresa nao iniciado"] };
+
+  if (!norm(cfg.razaoSocial)) faltando.push("Razao social");
+  if (!soDigitos(cfg.cnpj)) faltando.push("CNPJ");
+  if (!norm(cfg.inscMunicipal)) faltando.push("Inscricao Municipal");
+  if (!CRTS_VALIDOS.has(cfg.crt)) faltando.push("Regime tributario (CRT)");
+  if (!soDigitos(cfg.codMunicipioIBGE)) faltando.push("Codigo IBGE do municipio");
+  if (!cfg.provedorFiscal) faltando.push("Provedor fiscal (gateway)");
+  if (!norm(cfg.itemListaServicoPadrao)) faltando.push("Item da lista de servicos padrao (LC 116)");
+  if (cfg.aliquotaIssPadrao == null || Number(cfg.aliquotaIssPadrao) < 0) {
+    faltando.push("Aliquota do ISS padrao");
+  }
+
+  return { pronta: faltando.length === 0, faltando };
+}
+
 // Monta o payload de resposta dos GET/PUT — CSC sempre mascarado.
 function montarResposta(cfg) {
   const prontidao = avaliarProntidao(cfg);
+  const prontidaoNfse = avaliarProntidaoNfse(cfg);
   return {
     fiscalAtivo: !!cfg?.fiscalAtivo,
     ambienteFiscal: cfg?.ambienteFiscal || "HOMOLOGACAO",
@@ -82,7 +107,19 @@ function montarResposta(cfg) {
     // CSC mascarado: confirma que existe sem expor o valor.
     cscMascarado: cfg?.cscEnc ? mascarar(safeDecifrarPrefixo(cfg.cscEnc)) : null,
     certificadoRef: cfg?.certificadoRef || null,
+    // Validade do A1 (cacheada pelo cron) + alerta calculado p/ a UI (Onda 5).
+    certificadoValidade: cfg?.certificadoValidade || null,
+    certificadoUltimaChecagem: cfg?.certificadoUltimaChecagem || null,
+    certificadoAlerta: avaliarCertificado(cfg?.certificadoValidade || null),
+    // --- NFS-e (servicos / ISS) ---
+    nfseAtivo: !!cfg?.nfseAtivo,
+    serieNfse: cfg?.serieNfse ?? 1,
+    proximoNumeroNfse: cfg?.proximoNumeroNfse ?? 1,
+    itemListaServicoPadrao: cfg?.itemListaServicoPadrao || null,
+    codTributacaoMunicipioPadrao: cfg?.codTributacaoMunicipioPadrao || null,
+    aliquotaIssPadrao: cfg?.aliquotaIssPadrao != null ? Number(cfg.aliquotaIssPadrao) : null,
     prontidao,
+    prontidaoNfse,
   };
 }
 
@@ -180,6 +217,39 @@ export async function salvarConfig(req, res, next) {
 
     if (b.cscId !== undefined) data.cscId = soDigitos(b.cscId);
 
+    // --- Campos NFS-e (servicos / ISS) ---
+    if (b.serieNfse !== undefined) {
+      const s = Number(b.serieNfse);
+      if (!Number.isInteger(s) || s < 0) {
+        return res.status(400).json({ erro: "Serie da NFS-e deve ser um inteiro >= 0." });
+      }
+      data.serieNfse = s;
+    }
+    if (b.proximoNumeroNfse !== undefined) {
+      const n = Number(b.proximoNumeroNfse);
+      if (!Number.isInteger(n) || n < 1) {
+        return res.status(400).json({ erro: "Proximo numero da NFS-e deve ser um inteiro >= 1." });
+      }
+      data.proximoNumeroNfse = n;
+    }
+    if (b.itemListaServicoPadrao !== undefined) {
+      data.itemListaServicoPadrao = soDigitos(b.itemListaServicoPadrao);
+    }
+    if (b.codTributacaoMunicipioPadrao !== undefined) {
+      data.codTributacaoMunicipioPadrao = norm(b.codTributacaoMunicipioPadrao);
+    }
+    if (b.aliquotaIssPadrao !== undefined) {
+      if (b.aliquotaIssPadrao === null || b.aliquotaIssPadrao === "") {
+        data.aliquotaIssPadrao = null;
+      } else {
+        const a = Number(b.aliquotaIssPadrao);
+        if (!Number.isFinite(a) || a < 0 || a > 100) {
+          return res.status(400).json({ erro: "Aliquota do ISS deve estar entre 0 e 100." });
+        }
+        data.aliquotaIssPadrao = a;
+      }
+    }
+
     // CSC: 16 a 36 chars alfanumericos (Manual DANFE/QR Code §4.6). "" limpa.
     if (b.csc !== undefined) {
       const c = b.csc;
@@ -218,6 +288,22 @@ export async function salvarConfig(req, res, next) {
         }
       }
       data.fiscalAtivo = ligar;
+    }
+
+    // nfseAtivo: mesma logica do fiscalAtivo, mas com a prontidao da NFS-e.
+    if (b.nfseAtivo !== undefined) {
+      const ligar = !!b.nfseAtivo;
+      if (ligar) {
+        const mesclada = { ...existente, ...data };
+        const prontidao = avaliarProntidaoNfse(mesclada);
+        if (!prontidao.pronta) {
+          return res.status(400).json({
+            erro: "Nao e possivel ativar a NFS-e: cadastro incompleto.",
+            faltando: prontidao.faltando,
+          });
+        }
+      }
+      data.nfseAtivo = ligar;
     }
 
     const cfg = await prisma.configuracaoEmpresa.update({

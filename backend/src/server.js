@@ -18,6 +18,9 @@ import vendasRoutes from "./routes/vendas.js";
 import dashboardRoutes from "./routes/dashboard.js";
 import contasPagarRoutes from "./routes/contas-pagar.js";
 import contasReceberRoutes from "./routes/contas-receber.js";
+import planosContasRoutes from "./routes/planos-contas.js";
+import despesasRoutes from "./routes/despesas.js";
+import contabilidadeRoutes from "./routes/contabilidade.js";
 import alertasRoutes from "./routes/alertas.js";
 import relatoriosRoutes from "./routes/relatorios.js";
 import adminRoutes from "./routes/admin.js";
@@ -89,7 +92,9 @@ app.use(cors({
   origin(origin, cb) { cb(null, origemPermitida(origin)); },
   credentials: true,
 }));
-app.use(express.json());
+// 1mb: comporta o XML de NF-e de entrada (upload) com muitos itens — o default
+// (100kb) poderia rejeitar notas grandes com 413.
+app.use(express.json({ limit: "1mb" }));
 
 // Em dev (sem Vercel Blob configurado) servimos os uploads do filesystem
 // para preservar o fluxo local. Em producao, as URLs no banco apontam
@@ -134,6 +139,9 @@ app.use("/vendas", vendasRoutes);
 app.use("/dashboard", dashboardRoutes);
 app.use("/contas-pagar", contasPagarRoutes);
 app.use("/contas-receber", contasReceberRoutes);
+app.use("/planos-contas", planosContasRoutes);
+app.use("/despesas", despesasRoutes);
+app.use("/contabilidade", contabilidadeRoutes);
 app.use("/alertas", alertasRoutes);
 app.use("/relatorios", relatoriosRoutes);
 app.use("/admin", adminRoutes);

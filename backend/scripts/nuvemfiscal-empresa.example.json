@@ -20,5 +20,11 @@
   "certificado_password": "SENHA_DO_CERTIFICADO",
   "ambiente": "homologacao",
   "csc_id": "1",
-  "csc": "CSC_DE_HOMOLOGACAO_DA_SEFAZ_BA"
+  "csc": "CSC_DE_HOMOLOGACAO_DA_SEFAZ_BA",
+  "nfse": {
+    "_comentario": "Opcional. So preencha se for emitir NFS-e. Confira os campos exatos em https://dev.nuvemfiscal.com.br/docs/empresas e se o municipio e suportado (CidadesAtendidas). A inscricao_municipal vem do bloco acima.",
+    "rps": { "lote": 1, "serie": "1", "numero": 1 },
+    "prefeitura": { "login": "", "senha": "", "token": "" },
+    "incentivo_fiscal": false
+  }
 }

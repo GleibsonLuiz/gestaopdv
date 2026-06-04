@@ -3,7 +3,7 @@ import prisma from "../lib/prisma.js";
 import { exigirCaixaAberto, registrarNoCaixaAberto, calcularTotaisCaixa, exigirAutorizacaoGerencial } from "./caixaController.js";
 import { parseDate, calcularValores, gerarSerieRecorrencia } from "../lib/contas.js";
 import { criarComNumeroRetry } from "../lib/proximoNumero.js";
-import { aplicarLimite } from "../lib/planoLimites.js";
+import { verificarLimite } from "../lib/planoLimites.js";
 
 const FORMAS_VALIDAS = new Set([
   "DINHEIRO", "CARTAO_CREDITO", "CARTAO_DEBITO", "PIX", "BOLETO", "CREDIARIO",
@@ -136,6 +136,16 @@ function toNumber(v) {
   return Number.isFinite(n) ? n : NaN;
 }
 
+// Cria um Error com .status (e opcionalmente .body estruturado) para o
+// servico criarVenda sinalizar erros de validacao/regra sem depender de res.
+// O wrapper HTTP (criar) e o webhook do MP traduzem isso para a resposta.
+function erroVenda(status, message, body) {
+  const e = new Error(message);
+  e.status = status;
+  if (body) e.body = body;
+  return e;
+}
+
 // Arredonda quantidade para 3 casas decimais — bate com o tipo
 // Decimal(12,3) usado no schema (ItemVenda.quantidade, Produto.estoque).
 function arredQtd(n) {
@@ -192,44 +202,152 @@ export async function obter(req, res, next) {
   }
 }
 
+// Calcula o total final de uma venda (subtotal dos itens − desconto −
+// desconto de fidelidade) e valida itens + regras de fidelidade. FONTE UNICA
+// de verdade do total — usada por criarVenda E pela cobranca Mercado Pago
+// (validacao pre-charge). Read-only no banco. Lanca erroVenda(.status) em
+// payload invalido. Deve rodar com tenantStorage ativo (usa prisma filtrado).
+export async function calcularTotalVenda({ itens, descontoRaw, pontosResgatarRaw, clienteId }) {
+  if (!Array.isArray(itens) || itens.length === 0) {
+    throw erroVenda(400, "Informe ao menos um item");
+  }
+  const desconto = descontoRaw !== undefined ? toNumber(descontoRaw) : 0;
+  if (desconto === null || Number.isNaN(desconto) || desconto < 0) {
+    throw erroVenda(400, "Desconto invalido");
+  }
+  const pontosParsed = parseInt(pontosResgatarRaw, 10);
+  const pontosResgatar = Number.isFinite(pontosParsed) && pontosParsed > 0 ? pontosParsed : 0;
+
+  const itensNorm = [];
+  for (let i = 0; i < itens.length; i++) {
+    const it = itens[i];
+    const idx = i + 1;
+    if (!it?.produtoId) throw erroVenda(400, `Item ${idx}: produtoId obrigatorio`);
+    const qtdRaw = toNumber(it.quantidade);
+    if (qtdRaw === null || Number.isNaN(qtdRaw) || qtdRaw <= 0) {
+      throw erroVenda(400, `Item ${idx}: quantidade deve ser > 0`);
+    }
+    const qtd = arredQtd(qtdRaw);
+    const preco = toNumber(it.precoUnitario);
+    if (preco === null || Number.isNaN(preco) || preco < 0) {
+      throw erroVenda(400, `Item ${idx}: precoUnitario invalido`);
+    }
+    itensNorm.push({ produtoId: it.produtoId, quantidade: qtd, precoUnitario: preco });
+  }
+
+  const subtotal = itensNorm.reduce((acc, it) => acc + it.quantidade * it.precoUnitario, 0);
+
+  let configFidelidade = null;
+  let descontoFidelidade = 0;
+  if (pontosResgatar > 0) {
+    if (!clienteId) {
+      throw erroVenda(400, "Informe o cliente para resgatar pontos de fidelidade");
+    }
+    configFidelidade = await prisma.configuracaoFidelidade.findFirst();
+    if (!configFidelidade?.ativo) {
+      throw erroVenda(400, "Programa de fidelidade nao esta ativo");
+    }
+    if (pontosResgatar < configFidelidade.minimoResgate) {
+      throw erroVenda(400, `Minimo de resgate: ${configFidelidade.minimoResgate} pontos`);
+    }
+    const pontosDoc = await prisma.pontosCliente.findUnique({ where: { clienteId } });
+    const saldoAtual = pontosDoc?.saldo ?? 0;
+    if (saldoAtual < pontosResgatar) {
+      throw erroVenda(400, `Saldo insuficiente. Disponivel: ${saldoAtual} pontos`);
+    }
+    descontoFidelidade = Math.floor(pontosResgatar / Number(configFidelidade.pontosParaUmReal) * 100) / 100;
+    const limiteDescPct = subtotal * (Number(configFidelidade.maximoDescPct) / 100);
+    if (descontoFidelidade > limiteDescPct + 0.005) {
+      throw erroVenda(400, `Desconto por fidelidade excede o limite de ${configFidelidade.maximoDescPct}% do subtotal`);
+    }
+  }
+
+  const total = Math.max(0, subtotal - desconto - descontoFidelidade);
+  return { itensNorm, desconto, descontoFidelidade, configFidelidade, pontosResgatar, subtotal, total };
+}
+
+// HTTP: POST /vendas — wrapper fino sobre o servico criarVenda.
 export async function criar(req, res, next) {
   try {
-    const { clienteId, observacoes, itens, gerarContaReceber, oportunidadeId } = req.body;
-    const desconto = req.body.desconto !== undefined ? toNumber(req.body.desconto) : 0;
-    const pontosResgatarRaw = parseInt(req.body.pontosResgatar, 10);
-    const pontosResgatar = Number.isFinite(pontosResgatarRaw) && pontosResgatarRaw > 0 ? pontosResgatarRaw : 0;
+    const venda = await criarVenda({
+      body: req.body,
+      userId: req.user.sub,
+      tenantId: req.tenantId,
+    });
+    res.status(201).json(venda);
+  } catch (err) {
+    // Erros de validacao/regra carregam .status (e as vezes .body estruturado,
+    // ex: 402 de limite de plano). O resto vira 500 via next.
+    if (err.status) return res.status(err.status).json(err.body || { erro: err.message });
+    next(err);
+  }
+}
 
-    // Conversao Oportunidade GANHO -> Venda: valida fora da transacao para
-    // falhar rapido antes de qualquer write. Re-checado dentro da transacao
-    // (linha de update) contra race conditions de outro usuario tocando a
-    // oportunidade no meio tempo.
-    if (oportunidadeId) {
-      const op = await prisma.oportunidade.findUnique({
-        where: { id: oportunidadeId },
-        select: { id: true, etapa: true, vendaId: true, clienteId: true, numero: true },
+// SERVICO puro de criacao de venda. Usado pelo controller HTTP acima E pelo
+// webhook do Mercado Pago (aprovacao de pagamento). NAO recebe req/res:
+// recebe os dados ja extraidos e LANCA erros com .status (e .body opcional)
+// em vez de escrever na resposta. Deve rodar dentro de
+// tenantStorage.run({ tenantId }) para o Prisma extension filtrar/inserir
+// com o tenant correto. Retorna a Venda criada (com INCLUDE_DETALHE).
+//
+//   body     — mesmo shape de POST /vendas (clienteId, itens[], pagamentos[],
+//              desconto, observacoes, pontosResgatar, gerarContaReceber, ...)
+//   userId   — operador que originou a venda (auditoria, caixa, movimentacoes)
+//   tenantId — empresa dona da venda
+export async function criarVenda({ body, userId, tenantId }) {
+  const { clienteId, observacoes, itens, gerarContaReceber, oportunidadeId } = body;
+
+  // Conversao Oportunidade GANHO -> Venda: valida fora da transacao para
+  // falhar rapido antes de qualquer write. Re-checado dentro da transacao
+  // (linha de update) contra race conditions de outro usuario tocando a
+  // oportunidade no meio tempo.
+  if (oportunidadeId) {
+    const op = await prisma.oportunidade.findUnique({
+      where: { id: oportunidadeId },
+      select: { id: true, etapa: true, vendaId: true, clienteId: true, numero: true },
+    });
+    if (!op) {
+      throw erroVenda(404, "Oportunidade nao encontrada");
+    }
+    if (op.etapa !== "GANHO") {
+      throw erroVenda(400, "So e possivel converter oportunidades em etapa GANHO");
+    }
+    if (op.vendaId) {
+      throw erroVenda(400, "Oportunidade ja foi convertida em outra venda");
+    }
+    if (op.clienteId && clienteId && op.clienteId !== clienteId) {
+      throw erroVenda(400, "Cliente da venda nao bate com o cliente da oportunidade");
+    }
+  }
+
+  if (!Array.isArray(itens) || itens.length === 0) {
+    throw erroVenda(400, "Informe ao menos um item");
+  }
+  // ETAPA 13: limite mensal de vendas por plano. Sem tenant (cenarios
+  // cross-tenant raros) nao ha limite a aplicar.
+  if (tenantId) {
+    const lim = await verificarLimite(tenantId, "vendasMes");
+    if (!lim.ok) {
+      const msg = `Limite do plano ${lim.plano} atingido: ${lim.atual}/${lim.limite} vendas no mês. Faça upgrade do plano para criar mais.`;
+      throw erroVenda(402, msg, {
+        erro: msg,
+        recurso: lim.recurso,
+        atual: lim.atual,
+        limite: lim.limite,
+        plano: lim.plano,
+        limiteAtingido: true,
       });
-      if (!op) {
-        return res.status(404).json({ erro: "Oportunidade nao encontrada" });
-      }
-      if (op.etapa !== "GANHO") {
-        return res.status(400).json({ erro: "So e possivel converter oportunidades em etapa GANHO" });
-      }
-      if (op.vendaId) {
-        return res.status(400).json({ erro: "Oportunidade ja foi convertida em outra venda" });
-      }
-      if (op.clienteId && clienteId && op.clienteId !== clienteId) {
-        return res.status(400).json({ erro: "Cliente da venda nao bate com o cliente da oportunidade" });
-      }
     }
-
-    if (!Array.isArray(itens) || itens.length === 0) {
-      return res.status(400).json({ erro: "Informe ao menos um item" });
-    }
-    // ETAPA 13: limite mensal de vendas por plano
-    if (!await aplicarLimite(req, res, "vendasMes")) return;
-    if (desconto === null || Number.isNaN(desconto) || desconto < 0) {
-      return res.status(400).json({ erro: "Desconto invalido" });
-    }
+  }
+  // Total + validacao de itens/desconto/fidelidade. FONTE UNICA de verdade
+  // (mesma funcao usada pela cobranca MP para validar o valor pre-charge).
+  const { itensNorm, desconto, configFidelidade, pontosResgatar, total } =
+    await calcularTotalVenda({
+      itens,
+      descontoRaw: body.desconto,
+      pontosResgatarRaw: body.pontosResgatar,
+      clienteId,
+    });
 
     // Validacao basica do bloco financeiro (ContaReceber automatica). A
     // validacao do valor a prazo (baseada no split de pagamentos) acontece
@@ -238,10 +356,10 @@ export async function criar(req, res, next) {
     let configConta = null;
     if (gerarContaReceber) {
       const venc = parseDate(gerarContaReceber.vencimento);
-      if (!venc) return res.status(400).json({ erro: "Vencimento da conta a receber invalido" });
+      if (!venc) throw erroVenda(400, "Vencimento da conta a receber invalido");
       const parcelas = parseInt(gerarContaReceber.parcelas, 10) || 1;
       if (parcelas < 1 || parcelas > 60) {
-        return res.status(400).json({ erro: "Numero de parcelas deve estar entre 1 e 60" });
+        throw erroVenda(400, "Numero de parcelas deve estar entre 1 e 60");
       }
       configConta = {
         vencimento: venc,
@@ -255,63 +373,10 @@ export async function criar(req, res, next) {
       };
     }
 
-    const itensNorm = [];
-    for (let i = 0; i < itens.length; i++) {
-      const it = itens[i];
-      const idx = i + 1;
-      if (!it?.produtoId) return res.status(400).json({ erro: `Item ${idx}: produtoId obrigatorio` });
-      const qtdRaw = toNumber(it.quantidade);
-      if (qtdRaw === null || Number.isNaN(qtdRaw) || qtdRaw <= 0) {
-        return res.status(400).json({ erro: `Item ${idx}: quantidade deve ser > 0` });
-      }
-      const qtd = arredQtd(qtdRaw);
-      const preco = toNumber(it.precoUnitario);
-      if (preco === null || Number.isNaN(preco) || preco < 0) {
-        return res.status(400).json({ erro: `Item ${idx}: precoUnitario invalido` });
-      }
-      itensNorm.push({ produtoId: it.produtoId, quantidade: qtd, precoUnitario: preco });
-    }
-
-    const subtotal = itensNorm.reduce((acc, it) => acc + it.quantidade * it.precoUnitario, 0);
-
-    let configFidelidade = null;
-    let descontoFidelidade = 0;
-    if (pontosResgatar > 0) {
-      if (!clienteId) {
-        return res.status(400).json({ erro: "Informe o cliente para resgatar pontos de fidelidade" });
-      }
-      configFidelidade = await prisma.configuracaoFidelidade.findFirst();
-      if (!configFidelidade?.ativo) {
-        return res.status(400).json({ erro: "Programa de fidelidade nao esta ativo" });
-      }
-      if (pontosResgatar < configFidelidade.minimoResgate) {
-        return res.status(400).json({ erro: `Minimo de resgate: ${configFidelidade.minimoResgate} pontos` });
-      }
-      const pontosDoc = await prisma.pontosCliente.findUnique({ where: { clienteId } });
-      const saldoAtual = pontosDoc?.saldo ?? 0;
-      if (saldoAtual < pontosResgatar) {
-        return res.status(400).json({ erro: `Saldo insuficiente. Disponivel: ${saldoAtual} pontos` });
-      }
-      descontoFidelidade = Math.floor(pontosResgatar / Number(configFidelidade.pontosParaUmReal) * 100) / 100;
-      const limiteDescPct = subtotal * (Number(configFidelidade.maximoDescPct) / 100);
-      if (descontoFidelidade > limiteDescPct + 0.005) {
-        return res.status(400).json({
-          erro: `Desconto por fidelidade excede o limite de ${configFidelidade.maximoDescPct}% do subtotal`,
-        });
-      }
-    }
-
-    const total = Math.max(0, subtotal - desconto - descontoFidelidade);
-
-    // Normaliza/valida o split de pagamentos. Lanca erro 400 se algum
-    // pagamento for invalido ou se a soma nao bater com o total.
-    let splitPagamentos;
-    try {
-      splitPagamentos = normalizarPagamentos(req.body, total);
-    } catch (err) {
-      if (err.status) return res.status(err.status).json({ erro: err.message });
-      throw err;
-    }
+    // Normaliza/valida o split de pagamentos. Lanca erro com .status 400 se
+    // algum pagamento for invalido ou se a soma nao bater com o total — o
+    // erro propaga para o wrapper HTTP (ou para o webhook do MP).
+    const splitPagamentos = normalizarPagamentos(body, total);
     const { pagamentos: pagamentosNorm, formaPrincipal, valorAPrazo } = splitPagamentos;
 
     // CREDIARIO (fiado): exige cliente identificado e respeita o limite de
@@ -322,13 +387,13 @@ export async function criar(req, res, next) {
       .reduce((s, p) => s + Number(p.valor), 0);
     if (valorCrediario > 0) {
       if (!clienteId) {
-        return res.status(400).json({ erro: "Selecione o cliente para vender no crediário (fiado)." });
+        throw erroVenda(400, "Selecione o cliente para vender no crediário (fiado).");
       }
       const cli = await prisma.cliente.findUnique({
         where: { id: clienteId },
         select: { id: true, nome: true, limiteCredito: true },
       });
-      if (!cli) return res.status(404).json({ erro: "Cliente nao encontrado" });
+      if (!cli) throw erroVenda(404, "Cliente nao encontrado");
       if (cli.limiteCredito != null) {
         const agg = await prisma.contaReceber.aggregate({
           where: { clienteId, status: { in: ["PENDENTE", "ATRASADA"] } },
@@ -337,11 +402,15 @@ export async function criar(req, res, next) {
         const saldo = Number(agg._sum.valor || 0);
         const limite = Number(cli.limiteCredito);
         if (saldo + valorCrediario > limite + 0.005) {
-          return res.status(402).json({
-            erro: `Limite de crédito de ${cli.nome} excedido. Limite ${limite.toFixed(2)}, saldo atual ${saldo.toFixed(2)}, disponível ${Math.max(0, limite - saldo).toFixed(2)}.`,
-            limiteExcedido: true,
-            limite, saldo, disponivel: Math.max(0, limite - saldo),
-          });
+          throw erroVenda(
+            402,
+            `Limite de crédito de ${cli.nome} excedido. Limite ${limite.toFixed(2)}, saldo atual ${saldo.toFixed(2)}, disponível ${Math.max(0, limite - saldo).toFixed(2)}.`,
+            {
+              erro: `Limite de crédito de ${cli.nome} excedido. Limite ${limite.toFixed(2)}, saldo atual ${saldo.toFixed(2)}, disponível ${Math.max(0, limite - saldo).toFixed(2)}.`,
+              limiteExcedido: true,
+              limite, saldo, disponivel: Math.max(0, limite - saldo),
+            },
+          );
         }
       }
     }
@@ -351,16 +420,13 @@ export async function criar(req, res, next) {
     // valorAPrazo, NAO o total — ex: R$ 60 PIX + R$ 40 CREDIARIO gera conta
     // de R$ 40.
     if (configConta && valorAPrazo <= 0) {
-      return res.status(400).json({
-        erro: "Nenhuma forma de pagamento do split permite gerar conta a receber",
-      });
+      throw erroVenda(400, "Nenhuma forma de pagamento do split permite gerar conta a receber");
     }
 
-    try {
-      // Defesa explicita: nao deixa registrar venda sem caixa aberto.
-      const caixaAtivo = await exigirCaixaAberto(req.user.sub);
+    // Defesa explicita: nao deixa registrar venda sem caixa aberto.
+    const caixaAtivo = await exigirCaixaAberto(userId);
 
-      const venda = await prisma.$transaction(async (tx) => {
+    const venda = await prisma.$transaction(async (tx) => {
         if (clienteId) {
           const c = await tx.cliente.findUnique({ where: { id: clienteId } });
           if (!c) {
@@ -393,12 +459,12 @@ export async function criar(req, res, next) {
         // Numero sequencial por tenant (ETAPA 8). Retry em race condition.
         // Venda.formaPagamento (legado) recebe a forma de MAIOR valor do
         // split — preserva filtros/relatorios existentes.
-        const vendaCriada = await criarComNumeroRetry(tx.venda, req.tenantId, (numero) =>
+        const vendaCriada = await criarComNumeroRetry(tx.venda, tenantId, (numero) =>
           tx.venda.create({
             data: {
               numero,
               clienteId: clienteId || null,
-              userId: req.user.sub,
+              userId,
               caixaId: caixaAtivo.id,
               formaPagamento: formaPrincipal,
               status: "CONCLUIDA",
@@ -432,7 +498,7 @@ export async function criar(req, res, next) {
         // composicao real do recebimento.
         for (const p of pagamentosNorm) {
           const sufixoForma = pagamentosNorm.length > 1 ? ` (${p.forma})` : "";
-          await registrarNoCaixaAberto(tx, req.user.sub, {
+          await registrarNoCaixaAberto(tx, userId, {
             tipo: "VENDA",
             formaPagamento: p.forma,
             valor: p.valor,
@@ -475,7 +541,7 @@ export async function criar(req, res, next) {
               estoqueDepois: depois,
               motivo: `VENDA #${vendaCriada.numero}`,
               produtoId: it.produtoId,
-              userId: req.user.sub,
+              userId,
             },
           });
         }
@@ -497,7 +563,7 @@ export async function criar(req, res, next) {
               descricao: `RESGATE NA VENDA #${vendaCriada.numero}`,
               clienteId,
               vendaId: vendaCriada.id,
-              userId: req.user.sub,
+              userId,
             },
           });
         }
@@ -553,7 +619,7 @@ export async function criar(req, res, next) {
                   descricao: `GANHO NA VENDA #${vendaCriada.numero}`,
                   clienteId,
                   vendaId: vendaCriada.id,
-                  userId: req.user.sub,
+                  userId,
                 },
               });
             }
@@ -598,16 +664,9 @@ export async function criar(req, res, next) {
           where: { id: vendaCriada.id },
           include: INCLUDE_DETALHE,
         });
-      }, TX_OPTS);
+    }, TX_OPTS);
 
-      res.status(201).json(venda);
-    } catch (err) {
-      if (err.status) return res.status(err.status).json({ erro: err.message });
-      throw err;
-    }
-  } catch (err) {
-    next(err);
-  }
+    return venda;
 }
 
 // Reabre uma venda CONCLUIDA para que ADMIN/GERENTE altere a forma de

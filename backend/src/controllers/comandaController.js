@@ -11,7 +11,7 @@
 // =====================================================================
 import prisma from "../lib/prisma.js";
 import { aplicarLimite } from "../lib/planoLimites.js";
-import { criar as criarVenda } from "./vendaController.js";
+import { criarVenda } from "./vendaController.js";
 import { registrar as sseRegistrar, broadcast as sseBroadcast } from "../lib/sseHub.js";
 import jwt from "jsonwebtoken";
 
@@ -491,18 +491,21 @@ export async function finalizar(req, res, next) {
       })),
     };
 
-    let vendaId = null;
-    const reqFake = { body: payloadVenda, user: req.user, tenantId: req.tenantId };
-    const resFake = {
-      _status: 201, _body: null,
-      status(s) { this._status = s; return this; },
-      json(j) { this._body = j; },
-    };
-    await criarVenda(reqFake, resFake, (e) => { throw e; });
-    if (resFake._status !== 201) {
-      return res.status(resFake._status).json(resFake._body);
+    // Cria a Venda real via servico puro criarVenda (baixa de estoque, pontos,
+    // conta a receber, etc.). Em request autenticado o tenantStorage ja esta
+    // ativo — o Prisma extension filtra/insere no tenant. Sem fakeReq/fakeRes.
+    let vendaCriada;
+    try {
+      vendaCriada = await criarVenda({
+        body: payloadVenda,
+        userId: req.user.sub,
+        tenantId: req.tenantId,
+      });
+    } catch (err) {
+      if (err.status) return res.status(err.status).json(err.body || { erro: err.message });
+      throw err;
     }
-    vendaId = resFake._body?.id || null;
+    const vendaId = vendaCriada?.id || null;
 
     const finalizada = await prisma.comanda.update({
       where: { id: c.id },
@@ -517,7 +520,7 @@ export async function finalizar(req, res, next) {
       include: INCLUDE_DETALHE,
     });
     sseBroadcast(req.tenantId, "concluida", { id: finalizada.id, numero: finalizada.numero });
-    res.json({ comanda: finalizada, venda: resFake._body });
+    res.json({ comanda: finalizada, venda: vendaCriada });
   } catch (err) { next(err); }
 }
 

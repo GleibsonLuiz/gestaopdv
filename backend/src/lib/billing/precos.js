@@ -53,6 +53,21 @@ export function valorDoPlano(plano) {
   return p ? p.valorMensal : null;
 }
 
+// Reverse-lookup: plano cujo valorMensal bate com o valor informado. Usado pelo
+// webhook para promover o plano (entitlement) SO quando o pagamento confirma —
+// nunca antes. Retorna null se nenhum plano bater (ex: valor negociado pelo
+// super-admin); nesse caso o webhook mantem o plano atual. Depende de os precos
+// em PRECOS_PLANO serem UNICOS — mantenha assim.
+export function planoPorValor(valorMensal) {
+  if (valorMensal == null) return null;
+  const v = Number(valorMensal);
+  if (!Number.isFinite(v)) return null;
+  for (const [plano, info] of Object.entries(PRECOS_PLANO)) {
+    if (Math.abs(Number(info.valorMensal) - v) < 0.005) return plano;
+  }
+  return null;
+}
+
 // Catalogo pronto para o frontend montar a tela de escolha de plano.
 export function catalogoPublico() {
   return Object.entries(PRECOS_PLANO).map(([plano, info]) => ({

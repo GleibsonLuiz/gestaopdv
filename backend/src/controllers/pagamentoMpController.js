@@ -11,7 +11,7 @@ import {
   cancelarPagamento,
   listarDevices,
 } from "../lib/mercadoPago.js";
-import { criar as criarVendaController } from "./vendaController.js";
+import { criarVenda, calcularTotalVenda } from "./vendaController.js";
 
 const TIPOS_MP_VALIDOS = new Set(["CREDIT", "DEBIT", "PIX"]);
 
@@ -25,11 +25,28 @@ const TIPO_PARA_FORMA = {
   PIX:    "PIX",
 };
 
+// Idade minima (ms) da intencao antes de o polling consultar o MP como
+// fallback do webhook. Abaixo disso confiamos que o webhook ainda chega.
+const POLLING_FALLBACK_MS = 4000;
+
 // ============ HELPERS ============
 
-function somarPagamentos(pagamentos) {
+// Soma os valores do split JA EM CENTAVOS. Converter cada parcela para
+// inteiro ANTES de somar evita drift de ponto flutuante (ex: 0.1 + 0.2).
+function somarPagamentosCents(pagamentos) {
   if (!Array.isArray(pagamentos)) return 0;
-  return pagamentos.reduce((acc, p) => acc + (Number(p?.valor) || 0), 0);
+  return pagamentos.reduce(
+    (acc, p) => acc + Math.round((Number(p?.valor) || 0) * 100),
+    0,
+  );
+}
+
+// Formata um erro do cliente MP para a string `detalhe` exibida ao operador
+// e gravada na intencao. Centraliza o padrao "[MP <status>] <msg>".
+function formatarErroMp(err) {
+  return err instanceof MercadoPagoError
+    ? `[MP ${err.status}] ${err.message}`
+    : `[MP] ${err.message}`;
 }
 
 // Recupera config + valida que esta configurada para a feature pedida.
@@ -230,9 +247,7 @@ export async function listarDispositivos(req, res, next) {
     try {
       resp = await listarDevices({ accessToken });
     } catch (errMp) {
-      const detalhe = errMp instanceof MercadoPagoError
-        ? `[MP ${errMp.status}] ${errMp.message}`
-        : `[MP] ${errMp.message}`;
+      const detalhe = formatarErroMp(errMp);
       return res.status(502).json({
         erro: "Falha ao consultar dispositivos no Mercado Pago",
         detalhe,
@@ -271,11 +286,30 @@ export async function cobrar(req, res, next) {
     if (!Array.isArray(payload.itens) || payload.itens.length === 0) {
       return res.status(400).json({ erro: "vendaPayload.itens vazio" });
     }
-    const totalReais = somarPagamentos(payload.pagamentos);
-    if (!(totalReais > 0)) {
+    const amountCents = somarPagamentosCents(payload.pagamentos);
+    if (!(amountCents > 0)) {
       return res.status(400).json({ erro: "Total da venda invalido" });
     }
-    const amountCents = Math.round(totalReais * 100);
+    const totalReais = amountCents / 100;
+
+    // M1 (defesa em profundidade): o valor a cobrar = soma do que o cliente
+    // mandou em pagamentos[]. Validamos que bate com o total REAL da venda
+    // (itens − desconto − fidelidade), pela MESMA funcao usada por criarVenda.
+    // Sem isso, um payload divergente cobraria um valor que depois falharia
+    // ao registrar a venda no webhook — dinheiro cobrado e preso numa intencao
+    // ERROR. Falhar ANTES de cobrar e fail-safe. Erros de validacao do payload
+    // (itens/desconto/fidelidade) tambem sobem por aqui via .status no catch.
+    const totalCalc = await calcularTotalVenda({
+      itens: payload.itens,
+      descontoRaw: payload.desconto,
+      pontosResgatarRaw: payload.pontosResgatar,
+      clienteId: payload.clienteId,
+    });
+    if (Math.abs(Math.round(totalCalc.total * 100) - amountCents) > 1) {
+      return res.status(400).json({
+        erro: `Valor a cobrar (R$ ${(amountCents / 100).toFixed(2)}) nao confere com o total da venda (R$ ${totalCalc.total.toFixed(2)}). Refaca a venda.`,
+      });
+    }
 
     // Sobrescreve pagamentos[] com 1 unico pagamento na forma correspondente
     // ao tipo escolhido na maquininha. Garante que a Venda criada apos
@@ -352,9 +386,7 @@ export async function cobrar(req, res, next) {
           idempotencyKey: intencao.id,
         });
       } catch (errMp) {
-        const detalhe = errMp instanceof MercadoPagoError
-          ? `[MP ${errMp.status}] ${errMp.message}`
-          : `[MP] ${errMp.message}`;
+        const detalhe = formatarErroMp(errMp);
         await prisma.intencaoPagamentoMP.update({
           where: { id: intencao.id },
           data: { status: "ERROR", detalhe },
@@ -404,9 +436,7 @@ export async function cobrar(req, res, next) {
         idempotencyKey: intencao.id,
       });
     } catch (errMp) {
-      const detalhe = errMp instanceof MercadoPagoError
-        ? `[MP ${errMp.status}] ${errMp.message}`
-        : `[MP] ${errMp.message}`;
+      const detalhe = formatarErroMp(errMp);
       // "payment.type does not match: credit_card" no debito normalmente
       // significa payload invalido (installments/installments_cost enviados
       // junto com debit_card) — ja corrigido em mercadoPago.js. Se ainda
@@ -433,6 +463,15 @@ export async function cobrar(req, res, next) {
 
     // Atualiza com o intent_id recebido pelo MP.
     const intentId = intentMp?.id || null;
+    if (!intentId) {
+      // Sem intentId nao da pra casar via metadata.payment_intent_id; se o
+      // Point tambem nao propagar external_reference, a intencao fica orfa.
+      // Logamos para o operador/monitoramento notar (caso raro).
+      console.warn(
+        `[MP] payment-intent criada sem id retornado (intencao ${intencao.id}). ` +
+        `Reconciliacao dependera de external_reference.`,
+      );
+    }
     await prisma.intencaoPagamentoMP.update({
       where: { id: intencao.id },
       data: { intentId },
@@ -462,7 +501,6 @@ export async function obterStatus(req, res, next) {
   try {
     const intencao = await prisma.intencaoPagamentoMP.findUnique({
       where: { id: req.params.id },
-      include: { /* venda eh via FK opcional, leitura abaixo */ },
     });
     if (!intencao) return res.status(404).json({ erro: "Intencao nao encontrada" });
 
@@ -479,7 +517,7 @@ export async function obterStatus(req, res, next) {
     // como se o webhook tivesse chegado.
     const agora = Date.now();
     const idadeMs = agora - new Date(intencao.createdAt).getTime();
-    if (intencao.status === "PENDING" && intencao.intentId && idadeMs > 4000) {
+    if (intencao.status === "PENDING" && intencao.intentId && idadeMs > POLLING_FALLBACK_MS) {
       try {
         const intent = intencao.tipo === "PIX"
           ? await consultarPaymentPix(intencao)
@@ -614,30 +652,48 @@ export async function cancelar(req, res, next) {
           });
         }
       } catch (err) {
-        // Mesmo se MP recusar cancel (ex: ja finalizou), prosseguimos
-        // marcando como CANCELED localmente — o webhook eventual vai
-        // corrigir o status se aprovar de fato.
         if (err instanceof MercadoPagoError && (err.status === 409 || err.status === 400)) {
-          // Conflict / bad_request: PIX ja aprovado nao deixa cancelar.
+          // Conflict / bad_request: o pagamento ja finalizou no MP e nao
+          // permite mais cancelar. NAO marcamos CANCELED — o webhook/polling
+          // vai trazer o status real (provavelmente APPROVED).
           return res.status(409).json({
             erro: "Pagamento ja finalizou no Mercado Pago. Aguarde o status final.",
           });
         }
+        // Falha AMBIGUA (rede, timeout, 5xx): nao sabemos se o MP cancelou ou
+        // se o pagamento foi aprovado. Marcar CANCELED localmente aqui era um
+        // bug grave: se tivesse sido aprovado, o webhook chegaria depois e a
+        // guarda `status !== PENDING` impediria a criacao da Venda — dinheiro
+        // cobrado, venda perdida. Entao mantemos PENDING e devolvemos 502; o
+        // proximo polling/webhook resolve para o estado verdadeiro.
+        return res.status(502).json({
+          erro: "Nao foi possivel confirmar o cancelamento no Mercado Pago. Aguarde o status atualizar.",
+          detalhe: formatarErroMp(err),
+        });
       }
     }
 
-    const atualizada = await prisma.intencaoPagamentoMP.update({
-      where: { id: intencao.id },
-      data: {
-        status: "CANCELED",
-        detalhe: "Cancelada pelo operador",
-      },
+    // Claim atomico PENDING->CANCELED. Se um webhook de aprovacao venceu a
+    // corrida no meio tempo, count=0 e devolvemos o status real sem
+    // sobrescrever a aprovacao.
+    const claim = await prisma.intencaoPagamentoMP.updateMany({
+      where: { id: intencao.id, status: "PENDING" },
+      data: { status: "CANCELED", detalhe: "Cancelada pelo operador" },
     });
+    if (claim.count === 0) {
+      const atual = await prisma.intencaoPagamentoMP.findUnique({
+        where: { id: intencao.id },
+        select: { status: true, detalhe: true },
+      });
+      return res.status(409).json({
+        erro: `Intencao ja esta em status ${atual?.status || "finalizado"}`,
+      });
+    }
 
     res.json({
-      id: atualizada.id,
-      status: atualizada.status,
-      detalhe: atualizada.detalhe,
+      id: intencao.id,
+      status: "CANCELED",
+      detalhe: "Cancelada pelo operador",
     });
   } catch (err) {
     if (err.status) return res.status(err.status).json({ erro: err.message });
@@ -792,22 +848,35 @@ async function processarPaymentNotificacao({ tenantId, paymentId, accessToken })
     throw e;
   }
   if (intencao.status !== "PENDING") {
-    // Ja processado — webhook duplicado, idempotente.
+    // Fast path: ja finalizado — webhook duplicado, idempotente.
     return;
   }
 
   const status = String(payment?.status || "").toLowerCase();
+
   if (status === "approved") {
-    await aprovarIntencao({
-      intencao,
-      tenantId,
-      paymentRaw: payment,
+    // CLAIM ATOMICO. O PDV faz polling a cada 2s E o MP entrega o webhook
+    // (com re-tentativas em timeout) — varias execucoes podem chegar aqui
+    // com a intencao ainda PENDING ao mesmo tempo. O updateMany condicional
+    // e atomico por linha no Postgres: apenas UMA move PENDING->APPROVED e
+    // recebe count=1; as concorrentes recebem count=0 e abortam. Sem isso,
+    // duas execucoes criariam DUAS Vendas (estoque baixado em dobro).
+    const claim = await prismaRaw.intencaoPagamentoMP.updateMany({
+      where: { id: intencao.id, tenantId, status: "PENDING" },
+      data: { status: "APPROVED" },
     });
+    if (claim.count === 0) return; // outra execucao ja assumiu — idempotente
+    // Vencemos o claim: criamos a Venda. aprovarIntencao faz o update final
+    // (vendaId + rawWebhook) em sucesso, ou marca ERROR em falha.
+    await aprovarIntencao({ intencao, tenantId, paymentRaw: payment });
   } else if (status === "rejected" || status === "cancelled" || status === "canceled") {
-    await prismaRaw.intencaoPagamentoMP.update({
-      where: { id: intencao.id },
+    // Mesma protecao para o ramo terminal negativo: claim atomico evita
+    // sobrescrever um APPROVED que tenha vencido a corrida.
+    const novoStatus = status === "rejected" ? "REJECTED" : "CANCELED";
+    await prismaRaw.intencaoPagamentoMP.updateMany({
+      where: { id: intencao.id, tenantId, status: "PENDING" },
       data: {
-        status: status === "rejected" ? "REJECTED" : "CANCELED",
+        status: novoStatus,
         detalhe: payment?.status_detail || `Pagamento ${status}`,
         rawWebhook: payment,
       },
@@ -818,51 +887,19 @@ async function processarPaymentNotificacao({ tenantId, paymentId, accessToken })
 }
 
 async function aprovarIntencao({ intencao, tenantId, paymentRaw }) {
-  // Garante que rodamos a criacao de venda DENTRO do tenantStorage para o
-  // Prisma extension filtrar/inserir com o tenantId correto.
+  // Cria a Venda chamando o SERVICO puro criarVenda direto — sem fabricar
+  // req/res nem elevar role. Roda dentro de tenantStorage.run para o Prisma
+  // extension filtrar/inserir com o tenant correto (o AsyncLocalStorage
+  // preserva o contexto atraves dos awaits internos de criarVenda).
   let vendaCriada;
   try {
-    vendaCriada = await new Promise((resolve, reject) => {
-      let respondeu = false;
-      const fakeReq = {
+    vendaCriada = await tenantStorage.run({ tenantId }, () =>
+      criarVenda({
         body: intencao.vendaPayloadJson,
-        user: {
-          sub: intencao.userId,
-          role: "ADMIN", // o controller faz check de role so em alguns lugares;
-                         // como veio de uma cobranca ja autorizada, elevamos para
-                         // nao bloquear filtros internos. Auditoria fica no
-                         // userId real.
-          tid: tenantId,
-        },
+        userId: intencao.userId,
         tenantId,
-        query: {},
-      };
-      const fakeRes = {
-        _status: 200,
-        status(code) { this._status = code; return this; },
-        json(data) {
-          if (respondeu) return;
-          respondeu = true;
-          if (this._status >= 400) {
-            reject(Object.assign(new Error(data?.erro || "Erro ao criar venda"), {
-              status: this._status, body: data,
-            }));
-          } else {
-            resolve(data);
-          }
-        },
-      };
-      const fakeNext = (err) => {
-        if (respondeu) return;
-        respondeu = true;
-        reject(err || new Error("Erro desconhecido em criarVenda"));
-      };
-
-      tenantStorage.run({ tenantId }, () => {
-        Promise.resolve(criarVendaController(fakeReq, fakeRes, fakeNext))
-          .catch((e) => { if (!respondeu) { respondeu = true; reject(e); } });
-      });
-    });
+      }),
+    );
   } catch (err) {
     // Aprovacao do MP mas falha ao criar a Venda local (ex: estoque
     // insuficiente, conta a receber invalida). Marca a intencao com ERROR

@@ -2,7 +2,7 @@ import prisma, { prismaRaw } from "../lib/prisma.js";
 import { registrarEvento } from "../middlewares/auditoria.js";
 import { compararSegredo } from "../lib/timingSafe.js";
 import {
-  PRECOS_PLANO, catalogoPublico, ehPlanoAssinavel, valorDoPlano, DIAS_CARENCIA,
+  PRECOS_PLANO, catalogoPublico, ehPlanoAssinavel, valorDoPlano, planoPorValor, DIAS_CARENCIA,
 } from "../lib/billing/precos.js";
 import { getProvedor, provedorAtivo, cobrancaHabilitada } from "../lib/billing/provedor.js";
 
@@ -141,6 +141,27 @@ export async function assinarPlano(req, res, next) {
     const empresa = await prisma.empresa.findUnique({ where: { id: req.tenantId } });
     if (!empresa) return res.status(404).json({ erro: "Empresa nao encontrada" });
 
+    // A1/M3: evita assinatura duplicada e subscription orfa. Se ja ha uma
+    // assinatura ATIVA vinculada, bloqueia — trocar de plano e fluxo do suporte
+    // (assinar de novo criaria uma 2a subscription no gateway cobrando o cliente
+    // em paralelo, e o webhook so rastreia a mais recente).
+    if (empresa.statusAssinatura === "ATIVA" && empresa.gatewayAssinaturaId) {
+      return res.status(409).json({
+        erro: "Esta empresa ja possui uma assinatura ativa. Fale com o suporte para trocar de plano.",
+      });
+    }
+    // Se havia uma assinatura anterior (inadimplente/cancelada) ainda viva no
+    // gateway, cancela ANTES de criar a nova — senao a antiga continuaria
+    // gerando cobrancas em paralelo (subscription orfa).
+    if (empresa.gatewayAssinaturaId && empresa.gatewayProvedor) {
+      try {
+        const provedorAnterior = getProvedor(empresa.gatewayProvedor);
+        await provedorAnterior.cancelarAssinatura({ assinaturaId: empresa.gatewayAssinaturaId });
+      } catch (e) {
+        console.error("Falha ao cancelar assinatura anterior (segue criando a nova):", e.message);
+      }
+    }
+
     // Email de cobranca = email do admin que esta contratando.
     const usuario = await prisma.user.findUnique({
       where: { id: req.user.sub },
@@ -158,11 +179,14 @@ export async function assinarPlano(req, res, next) {
     const cobranca = resultado.primeiraCobranca;
     const pago = cobranca?.status === "PAGA";
 
-    // Atualiza o vinculo + plano. Se a 1a cobranca ja foi paga (mock), ativa e
-    // empurra expiraEm. Se PENDENTE (asaas), mantem o acesso atual — a ativacao
-    // vem pelo webhook quando o cliente pagar.
+    // Atualiza o vinculo. valorMensal/gateway ids sao gravados ja (necessarios
+    // para o webhook casar e promover o plano). MAS o `plano` (entitlement que
+    // dita os limites em planoLimites) NAO e promovido aqui quando o pagamento
+    // esta PENDENTE — senao o cliente ganharia os limites do plano superior sem
+    // ter pago (A2). Se a 1a cobranca ja foi paga (mock), ativa, promove o plano
+    // e empurra expiraEm. Se PENDENTE (asaas), o plano e promovido no webhook
+    // quando o cliente pagar.
     const dataEmpresa = {
-      plano,
       valorMensal,
       gatewayProvedor: resultado.provedor,
       gatewayClienteId: resultado.clienteId,
@@ -170,6 +194,7 @@ export async function assinarPlano(req, res, next) {
       proximaCobrancaEm: resultado.proximaCobrancaEm || null,
     };
     if (pago) {
+      dataEmpresa.plano = plano;
       dataEmpresa.statusAssinatura = "ATIVA";
       dataEmpresa.ativo = true;
       dataEmpresa.ultimoPagamentoEm = cobranca.pagoEm || new Date();
@@ -228,6 +253,13 @@ export async function webhook(req, res) {
   try {
     const provedor = getProvedor();
 
+    // B1: o mock nao recebe webhooks reais (o verificarAssinaturaWebhook dele
+    // retorna sempre true). Se a plataforma esta em mock, ignora qualquer POST
+    // aqui para nunca processar um evento forjado.
+    if (provedorAtivo() === "mock") {
+      return res.json({ ignorado: true, motivo: "provedor mock nao processa webhook" });
+    }
+
     if (!provedor.verificarAssinaturaWebhook({ headers: req.headers, body: req.body })) {
       return res.status(401).json({ erro: "Assinatura de webhook invalida" });
     }
@@ -285,11 +317,23 @@ export async function webhook(req, res) {
     if (!jaProcessadaComMesmoStatus) {
       const dataEmpresa = {};
       if (evt.status === "PAGA") {
+        // M1 (defesa em profundidade): registra divergencia entre o valor pago
+        // e o valorMensal do plano. Nao bloqueia (o Asaas pode ter desconto/
+        // valor proporcional configurado), mas deixa rastro para auditoria.
+        if (evt.valor != null && empresa.valorMensal != null
+            && Math.abs(Number(evt.valor) - Number(empresa.valorMensal)) > 0.01) {
+          console.warn(`[BILLING] valor pago (${evt.valor}) difere do plano (${Number(empresa.valorMensal)}) — assinatura ${evt.assinaturaId}`);
+        }
         dataEmpresa.statusAssinatura = "ATIVA";
         dataEmpresa.ativo = true;
         dataEmpresa.ultimoPagamentoEm = evt.pagoEm || new Date();
         dataEmpresa.expiraEm = proximaValidade(empresa.expiraEm);
         dataEmpresa.proximaCobrancaEm = maisDias(new Date(), CICLO_DIAS);
+        // A2: promove o plano (entitlement) SO agora que o pagamento confirmou.
+        // Deriva do valorMensal contratado (gravado no assinar; precos unicos).
+        // null = valor negociado/desconhecido -> mantem o plano atual.
+        const planoPago = planoPorValor(empresa.valorMensal);
+        if (planoPago) dataEmpresa.plano = planoPago;
       } else if (evt.status === "VENCIDA") {
         dataEmpresa.statusAssinatura = "INADIMPLENTE";
       } else if (evt.status === "CANCELADA") {

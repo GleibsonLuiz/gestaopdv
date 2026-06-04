@@ -154,7 +154,8 @@ export async function cancelarAssinatura({ assinaturaId }) {
 export function verificarAssinaturaWebhook({ headers }) {
   const esperado = process.env.ASAAS_WEBHOOK_TOKEN;
   if (!esperado) return false; // sem token configurado, recusa por seguranca
-  const recebido = headers?.["asaas-access-token"] || headers?.["Asaas-Access-Token"] || "";
+  // O Node sempre entrega os nomes de header em minusculo.
+  const recebido = headers?.["asaas-access-token"] || "";
   return compararSegredo(String(recebido), String(esperado));
 }
 

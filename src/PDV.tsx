@@ -25,6 +25,7 @@ import { imprimirViaBluetooth, bluetoothDisponivel } from "./lib/webBluetoothPri
 import { getEmpresa } from "./lib/api";
 import { gerarLink } from "./lib/templates";
 import { ehUnidadePeso, pesoGramasParaEstoque, resolverEtiquetaBalanca, PRESETS_PESO_G } from "./lib/unidades";
+import { ignorarErro } from "./lib/erroSilencioso";
 
 function urlImagem(imagem) {
   if (!imagem) return null;
@@ -510,41 +511,41 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
         setCaixaAtual(r.caixa);
         if (r.tipoCaixa) setTipoCaixa(r.tipoCaixa);
       })
-      .catch(() => setCaixaAtual(null));
+      .catch(ignorarErro("caixaAtual", () => setCaixaAtual(null)));
   }, []);
 
   const recarregarPainel = useCallback(() => {
     return api.obterPainelPDV()
       .then(setPainel)
-      .catch(() => {});
+      .catch(ignorarErro("dados"));
   }, []);
 
   const recarregarFormasCustom = useCallback(() => {
     return api.listarFormasPagamento({ ativo: "true" })
       .then(lista => setFormasCustom(Array.isArray(lista) ? lista : []))
-      .catch(() => setFormasCustom([]));
+      .catch(ignorarErro("formasPagamento", () => setFormasCustom([])));
   }, []);
 
   const recarregarEspera = useCallback(() => {
     return api.listarVendasEspera()
       .then(lista => setVendasEspera(Array.isArray(lista) ? lista : []))
-      .catch(() => {});
+      .catch(ignorarErro("dados"));
   }, []);
 
   useEffect(() => {
-    api.listarProdutos({ ativo: "true" }).then(setProdutos).catch(() => {});
-    api.listarClientes({ ativo: "true" }).then(setClientes).catch(() => {});
+    api.listarProdutos({ ativo: "true" }).then(setProdutos).catch(ignorarErro("produtos"));
+    api.listarClientes({ ativo: "true" }).then(setClientes).catch(ignorarErro("clientes"));
     recarregarCaixa().finally(() => setCaixaCarregando(false));
     recarregarPainel();
     recarregarFormasCustom();
     recarregarEspera();
-    api.obterConfiguracaoFidelidade().then(setConfigFidelidade).catch(() => {});
+    api.obterConfiguracaoFidelidade().then(setConfigFidelidade).catch(ignorarErro("configuracaoFidelidade"));
     // Carrega config Mercado Pago Point. Em erro (sem config ainda, 403 sem
     // permissao) cai pro estado "nao configurada" — botao da maquininha
     // simplesmente nao aparece.
     api.obterConfigMp()
       .then(setConfigMp)
-      .catch(() => setConfigMp({ configurada: false, mpAtivo: false }));
+      .catch(ignorarErro("configMercadoPago", () => setConfigMp({ configurada: false, mpAtivo: false })));
   }, [recarregarCaixa, recarregarPainel, recarregarFormasCustom, recarregarEspera]);
 
   useEffect(() => {
@@ -554,7 +555,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
     if (clienteId && configFidelidade?.ativo) {
       api.pontosFidelidade(clienteId)
         .then(d => setSaldoPontos(d.saldo ?? 0))
-        .catch(() => setSaldoPontos(null));
+        .catch(ignorarErro("saldoPontos", () => setSaldoPontos(null)));
     }
     // Crediario do cliente (saldo/limite). Best-effort: se o modulo nao estiver
     // no plano ou o user sem permissao, simplesmente nao mostra.
@@ -568,7 +569,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
           vencido: d.vencido ?? 0,
           acimaDoLimite: d.acimaDoLimite,
         }))
-        .catch(() => setCrediarioCliente(null));
+        .catch(ignorarErro("crediarioCliente", () => setCrediarioCliente(null)));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clienteId]);
@@ -3000,7 +3001,7 @@ function ModalAbrirCaixaPDV({ onCancelar, onSucesso }) {
   useEffect(() => {
     api.sugerirTrocoCaixa()
       .then(r => { setSugestao(r); setSaldoInicial(String(r.sugestao ?? 0)); })
-      .catch(() => setSaldoInicial("0"));
+      .catch(ignorarErro("saldoInicial", () => setSaldoInicial("0")));
     setTimeout(() => saldoRef.current?.focus(), 80);
   }, []);
 
@@ -3448,7 +3449,7 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpr
     let ativo = true;
     api.obterConfigFiscal()
       .then((c: any) => { if (ativo) setFiscalAtivo(!!c?.fiscalAtivo); })
-      .catch(() => {});
+      .catch(ignorarErro("dados"));
     return () => { ativo = false; };
   }, []);
 

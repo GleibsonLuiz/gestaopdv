@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, type CSSProperties } from "react";
 import { C } from "./lib/theme";
 import { api } from "./lib/api";
+import { ignorarErro } from "./lib/erroSilencioso";
 import HeaderRelatorio, { useConfiguracaoEmpresa } from "./HeaderRelatorio";
 import { useModalKeys } from "./lib/modalKeys";
 import { obterConfigImpressora, devePrintar, imprimirDocumento } from "./lib/impressora";
@@ -581,7 +582,7 @@ function ModalAbrir({ onCancelar, onSucesso }: any) {
     api.sugerirTrocoCaixa().then((r: any) => {
       setSugestao(r);
       setSaldoInicial(String(r.sugestao || 0));
-    }).catch(() => setSaldoInicial("0"));
+    }).catch(ignorarErro("trocoCaixa", () => setSaldoInicial("0")));
   }, []);
 
   async function salvar(e: any) {

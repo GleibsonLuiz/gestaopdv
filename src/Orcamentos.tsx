@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { C } from "./lib/theme";
 import { api, BASE_URL, type SessionUser } from "./lib/api";
+import { ignorarErro } from "./lib/erroSilencioso";
 import ActionsMenu from "./components/ActionsMenu";
 import SelectBusca from "./components/SelectBusca";
 import type { ConfiguracaoEmpresa } from "./Configuracoes";
@@ -266,11 +267,11 @@ export default function Orcamentos({ user }: OrcamentosProps) {
   useEffect(() => { carregar(); }, [carregar]);
 
   useEffect(() => {
-    api.listarClientes({ ativo: "true" }).then((r) => setClientes((r as Cliente[]) || [])).catch(() => {});
-    api.listarProdutos({ ativo: "true" }).then((r) => setProdutos((r as Produto[]) || [])).catch(() => {});
-    api.obterConfiguracao().then((r) => setEmpresa(r as ConfiguracaoEmpresa)).catch(() => {});
+    api.listarClientes({ ativo: "true" }).then((r) => setClientes((r as Cliente[]) || [])).catch(ignorarErro("clientes"));
+    api.listarProdutos({ ativo: "true" }).then((r) => setProdutos((r as Produto[]) || [])).catch(ignorarErro("produtos"));
+    api.obterConfiguracao().then((r) => setEmpresa(r as ConfiguracaoEmpresa)).catch(ignorarErro("configuracao"));
     if (user.role === "ADMIN") {
-      api.listarFuncionarios({ ativo: "true" }).then((r) => setFuncionarios((r as Funcionario[]) || [])).catch(() => {});
+      api.listarFuncionarios({ ativo: "true" }).then((r) => setFuncionarios((r as Funcionario[]) || [])).catch(ignorarErro("funcionarios"));
     }
   }, [user.role]);
 
@@ -532,7 +533,7 @@ export default function Orcamentos({ user }: OrcamentosProps) {
           onAtualizar={(msg) => {
             api.obterOrcamento(detalhe.id)
               .then((r) => setDetalhe(r as Orcamento))
-              .catch(() => setDetalhe(null));
+              .catch(ignorarErro("orcamento", () => setDetalhe(null)));
             carregar();
             if (msg) flash(msg);
           }}

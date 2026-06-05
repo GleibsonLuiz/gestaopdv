@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, type CSSProperties, type FormEvent } from "react";
 import { C } from "./lib/theme";
 import { api, type SessionUser } from "./lib/api";
+import { ignorarErro } from "./lib/erroSilencioso";
 import ActionsMenu from "./components/ActionsMenu";
 
 // ============ HELPERS ============
@@ -120,10 +121,10 @@ function TarefaModal({ tarefa, onFechar, onSalvo }: TarefaModalProps) {
     // (ex: cliente sem permissao) nao zere a outra lista.
     api.listarResponsaveis()
       .then((r) => setFuncionarios((r as FuncionarioRef[]) || []))
-      .catch(() => setFuncionarios([]));
+      .catch(ignorarErro("funcionarios", () => setFuncionarios([])));
     api.listarClientes({ ativo: "true" })
       .then((r) => setClientes((r as ClienteRef[]) || []))
-      .catch(() => setClientes([]));
+      .catch(ignorarErro("clientes", () => setClientes([])));
   }, []);
 
   useEffect(() => {

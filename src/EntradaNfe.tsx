@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { C } from "./lib/theme";
 import { api, type SessionUser } from "./lib/api";
 import { emitirToast } from "./lib/toast";
+import { ignorarErro } from "./lib/erroSilencioso";
 import { fmtBRL, fmtData } from "./components/cupons/fmt";
 
 // Entrada de NF-e de fornecedor (importacao de compra). Fluxo:
@@ -96,13 +97,13 @@ export default function EntradaNfe({ user }: { user: SessionUser }) {
 
   useEffect(() => { carregar(); }, [carregar]);
   useEffect(() => {
-    api.listarProdutos({ ativo: "true" }).then((r) => setProdutos((r as Produto[]) || [])).catch(() => {});
-    api.listarFornecedores({ ativo: "true" }).then((r) => setFornecedores((r as Fornecedor[]) || [])).catch(() => {});
+    api.listarProdutos({ ativo: "true" }).then((r) => setProdutos((r as Produto[]) || [])).catch(ignorarErro("produtos"));
+    api.listarFornecedores({ ativo: "true" }).then((r) => setFornecedores((r as Fornecedor[]) || [])).catch(ignorarErro("fornecedores"));
   }, []);
 
   const carregarDFe = useCallback(() => {
     setCarregandoDFe(true);
-    api.listarDfe({ limit: 200 }).then((r) => setDocsDFe(r as DocDFe[])).catch(() => {}).finally(() => setCarregandoDFe(false));
+    api.listarDfe({ limit: 200 }).then((r) => setDocsDFe(r as DocDFe[])).catch(ignorarErro("dfe")).finally(() => setCarregandoDFe(false));
   }, []);
   useEffect(() => { if (aba === "sefaz") carregarDFe(); }, [aba, carregarDFe]);
 

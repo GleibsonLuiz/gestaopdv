@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, type CSSProperties, type FormEvent } from "react";
 import { C } from "./lib/theme";
 import { api, type SessionUser } from "./lib/api";
+import { ignorarErro } from "./lib/erroSilencioso";
 
 // ============ HELPERS ============
 
@@ -327,7 +328,7 @@ function AbaConsultar({ user }: AbaProps) {
   useEffect(() => {
     api.listarClientes({ ativo: "true" })
       .then((lista) => setClientes(Array.isArray(lista) ? (lista as ClienteRef[]) : []))
-      .catch(() => {});
+      .catch(ignorarErro("dados"));
   }, []);
 
   const clientesFiltrados = clientes.filter((c) => {

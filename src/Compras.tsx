@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { C } from "./lib/theme";
 import { api, type SessionUser } from "./lib/api";
+import { ignorarErro } from "./lib/erroSilencioso";
 import ActionsMenu from "./components/ActionsMenu";
 import SelectBusca from "./components/SelectBusca";
 import {
@@ -171,8 +172,8 @@ export default function Compras({ user }: ComprasProps) {
   useEffect(() => { carregar(); }, [carregar]);
 
   useEffect(() => {
-    api.listarFornecedores({ ativo: "true" }).then((r) => setFornecedores((r as Fornecedor[]) || [])).catch(() => {});
-    api.listarProdutos({ ativo: "true" }).then((r) => setProdutos((r as Produto[]) || [])).catch(() => {});
+    api.listarFornecedores({ ativo: "true" }).then((r) => setFornecedores((r as Fornecedor[]) || [])).catch(ignorarErro("fornecedores"));
+    api.listarProdutos({ ativo: "true" }).then((r) => setProdutos((r as Produto[]) || [])).catch(ignorarErro("produtos"));
   }, []);
 
   function flash(t: string) {

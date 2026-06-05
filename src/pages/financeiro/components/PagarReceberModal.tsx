@@ -3,6 +3,7 @@ import ModalShell, {
   Alerta, BtnPrimario, BtnSecundario, Campo, Input, Select,
 } from "./ModalShell";
 import { api } from "../../../lib/api";
+import { ignorarErro } from "../../../lib/erroSilencioso";
 
 const GerenciarFormasModal = lazy(() =>
   import("../../../Financeiro").then(m => ({ default: m.GerenciarFormasModal }))
@@ -91,13 +92,13 @@ export default function PagarReceberModal({
         const arr = Array.isArray(lista) ? lista : ((lista as { caixas?: Caixa[] })?.caixas || []);
         setCaixasAbertos(arr as Caixa[]);
       })
-      .catch(() => setCaixasAbertos([]));
+      .catch(ignorarErro("caixasAbertos", () => setCaixasAbertos([])));
   }, []);
 
   const recarregarFormas = useCallback(() => {
     return api.listarFormasPagamento({ ativo: "true" })
       .then((lista: unknown) => setFormasCustom(Array.isArray(lista) ? (lista as FormaCustom[]) : []))
-      .catch(() => setFormasCustom([]));
+      .catch(ignorarErro("formasPagamento", () => setFormasCustom([])));
   }, []);
 
   useEffect(() => { recarregarFormas(); }, [recarregarFormas]);

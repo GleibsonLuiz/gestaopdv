@@ -10,6 +10,7 @@ import { FormularioLuxuoso, Secao, Linha, Campo as CampoLux } from "./components
 import SelectBusca from "./components/SelectBusca";
 import { Abas } from "./components/AbasFormulario";
 import { UNIDADES_MEDIDA, SIGLAS_UNIDADE } from "./lib/unidades";
+import { ignorarErro } from "./lib/erroSilencioso";
 
 // ============ TIPOS ============
 
@@ -321,9 +322,9 @@ export default function Produtos({ user }: ProdutosProps) {
   }, [carregar]);
 
   useEffect(() => {
-    api.listarCategorias().then((r) => setCategorias((r as Categoria[]) || [])).catch(() => {});
-    api.listarFornecedores({ ativo: "true" }).then((r) => setFornecedores((r as Fornecedor[]) || [])).catch(() => {});
-    api.listarFabricantes().then((r) => setFabricantes((r as Fabricante[]) || [])).catch(() => {});
+    api.listarCategorias().then((r) => setCategorias((r as Categoria[]) || [])).catch(ignorarErro("categorias"));
+    api.listarFornecedores({ ativo: "true" }).then((r) => setFornecedores((r as Fornecedor[]) || [])).catch(ignorarErro("fornecedores"));
+    api.listarFabricantes().then((r) => setFabricantes((r as Fabricante[]) || [])).catch(ignorarErro("fabricantes"));
   }, []);
 
   function flash(texto: string) {

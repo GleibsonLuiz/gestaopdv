@@ -4,6 +4,7 @@ import { C } from "./lib/theme";
 import type { SessionUser, SegmentoEmpresa } from "./lib/api";
 import { gerarComandosPedido } from "./lib/escposPedido";
 import { imprimirViaBluetooth, bluetoothDisponivel } from "./lib/webBluetoothPrint";
+import { ignorarErro } from "./lib/erroSilencioso";
 
 // =====================================================================
 // ETAPA#8b — Central de Comandas (Kanban /painel-comandas)
@@ -1280,7 +1281,7 @@ function ModalDetalheComanda({ comanda, onFechar, onAtualizar }: {
   const [erroAdd, setErroAdd] = useState("");
   useEffect(() => {
     if (!comanda.itens) {
-      api.obterComanda(comanda.id).then(c => setCompleta(c as Comanda)).catch(() => {});
+      api.obterComanda(comanda.id).then(c => setCompleta(c as Comanda)).catch(ignorarErro("comanda"));
     }
   }, [comanda]);
 

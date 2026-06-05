@@ -6,6 +6,7 @@ import { C } from "./lib/theme";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { api, BASE_URL } from "./lib/api";
+import { ignorarErro } from "./lib/erroSilencioso";
 import HeaderRelatorio, { formatarEndereco, obterConfiguracaoCache } from "./HeaderRelatorio.jsx";
 import { urlLogotipo } from "./Configuracoes";
 import SelectBusca from "./components/SelectBusca.jsx";
@@ -172,8 +173,8 @@ function RelatorioVendas() {
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
-    api.listarClientes({ ativo: "true" }).then(setClientes).catch(() => {});
+    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(ignorarErro("funcionarios"));
+    api.listarClientes({ ativo: "true" }).then(setClientes).catch(ignorarErro("clientes"));
   }, []);
 
   const gerar = useCallback(async () => {
@@ -342,7 +343,7 @@ function RelatorioCompras() {
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarFornecedores({ ativo: "true" }).then(setFornecedores).catch(() => {});
+    api.listarFornecedores({ ativo: "true" }).then(setFornecedores).catch(ignorarErro("fornecedores"));
   }, []);
 
   const gerar = useCallback(async () => {
@@ -467,8 +468,8 @@ function RelatorioFinanceiro() {
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarClientes({ ativo: "true" }).then(setClientes).catch(() => {});
-    api.listarFornecedores({ ativo: "true" }).then(setFornecedores).catch(() => {});
+    api.listarClientes({ ativo: "true" }).then(setClientes).catch(ignorarErro("clientes"));
+    api.listarFornecedores({ ativo: "true" }).then(setFornecedores).catch(ignorarErro("fornecedores"));
   }, []);
 
   const gerar = useCallback(async () => {
@@ -651,8 +652,8 @@ function RelatorioEstoque() {
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarCategorias().then(setCategorias).catch(() => {});
-    api.listarFornecedores({ ativo: "true" }).then(setFornecedores).catch(() => {});
+    api.listarCategorias().then(setCategorias).catch(ignorarErro("categorias"));
+    api.listarFornecedores({ ativo: "true" }).then(setFornecedores).catch(ignorarErro("fornecedores"));
   }, []);
 
   const gerar = useCallback(async () => {
@@ -761,8 +762,8 @@ function RelatorioProdutosFabricante() {
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarFabricantes().then(setFabricantes).catch(() => {});
-    api.listarCategorias().then(setCategorias).catch(() => {});
+    api.listarFabricantes().then(setFabricantes).catch(ignorarErro("fabricantes"));
+    api.listarCategorias().then(setCategorias).catch(ignorarErro("categorias"));
   }, []);
 
   const gerar = useCallback(async () => {
@@ -1026,8 +1027,8 @@ function RelatorioLucratividade() {
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarCategorias().then(setCategorias).catch(() => {});
-    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
+    api.listarCategorias().then(setCategorias).catch(ignorarErro("categorias"));
+    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(ignorarErro("funcionarios"));
   }, []);
 
   const gerar = useCallback(async () => {
@@ -1177,7 +1178,7 @@ function RelatorioComissoesLista() {
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
+    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(ignorarErro("funcionarios"));
   }, []);
 
   const gerar = useCallback(async () => {
@@ -1325,7 +1326,7 @@ function RelatorioFunilCrm() {
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
+    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(ignorarErro("funcionarios"));
   }, []);
 
   const gerar = useCallback(async () => {
@@ -1605,7 +1606,7 @@ function RelatorioPerformanceCrm() {
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
+    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(ignorarErro("funcionarios"));
   }, []);
 
   const gerar = useCallback(async () => {
@@ -1821,7 +1822,7 @@ function RelatorioPerdasCrm() {
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
+    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(ignorarErro("funcionarios"));
   }, []);
 
   const gerar = useCallback(async () => {
@@ -2220,7 +2221,7 @@ function RelatorioForecastCrm() {
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
+    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(ignorarErro("funcionarios"));
   }, []);
 
   const gerar = useCallback(async () => {
@@ -2523,7 +2524,7 @@ function RelatorioAtividadesCrm() {
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
+    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(ignorarErro("funcionarios"));
   }, []);
 
   const gerar = useCallback(async () => {
@@ -2834,7 +2835,7 @@ function RelatorioNpsCrm() {
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
+    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(ignorarErro("funcionarios"));
   }, []);
 
   const gerar = useCallback(async () => {
@@ -3144,7 +3145,7 @@ function RelatorioCarteiraCrm() {
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarTags().then(setTags).catch(() => {});
+    api.listarTags().then(setTags).catch(ignorarErro("tags"));
   }, []);
 
   const gerar = useCallback(async () => {

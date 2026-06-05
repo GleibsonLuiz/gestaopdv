@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, type CSSProperties, type ReactNode } from "react";
 import { C } from "./lib/theme";
 import { api } from "./lib/api";
+import { ignorarErro } from "./lib/erroSilencioso";
 import BotoesContatoCliente from "./components/BotoesContatoCliente";
 import type { TipoMensagem } from "./lib/templates";
 
@@ -107,7 +108,7 @@ export default function Reativacao({ user }: ReativacaoProps) {
   useEffect(() => {
     api.listarTemplates({ ativo: "true" })
       .then((t) => setTemplates((t as Template[]) || []))
-      .catch(() => setTemplates([]));
+      .catch(ignorarErro("templates", () => setTemplates([])));
   }, []);
 
   return (

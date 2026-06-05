@@ -4,6 +4,7 @@ import { api, BASE_URL, getUser } from "./lib/api";
 import ActionsMenu from "./components/ActionsMenu";
 import { useConfiguracaoEmpresa } from "./HeaderRelatorio";
 import { obterConfigImpressora, devePrintar, imprimirDocumento } from "./lib/impressora";
+import { ignorarErro } from "./lib/erroSilencioso";
 import CupomEnvelope from "./components/cupons/CupomEnvelope.jsx";
 import CupomReciboFinanceiro from "./components/cupons/CupomReciboFinanceiro.jsx";
 
@@ -125,7 +126,7 @@ function ListaContas({ tipo, podeEditar }: any) {
     const promise = ehPagar
       ? api.listarFornecedores({ ativo: "true" })
       : api.listarClientes({ ativo: "true" });
-    promise.then((data: any) => setEntidades(Array.isArray(data) ? data : [])).catch(() => {});
+    promise.then((data: any) => setEntidades(Array.isArray(data) ? data : [])).catch(ignorarErro("dados"));
   }, [ehPagar]);
 
   function flash(t: string) {
@@ -847,13 +848,13 @@ export function PagarReceberModal({ tipo, conta, podeEditar, onCancelar, onConfi
       .then((lista: any) => {
         setCaixasAbertos(Array.isArray(lista) ? lista : (lista?.caixas || []));
       })
-      .catch(() => setCaixasAbertos([]));
+      .catch(ignorarErro("caixasAbertos", () => setCaixasAbertos([])));
   }, []);
 
   const recarregarFormasCustom = useCallback(() => {
     return api.listarFormasPagamento({ ativo: "true" })
       .then((lista: any) => setFormasCustom(Array.isArray(lista) ? lista : []))
-      .catch(() => setFormasCustom([]));
+      .catch(ignorarErro("formasPagamento", () => setFormasCustom([])));
   }, []);
 
   useEffect(() => { recarregarFormasCustom(); }, [recarregarFormasCustom]);

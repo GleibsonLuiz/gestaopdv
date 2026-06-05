@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { C } from "./lib/theme";
 import { api } from "./lib/api";
+import { ignorarErro } from "./lib/erroSilencioso";
 
 type AcaoLog =
   | "CREATE" | "UPDATE" | "DELETE"
@@ -199,8 +200,8 @@ export default function Logs() {
   }, [carregar]);
 
   useEffect(() => {
-    api.filtrosLogs().then((r) => setOpcoesFiltro(r as OpcoesFiltro)).catch(() => {});
-    api.resumoLogs().then((r) => setResumo(r as ResumoLogs)).catch(() => {});
+    api.filtrosLogs().then((r) => setOpcoesFiltro(r as OpcoesFiltro)).catch(ignorarErro("logs"));
+    api.resumoLogs().then((r) => setResumo(r as ResumoLogs)).catch(ignorarErro("logs"));
   }, []);
 
   function atualizarFiltro<K extends keyof Filtros>(chave: K, valor: Filtros[K]) {

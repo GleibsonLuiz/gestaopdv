@@ -8,6 +8,7 @@ import FiltersBar from "./components/FiltersBar";
 import BillsTable, { type Bill, type BillBucket } from "./components/BillsTable";
 import { api } from "../../lib/api";
 import type { SessionUser } from "../../lib/api";
+import { ignorarErro } from "../../lib/erroSilencioso";
 import ContaModal from "./components/ContaModal";
 import PagarReceberModal from "./components/PagarReceberModal";
 import AnexosModal from "./components/AnexosModal";
@@ -362,7 +363,7 @@ function ContaModalReloader({ tipo, onFechar }: ContaModalReloaderProps) {
     const promise = tipo === "pagar"
       ? api.listarFornecedores({ ativo: "true" })
       : api.listarClientes({ ativo: "true" });
-    promise.then((d) => setEntidades((d as Entidade[]) || [])).catch(() => {});
+    promise.then((d) => setEntidades((d as Entidade[]) || [])).catch(ignorarErro("dados"));
   }, [tipo]);
 
   return (
@@ -434,7 +435,7 @@ function ContasView({ tipo, podeEditar, onContas }: ContasViewProps) {
     const promise = ehPagar
       ? api.listarFornecedores({ ativo: "true" })
       : api.listarClientes({ ativo: "true" });
-    promise.then((d) => setEntidades((d as Entidade[]) || [])).catch(() => {});
+    promise.then((d) => setEntidades((d as Entidade[]) || [])).catch(ignorarErro("dados"));
   }, [ehPagar]);
 
   useEffect(() => {

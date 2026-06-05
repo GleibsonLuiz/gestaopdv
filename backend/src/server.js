@@ -180,8 +180,20 @@ app.use("/ordens-servico", ordensServicoRoutes);
 app.use("/cron", cronRoutes);
 
 app.use((err, req, res, _next) => {
-  console.error(err);
-  res.status(500).json({ erro: "Erro interno do servidor" });
+  // Erros de dominio/validacao vindos dos controllers (err.status definido
+  // explicitamente, ex: 400, 404, 409, 422) sao repassados ao cliente com
+  // a mensagem original — nao sao falhas inesperadas.
+  const status = typeof err.status === "number" && err.status >= 400 && err.status < 600
+    ? err.status
+    : 500;
+
+  if (status === 500) {
+    console.error("[erro-nao-tratado]", err);
+  }
+
+  const payload = { erro: status === 500 ? "Erro interno do servidor" : (err.message || "Erro interno do servidor") };
+  if (err.body && status !== 500) payload.detalhes = err.body;
+  res.status(status).json(payload);
 });
 
 // Listen apenas quando rodado direto (npm run dev). Quando importado pelo

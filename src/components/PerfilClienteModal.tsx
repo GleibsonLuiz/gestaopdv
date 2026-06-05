@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import type { FormEvent } from "react";
 import { C } from "../lib/theme";
 import { api } from "../lib/api";
+import { ignorarErro } from "../lib/erroSilencioso";
 import BotoesContatoCliente from "./BotoesContatoCliente";
 import { CLASSIFICACOES_SCORE, corDoScore, type ClassificacaoScore } from "../lib/scoring";
 
@@ -1027,7 +1028,7 @@ export default function PerfilClienteModal({ clienteId, onFechar, user }: Perfil
   useEffect(() => {
     api.listarTemplates({ ativo: "true" })
       .then((d) => setTemplates((d as any[]) || []))
-      .catch(() => setTemplates([]));
+      .catch(ignorarErro("templates", () => setTemplates([])));
   }, []);
 
   useEffect(() => {

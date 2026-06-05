@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, type CSSProperties } from "react";
 import { C } from "./lib/theme";
 import { api, type SessionUser } from "./lib/api";
+import { ignorarErro } from "./lib/erroSilencioso";
 import MovimentarEstoqueModal from "./MovimentarEstoqueModal";
 import SelectBusca from "./components/SelectBusca";
 
@@ -112,7 +113,7 @@ export default function Estoque({ user }: EstoqueProps) {
   useEffect(() => {
     api.listarProdutos({ ativo: "true" })
       .then((r) => setProdutos((r as Produto[]) || []))
-      .catch(() => {});
+      .catch(ignorarErro("dados"));
   }, []);
 
   function flash(t: string) {

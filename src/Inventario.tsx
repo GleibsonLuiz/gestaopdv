@@ -4,6 +4,7 @@ import { api, type SessionUser } from "./lib/api";
 import ActionsMenu from "./components/ActionsMenu";
 import QrMobileModal from "./components/QrMobileModal";
 import { gerarFolhaCegaPdf, type FolhaCegaPayload, type EmpresaParaCabecalho } from "./lib/folhaCegaPdf";
+import { ignorarErro } from "./lib/erroSilencioso";
 import { obterConfiguracaoCache } from "./HeaderRelatorio";
 
 // Lazy: a folha de contagem so e carregada quando o usuario clica em
@@ -109,7 +110,7 @@ export default function Inventario({ user }: InventarioProps) {
   useEffect(() => { carregar(); }, [carregar]);
 
   useEffect(() => {
-    api.listarCategorias().then((r) => setCategorias((r as Categoria[]) || [])).catch(() => {});
+    api.listarCategorias().then((r) => setCategorias((r as Categoria[]) || [])).catch(ignorarErro("categorias"));
   }, []);
 
   function flash(t: string) {

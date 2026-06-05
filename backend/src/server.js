@@ -57,6 +57,17 @@ import { auditoria } from "./middlewares/auditoria.js";
 
 dotenv.config();
 
+// Fail fast: variaveis criticas devem existir antes de aceitar requests.
+// JWT_SECRET indefinido faria jwt.sign/verify aceitar `undefined` como
+// chave, permitindo forjar tokens trivialmente.
+const REQUIRED_ENV = ["JWT_SECRET"];
+for (const name of REQUIRED_ENV) {
+  if (!process.env[name]) {
+    console.error(`FATAL: variavel de ambiente ${name} nao definida. Abortando.`);
+    process.exit(1);
+  }
+}
+
 const app = express();
 const PORT = process.env.PORT || 3333;
 
@@ -72,13 +83,11 @@ app.use(helmet({
 // CORS: libera o dominio do front (FRONTEND_URL), os deploys da Vercel
 // (*.vercel.app — cobre producao e previews) e localhost (dev). Requests
 // sem header Origin (curl, health checks, server-to-server) passam.
-// FRONTEND_URL="*" mantem o modo "libera geral" como escape de emergencia.
 // Antes refletia QUALQUER origem; agora so as confiaveis.
 const FRONTEND_URL = process.env.FRONTEND_URL;
 
 function origemPermitida(origin) {
   if (!origin) return true;               // sem Origin (curl, same-origin, SSR)
-  if (FRONTEND_URL === "*") return true;  // escape explicito: libera geral
   if (FRONTEND_URL && origin === FRONTEND_URL) return true;
   try {
     const host = new URL(origin).hostname;

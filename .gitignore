@@ -29,6 +29,9 @@ atualizacao.md
 image.png
 
 # Arquivos com credenciais — NUNCA versionar
+.env
+.env.*
+!.env.example
 senha.rtf
 *.rtf
 secrets.txt

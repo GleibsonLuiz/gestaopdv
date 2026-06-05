@@ -5,6 +5,7 @@ import "./styles/login.css";
 import "./styles/pdv.css";
 import { inicializarTema, C } from "./lib/theme";
 import PwaUpdateBanner from "./components/PwaUpdateBanner";
+import IndicadorRede from "./components/IndicadorRede";
 
 // Lazy split entre os 2 apps. Como o roteamento e decidido sincronicamente
 // pelo path, so um dos chunks e baixado no carregamento inicial.
@@ -38,6 +39,7 @@ function TelaCarregando() {
 createRoot(root).render(
   <StrictMode>
     <PwaUpdateBanner />
+    <IndicadorRede />
     <Suspense fallback={<TelaCarregando />}>
       {isAdminMaster ? <AdminMasterApp /> : <App />}
     </Suspense>

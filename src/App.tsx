@@ -3,7 +3,6 @@ import { C, hidratarAparenciaDoUser } from "./lib/theme";
 import Alertas from "./Alertas";
 import { getUser, getToken, clearSession, setEmpresa, api } from "./lib/api";
 import { podeAcessar, moduloNoPlano } from "./lib/permissoes";
-import IndicadorRede from "./components/IndicadorRede";
 import { TELA_AJUDA } from "./Ajuda";
 
 // Todas as telas sao lazy — cada uma vira um chunk separado e so e baixada
@@ -381,13 +380,11 @@ export default function App() {
   if (modoMobile === "inventario" && user) return (
     <Suspense fallback={<TelaCarregando />}>
       <InventarioMobile />
-      <IndicadorRede />
     </Suspense>
   );
   if (modoMobile === "pdv-volante" && user) return (
     <Suspense fallback={<TelaCarregando />}>
       <PdvVolante />
-      <IndicadorRede />
     </Suspense>
   );
 
@@ -406,7 +403,6 @@ export default function App() {
   if (!user) return (
     <Suspense fallback={<TelaCarregando />}>
       <Login onSuccess={(u: any) => { setUser(u); hidratarPreferencias(u); }} />
-      <IndicadorRede />
     </Suspense>
   );
 
@@ -440,7 +436,6 @@ export default function App() {
             onContextoConsumido={() => setPdvContexto(null)}
           />
         </Suspense>
-        <IndicadorRede />
       </div>
     );
   }
@@ -1027,7 +1022,6 @@ export default function App() {
           />
         </Suspense>
       )}
-      <IndicadorRede />
     </div>
   );
 }

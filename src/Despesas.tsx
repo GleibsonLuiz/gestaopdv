@@ -1,10 +1,7 @@
 // Despesas.tsx — lancamento rapido de despesas operacionais (cafe, agua,
-// limpeza, etc.), classificadas pelo Plano de Contas. Pensado para ser tao
-// rapido quanto mandar um WhatsApp: valor em destaque, categorias recentes em
-// 1 toque, foto do comprovante opcional. Lista as despesas do periodo com
-// filtro por categoria. (Modulo DESPESAS — backend /despesas + /planos-contas.)
+// limpeza, etc.), classificadas pelo Plano de Contas.
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { C } from "./lib/theme";
 import { api, type SessionUser } from "./lib/api";
 
@@ -51,11 +48,9 @@ export default function Despesas({ user }: { user: SessionUser }) {
   const [erro, setErro] = useState("");
   const [ok, setOk] = useState("");
 
-  // Filtros da lista (default: mes corrente).
   const inicioMes = useMemo(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10); }, []);
   const [fInicio, setFInicio] = useState(inicioMes);
   const [fFim, setFFim] = useState(hojeISO());
-  const [fCategoria, setFCategoria] = useState("");
 
   const podeEditar = user.role === "ADMIN" || user.role === "GERENTE";
 
@@ -74,17 +69,15 @@ export default function Despesas({ user }: { user: SessionUser }) {
   const carregarDespesas = useCallback(async () => {
     setCarregando(true); setErro("");
     try {
-      const r = await api.listarDespesas({ dataInicio: fInicio, dataFim: fFim, planoContaId: fCategoria }) as Despesa[];
+      const r = await api.listarDespesas({ dataInicio: fInicio, dataFim: fFim }) as Despesa[];
       setDespesas(r || []);
     } catch (e) { setErro((e as Error).message); }
     finally { setCarregando(false); }
-  }, [fInicio, fFim, fCategoria]);
+  }, [fInicio, fFim]);
 
   useEffect(() => { carregarContas(); }, [carregarContas]);
   useEffect(() => { carregarDespesas(); }, [carregarDespesas]);
 
-  // Categorias usadas com mais frequencia nas despesas carregadas — viram chips
-  // de 1 toque no formulario (atalho para o gasto recorrente).
   const recentes = useMemo(() => {
     const freq = new Map<string, number>();
     for (const d of despesas) {
@@ -136,22 +129,17 @@ export default function Despesas({ user }: { user: SessionUser }) {
           recentes={recentes}
           onSalvo={aposSalvar}
           onErro={setErro}
+          onContaCriada={carregarContas}
         />
       )}
 
-      {/* Filtros */}
-      <div style={{ ...card(), display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+      {/* Filtros — apenas periodo */}
+      <div style={{ ...card(), display: "flex", gap: 12, alignItems: "flex-end" }}>
         <Campo label="De">
-          <input type="date" value={fInicio} onChange={e => setFInicio(e.target.value)} style={input()} />
+          <input type="date" value={fInicio} onChange={e => setFInicio(e.target.value)} style={{ ...input(), width: 150 }} />
         </Campo>
         <Campo label="Até">
-          <input type="date" value={fFim} onChange={e => setFFim(e.target.value)} style={input()} />
-        </Campo>
-        <Campo label="Categoria">
-          <select value={fCategoria} onChange={e => setFCategoria(e.target.value)} style={input()}>
-            <option value="">Todas</option>
-            {analiticas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-          </select>
+          <input type="date" value={fFim} onChange={e => setFFim(e.target.value)} style={{ ...input(), width: 150 }} />
         </Campo>
       </div>
 
@@ -161,7 +149,7 @@ export default function Despesas({ user }: { user: SessionUser }) {
           <div style={{ color: C.muted, padding: 24, textAlign: "center" }}>Carregando…</div>
         ) : despesas.length === 0 ? (
           <div style={{ color: C.muted, padding: 24, textAlign: "center" }}>
-            Nenhuma despesa no período. {podeEditar ? "Lance a primeira acima 👆" : ""}
+            Nenhuma despesa no período. {podeEditar ? "Lance a primeira acima." : ""}
           </div>
         ) : (
           <div style={{ overflowX: "auto" }}>
@@ -211,11 +199,12 @@ export default function Despesas({ user }: { user: SessionUser }) {
 
 // ============ FORMULARIO DE LANCAMENTO RAPIDO ============
 
-function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
+function LancarDespesa({ contas, recentes, onSalvo, onErro, onContaCriada }: {
   contas: PlanoConta[];
   recentes: string[];
   onSalvo: () => void;
   onErro: (msg: string) => void;
+  onContaCriada: () => void;
 }) {
   const [valor, setValor] = useState("");
   const [planoContaId, setPlanoContaId] = useState("");
@@ -226,13 +215,12 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
   const [salvando, setSalvando] = useState(false);
   const [lendo, setLendo] = useState(false);
   const [origemOcr, setOrigemOcr] = useState(false);
+  const [erroLocal, setErroLocal] = useState("");
+  const [modalCategoria, setModalCategoria] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const chips = contas.filter(c => recentes.includes(c.id));
 
-  // OCR: envia o comprovante, a IA le e devolvemos os campos sugeridos para
-  // pre-preencher. O usuario confere e confirma — nunca grava sozinho. Falha
-  // silenciosa: se a IA nao responder, segue no preenchimento manual.
   async function lerComprovante(file: File) {
     setLendo(true); onErro("");
     try {
@@ -253,15 +241,14 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
 
   function aoEscolherArquivo(f: File | null) {
     setArquivo(f);
-    // Foto dispara OCR automatico; PDF tambem (a IA aceita documento).
     if (f) lerComprovante(f);
   }
 
   async function salvar() {
     const v = Number(String(valor).replace(",", "."));
-    if (!v || v <= 0) { onErro("Informe um valor maior que zero."); return; }
-    if (!planoContaId) { onErro("Escolha uma categoria."); return; }
-    setSalvando(true); onErro("");
+    if (!v || v <= 0) { setErroLocal("Informe um valor maior que zero."); return; }
+    if (!planoContaId) { setErroLocal("Escolha uma categoria."); return; }
+    setSalvando(true); setErroLocal(""); onErro("");
     try {
       await api.criarDespesa(
         { valor: v, planoContaId, data, descricao, formaPagamento, origem: origemOcr ? "OCR" : "MANUAL" },
@@ -275,28 +262,77 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
     finally { setSalvando(false); }
   }
 
+  function aoCategoriaCriada(id: string) {
+    setModalCategoria(false);
+    setPlanoContaId(id);
+    setErroLocal("");
+    onContaCriada();
+  }
+
   return (
     <div style={{ ...card(), borderColor: C.accent }}>
-      <div style={{ fontWeight: 700, color: C.white, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ fontWeight: 700, color: C.white, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
         <span>⚡</span> Lançar despesa
       </div>
 
-      {/* Valor em destaque */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <span style={{ color: C.muted, fontSize: 22, fontWeight: 700 }}>R$</span>
-        <input
-          type="text" inputMode="decimal" placeholder="0,00" value={valor} autoFocus
-          onChange={e => setValor(e.target.value.replace(/[^0-9.,]/g, ""))}
-          onKeyDown={e => { if (e.key === "Enter") salvar(); }}
-          style={{ ...input(), fontSize: 32, fontWeight: 800, color: C.text, padding: "8px 12px", width: 220 }}
-        />
+      {/* Grid principal: Valor | Categoria | Data | Forma */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "120px 1fr 150px 120px",
+        gap: 12,
+        alignItems: "end",
+      }}>
+        {/* Valor */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={labelStyle}>Valor *</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ color: C.muted, fontSize: 13, fontWeight: 600 }}>R$</span>
+            <input
+              type="text" inputMode="decimal" placeholder="0,00" value={valor} autoFocus
+              onChange={e => { setValor(e.target.value.replace(/[^0-9.,]/g, "")); setErroLocal(""); }}
+              onKeyDown={e => { if (e.key === "Enter") salvar(); }}
+              style={{ ...input(), fontWeight: 700 }}
+            />
+          </div>
+        </div>
+
+        {/* Categoria */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={labelStyle}>Categoria *</span>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <select value={planoContaId}
+              onChange={e => { setPlanoContaId(e.target.value); setErroLocal(""); }}
+              style={{ ...input(), flex: 1 }}>
+              <option value="">Selecione…</option>
+              {contas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+            <button type="button" onClick={() => setModalCategoria(true)}
+              title="Nova categoria"
+              style={btnIcon}>+</button>
+          </div>
+        </div>
+
+        {/* Data */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={labelStyle}>Data</span>
+          <input type="date" value={data} onChange={e => setData(e.target.value)} style={input()} />
+        </div>
+
+        {/* Forma */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={labelStyle}>Forma</span>
+          <select value={formaPagamento} onChange={e => setFormaPagamento(e.target.value)} style={input()}>
+            {FORMAS.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+          </select>
+        </div>
       </div>
 
       {/* Chips de categorias recentes */}
       {chips.length > 0 && (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
           {chips.map(c => (
-            <button key={c.id} type="button" onClick={() => setPlanoContaId(c.id)}
+            <button key={c.id} type="button"
+              onClick={() => { setPlanoContaId(c.id); setErroLocal(""); }}
               style={chip(planoContaId === c.id)}>
               {c.nome}
             </button>
@@ -304,46 +340,115 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-        <Campo label="Categoria *" flex={2}>
-          <select value={planoContaId} onChange={e => setPlanoContaId(e.target.value)} style={input()}>
-            <option value="">Selecione…</option>
-            {contas.map(c => <option key={c.id} value={c.id}>{c.codigo} — {c.nome}</option>)}
-          </select>
-        </Campo>
-        <Campo label="Data">
-          <input type="date" value={data} onChange={e => setData(e.target.value)} style={input()} />
-        </Campo>
-        <Campo label="Forma">
-          <select value={formaPagamento} onChange={e => setFormaPagamento(e.target.value)} style={input()}>
-            {FORMAS.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
-          </select>
-        </Campo>
-      </div>
-
-      <div style={{ marginTop: 12 }}>
-        <Campo label="Descrição (opcional)">
+      {/* Segunda linha: Descricao + ações */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, marginTop: 12, alignItems: "end" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={labelStyle}>Descrição (opcional)</span>
           <input value={descricao} onChange={e => setDescricao(e.target.value)}
             placeholder="Ex.: café e açúcar da copa" style={input()} />
-        </Campo>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button type="button" onClick={() => fileRef.current?.click()} disabled={lendo} style={btnSec()}>
+            {lendo ? "🔎 Lendo…" : arquivo ? `📎 ${arquivo.name.slice(0, 16)}` : "📷 Comprovante"}
+          </button>
+          <button type="button" onClick={salvar} disabled={salvando || lendo} style={btnPri(salvando)}>
+            {salvando ? "Salvando…" : "Lançar"}
+          </button>
+        </div>
       </div>
 
-      <div style={{ display: "flex", gap: 12, marginTop: 12, alignItems: "center", flexWrap: "wrap" }}>
-        <button type="button" onClick={() => fileRef.current?.click()} disabled={lendo} style={btnSec()}>
-          {lendo ? "🔎 Lendo comprovante…" : arquivo ? `📎 ${arquivo.name.slice(0, 24)}` : "📷 Comprovante (lê sozinho)"}
-        </button>
-        {arquivo && !lendo && (
+      {arquivo && !lendo && (
+        <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center" }}>
+          <span style={{ fontSize: 12, color: C.muted }}>{arquivo.name}</span>
           <button type="button" onClick={() => { setArquivo(null); setOrigemOcr(false); if (fileRef.current) fileRef.current.value = ""; }}
-            style={{ ...btnSec(), color: C.red }}>Remover</button>
-        )}
-        {origemOcr && !lendo && <span style={tag(C.purple)}>preenchido por IA — confira</span>}
-        <input ref={fileRef} type="file" accept="image/*,application/pdf" capture="environment" hidden
-          onChange={e => aoEscolherArquivo(e.target.files?.[0] ?? null)} />
+            style={{ background: "none", border: "none", color: C.red, fontSize: 12, cursor: "pointer", textDecoration: "underline" }}>remover</button>
+          {origemOcr && <span style={tag(C.purple)}>IA preencheu — confira</span>}
+        </div>
+      )}
 
-        <div style={{ flex: 1 }} />
-        <button type="button" onClick={salvar} disabled={salvando || lendo} style={btnPri(salvando)}>
-          {salvando ? "Salvando…" : "Lançar despesa"}
-        </button>
+      <input ref={fileRef} type="file" accept="image/*,application/pdf" capture="environment" hidden
+        onChange={e => aoEscolherArquivo(e.target.files?.[0] ?? null)} />
+
+      {erroLocal && (
+        <div style={{ marginTop: 8, color: C.red, fontSize: 13, fontWeight: 600 }}>{erroLocal}</div>
+      )}
+
+      {/* Modal de nova categoria */}
+      {modalCategoria && (
+        <ModalNovaCategoria
+          onCriada={aoCategoriaCriada}
+          onFechar={() => setModalCategoria(false)}
+          onErro={onErro}
+        />
+      )}
+    </div>
+  );
+}
+
+// ============ MODAL NOVA CATEGORIA ============
+
+function ModalNovaCategoria({ onCriada, onFechar, onErro }: {
+  onCriada: (id: string) => void;
+  onFechar: () => void;
+  onErro: (msg: string) => void;
+}) {
+  const [nome, setNome] = useState("");
+  const [codigo, setCodigo] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const [erroModal, setErroModal] = useState("");
+
+  async function criar() {
+    if (!nome.trim()) { setErroModal("Nome da categoria é obrigatório."); return; }
+    const codigoFinal = codigo.trim() || `D${Date.now().toString().slice(-4)}`;
+    setSalvando(true); setErroModal("");
+    try {
+      const r = await api.criarPlanoConta({
+        nome: nome.trim(),
+        codigo: codigoFinal,
+        natureza: "DESPESA",
+        analitica: true,
+      }) as { id: string };
+      onCriada(r.id);
+    } catch (e) { setErroModal((e as Error).message); }
+    finally { setSalvando(false); }
+  }
+
+  return (
+    <div style={overlay} onClick={onFechar}>
+      <div style={modal} onClick={e => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <span style={{ fontWeight: 700, fontSize: 16, color: C.text }}>Nova categoria de despesa</span>
+          <button onClick={onFechar} style={{ background: "none", border: "none", color: C.muted, fontSize: 18, cursor: "pointer" }}>✕</button>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12, marginBottom: 12 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={labelStyle}>Nome *</span>
+            <input value={nome} onChange={e => { setNome(e.target.value); setErroModal(""); }}
+              placeholder="Ex.: Material de limpeza" autoFocus
+              onKeyDown={e => { if (e.key === "Enter") criar(); }}
+              style={input()} />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={labelStyle}>Código (opcional)</span>
+            <input value={codigo} onChange={e => setCodigo(e.target.value)}
+              placeholder="Auto"
+              onKeyDown={e => { if (e.key === "Enter") criar(); }}
+              style={input()} />
+          </div>
+        </div>
+
+        {erroModal && (
+          <div style={{ color: C.red, fontSize: 13, marginBottom: 12 }}>{erroModal}</div>
+        )}
+
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button type="button" onClick={onFechar} style={btnSec()}>Cancelar</button>
+          <button type="button" onClick={criar} disabled={salvando} style={btnPri(salvando)}>
+            {salvando ? "Criando…" : "Criar categoria"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -351,10 +456,10 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
 
 // ============ UI helpers ============
 
-function Campo({ label, children, flex }: { label: string; children: React.ReactNode; flex?: number }) {
+function Campo({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label style={{ display: "flex", flexDirection: "column", gap: 4, flex: flex ?? 1, minWidth: 140 }}>
-      <span style={{ color: C.muted, fontSize: 12 }}>{label}</span>
+    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <span style={labelStyle}>{label}</span>
       {children}
     </label>
   );
@@ -369,12 +474,17 @@ function Aviso({ cor, texto, onClose }: { cor: string; texto: string; onClose: (
   );
 }
 
+// Style constants
+const labelStyle: CSSProperties = { color: C.muted, fontSize: 12, fontWeight: 500 };
 const card = (): CSSProperties => ({ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 });
 const input = (): CSSProperties => ({ background: C.surface, border: `1px solid ${C.border}`, color: C.text, borderRadius: 8, padding: "8px 10px", fontSize: 14, width: "100%", boxSizing: "border-box" });
 const th = (): CSSProperties => ({ padding: "8px 10px", fontWeight: 600, fontSize: 12, textTransform: "uppercase", letterSpacing: 0.4 });
 const td = (): CSSProperties => ({ padding: "10px", color: C.text, verticalAlign: "middle" });
-const chip = (ativo: boolean): CSSProperties => ({ background: ativo ? C.accent : C.surface, color: ativo ? "var(--accent-ink, #fff)" : C.text, border: `1px solid ${ativo ? C.accent : C.border}`, borderRadius: 999, padding: "6px 12px", fontSize: 13, cursor: "pointer" });
+const chip = (ativo: boolean): CSSProperties => ({ background: ativo ? C.accent : C.surface, color: ativo ? "var(--accent-ink, #fff)" : C.text, border: `1px solid ${ativo ? C.accent : C.border}`, borderRadius: 999, padding: "4px 10px", fontSize: 12, cursor: "pointer" });
 const tag = (cor: string): CSSProperties => ({ marginLeft: 6, background: cor + "22", color: cor, border: `1px solid ${cor}`, borderRadius: 6, padding: "1px 6px", fontSize: 10, fontWeight: 700 });
-const btnPri = (loading: boolean): CSSProperties => ({ background: C.accent, color: "var(--accent-ink, #fff)", border: "none", borderRadius: 8, padding: "10px 18px", fontWeight: 700, fontSize: 14, cursor: loading ? "default" : "pointer", opacity: loading ? 0.7 : 1 });
-const btnSec = (): CSSProperties => ({ background: C.surface, color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, padding: "9px 14px", fontSize: 13, cursor: "pointer" });
+const btnPri = (loading: boolean): CSSProperties => ({ background: C.accent, color: "var(--accent-ink, #fff)", border: "none", borderRadius: 8, padding: "8px 16px", fontWeight: 700, fontSize: 14, cursor: loading ? "default" : "pointer", opacity: loading ? 0.7 : 1 });
+const btnSec = (): CSSProperties => ({ background: C.surface, color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 14px", fontSize: 13, cursor: "pointer" });
+const btnIcon: CSSProperties = { background: C.surface, border: `1px solid ${C.border}`, color: C.text, borderRadius: 8, width: 34, height: 34, fontSize: 18, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
 const btnIcone = (cor: string): CSSProperties => ({ background: "none", border: `1px solid ${C.border}`, color: cor, borderRadius: 8, padding: "4px 8px", cursor: "pointer" });
+const overlay: CSSProperties = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 };
+const modal: CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 24, width: "100%", maxWidth: 440, boxShadow: "0 8px 32px rgba(0,0,0,0.4)" };

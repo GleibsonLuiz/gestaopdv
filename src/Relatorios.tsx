@@ -9,28 +9,8 @@ import { api, BASE_URL } from "./lib/api";
 import HeaderRelatorio, { formatarEndereco, obterConfiguracaoCache } from "./HeaderRelatorio.jsx";
 import { urlLogotipo } from "./Configuracoes";
 import SelectBusca from "./components/SelectBusca.jsx";
+import { fmtBRL, fmtData, fmtDataHora, fmtNum, fmtPct } from "./lib/format";
 
-
-const fmtBRL = (v) => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "R$ 0,00";
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-};
-
-const fmtNum = (v) => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "0";
-  return n.toLocaleString("pt-BR");
-};
-
-const fmtData = (iso) => iso ? new Date(iso).toLocaleDateString("pt-BR") : "—";
-const fmtDataHora = (iso) => iso ? new Date(iso).toLocaleString("pt-BR") : "—";
-
-const fmtPct = (v) => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "0,0%";
-  return `${n.toFixed(1).replace(".", ",")}%`;
-};
 
 const ROTULO_PAGAMENTO = {
   DINHEIRO: "Dinheiro",

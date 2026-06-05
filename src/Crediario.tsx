@@ -6,9 +6,8 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { C } from "./lib/theme";
 import { api, type SessionUser } from "./lib/api";
+import { fmtBRL, fmtData } from "./lib/format";
 
-const fmtBRL = (v: unknown) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-const fmtData = (iso: string | null | undefined) => iso ? new Date(iso).toLocaleDateString("pt-BR") : "—";
 
 interface ClienteCrediario {
   id: string;

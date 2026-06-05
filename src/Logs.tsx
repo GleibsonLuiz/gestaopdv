@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { C } from "./lib/theme";
 import { api } from "./lib/api";
+import { fmtDataHora } from "./lib/format";
+
 
 type AcaoLog =
   | "CREATE" | "UPDATE" | "DELETE"
@@ -80,12 +82,6 @@ const CORES_ACAO: Record<string, CoresAcao> = {
 };
 
 function corAcao(acao: string): CoresAcao { return CORES_ACAO[acao] || CORES_ACAO.OUTRA; }
-
-function formatarData(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "medium" });
-}
 
 function CampoKv({ label, valor }: { label: string; valor: unknown }) {
   return (
@@ -331,7 +327,7 @@ export default function Logs() {
                 onMouseEnter={(e) => { if (!aberto) e.currentTarget.style.background = C.surface + "44"; }}
                 onMouseLeave={(e) => { if (!aberto) e.currentTarget.style.background = "transparent"; }}
               >
-                <div className="text-gp-text tabular-nums">{formatarData(log.createdAt)}</div>
+                <div className="text-gp-text tabular-nums">{fmtDataHora(log.createdAt)}</div>
                 <div>
                   <span
                     className="inline-flex items-center gap-1 px-2 py-[2px] rounded text-[11px] font-bold"

@@ -3,6 +3,8 @@ import ModalShell, {
   Alerta, BtnPrimario, BtnSecundario, Campo, Input, Select,
 } from "./ModalShell";
 import { api } from "../../../lib/api";
+import { fmtBRL, fmtData } from "../../../lib/format";
+
 
 const GerenciarFormasModal = lazy(() =>
   import("../../../Financeiro").then(m => ({ default: m.GerenciarFormasModal }))
@@ -51,13 +53,6 @@ const FORMAS_PAGAMENTO = [
   { id: "CREDIARIO",      label: "📒 Crediário" },
 ];
 
-function fmtBRL(n: number): string {
-  return (n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-function fmtData(iso?: string): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("pt-BR");
-}
 function hojeLocal(): string {
   const d = new Date();
   const m = String(d.getMonth() + 1).padStart(2, "0");

@@ -2,6 +2,8 @@ import { useEffect, useState, useMemo, useCallback, type CSSProperties } from "r
 import { C } from "./lib/theme";
 import { api, type SessionUser } from "./lib/api";
 
+import { fmtBRL, fmtData, fmtQtd } from "./lib/format";
+
 // =====================================================================
 // DETALHE DO INVENTARIO — VISAO DO GESTOR
 // Mostra divergencias (estoqueLogico × contada), impacto financeiro
@@ -84,24 +86,6 @@ interface InventarioDetalheProps {
 }
 
 // ============ HELPERS ============
-
-const fmtBRL = (v: number | string | null | undefined): string => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-};
-
-const fmtQtd = (v: number | string | null | undefined): string => {
-  if (v === null || v === undefined || v === "") return "—";
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
-};
-
-const fmtData = (iso: string | null | undefined): string => {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-};
 
 const STATUS_META: Record<StatusInventario, { label: string; cor: string }> = {
   ABERTO: { label: "Em contagem", cor: C.yellow },

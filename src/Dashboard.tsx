@@ -1,38 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { C } from "./lib/theme";
 import { api } from "./lib/api";
+import { fmtBRL, fmtBRLSplit, fmtDataHora, fmtNum, fmtPercentual } from "./lib/format";
 
 
 const FONT_SANS = `"Manrope", "Segoe UI", system-ui, sans-serif`;
 const FONT_MONO = `"JetBrains Mono", ui-monospace, "Courier New", monospace`;
 
-const fmtBRL = (v) => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-};
 
-const fmtBRLSplit = (v) => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return { reais: "—", centavos: "" };
-  const fixed = Math.abs(n).toFixed(2);
-  const [reais, centavos] = fixed.split(".");
-  const reaisFmt = Number(reais).toLocaleString("pt-BR");
-  const sinal = n < 0 ? "-" : "";
-  return { reais: `${sinal}R$ ${reaisFmt}`, centavos: `,${centavos}` };
-};
-
-const fmtNumero = (v) => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString("pt-BR");
-};
-
-const fmtDataHora = (iso) => {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-};
 
 const fmtDiaCurto = (iso) => {
   if (!iso) return "";
@@ -65,12 +40,7 @@ const ROTULO_PAGAMENTO = {
   CREDIARIO: "Crediário",
 };
 
-const fmtPercentual = (v) => {
-  if (v === null || v === undefined || !Number.isFinite(Number(v))) return null;
-  const n = Number(v);
-  const sinal = n > 0 ? "+" : "";
-  return `${sinal}${n.toFixed(1)}%`;
-};
+
 
 function niceMax(v) {
   const n = Math.max(1, Number(v) || 1);
@@ -225,7 +195,7 @@ function ConteudoDashboard({ dados, onAtualizar, user, contagem }: any) {
             icone={<IconCart />}
             rotulo="Vendas hoje"
             valor={fmtBRLSplit(k.vendasHoje.total)}
-            descricao={`${fmtNumero(tickets)} ${tickets === 1 ? "venda" : "vendas"} · ticket ${fmtBRL(ticketHoje)}`}
+            descricao={`${fmtNum(tickets)} ${tickets === 1 ? "venda" : "vendas"} · ticket ${fmtBRL(ticketHoje)}`}
             comparativo="hoje"
             sparkline={<Sparkline cor={C.accent} pontos={(dados.vendasPorDia || []).map(d => d.total)} />}
           />
@@ -234,7 +204,7 @@ function ConteudoDashboard({ dados, onAtualizar, user, contagem }: any) {
             icone={<IconTrendUp />}
             rotulo="Faturamento do mês"
             valor={fmtBRLSplit(k.vendasMes.total)}
-            descricao={`${fmtNumero(k.vendasMes.quantidade)} vendas · ø ${fmtBRL(k.ticketMedioMes)}`}
+            descricao={`${fmtNum(k.vendasMes.quantidade)} vendas · ø ${fmtBRL(k.ticketMedioMes)}`}
             comparativo={variacaoMes ? `${variacaoMes} vs. mês anterior` : ""}
             delta={variacaoMes ? { texto: variacaoMes, tipo: tipoVariacao } : null}
             sparkline={<Sparkline cor={C.green} pontos={(dados.vendasPorDia || []).map(d => d.total)} />}
@@ -266,7 +236,7 @@ function ConteudoDashboard({ dados, onAtualizar, user, contagem }: any) {
             icone={<IconBag />}
             rotulo="Compras do mês"
             valor={fmtBRLSplit(k.comprasMes.total)}
-            descricao={`${fmtNumero(k.comprasMes.quantidade)} ${k.comprasMes.quantidade === 1 ? "compra registrada" : "compras registradas"}`}
+            descricao={`${fmtNum(k.comprasMes.quantidade)} ${k.comprasMes.quantidade === 1 ? "compra registrada" : "compras registradas"}`}
             comparativo={dados.ultimasCompras?.[0]
               ? `última ${new Date(dados.ultimasCompras[0].createdAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}`
               : "sem registros"}
@@ -290,18 +260,18 @@ function ConteudoDashboard({ dados, onAtualizar, user, contagem }: any) {
             label="Valor do estoque"
             valor={fmtBRL(k.valorEstoque?.total || 0)}
             hint={k.valorEstoque?.itens != null
-              ? `${fmtNumero(k.valorEstoque.itens)} unidades`
+              ? `${fmtNum(k.valorEstoque.itens)} unidades`
               : "imobilizado"}
           />
-          <MiniTile icone={<IconPeople />} label="Clientes" valor={fmtNumero(k.clientesAtivos)} hint="ativos" />
-          <MiniTile icone={<IconUserPlus />} label="Novos clientes" valor={fmtNumero(k.novosCLientesMes || 0)} hint="este mês" />
-          <MiniTile icone={<IconBox />} label="Produtos" valor={fmtNumero(k.produtosAtivos)} hint="ativos" />
-          <MiniTile icone={<IconTruck />} label="Fornecedores" valor={fmtNumero(k.fornecedoresAtivos)} hint="cadastrados" />
-          <MiniTile icone={<IconUser />} label="Funcionários" valor={fmtNumero(k.funcionariosAtivos)} hint="ativos" />
+          <MiniTile icone={<IconPeople />} label="Clientes" valor={fmtNum(k.clientesAtivos)} hint="ativos" />
+          <MiniTile icone={<IconUserPlus />} label="Novos clientes" valor={fmtNum(k.novosCLientesMes || 0)} hint="este mês" />
+          <MiniTile icone={<IconBox />} label="Produtos" valor={fmtNum(k.produtosAtivos)} hint="ativos" />
+          <MiniTile icone={<IconTruck />} label="Fornecedores" valor={fmtNum(k.fornecedoresAtivos)} hint="cadastrados" />
+          <MiniTile icone={<IconUser />} label="Funcionários" valor={fmtNum(k.funcionariosAtivos)} hint="ativos" />
           <MiniTile
             icone={<IconAlert />}
             label="Estoque baixo"
-            valor={fmtNumero(k.produtosEstoqueBaixo)}
+            valor={fmtNum(k.produtosEstoqueBaixo)}
             hint={k.produtosEstoqueBaixo > 0 ? "requer ação" : "tudo ok"}
             warn={k.produtosEstoqueBaixo > 0}
             tagDelta={k.produtosEstoqueBaixo > 0 ? { texto: "crítico", tipo: "down" } : null}
@@ -310,7 +280,7 @@ function ConteudoDashboard({ dados, onAtualizar, user, contagem }: any) {
             <MiniTile
               icone={<IconUserOff />}
               label="Clientes inativos"
-              valor={fmtNumero(k.clientesInativos)}
+              valor={fmtNum(k.clientesInativos)}
               hint="sem comprar há 60d"
               warn
               tagDelta={{ texto: "reativar", tipo: "down" }}
@@ -945,7 +915,7 @@ function PainelTopProdutos({ itens, totalMes }: any) {
                 fontSize: 13, fontWeight: 600, letterSpacing: "-0.005em", color: C.white,
               }}>{t.produto?.nome || "—"}</div>
               <div style={{ fontSize: 10.5, color: C.muted, fontFamily: FONT_MONO }}>
-                {t.produto?.codigo || "—"} · {fmtNumero(t.quantidade)} {t.produto?.unidade || "UN"} · participação {part.toFixed(1)}%
+                {t.produto?.codigo || "—"} · {fmtNum(t.quantidade)} {t.produto?.unidade || "UN"} · participação {part.toFixed(1)}%
               </div>
             </div>
             <div style={{
@@ -973,7 +943,7 @@ function PainelTopVendedores({ itens, totalMes, qtdMes }: any) {
     <Card>
       <CardHead
         titulo="Top vendedores do mês"
-        meta={`${fmtNumero(qtdMes)} vendas · ${fmtBRL(totalMes)}`}
+        meta={`${fmtNum(qtdMes)} vendas · ${fmtBRL(totalMes)}`}
       />
       {itens.length === 0 ? (
         <Vazio texto="Nenhuma venda registrada no mês." />
@@ -1018,7 +988,7 @@ function PainelTopVendedores({ itens, totalMes, qtdMes }: any) {
                 <div style={{
                   fontSize: 11, color: C.muted, marginTop: 2, fontFamily: FONT_MONO,
                 }}>
-                  {fmtNumero(t.vendas)} vendas · ticket {fmtBRL(ticket)}
+                  {fmtNum(t.vendas)} vendas · ticket {fmtBRL(ticket)}
                 </div>
               </div>
               <div style={{ textAlign: "right" }}>
@@ -1089,7 +1059,7 @@ function PainelFormasPagamento({ itens, totalGeral, qtdMes }: any) {
         titulo="Formas de pagamento (mês)"
         meta={
           <span style={{ fontFamily: FONT_MONO }}>
-            {fmtBRL(totalGeral)} · {fmtNumero(qtdMes)} vendas
+            {fmtBRL(totalGeral)} · {fmtNum(qtdMes)} vendas
           </span>
         }
       />
@@ -1114,7 +1084,7 @@ function PainelFormasPagamento({ itens, totalGeral, qtdMes }: any) {
             ))}
             <text x={cx} y={cy - 2} textAnchor="middle"
               style={{ fill: C.white, fontSize: 14, fontWeight: 700, fontFamily: FONT_SANS }}>
-              {fmtNumero(qtdMes)}
+              {fmtNum(qtdMes)}
             </text>
             <text x={cx} y={cy + 14} textAnchor="middle"
               style={{ fill: C.muted, fontSize: 9, letterSpacing: "0.16em", fontFamily: FONT_SANS }}>
@@ -1158,7 +1128,7 @@ function PainelFormasPagamento({ itens, totalGeral, qtdMes }: any) {
                   </div>
                   <div style={{
                     fontSize: 11, color: C.muted, marginTop: 5, fontFamily: FONT_MONO,
-                  }}>{fmtNumero(f.quantidade)} {f.quantidade === 1 ? "venda" : "vendas"}</div>
+                  }}>{fmtNum(f.quantidade)} {f.quantidade === 1 ? "venda" : "vendas"}</div>
                 </div>
               );
             })}
@@ -1225,7 +1195,7 @@ function PainelFinanceiro({ tipo, titulo, icone, dados }: any) {
           <div style={{
             fontSize: 20, fontWeight: 700, color: C.text,
             fontFamily: FONT_MONO, fontVariantNumeric: "tabular-nums",
-          }}>{fmtNumero(dados.quantidade)}</div>
+          }}>{fmtNum(dados.quantidade)}</div>
         </div>
         <div>
           <div style={{
@@ -1235,7 +1205,7 @@ function PainelFinanceiro({ tipo, titulo, icone, dados }: any) {
           <div style={{
             fontSize: 20, fontWeight: 700, color: atrasadas > 0 ? corPrincipal : C.text,
             fontFamily: FONT_MONO, fontVariantNumeric: "tabular-nums",
-          }}>{fmtNumero(atrasadas)}</div>
+          }}>{fmtNum(atrasadas)}</div>
         </div>
       </div>
 
@@ -1448,7 +1418,7 @@ function PainelUltimasVendas({ itens, totalHoje, qtdHoje }: any) {
     <Card>
       <CardHead
         titulo="Últimas vendas"
-        meta={`${fmtNumero(qtdHoje)} hoje · ${fmtBRL(totalHoje)}`}
+        meta={`${fmtNum(qtdHoje)} hoje · ${fmtBRL(totalHoje)}`}
       />
       {itens.length === 0 ? (
         <Vazio texto="Nenhuma venda registrada ainda." />
@@ -1506,7 +1476,7 @@ function PainelUltimasCompras({ itens }: any) {
     <Card>
       <CardHead
         titulo="Últimas compras"
-        meta={itens.length > 0 ? `${fmtNumero(itens.length)} ${itens.length === 1 ? "registro recente" : "registros recentes"}` : "sem registros"}
+        meta={itens.length > 0 ? `${fmtNum(itens.length)} ${itens.length === 1 ? "registro recente" : "registros recentes"}` : "sem registros"}
       />
       {itens.length === 0 ? (
         <Vazio texto="Nenhuma compra registrada ainda." />
@@ -1619,7 +1589,7 @@ function PainelMetaMensal({ meta }: any) {
           <div style={{
             fontSize: 20, fontWeight: 700, color: C.text,
             fontFamily: FONT_MONO, fontVariantNumeric: "tabular-nums",
-          }}>{fmtNumero(diasRestantes)}</div>
+          }}>{fmtNum(diasRestantes)}</div>
         </div>
         <div>
           <div style={{
@@ -1772,7 +1742,7 @@ function PainelTopCategorias({ itens, totalMes }: any) {
               }}>{cat.nome}</span>
               <span style={{
                 fontSize: 11, color: C.muted, fontFamily: FONT_MONO,
-              }}>{fmtNumero(cat.quantidade)} un</span>
+              }}>{fmtNum(cat.quantidade)} un</span>
               <span style={{
                 fontSize: 13, color: cor, fontFamily: FONT_MONO, fontWeight: 700,
               }}>{fmtBRL(cat.total)}</span>

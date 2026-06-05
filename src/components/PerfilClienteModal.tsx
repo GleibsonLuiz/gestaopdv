@@ -4,19 +4,8 @@ import { C } from "../lib/theme";
 import { api } from "../lib/api";
 import BotoesContatoCliente from "./BotoesContatoCliente";
 import { CLASSIFICACOES_SCORE, corDoScore, type ClassificacaoScore } from "../lib/scoring";
+import { fmtBRL, fmtData, fmtDataHora } from "../lib/format";
 
-const fmtBRL = (v: number | string | null | undefined) =>
-  Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-const fmtData = (iso: string | null | undefined) => {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("pt-BR");
-};
-
-const fmtDataHora = (iso: string | null | undefined) => {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-};
 
 const STATUS_VENDA = {
   CONCLUIDA: { label: "Concluída", cor: C.green },

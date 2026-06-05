@@ -11,6 +11,8 @@ import type { SessionUser } from "../../lib/api";
 import ContaModal from "./components/ContaModal";
 import PagarReceberModal from "./components/PagarReceberModal";
 import AnexosModal from "./components/AnexosModal";
+import { fmtBRL, fmtData } from "../../lib/format";
+
 
 type TipoConta = "pagar" | "receber";
 type StatusConta = "PENDENTE" | "PAGA" | "ATRASADA" | "CANCELADA";
@@ -96,17 +98,6 @@ function diasDiff(iso?: string | null): number {
 function statusEfetivo(c: Conta): StatusConta {
   if (c.status === "PAGA" || c.status === "CANCELADA") return c.status;
   return diasDiff(c.vencimento) < 0 ? "ATRASADA" : "PENDENTE";
-}
-
-function fmtData(iso?: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("pt-BR");
-}
-
-function fmtBRL(v: number | string): string {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "R$ 0,00";
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 function splitValor(v: number | string): { amount: string; cents: string } {

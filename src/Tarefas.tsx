@@ -2,18 +2,10 @@ import { useEffect, useState, useCallback, useMemo, type CSSProperties, type For
 import { C } from "./lib/theme";
 import { api, type SessionUser } from "./lib/api";
 import ActionsMenu from "./components/ActionsMenu";
+import { fmtData, fmtDataInput } from "./lib/format";
+
 
 // ============ HELPERS ============
-
-const fmtData = (iso: string | null | undefined): string => {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("pt-BR");
-};
-
-const fmtDataInput = (iso: string | null | undefined): string => {
-  if (!iso) return "";
-  return new Date(iso).toISOString().slice(0, 10);
-};
 
 function diasRestantes(prazo: string | null | undefined): number | null {
   if (!prazo) return null;

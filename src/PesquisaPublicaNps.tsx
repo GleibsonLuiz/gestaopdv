@@ -1,11 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { C } from "./lib/theme";
 import { api } from "./lib/api";
+import { fmtData } from "./lib/format";
 
-const fmtData = (iso: string | null | undefined): string => {
-  if (!iso) return "";
-  return new Date(iso).toLocaleDateString("pt-BR");
-};
 
 interface VendaInfo {
   numero: string | number;

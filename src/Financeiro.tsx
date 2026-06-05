@@ -6,18 +6,8 @@ import { useConfiguracaoEmpresa } from "./HeaderRelatorio";
 import { obterConfigImpressora, devePrintar, imprimirDocumento } from "./lib/impressora";
 import CupomEnvelope from "./components/cupons/CupomEnvelope.jsx";
 import CupomReciboFinanceiro from "./components/cupons/CupomReciboFinanceiro.jsx";
+import { fmtBRL, fmtData, fmtTamanho } from "./lib/format";
 
-
-const fmtBRL = (v: any) => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-};
-
-const fmtData = (iso: any) => {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("pt-BR");
-};
 
 const STATUS_INFO: Record<string, { label: string; cor: string }> = {
   PENDENTE: { label: "Pendente", cor: C.yellow },
@@ -1073,13 +1063,6 @@ export function AnexosModal({ tipo, conta, podeEditar, onFechar }: any) {
     } catch (err: any) {
       setErro(err.message);
     }
-  }
-
-  function fmtTamanho(bytes: any) {
-    if (!bytes) return "—";
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
   }
 
   function iconeTipo(mime) {

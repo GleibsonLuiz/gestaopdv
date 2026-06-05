@@ -8,10 +8,8 @@ import {
 } from "recharts";
 import { C } from "../lib/theme";
 import { api } from "../lib/api";
+import { fmtBRL, fmtNum } from "../lib/format";
 
-const fmtBRL = (n: unknown): string =>
-  Number(n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-const fmtNum = (n: unknown): string => Number(n || 0).toLocaleString("pt-BR");
 
 // "YYYY-MM" -> "mai/26"
 function formatarMesCurto(chave: string | undefined | null): string {

@@ -4,6 +4,8 @@ import { C } from "./lib/theme";
 import type { SessionUser, SegmentoEmpresa } from "./lib/api";
 import { gerarComandosPedido } from "./lib/escposPedido";
 import { imprimirViaBluetooth, bluetoothDisponivel } from "./lib/webBluetoothPrint";
+import { fmtBRL } from "./lib/format";
+
 
 // =====================================================================
 // ETAPA#8b — Central de Comandas (Kanban /painel-comandas)
@@ -78,10 +80,6 @@ const LIMITE_GARGALO_MIN = 10;
 const REALCE_NOVA_MS = 12000;
 
 interface Toast { id: number; msg: string; tipo: "ok" | "erro" | "info"; }
-
-function fmtBRL(n: number | string): string {
-  return (Number(n) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
 
 // Timer persistente — recalcula segundo a segundo. Devolve "Mm Ss" para
 // mostrar no card. Usa "agora" do client mas baseia em data do servidor.

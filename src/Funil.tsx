@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState, useCallback, type CSSProperties, type Rea
 import { C } from "./lib/theme";
 import { api, type SessionUser, type Role } from "./lib/api";
 import SelectBusca from "./components/SelectBusca";
+import { fmtBRL, fmtData, fmtDataInput } from "./lib/format";
+
 
 // ============ TIPOS ============
 
@@ -33,19 +35,6 @@ const ORIGENS = [
 // usuario deixar o campo vazio, o backend aplica este mesmo default.
 const PROB_PADRAO: Record<EtapaId, number> = {
   LEAD: 10, QUALIFICADO: 30, PROPOSTA: 50, NEGOCIACAO: 75, GANHO: 100, PERDIDO: 0,
-};
-
-const fmtBRL = (v: number | string | null | undefined): string =>
-  Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-const fmtData = (iso: string | null | undefined): string => {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("pt-BR");
-};
-
-const fmtDataInput = (iso: string | null | undefined): string => {
-  if (!iso) return "";
-  return new Date(iso).toISOString().slice(0, 10);
 };
 
 interface ClienteRef {

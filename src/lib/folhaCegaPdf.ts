@@ -12,6 +12,8 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { urlLogotipo } from "../Configuracoes";
+import { fmtDataHora } from "../lib/format";
+
 
 // As respostas de /inventarios/:id/folha e /empresa nao estao tipadas
 // estritamente no api.ts — usamos shapes locais com os campos que usamos.
@@ -53,13 +55,6 @@ async function carregarImagemDataUrl(url: string): Promise<string> {
     reader.onerror = reject;
     reader.readAsDataURL(blob);
   });
-}
-
-function fmtDataHora(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
-  return d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
 function hojeIso(): string {

@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback, type CSSProperties, type ReactNode } from "react";
 import { C } from "./lib/theme";
 import { api } from "./lib/api";
+import { fmtBRL, fmtNum } from "./lib/format";
+
 
 // ============ TIPOS / CONFIGURACAO ============
 
@@ -39,12 +41,6 @@ const SEGMENTOS: SegmentoMeta[] = [
   { id: "PROSPECT",   label: "Prospect",   cor: "#7c3aed", icone: "🌱" },
 ];
 const SEG_MAP: Record<string, SegmentoMeta> = Object.fromEntries(SEGMENTOS.map((s) => [s.id, s]));
-
-const fmtBRL = (v: number | string | null | undefined): string =>
-  Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-const fmtNum = (v: number | string | null | undefined): string =>
-  Number(v || 0).toLocaleString("pt-BR");
 
 interface EtapaResumo {
   quantidade: number;

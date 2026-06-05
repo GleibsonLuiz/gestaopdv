@@ -6,6 +6,8 @@ import QrMobileModal from "./components/QrMobileModal";
 import { gerarFolhaCegaPdf, type FolhaCegaPayload, type EmpresaParaCabecalho } from "./lib/folhaCegaPdf";
 import { obterConfiguracaoCache } from "./HeaderRelatorio";
 
+import { fmtData } from "./lib/format";
+
 // Lazy: a folha de contagem so e carregada quando o usuario clica em
 // "Contar". Mesmo principio vale para o detalhe (gestor) — mantem o
 // chunk de listagem leve.
@@ -40,11 +42,6 @@ interface Inventario {
 }
 
 // ============ HELPERS ============
-
-const fmtData = (iso: string | null | undefined): string => {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-};
 
 const STATUS_META: Record<StatusInventario, { label: string; cor: string }> = {
   ABERTO: { label: "Em contagem", cor: C.yellow },

@@ -15,6 +15,9 @@ import { C } from "./lib/theme";
 import { api, setSession, getToken, getUser, type SessionUser, type SessionEmpresa } from "./lib/api";
 import { getAvisosRedeAtivos, setAvisosRedeAtivos } from "./lib/preferenciasUI";
 import Configuracoes from "./Configuracoes";
+import { fmtBRL, fmtData, fmtNum } from "./lib/format";
+import { mascararCnpj } from "./lib/masks";
+
 
 type Plano = "TRIAL" | "FREE" | "STARTER" | "PRO" | "ENTERPRISE";
 
@@ -37,24 +40,6 @@ interface DadosEmpresa extends SessionEmpresa {
   uso?: Partial<Record<RecursoId, number>>;
   limites?: Partial<Record<RecursoId, number | null>>;
   modulos?: string[];
-}
-
-function mascararCnpj(v: string | null | undefined): string {
-  const d = String(v || "").replace(/\D/g, "").slice(0, 14);
-  if (d.length <= 2) return d;
-  if (d.length <= 5) return `${d.slice(0, 2)}.${d.slice(2)}`;
-  if (d.length <= 8) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`;
-  if (d.length <= 12) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8)}`;
-  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
-}
-
-function fmtData(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
-}
-
-function fmtNum(n: unknown): string {
-  return Number(n || 0).toLocaleString("pt-BR");
 }
 
 interface EmpresaProps {
@@ -517,10 +502,6 @@ const STATUS_COBRANCA_COR: Record<Cobranca["status"], string> = {
   CANCELADA: C.muted,
 };
 
-function fmtMoeda(n: number | null | undefined): string {
-  return Number(n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
 function BlocoAssinatura({ podeAssinar }: { podeAssinar: boolean }) {
   const [info, setInfo] = useState<AssinaturaInfo | null>(null);
   const [planos, setPlanos] = useState<PlanoCatalogo[]>([]);
@@ -598,7 +579,7 @@ function BlocoAssinatura({ podeAssinar }: { podeAssinar: boolean }) {
             </span>
             {info?.valorMensal ? (
               <span className="text-gp-muted text-xs">
-                {fmtMoeda(info.valorMensal)}/mês
+                {fmtBRL(info.valorMensal)}/mês
               </span>
             ) : null}
           </div>
@@ -635,7 +616,7 @@ function BlocoAssinatura({ podeAssinar }: { podeAssinar: boolean }) {
           style={{ background: "#f59e0b22", border: "1px solid #f59e0b55" }}
         >
           <div className="text-xs" style={{ color: "#f59e0b" }}>
-            💳 Há uma cobrança em aberto de <strong>{fmtMoeda(pendente.valor)}</strong>
+            💳 Há uma cobrança em aberto de <strong>{fmtBRL(pendente.valor)}</strong>
             {pendente.vencimento && <> (vence {fmtData(pendente.vencimento)})</>}.
           </div>
           <a
@@ -677,7 +658,7 @@ function BlocoAssinatura({ podeAssinar }: { podeAssinar: boolean }) {
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="text-gp-white text-sm font-bold">{p.rotulo}</span>
                   <span className="text-gp-white text-sm font-extrabold">
-                    {p.valorMensal ? `${fmtMoeda(p.valorMensal)}` : "Sob consulta"}
+                    {p.valorMensal ? `${fmtBRL(p.valorMensal)}` : "Sob consulta"}
                   </span>
                 </div>
                 <div className="text-gp-muted text-[11px]" style={{ lineHeight: 1.4, minHeight: 30 }}>
@@ -728,7 +709,7 @@ function BlocoAssinatura({ podeAssinar }: { podeAssinar: boolean }) {
               >
                 <span className="text-gp-text">{fmtData(c.criadaEm)}</span>
                 <span className="text-gp-muted">{c.metodo || "—"}</span>
-                <span className="text-gp-white font-bold">{fmtMoeda(c.valor)}</span>
+                <span className="text-gp-white font-bold">{fmtBRL(c.valor)}</span>
                 <span
                   className="font-bold"
                   style={{ color: STATUS_COBRANCA_COR[c.status] }}

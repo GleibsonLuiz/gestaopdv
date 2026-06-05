@@ -11,6 +11,8 @@ import {
 } from "./lib/pdvVolanteOffline";
 import { gerarComandosAdendo, type ItemPedidoImp } from "./lib/escposPedido";
 import { imprimirViaBluetooth, bluetoothDisponivel } from "./lib/webBluetoothPrint";
+import { fmtBRL } from "./lib/format";
+
 
 // Resumo minimo de comanda aberta vindo de GET /comandas/abertas?mesa=...
 interface ComandaAbertaResumo {
@@ -60,11 +62,6 @@ interface ProdutoMin {
 }
 
 type Tela = "produtos" | "scanner" | "carrinho" | "envio";
-
-function fmtBRL(n: number | string): string {
-  const v = Number(n) || 0;
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
 
 export default function PdvVolante() {
   const [produtos, setProdutos] = useState<ProdutoMin[]>(() => {

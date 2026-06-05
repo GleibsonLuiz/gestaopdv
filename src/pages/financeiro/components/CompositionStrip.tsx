@@ -1,7 +1,4 @@
-function fmtBRL(v: unknown): string {
-  const n = Number(v) || 0;
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
+import { fmtBRL } from "../../../lib/format";
 
 interface CompositionStripProps {
   pendente?: number;

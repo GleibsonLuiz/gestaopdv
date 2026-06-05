@@ -1,10 +1,6 @@
 import Barcode from "react-barcode";
 
-const fmtBRL = (v: unknown): string => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-};
+import { fmtBRL } from "../lib/format";
 
 interface EtiquetaPrecoProps {
   nomeProduto?: string | null;

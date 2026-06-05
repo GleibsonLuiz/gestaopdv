@@ -97,9 +97,17 @@ export async function criar(req, res, next) {
       observacoes: observacoes ? String(observacoes).trim() : null,
     };
 
+    const entradaForma = req.body.entradaForma || "DINHEIRO";
+    if (req.body.entrada != null && !FORMAS_VALIDAS.has(entradaForma)) {
+      return res.status(400).json({ erro: "Forma de pagamento da entrada invalida" });
+    }
+
     const serie = gerarSerieRecorrencia({
       tipoRecorrencia, parcelaTotal,
       valores: calc.valores, vencimento: venc, dadosBase,
+      entrada: req.body.entrada,
+      dataEntrada: req.body.dataEntrada ? parseDate(req.body.dataEntrada) : new Date(),
+      campoPagamento: "recebimento",
     });
     if (!serie.ok) return res.status(400).json({ erro: serie.erro });
 
@@ -111,14 +119,34 @@ export async function criar(req, res, next) {
       return res.status(201).json(conta);
     }
 
-    const result = await prisma.$transaction(async tx => {
-      await tx.contaReceber.createMany({ data: serie.registros });
-      return tx.contaReceber.findFirst({
-        where: { grupoRecorrenciaId: serie.grupoId, parcelaAtual: 1 },
-        include: INCLUDE,
+    try {
+      const result = await prisma.$transaction(async tx => {
+        await tx.contaReceber.createMany({ data: serie.registros });
+
+        // Entrada à vista: o cliente ja pagou esse valor — cria o lancamento
+        // quitado e registra a entrada no caixa aberto (se houver).
+        if (serie.entrada) {
+          const entradaConta = await tx.contaReceber.create({ data: serie.entrada });
+          await registrarNoCaixaAberto(tx, req.user.sub, {
+            tipo: "RECEBER_CONTA",
+            formaPagamento: entradaForma,
+            valor: Number(entradaConta.valor),
+            descricao: `ENTRADA: ${entradaConta.descricao}`.toUpperCase().slice(0, 200),
+            contaReceberId: entradaConta.id,
+          });
+        }
+
+        return tx.contaReceber.findFirst({
+          where: { grupoRecorrenciaId: serie.grupoId, parcelaAtual: 1 },
+          include: INCLUDE,
+        });
       });
-    });
-    res.status(201).json({ ...result, parcelasGeradas: serie.registros.length });
+      const parcelasGeradas = serie.registros.length + (serie.entrada ? 1 : 0);
+      res.status(201).json({ ...result, parcelasGeradas });
+    } catch (err) {
+      if (err.status) return res.status(err.status).json({ erro: err.message });
+      throw err;
+    }
   } catch (err) {
     if (err.code === "P2003") return res.status(400).json({ erro: "Cliente inexistente" });
     next(err);

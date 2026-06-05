@@ -171,9 +171,11 @@ function billFromConta(c: Conta, ehPagar: boolean): Bill & { raw: Conta } {
   const isParcelada = c.tipoRecorrencia === "PARCELADA";
   const isRecorrente = c.tipoRecorrencia === "RECORRENTE";
   const parcela =
-    (isParcelada || isRecorrente) && c.parcelaTotal
-      ? `${isParcelada ? "📋" : "🔁"} ${c.parcelaAtual}/${c.parcelaTotal}`
-      : undefined;
+    isParcelada && c.parcelaAtual === 0
+      ? "🅴 Entrada"
+      : (isParcelada || isRecorrente) && c.parcelaTotal
+        ? `${isParcelada ? "📋" : "🔁"} ${c.parcelaAtual}/${c.parcelaTotal}`
+        : undefined;
 
   return {
     id: c.id,

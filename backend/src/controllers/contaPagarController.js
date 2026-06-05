@@ -99,9 +99,16 @@ export async function criar(req, res, next) {
       observacoes: observacoes ? String(observacoes).trim() : null,
     };
 
+    const entradaForma = req.body.entradaForma || "DINHEIRO";
+    if (req.body.entrada != null && !FORMAS_VALIDAS.has(entradaForma)) {
+      return res.status(400).json({ erro: "Forma de pagamento da entrada invalida" });
+    }
+
     const serie = gerarSerieRecorrencia({
       tipoRecorrencia, parcelaTotal,
       valores: calc.valores, vencimento: venc, dadosBase,
+      entrada: req.body.entrada,
+      dataEntrada: req.body.dataEntrada ? parseDate(req.body.dataEntrada) : new Date(),
     });
     if (!serie.ok) return res.status(400).json({ erro: serie.erro });
 
@@ -113,15 +120,35 @@ export async function criar(req, res, next) {
       return res.status(201).json(conta);
     }
 
-    // Cria toda a serie em transaction e retorna a primeira (mae).
-    const result = await prisma.$transaction(async tx => {
-      await tx.contaPagar.createMany({ data: serie.registros });
-      return tx.contaPagar.findFirst({
-        where: { grupoRecorrenciaId: serie.grupoId, parcelaAtual: 1 },
-        include: INCLUDE,
+    // Cria toda a serie em transaction e retorna a primeira parcela (mae).
+    try {
+      const result = await prisma.$transaction(async tx => {
+        await tx.contaPagar.createMany({ data: serie.registros });
+
+        // Entrada à vista: cria o lancamento ja quitado e baixa no caixa aberto
+        // do usuario (se houver). Fora do PDV nao registra movimentacao.
+        if (serie.entrada) {
+          const entradaConta = await tx.contaPagar.create({ data: serie.entrada });
+          await registrarNoCaixaAberto(tx, req.user.sub, {
+            tipo: "PAGAR_CONTA",
+            formaPagamento: entradaForma,
+            valor: Number(entradaConta.valor),
+            descricao: `ENTRADA: ${entradaConta.descricao}`.toUpperCase().slice(0, 200),
+            contaPagarId: entradaConta.id,
+          });
+        }
+
+        return tx.contaPagar.findFirst({
+          where: { grupoRecorrenciaId: serie.grupoId, parcelaAtual: 1 },
+          include: INCLUDE,
+        });
       });
-    });
-    res.status(201).json({ ...result, parcelasGeradas: serie.registros.length });
+      const parcelasGeradas = serie.registros.length + (serie.entrada ? 1 : 0);
+      res.status(201).json({ ...result, parcelasGeradas });
+    } catch (err) {
+      if (err.status) return res.status(err.status).json({ erro: err.message });
+      throw err;
+    }
   } catch (err) {
     if (err.code === "P2003") return res.status(400).json({ erro: "Fornecedor inexistente" });
     next(err);

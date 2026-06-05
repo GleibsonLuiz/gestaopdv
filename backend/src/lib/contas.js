@@ -76,12 +76,20 @@ export function adicionarMeses(data, n) {
 // PARCELADA: divide o valor bruto entre parcelas; ultima parcela ajusta o
 // arredondamento. Para RECORRENTE: mesmo valor em todas. Todas compartilham
 // grupoRecorrenciaId.
+//
+// Entrada (à vista): so para PARCELADA. Quando `entrada` > 0, separa um
+// lancamento ja QUITADO (status PAGA, parcelaAtual 0) com esse valor e divide
+// apenas o RESTANTE (valorBruto - entrada) entre as N parcelas. Devolvido em
+// `entrada` para o controller criar a parte e baixar no caixa.
 export function gerarSerieRecorrencia({
   tipoRecorrencia,
   parcelaTotal,
   valores,           // { valorBruto, juros, multa, desconto, valor } da conta
   vencimento,        // Date
   dadosBase,         // restante das colunas (descricao, fornecedorId, etc.)
+  entrada,           // valor da entrada à vista (opcional, so PARCELADA)
+  dataEntrada,       // Date do pagamento da entrada (default: agora)
+  campoPagamento = "pagamento", // coluna de baixa: "pagamento" (pagar) ou "recebimento" (receber)
 }) {
   if (tipoRecorrencia === "NENHUMA") {
     return {
@@ -91,6 +99,7 @@ export function gerarSerieRecorrencia({
         tipoRecorrencia: "NENHUMA",
         grupoRecorrenciaId: null, parcelaAtual: null, parcelaTotal: null,
       }],
+      entrada: null,
     };
   }
 
@@ -108,13 +117,35 @@ export function gerarSerieRecorrencia({
 
   const grupoId = crypto.randomUUID();
   const registros = [];
+  let entradaRegistro = null;
 
   if (tipoRecorrencia === "PARCELADA") {
-    // Divide o valor bruto entre as parcelas. Outras componentes (juros/multa/
+    // Entrada à vista (opcional): vira um lancamento separado ja quitado e
+    // abate do montante que sera parcelado.
+    const entradaVal = round2(toNumber(entrada) ?? 0);
+    const temEntrada = Number.isFinite(entradaVal) && entradaVal > 0;
+    if (temEntrada && entradaVal >= valores.valorBruto) {
+      return { ok: false, erro: "A entrada deve ser menor que o valor total" };
+    }
+    const baseParcelar = temEntrada ? round2(valores.valorBruto - entradaVal) : valores.valorBruto;
+
+    if (temEntrada) {
+      const pago = dataEntrada instanceof Date ? dataEntrada : new Date();
+      entradaRegistro = {
+        ...dadosBase,
+        valorBruto: entradaVal, juros: 0, multa: 0, desconto: 0, valor: entradaVal,
+        vencimento: pago, [campoPagamento]: pago, status: "PAGA",
+        tipoRecorrencia: "PARCELADA",
+        grupoRecorrenciaId: grupoId,
+        parcelaAtual: 0, parcelaTotal: total,
+      };
+    }
+
+    // Divide o RESTANTE entre as parcelas. Outras componentes (juros/multa/
     // desconto) ficam apenas na primeira (cobrancas pontuais nao se repetem).
-    const valorParcelaBruto = round2(valores.valorBruto / total);
+    const valorParcelaBruto = round2(baseParcelar / total);
     const totalDistribuido = round2(valorParcelaBruto * total);
-    const ajuste = round2(valores.valorBruto - totalDistribuido);
+    const ajuste = round2(baseParcelar - totalDistribuido);
     for (let i = 0; i < total; i++) {
       const ehPrimeira = i === 0;
       const ehUltima = i === total - 1;
@@ -144,5 +175,5 @@ export function gerarSerieRecorrencia({
     }
   }
 
-  return { ok: true, registros, grupoId };
+  return { ok: true, registros, grupoId, entrada: entradaRegistro };
 }

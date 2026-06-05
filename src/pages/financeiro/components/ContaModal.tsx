@@ -61,21 +61,31 @@ export default function ContaModal({
   const [observacoes, setObservacoes] = useState(conta?.observacoes || "");
   const [tipoRecorrencia, setTipoRecorrencia] = useState<TipoRecorrencia>("NENHUMA");
   const [parcelaTotal, setParcelaTotal] = useState("3");
+  const [entrada, setEntrada] = useState("");
+  const [entradaForma, setEntradaForma] = useState("DINHEIRO");
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
+
+  // Entrada à vista só faz sentido em conta parcelada (pagar ou receber).
+  const usaEntrada = tipoRecorrencia === "PARCELADA";
 
   const liquido = useMemo(
     () => parseNum(valorBruto) + parseNum(juros) + parseNum(multa) - parseNum(desconto),
     [valorBruto, juros, multa, desconto]
   );
+  // Montante que será parcelado (valor bruto menos a entrada, quando houver).
+  const restanteParcelar = useMemo(() => {
+    if (!usaEntrada) return parseNum(valorBruto);
+    return Math.max(0, parseNum(valorBruto) - parseNum(entrada));
+  }, [usaEntrada, valorBruto, entrada]);
   const valorParcela = useMemo(() => {
     if (tipoRecorrencia === "NENHUMA") return null;
     const total = parseInt(parcelaTotal, 10);
     const vb = parseNum(valorBruto);
     if (!total || total < 2 || vb <= 0) return null;
-    if (tipoRecorrencia === "PARCELADA") return vb / total;
+    if (tipoRecorrencia === "PARCELADA") return restanteParcelar / total;
     return vb;
-  }, [tipoRecorrencia, parcelaTotal, valorBruto]);
+  }, [tipoRecorrencia, parcelaTotal, valorBruto, restanteParcelar]);
 
   async function salvar(e: React.FormEvent) {
     e.preventDefault();
@@ -103,6 +113,16 @@ export default function ContaModal({
       const total = parseInt(parcelaTotal, 10);
       if (!total || total < 2 || total > 60) { setErro("Número de parcelas deve estar entre 2 e 60"); return; }
       payload.parcelaTotal = total;
+
+      if (usaEntrada) {
+        const ent = parseNum(entrada);
+        if (ent < 0) { setErro("Entrada não pode ser negativa"); return; }
+        if (ent >= vb) { setErro("A entrada deve ser menor que o valor total"); return; }
+        if (ent > 0) {
+          payload.entrada = ent;
+          payload.entradaForma = entradaForma;
+        }
+      }
     }
 
     setSalvando(true);
@@ -205,6 +225,24 @@ export default function ContaModal({
                 </button>
               ))}
             </div>
+            {usaEntrada && (
+              <div className="grid grid-cols-2 gap-2.5">
+                <Campo label="Entrada à vista (opcional)">
+                  <Input type="number" step="0.01" min="0" value={entrada}
+                    onChange={e => setEntrada(e.target.value)} placeholder="0,00" />
+                </Campo>
+                <Campo label="Forma da entrada">
+                  <Select value={entradaForma} onChange={e => setEntradaForma(e.target.value)}
+                    disabled={parseNum(entrada) <= 0}>
+                    <option value="DINHEIRO">Dinheiro</option>
+                    <option value="PIX">PIX</option>
+                    <option value="CARTAO_DEBITO">Cartão de débito</option>
+                    <option value="CARTAO_CREDITO">Cartão de crédito</option>
+                    <option value="BOLETO">Boleto</option>
+                  </Select>
+                </Campo>
+              </div>
+            )}
             {tipoRecorrencia !== "NENHUMA" && (
               <div className="grid grid-cols-2 gap-2.5 items-end">
                 <Campo label={tipoRecorrencia === "PARCELADA" ? "Nº de parcelas" : "Repetir por (meses)"}>
@@ -221,9 +259,18 @@ export default function ContaModal({
                 </div>
               </div>
             )}
+            {usaEntrada && parseNum(entrada) > 0 && (
+              <p className="text-[11px] text-iris mt-1">
+                Entrada de {fmtBRL(parseNum(entrada))} ({ehPagar ? "registrada como paga" : "já recebida"}) + {parcelaTotal}× de{" "}
+                {valorParcela != null ? fmtBRL(valorParcela) : "—"} ={" "}
+                {fmtBRL(restanteParcelar)} parcelados.
+              </p>
+            )}
             {tipoRecorrencia === "PARCELADA" && (
               <p className="text-[11px] text-fg-faint mt-1">
-                Juros, multa e desconto se aplicam apenas à 1ª parcela.
+                {usaEntrada && parseNum(entrada) > 0
+                  ? `A entrada é lançada no caixa aberto, se houver. Juros, multa e desconto se aplicam só à 1ª parcela.`
+                  : "Juros, multa e desconto se aplicam apenas à 1ª parcela."}
               </p>
             )}
             {tipoRecorrencia === "RECORRENTE" && (

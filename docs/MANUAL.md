@@ -712,6 +712,8 @@ Cada grupo tem header colapsável com contagem + subtotal.
 
 **Recorrência:** ao criar conta, marque **PARCELADA** (gera N contas mês a mês com `grupoRecorrenciaId` compartilhado) ou **RECORRENTE_MENSAL**.
 
+**Entrada + parcelado:** ao marcar **PARCELADA** (em contas a pagar **ou** a receber), informe opcionalmente uma **Entrada à vista** e a **forma de pagamento** dela (dinheiro, PIX, cartão, boleto). O sistema separa um lançamento já **quitado** com o valor da entrada — lançando a movimentação no caixa aberto, se houver (saída em contas a pagar; entrada em contas a receber) — e parcela apenas o **restante** nas N parcelas. Ex.: total R$ 200, entrada R$ 50, 3 parcelas → entrada de R$ 50 + 3× de R$ 50. A entrada aparece na lista marcada como **🅴 Entrada**.
+
 #### 📒 Crediário (Fiado)
 
 ![Crediário (Fiado)](img/crediario.png)

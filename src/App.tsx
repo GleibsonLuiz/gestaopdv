@@ -3,7 +3,6 @@ import { C, hidratarAparenciaDoUser } from "./lib/theme";
 import Alertas from "./Alertas";
 import { getUser, getToken, clearSession, setEmpresa, api } from "./lib/api";
 import { podeAcessar, moduloNoPlano } from "./lib/permissoes";
-import PwaUpdateBanner from "./components/PwaUpdateBanner";
 import IndicadorRede from "./components/IndicadorRede";
 import { TELA_AJUDA } from "./Ajuda";
 
@@ -383,14 +382,12 @@ export default function App() {
     <Suspense fallback={<TelaCarregando />}>
       <InventarioMobile />
       <IndicadorRede />
-      <PwaUpdateBanner />
     </Suspense>
   );
   if (modoMobile === "pdv-volante" && user) return (
     <Suspense fallback={<TelaCarregando />}>
       <PdvVolante />
       <IndicadorRede />
-      <PwaUpdateBanner />
     </Suspense>
   );
 
@@ -410,7 +407,6 @@ export default function App() {
     <Suspense fallback={<TelaCarregando />}>
       <Login onSuccess={(u: any) => { setUser(u); hidratarPreferencias(u); }} />
       <IndicadorRede />
-      <PwaUpdateBanner />
     </Suspense>
   );
 
@@ -445,7 +441,6 @@ export default function App() {
           />
         </Suspense>
         <IndicadorRede />
-        <PwaUpdateBanner />
       </div>
     );
   }
@@ -1033,7 +1028,6 @@ export default function App() {
         </Suspense>
       )}
       <IndicadorRede />
-      <PwaUpdateBanner />
     </div>
   );
 }

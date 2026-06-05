@@ -1,51 +1,73 @@
+import { useCallback, useRef, useState } from "react";
 import { useRegisterSW } from "virtual:pwa-register/react";
 
-// =====================================================================
-// Banner fixo que aparece quando o Service Worker detecta uma versao
-// nova publicada. O usuario pode tocar pra recarregar e ativar o novo
-// bundle sem precisar fechar/reabrir o app PWA.
-//
-// useRegisterSW (vite-plugin-pwa) cuida do ciclo de vida:
-//   - immediate: true       — registra ja no mount (sem esperar load)
-//   - onNeedRefresh         — dispara quando ha SW waiting (nova versao)
-//   - updateServiceWorker() — ativa o SW novo e recarrega a pagina
-// =====================================================================
+// Banner global (montado uma vez em main.tsx). useRegisterSW deve existir em
+// instancia unica: varios mounts quebram o listener "controlling" que recarrega
+// a pagina apos skipWaiting — o botao Atualizar parece morto.
 
 export default function PwaUpdateBanner() {
+  const [updating, setUpdating] = useState(false);
+  const checkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
   } = useRegisterSW({
     immediate: true,
+    onNeedRefresh() {
+      setNeedRefresh(true);
+    },
     onRegisteredSW(_swUrl, registration) {
-      // Sessoes que ficam abertas o dia todo (PDV/Caixa) so checariam por
-      // versao nova num reload. Aqui forcamos uma checagem periodica pra o
-      // banner aparecer logo apos um deploy, sem precisar recarregar na mao.
       if (!registration) return;
-      setInterval(() => {
+
+      registration.addEventListener("updatefound", () => {
+        if (checkIntervalRef.current) {
+          clearInterval(checkIntervalRef.current);
+          checkIntervalRef.current = null;
+        }
+      });
+
+      if (checkIntervalRef.current) clearInterval(checkIntervalRef.current);
+      checkIntervalRef.current = setInterval(() => {
         registration.update().catch(() => {});
-      }, 30 * 60 * 1000); // a cada 30 min
+      }, 30 * 60 * 1000);
     },
     onRegisterError(err) {
-      // Em dev (sem PWA habilitado) o registro falha silenciosamente. OK.
       console.warn("[PWA] erro ao registrar SW:", err);
     },
   });
+
+  const handleUpdate = useCallback(async () => {
+    if (updating) return;
+    setUpdating(true);
+    try {
+      await updateServiceWorker(true);
+    } catch (err) {
+      console.warn("[PWA] updateServiceWorker:", err);
+    }
+    // Fallback: em prompt mode o reload depende do evento "controlling";
+    // com race/multi-tab o reload as vezes nao dispara (vite-plugin-pwa #583).
+    window.setTimeout(() => {
+      window.location.reload();
+    }, 800);
+  }, [updateServiceWorker, updating]);
 
   if (!needRefresh) return null;
 
   return (
     <div
       role="alert"
-      className="fixed left-3 right-3 z-[9999] rounded-xl shadow-2xl flex items-center gap-3 px-4 py-3"
+      className="fixed left-3 right-3 flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl"
       style={{
         bottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+        zIndex: 2147483646,
         background: "#10b981",
         color: "#ffffff",
         border: "1px solid #059669",
+        pointerEvents: "auto",
       }}
     >
-      <div className="text-xl">🔄</div>
+      <div className="text-xl" aria-hidden>🔄</div>
       <div className="flex-1 text-sm">
         <div className="font-bold">Nova versão disponível</div>
         <div className="text-[12px] opacity-90">
@@ -54,19 +76,23 @@ export default function PwaUpdateBanner() {
       </div>
       <button
         type="button"
-        onClick={() => updateServiceWorker(true)}
-        className="px-3 py-2 rounded-lg text-[13px] font-bold"
-        style={{ background: "#ffffff", color: "#065f46" }}
+        disabled={updating}
+        onClick={() => void handleUpdate()}
+        className="px-3 py-2 rounded-lg text-[13px] font-bold disabled:opacity-60"
+        style={{ background: "#ffffff", color: "#065f46", cursor: updating ? "wait" : "pointer" }}
       >
-        Atualizar
+        {updating ? "Atualizando…" : "Atualizar"}
       </button>
       <button
         type="button"
+        disabled={updating}
         onClick={() => setNeedRefresh(false)}
         aria-label="Dispensar"
         className="text-xl leading-none px-1 opacity-80"
-        style={{ color: "#ffffff" }}
-      >×</button>
+        style={{ color: "#ffffff", cursor: "pointer" }}
+      >
+        ×
+      </button>
     </div>
   );
 }

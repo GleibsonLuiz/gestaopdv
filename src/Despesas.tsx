@@ -4,7 +4,7 @@
 // 1 toque, foto do comprovante opcional. Lista as despesas do periodo com
 // filtro por categoria. (Modulo DESPESAS — backend /despesas + /planos-contas.)
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { C } from "./lib/theme";
 import { api, type SessionUser } from "./lib/api";
 
@@ -136,18 +136,19 @@ export default function Despesas({ user }: { user: SessionUser }) {
           recentes={recentes}
           onSalvo={aposSalvar}
           onErro={setErro}
+          onContaCriada={carregarContas}
         />
       )}
 
       {/* Filtros */}
       <div style={{ ...card(), display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
-        <Campo label="De">
+        <Campo label="De" minW={130}>
           <input type="date" value={fInicio} onChange={e => setFInicio(e.target.value)} style={input()} />
         </Campo>
-        <Campo label="Até">
+        <Campo label="Até" minW={130}>
           <input type="date" value={fFim} onChange={e => setFFim(e.target.value)} style={input()} />
         </Campo>
-        <Campo label="Categoria">
+        <Campo label="Categoria" flex={2} minW={180}>
           <select value={fCategoria} onChange={e => setFCategoria(e.target.value)} style={input()}>
             <option value="">Todas</option>
             {analiticas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
@@ -211,11 +212,12 @@ export default function Despesas({ user }: { user: SessionUser }) {
 
 // ============ FORMULARIO DE LANCAMENTO RAPIDO ============
 
-function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
+function LancarDespesa({ contas, recentes, onSalvo, onErro, onContaCriada }: {
   contas: PlanoConta[];
   recentes: string[];
   onSalvo: () => void;
   onErro: (msg: string) => void;
+  onContaCriada: () => void;
 }) {
   const [valor, setValor] = useState("");
   const [planoContaId, setPlanoContaId] = useState("");
@@ -227,13 +229,11 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
   const [lendo, setLendo] = useState(false);
   const [origemOcr, setOrigemOcr] = useState(false);
   const [erroLocal, setErroLocal] = useState("");
+  const [mostrarNovaCategoria, setMostrarNovaCategoria] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const chips = contas.filter(c => recentes.includes(c.id));
 
-  // OCR: envia o comprovante, a IA le e devolvemos os campos sugeridos para
-  // pre-preencher. O usuario confere e confirma — nunca grava sozinho. Falha
-  // silenciosa: se a IA nao responder, segue no preenchimento manual.
   async function lerComprovante(file: File) {
     setLendo(true); onErro("");
     try {
@@ -254,7 +254,6 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
 
   function aoEscolherArquivo(f: File | null) {
     setArquivo(f);
-    // Foto dispara OCR automatico; PDF tambem (a IA aceita documento).
     if (f) lerComprovante(f);
   }
 
@@ -276,28 +275,65 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
     finally { setSalvando(false); }
   }
 
+  function aoCategoriaCriada(id: string) {
+    setMostrarNovaCategoria(false);
+    setPlanoContaId(id);
+    setErroLocal("");
+    onContaCriada();
+  }
+
   return (
     <div style={{ ...card(), borderColor: C.accent }}>
       <div style={{ fontWeight: 700, color: C.white, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
         <span>⚡</span> Lançar despesa
       </div>
 
-      {/* Valor em destaque */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <span style={{ color: C.muted, fontSize: 22, fontWeight: 700 }}>R$</span>
-        <input
-          type="text" inputMode="decimal" placeholder="0,00" value={valor} autoFocus
-          onChange={e => { setValor(e.target.value.replace(/[^0-9.,]/g, "")); setErroLocal(""); }}
-          onKeyDown={e => { if (e.key === "Enter") salvar(); }}
-          style={{ ...input(), fontSize: 32, fontWeight: 800, color: C.text, padding: "8px 12px", width: 220 }}
-        />
+      {/* Linha 1: Valor + Data + Forma (tamanhos proporcionais) */}
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <Campo label="Valor *" minW={140} flex={0}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ color: C.muted, fontSize: 14, fontWeight: 700 }}>R$</span>
+            <input
+              type="text" inputMode="decimal" placeholder="0,00" value={valor} autoFocus
+              onChange={e => { setValor(e.target.value.replace(/[^0-9.,]/g, "")); setErroLocal(""); }}
+              onKeyDown={e => { if (e.key === "Enter") salvar(); }}
+              style={{ ...input(), fontSize: 20, fontWeight: 700, padding: "8px 10px", width: 120 }}
+            />
+          </div>
+        </Campo>
+        <Campo label="Data" minW={140} flex={0}>
+          <input type="date" value={data} onChange={e => setData(e.target.value)} style={{ ...input(), width: 140 }} />
+        </Campo>
+        <Campo label="Forma" minW={110} flex={0}>
+          <select value={formaPagamento} onChange={e => setFormaPagamento(e.target.value)} style={{ ...input(), width: 110 }}>
+            {FORMAS.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+          </select>
+        </Campo>
+      </div>
+
+      {/* Linha 2: Categoria (com chips recentes e botao +) */}
+      <div style={{ marginTop: 12 }}>
+        <Campo label="Categoria *" minW={200}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <select value={planoContaId} onChange={e => { setPlanoContaId(e.target.value); setErroLocal(""); }}
+              style={{ ...input(), flex: 1 }}>
+              <option value="">Selecione…</option>
+              {contas.map(c => <option key={c.id} value={c.id}>{c.codigo} — {c.nome}</option>)}
+            </select>
+            <button type="button" onClick={() => setMostrarNovaCategoria(v => !v)}
+              title="Criar nova categoria"
+              style={{ ...btnSec(), padding: "8px 12px", fontSize: 16, fontWeight: 700, lineHeight: 1 }}>
+              +
+            </button>
+          </div>
+        </Campo>
       </div>
 
       {/* Chips de categorias recentes */}
       {chips.length > 0 && (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
           {chips.map(c => (
-            <button key={c.id} type="button" onClick={() => setPlanoContaId(c.id)}
+            <button key={c.id} type="button" onClick={() => { setPlanoContaId(c.id); setErroLocal(""); }}
               style={chip(planoContaId === c.id)}>
               {c.nome}
             </button>
@@ -305,25 +341,18 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-        <Campo label="Categoria *" flex={2}>
-          <select value={planoContaId} onChange={e => { setPlanoContaId(e.target.value); setErroLocal(""); }} style={input()}>
-            <option value="">Selecione…</option>
-            {contas.map(c => <option key={c.id} value={c.id}>{c.codigo} — {c.nome}</option>)}
-          </select>
-        </Campo>
-        <Campo label="Data">
-          <input type="date" value={data} onChange={e => setData(e.target.value)} style={input()} />
-        </Campo>
-        <Campo label="Forma">
-          <select value={formaPagamento} onChange={e => setFormaPagamento(e.target.value)} style={input()}>
-            {FORMAS.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
-          </select>
-        </Campo>
-      </div>
+      {/* Mini-formulario para criar nova categoria */}
+      {mostrarNovaCategoria && (
+        <NovaCategoriaInline
+          onCriada={aoCategoriaCriada}
+          onCancelar={() => setMostrarNovaCategoria(false)}
+          onErro={onErro}
+        />
+      )}
 
+      {/* Linha 3: Descricao */}
       <div style={{ marginTop: 12 }}>
-        <Campo label="Descrição (opcional)">
+        <Campo label="Descrição (opcional)" minW={200}>
           <input value={descricao} onChange={e => setDescricao(e.target.value)}
             placeholder="Ex.: café e açúcar da copa" style={input()} />
         </Campo>
@@ -333,9 +362,10 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
         <div style={{ marginTop: 8, color: C.red, fontSize: 13, fontWeight: 600 }}>{erroLocal}</div>
       )}
 
+      {/* Linha 4: Comprovante + Botao salvar */}
       <div style={{ display: "flex", gap: 12, marginTop: 12, alignItems: "center", flexWrap: "wrap" }}>
         <button type="button" onClick={() => fileRef.current?.click()} disabled={lendo} style={btnSec()}>
-          {lendo ? "🔎 Lendo comprovante…" : arquivo ? `📎 ${arquivo.name.slice(0, 24)}` : "📷 Comprovante (lê sozinho)"}
+          {lendo ? "🔎 Lendo…" : arquivo ? `📎 ${arquivo.name.slice(0, 20)}` : "📷 Comprovante (lê sozinho)"}
         </button>
         {arquivo && !lendo && (
           <button type="button" onClick={() => { setArquivo(null); setOrigemOcr(false); if (fileRef.current) fileRef.current.value = ""; }}
@@ -354,11 +384,65 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
   );
 }
 
+// ============ NOVA CATEGORIA INLINE ============
+
+function NovaCategoriaInline({ onCriada, onCancelar, onErro }: {
+  onCriada: (id: string) => void;
+  onCancelar: () => void;
+  onErro: (msg: string) => void;
+}) {
+  const [nome, setNome] = useState("");
+  const [codigo, setCodigo] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  async function criar() {
+    if (!nome.trim()) { onErro("Nome da categoria é obrigatório."); return; }
+    const codigoFinal = codigo.trim() || `D${Date.now().toString().slice(-4)}`;
+    setSalvando(true);
+    try {
+      const r = await api.criarPlanoConta({
+        nome: nome.trim(),
+        codigo: codigoFinal,
+        natureza: "DESPESA",
+        analitica: true,
+      }) as { id: string };
+      onCriada(r.id);
+    } catch (e) { onErro((e as Error).message); }
+    finally { setSalvando(false); }
+  }
+
+  return (
+    <div style={{ marginTop: 10, padding: 12, background: C.surface, borderRadius: 8, border: `1px solid ${C.border}` }}>
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 8, fontWeight: 600 }}>Nova categoria de despesa</div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <Campo label="Nome *" flex={2} minW={160}>
+          <input value={nome} onChange={e => setNome(e.target.value)}
+            placeholder="Ex.: Material de limpeza" autoFocus
+            onKeyDown={e => { if (e.key === "Enter") criar(); }}
+            style={input()} />
+        </Campo>
+        <Campo label="Código (opcional)" flex={1} minW={100}>
+          <input value={codigo} onChange={e => setCodigo(e.target.value)}
+            placeholder="Auto"
+            onKeyDown={e => { if (e.key === "Enter") criar(); }}
+            style={input()} />
+        </Campo>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button type="button" onClick={criar} disabled={salvando} style={btnPri(salvando)}>
+            {salvando ? "…" : "Criar"}
+          </button>
+          <button type="button" onClick={onCancelar} style={btnSec()}>Cancelar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ============ UI helpers ============
 
-function Campo({ label, children, flex }: { label: string; children: React.ReactNode; flex?: number }) {
+function Campo({ label, children, flex, minW }: { label: string; children: React.ReactNode; flex?: number; minW?: number }) {
   return (
-    <label style={{ display: "flex", flexDirection: "column", gap: 4, flex: flex ?? 1, minWidth: 140 }}>
+    <label style={{ display: "flex", flexDirection: "column", gap: 4, flex: flex ?? 1, minWidth: minW ?? 120 }}>
       <span style={{ color: C.muted, fontSize: 12 }}>{label}</span>
       {children}
     </label>
@@ -378,7 +462,7 @@ const card = (): CSSProperties => ({ background: C.card, border: `1px solid ${C.
 const input = (): CSSProperties => ({ background: C.surface, border: `1px solid ${C.border}`, color: C.text, borderRadius: 8, padding: "8px 10px", fontSize: 14, width: "100%", boxSizing: "border-box" });
 const th = (): CSSProperties => ({ padding: "8px 10px", fontWeight: 600, fontSize: 12, textTransform: "uppercase", letterSpacing: 0.4 });
 const td = (): CSSProperties => ({ padding: "10px", color: C.text, verticalAlign: "middle" });
-const chip = (ativo: boolean): CSSProperties => ({ background: ativo ? C.accent : C.surface, color: ativo ? "var(--accent-ink, #fff)" : C.text, border: `1px solid ${ativo ? C.accent : C.border}`, borderRadius: 999, padding: "6px 12px", fontSize: 13, cursor: "pointer" });
+const chip = (ativo: boolean): CSSProperties => ({ background: ativo ? C.accent : C.surface, color: ativo ? "var(--accent-ink, #fff)" : C.text, border: `1px solid ${ativo ? C.accent : C.border}`, borderRadius: 999, padding: "5px 10px", fontSize: 12, cursor: "pointer" });
 const tag = (cor: string): CSSProperties => ({ marginLeft: 6, background: cor + "22", color: cor, border: `1px solid ${cor}`, borderRadius: 6, padding: "1px 6px", fontSize: 10, fontWeight: 700 });
 const btnPri = (loading: boolean): CSSProperties => ({ background: C.accent, color: "var(--accent-ink, #fff)", border: "none", borderRadius: 8, padding: "10px 18px", fontWeight: 700, fontSize: 14, cursor: loading ? "default" : "pointer", opacity: loading ? 0.7 : 1 });
 const btnSec = (): CSSProperties => ({ background: C.surface, color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, padding: "9px 14px", fontSize: 13, cursor: "pointer" });

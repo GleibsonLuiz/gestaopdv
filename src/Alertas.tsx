@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { C } from "./lib/theme";
 import { api } from "./lib/api";
+import { fmtBRL, fmtData } from "./lib/format";
 
 
 const POLLING_MS = 60_000;
@@ -35,15 +36,6 @@ interface AlertasPayload {
 interface AlertasProps {
   onNavegar?: (tela: string) => void;
 }
-
-const fmtBRL = (v: unknown): string => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-};
-
-const fmtData = (iso: string | null | undefined): string =>
-  iso ? new Date(iso).toLocaleDateString("pt-BR") : "—";
 
 const COR_SEVERIDADE: Record<Severidade, string> = {
   ALTA: C.red, MEDIA: C.yellow, BAIXA: C.accent,

@@ -8,21 +8,7 @@ import CupomEnvelope from "./components/cupons/CupomEnvelope.jsx";
 import CupomSangriaSuprimento from "./components/cupons/CupomSangriaSuprimento.jsx";
 import CupomFechamentoCaixa from "./components/cupons/CupomFechamentoCaixa.jsx";
 
-const fmtBRL = (v: any) => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "R$ 0,00";
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-};
-
-const fmtData = (iso: any) => {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-};
-
-const fmtDataCurta = (iso: any) => {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("pt-BR");
-};
+import { fmtBRL, fmtData } from "./lib/format";
 
 const TIPO_INFO: Record<string, { label: string; icone: string; cor: string; sinal?: string }> = {
   ABERTURA:      { label: "Abertura",       icone: "🟢", cor: "accent" },
@@ -542,8 +528,8 @@ function AbaHistorico() {
               }}>
               <div style={{ color: C.accent, fontFamily: "monospace", fontWeight: 700 }}>#{c.numero}</div>
               <div style={{ color: C.text }}>{c.user?.nome || "—"}</div>
-              <div style={{ color: C.muted, fontSize: 12 }}>{fmtDataCurta(c.abertoEm)}</div>
-              <div style={{ color: C.muted, fontSize: 12 }}>{c.fechadoEm ? fmtDataCurta(c.fechadoEm) : "—"}</div>
+              <div style={{ color: C.muted, fontSize: 12 }}>{fmtData(c.abertoEm)}</div>
+              <div style={{ color: C.muted, fontSize: 12 }}>{c.fechadoEm ? fmtData(c.fechadoEm) : "—"}</div>
               <div style={{ textAlign: "right", color: C.text, fontFamily: "monospace", fontSize: 12 }}>
                 {c.saldoFinalContado != null ? fmtBRL(c.saldoFinalContado) : "—"}
               </div>

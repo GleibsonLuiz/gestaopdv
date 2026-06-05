@@ -1,14 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { C } from "./lib/theme";
 import { api } from "./lib/api";
+import { fmtBRL, fmtData } from "./lib/format";
 
-const fmtBRL = (v: number | string | null | undefined): string =>
-  Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-const fmtData = (iso: string | null | undefined): string => {
-  if (!iso) return "";
-  return new Date(iso).toLocaleDateString("pt-BR");
-};
 
 interface ItemOrc {
   descricao: string;

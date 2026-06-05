@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, useCallback, lazy, Suspense, type CSSProperties, type ReactNode } from "react";
 import { C } from "./lib/theme";
 import { api, type SessionUser, type Role } from "./lib/api";
+import { fmtBRL } from "./lib/format";
+
 
 // Lazy: RelatorioComissoes carrega recharts (~400 kB). Sai do chunk
 // principal de Comissoes — so e baixado quando o usuario abre a aba
@@ -47,9 +49,6 @@ interface SimulacaoResult {
   total: number;
   atingiuMeta: boolean;
 }
-
-const fmtBRL = (n: number | string | null | undefined): string =>
-  Number(n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 const ROLE_INFO: Record<Role, RoleInfo> = {
   ADMIN:    { label: "Admin",    cor: C.purple },

@@ -15,6 +15,8 @@
 //                    Resolvido pelo caller via api.obterLinkNpsPendente e
 //                    passado em `extras` (nao e calculado a partir do cliente).
 
+import { fmtBRL, fmtData } from "../lib/format";
+
 export interface ClienteKpis {
   totalGasto?: number;
   monetario?: number;
@@ -46,16 +48,6 @@ export interface GerarLinkParams {
   assunto?: string | null;
   corpo?: string | null;
 }
-
-const fmtBRL = (v: unknown): string =>
-  Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-const fmtData = (iso: string | null | undefined): string => {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("pt-BR");
-};
 
 // Variaveis adicionais que dependem de fetch ou contexto externo (nao
 // derivam direto do cliente). Resolvidas pelo caller e injetadas em

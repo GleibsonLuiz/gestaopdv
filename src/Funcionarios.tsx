@@ -3,6 +3,7 @@ import { C } from "./lib/theme";
 import { api } from "./lib/api";
 import { MODULOS, permissoesPadrao, IDS_MODULOS } from "./lib/permissoes";
 import ActionsMenu from "./components/ActionsMenu";
+import { fmtData } from "./lib/format";
 
 
 const ROLE_INFO: Record<string, { label: string; cor: string; icone: string }> = {
@@ -65,11 +66,6 @@ function ChipsModulos({ role, permissoes }: { role: string; permissoes: string[]
     </div>
   );
 }
-
-const fmtData = (iso: any) => {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("pt-BR");
-};
 
 export default function Funcionarios({ user }: any) {
   const [funcionarios, setFuncionarios] = useState<any[]>([]);

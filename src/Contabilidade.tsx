@@ -12,9 +12,9 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { C } from "./lib/theme";
 import { api, type SessionUser } from "./lib/api";
+import { fmtBRL, fmtData } from "./lib/format";
 
-const fmtBRL = (v: unknown) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-const fmtData = (iso: string | null | undefined) => iso ? new Date(iso).toLocaleDateString("pt-BR") : "—";
+
 const hojeISO = () => new Date().toISOString().slice(0, 10);
 
 const ROTULO_TIPO: Record<string, string> = {

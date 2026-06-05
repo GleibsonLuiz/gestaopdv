@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { C } from "./lib/theme";
 import { api, getEmpresa, type SessionUser } from "./lib/api";
+import { fmtDataHora, fmtTamanho } from "./lib/format";
+
 
 // Palavra-chave conforme backupController.PALAVRA_CHAVE_RESTORE — precisa
 // bater exatamente. Exposta aqui para o usuario digitar antes de liberar
@@ -125,7 +127,7 @@ function CardExportar() {
             ✓ Backup gerado e baixado
           </div>
           <div className="text-gp-muted text-[11px] mb-2">
-            Versão {resultado.versao} · {formatarData(resultado.exportadoEm)}
+            Versão {resultado.versao} · {fmtDataHora(resultado.exportadoEm)}
           </div>
           <ListaContagens contagem={resultado.contagem} />
         </div>
@@ -241,8 +243,8 @@ function CardRestaurar() {
             <div className="flex-1 min-w-0">
               <div className="font-bold text-sm text-gp-text truncate">{arquivo.nome}</div>
               <div className="text-gp-muted text-[11px]">
-                {formatarTamanho(arquivo.tamanho)} · versão {arquivo.payload.versao} ·{" "}
-                {formatarData(arquivo.payload.exportadoEm)}
+                {fmtTamanho(arquivo.tamanho)} · versão {arquivo.payload.versao} ·{" "}
+                {fmtDataHora(arquivo.payload.exportadoEm)}
               </div>
             </div>
             <button
@@ -294,7 +296,7 @@ function CardRestaurar() {
             ✓ Restauração concluída
           </div>
           <div className="text-gp-muted text-[11px] mb-2">
-            Backup de {formatarData(resultado.exportadoEm)}
+            Backup de {fmtDataHora(resultado.exportadoEm)}
           </div>
           <ListaContagens contagem={resultado.restaurados} />
         </div>
@@ -487,21 +489,6 @@ function rotuloAmigavel(chave: string): string {
     formaPagamentoCustom: "Formas pagto.",
   };
   return mapa[chave] || chave;
-}
-
-function formatarTamanho(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 ** 2).toFixed(2)} MB`;
-}
-
-function formatarData(iso: string): string {
-  try {
-    const d = new Date(iso);
-    return d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-  } catch {
-    return iso;
-  }
 }
 
 function nomeArquivoBackup(nomeEmpresa: string | undefined | null): string {

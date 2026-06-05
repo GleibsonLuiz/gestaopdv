@@ -6,6 +6,8 @@
 
 import { useState, type FormEvent } from "react";
 import { api, setSession, type SessionUser } from "./lib/api";
+import { mascararCnpj } from "./lib/masks";
+
 
 type IconProps = { size?: number };
 
@@ -82,16 +84,6 @@ function DefaultMark({ size = 44 }: IconProps) {
       </svg>
     </span>
   );
-}
-
-// Mascara CNPJ visual XX.XXX.XXX/XXXX-XX. Backend valida apenas digitos.
-function mascararCnpj(v: string): string {
-  const d = String(v || "").replace(/\D/g, "").slice(0, 14);
-  if (d.length <= 2) return d;
-  if (d.length <= 5) return `${d.slice(0, 2)}.${d.slice(2)}`;
-  if (d.length <= 8) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`;
-  if (d.length <= 12) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8)}`;
-  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
 }
 
 type SignupStatus = "idle" | "loading" | "error" | "success";

@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback, type CSSProperties, type ReactNode } 
 import { C } from "./lib/theme";
 import { api, type SessionUser } from "./lib/api";
 
+import { fmtData } from "./lib/format";
+
 // ============ TIPOS ============
 
 type TipoId = "CLIENTE_INATIVO" | "ORCAMENTO_PARADO" | "POS_VENDA_FOLLOWUP";
@@ -100,11 +102,6 @@ const PRIORIDADES: PrioridadeCfg[] = [
   { id: "ALTA",    label: "Alta",    cor: "#f97316" },
   { id: "URGENTE", label: "Urgente", cor: C.red },
 ];
-
-const fmtData = (iso: string | null | undefined): string => {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-};
 
 interface VendedorRef {
   id: string;

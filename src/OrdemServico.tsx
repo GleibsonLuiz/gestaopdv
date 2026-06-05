@@ -7,10 +7,10 @@ import { C } from "./lib/theme";
 import { api, type SessionUser } from "./lib/api";
 import { moduloNoPlano } from "./lib/permissoes";
 import EmitirNfseModal from "./EmitirNfseModal";
+import { fmtData } from "./lib/format";
+
 
 const brl = (n: unknown) => Number(n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-const fmtData = (iso: string | null | undefined) => iso ? new Date(iso).toLocaleDateString("pt-BR") : "—";
-
 type StatusOS = "ABERTA" | "EM_ANDAMENTO" | "AGUARDANDO_PECA" | "PRONTA" | "ENTREGUE" | "CANCELADA";
 
 const STATUS_INFO: Record<StatusOS, { label: string; cor: string }> = {

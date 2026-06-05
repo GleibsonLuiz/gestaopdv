@@ -2,12 +2,9 @@ import { useState, useEffect, useCallback, type CSSProperties, type FormEvent } 
 import { C } from "./lib/theme";
 import { api, type SessionUser } from "./lib/api";
 
-// ============ HELPERS ============
+import { fmtData } from "./lib/format";
 
-const fmtData = (iso: string | null | undefined): string => {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-};
+// ============ HELPERS ============
 
 // ============ TIPOS ============
 

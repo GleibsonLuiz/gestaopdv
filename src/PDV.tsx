@@ -26,6 +26,8 @@ import { getEmpresa } from "./lib/api";
 import { gerarLink } from "./lib/templates";
 import { ehUnidadePeso, pesoGramasParaEstoque, resolverEtiquetaBalanca, PRESETS_PESO_G } from "./lib/unidades";
 
+import { fmtBRL, fmtData, fmtQtd } from "./lib/format";
+
 function urlImagem(imagem) {
   if (!imagem) return null;
   if (/^https?:\/\//i.test(imagem)) return imagem;
@@ -84,20 +86,6 @@ const STATUS_INFO = {
   EM_EDICAO: { label: "Em edição", cor: C.yellow },
 };
 
-const fmtBRL = (v) => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-};
-
-// Formata quantidade exibindo decimais apenas quando existem (1.5 -> "1,5",
-// 2 -> "2"). Bate com Decimal(12,3) do schema (ate 3 casas).
-const fmtQtd = (v) => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "0";
-  return n.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
-};
-
 // Quebra "1234.56" em { int: "1.234", dec: "56" } pra renderizar o R$ com
 // rítmo tipográfico (símbolo + inteiros grandes + centavos menores).
 const fmtPartes = (v) => {
@@ -131,11 +119,6 @@ function useCountUp(target, duration = 380) {
   }, [target, duration]);
   return v;
 }
-
-const fmtData = (iso) => {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-};
 
 // "agora", "há 3 min", "há 2 h", "há 1 d" — relativo curto para a lista de
 // atendimentos em espera.

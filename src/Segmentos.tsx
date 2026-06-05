@@ -5,6 +5,8 @@ import BotoesContatoCliente from "./components/BotoesContatoCliente";
 import ModalGerirTemplates from "./components/ModalGerirTemplates";
 import type { TipoMensagem } from "./lib/templates";
 import { CLASSIFICACOES_SCORE, corDoScore, type ClassificacaoScore } from "./lib/scoring";
+import { fmtBRL, fmtData } from "./lib/format";
+
 
 // ============ CONFIGURACAO DE SEGMENTOS RFM ============
 
@@ -27,14 +29,6 @@ const SEGMENTOS: SegmentoMeta[] = [
   { id: "PROSPECT",   label: "Prospect",   cor: C.purple,  icone: "🌱", desc: "Cadastrado, nunca comprou" },
 ];
 const SEG_MAP: Record<string, SegmentoMeta> = Object.fromEntries(SEGMENTOS.map((s) => [s.id, s]));
-
-const fmtBRL = (v: number | string | null | undefined): string =>
-  Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-const fmtData = (iso: string | null | undefined): string => {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("pt-BR");
-};
 
 // ============ TIPOS ============
 

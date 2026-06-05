@@ -5,6 +5,8 @@ import ActionsMenu from "./components/ActionsMenu";
 import SelectBusca from "./components/SelectBusca";
 import type { ConfiguracaoEmpresa } from "./Configuracoes";
 
+import { fmtBRL, fmtData } from "./lib/format";
+
 // ============ TIPOS ============
 
 type TipoDocumento = "ORCAMENTO" | "ORDEM_SERVICO";
@@ -190,17 +192,6 @@ function urlLogotipo(logotipo: string | null | undefined): string | null {
   if (/^https?:\/\//i.test(logotipo)) return logotipo;
   return `${BASE_URL}${logotipo}`;
 }
-
-const fmtBRL = (v: number | string | null | undefined): string => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-};
-
-const fmtData = (iso: string | null | undefined): string => {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-};
 
 function calcularItem(it: ItemForm): { totalEm: number; subtotal: number } {
   const qtd = parseFloat(String(it.quantidade).replace(",", ".")) || 0;

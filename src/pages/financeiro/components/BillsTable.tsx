@@ -4,6 +4,8 @@ import StatusPill from "./StatusPill";
 import DueCell from "./DueCell";
 import AmountCell from "./AmountCell";
 import ActionsMenu from "../../../components/ActionsMenu";
+import { fmtBRL } from "../../../lib/format";
+
 
 type DueState = "late" | "today" | "soon" | "paid";
 export type BillBucket = "atrasadas" | "hoje" | "semana" | "mes" | "futuras" | "concluidas";
@@ -42,10 +44,6 @@ const BUCKET_META: BucketMeta[] = [
   { id: "futuras",     label: "Futuras",         icon: "◌", tone: "text-fg-muted" },
   { id: "concluidas",  label: "Concluídas",      icon: "✓", tone: "text-emerald2" },
 ];
-
-function fmtBRL(n: number): string {
-  return (n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
 
 interface BillsTableProps {
   bills: Bill[];

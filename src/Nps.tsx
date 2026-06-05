@@ -1,16 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { C } from "./lib/theme";
 import { api } from "./lib/api";
+import { fmtData, fmtDataHora } from "./lib/format";
 
-const fmtData = (iso: string | null | undefined): string => {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("pt-BR");
-};
-
-const fmtDataHora = (iso: string | null | undefined): string => {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-};
 
 type Classificacao = "PROMOTOR" | "NEUTRO" | "DETRATOR";
 

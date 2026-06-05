@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { C } from "./lib/theme";
 import { api, type SessionUser } from "./lib/api";
 import { emitirToast } from "./lib/toast";
-import { fmtBRL, fmtData } from "./components/cupons/fmt";
+import { fmtBRL, fmtData, fmtQtd } from "./lib/format";
 
 // Entrada de NF-e de fornecedor (importacao de compra). Fluxo:
 //   1. upload do XML -> validado no backend (bloqueia se reprovar)
@@ -57,8 +57,7 @@ type DocDFe = {
 };
 const STATUS_DFE_COR: Record<string, string> = { PENDENTE: C.yellow, XML_BAIXADO: C.green, IGNORADO: C.muted };
 
-// Formata quantidade/estoque (ate 3 casas, sem zeros sobrando).
-const fmtNum = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+
 
 const STATUS_COR: Record<string, string> = {
   RECEBIDA: C.yellow, IMPORTADA: C.green, DESCARTADA: C.muted,
@@ -586,7 +585,7 @@ function ConciliacaoView({
                   </td>
                   <td style={td}>{it.ncm || "—"}</td>
                   <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
-                    <b>{fmtNum(Number(it.quantidade))}</b> <span style={{ color: C.muted, fontSize: 11 }}>{it.unidade || ""}</span>
+                    <b>{fmtQtd(Number(it.quantidade))}</b> <span style={{ color: C.muted, fontSize: 11 }}>{it.unidade || ""}</span>
                   </td>
                   <td style={{ ...td, textAlign: "right" }}>
                     <div style={custoWrap}>
@@ -617,9 +616,9 @@ function ConciliacaoView({
                   <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
                     {estoqueAtual != null ? (
                       <span style={{ fontSize: 12 }}>
-                        <span style={{ color: C.muted }}>{fmtNum(estoqueAtual)}</span>
+                        <span style={{ color: C.muted }}>{fmtQtd(estoqueAtual)}</span>
                         <span style={{ color: C.muted }}> → </span>
-                        <b style={{ color: C.green }}>{fmtNum(estoqueNovo!)}</b>
+                        <b style={{ color: C.green }}>{fmtQtd(estoqueNovo!)}</b>
                       </span>
                     ) : <span style={{ color: C.muted }}>—</span>}
                   </td>
@@ -750,7 +749,7 @@ function ProdutoPicker({ produtos, value, onChange, invalido }: {
             ) : filtrados.map((p) => (
               <button type="button" key={p.id} onClick={() => escolher(p.id)} style={{ ...comboItem, background: p.id === value ? C.accent + "22" : "transparent" }}>
                 <b>{p.codigo}</b> — {p.nome}
-                {p.estoque != null && <span style={{ color: C.muted, fontSize: 11 }}> · est. {fmtNum(Number(p.estoque))}</span>}
+                {p.estoque != null && <span style={{ color: C.muted, fontSize: 11 }}> · est. {fmtQtd(Number(p.estoque))}</span>}
               </button>
             ))}
           </div>

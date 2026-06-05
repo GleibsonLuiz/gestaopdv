@@ -1,6 +1,8 @@
 import { useState } from "react";
 import ModalShell, { Alerta, BtnSecundario } from "./ModalShell";
 import { api, BASE_URL } from "../../../lib/api";
+import { fmtData, fmtTamanho } from "../../../lib/format";
+
 
 interface Anexo {
   id: string;
@@ -26,16 +28,6 @@ interface AnexosModalProps {
   onFechar: () => void;
 }
 
-function fmtTamanho(bytes?: number): string {
-  if (!bytes) return "—";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
-}
-function fmtData(iso?: string): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("pt-BR");
-}
 function iconeTipo(mime?: string): string {
   if (mime === "application/pdf") return "📄";
   if (mime?.startsWith("image/")) return "🖼";

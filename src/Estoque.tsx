@@ -4,6 +4,8 @@ import { api, type SessionUser } from "./lib/api";
 import MovimentarEstoqueModal from "./MovimentarEstoqueModal";
 import SelectBusca from "./components/SelectBusca";
 
+import { fmtData, fmtQtd } from "./lib/format";
+
 // ============ TIPOS ============
 
 type TipoMov = "ENTRADA" | "SAIDA" | "AJUSTE";
@@ -51,19 +53,6 @@ interface Movimentacao {
   produto?: ProdutoRef | null;
   user?: UserRef | null;
 }
-
-const fmtData = (iso: string | null | undefined): string => {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-};
-
-// Quantidade fracionaria (Decimal(12,3) no banco) — exibe ate 3 casas.
-const fmtQtd = (v: number | string | null | undefined): string => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "0";
-  return n.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
-};
 
 // ============ COMPONENTE PRINCIPAL ============
 

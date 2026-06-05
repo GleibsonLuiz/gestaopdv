@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { C } from "../lib/theme";
 import { api, ApiError } from "../lib/api";
 import { useModalKeys } from "../lib/modalKeys";
+import { fmtBRL } from "../lib/format";
+
 
 // ============ MAQUININHA MERCADO PAGO ============
 //
@@ -53,9 +55,6 @@ const TIPOS: { id: TipoMaquininha; label: string; icone: string; cor: string }[]
   { id: "CREDIT", label: "Crédito à vista", icone: "💳", cor: C.yellow },
   { id: "DEBIT",  label: "Débito",          icone: "💳", cor: C.accent },
 ];
-
-const fmtBRL = (v: number) =>
-  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 export default function MaquininhaMpModal({
   totalReais, vendaPayload, onFechar, onConcluido,

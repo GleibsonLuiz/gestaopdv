@@ -3,6 +3,8 @@ import { C } from "./lib/theme";
 import { api } from "./lib/api";
 import BotoesContatoCliente from "./components/BotoesContatoCliente";
 import type { TipoMensagem } from "./lib/templates";
+import { fmtBRL, fmtData } from "./lib/format";
+
 
 // ============ CONFIGURACAO ============
 
@@ -26,14 +28,6 @@ const MESES: MesItem[] = [
   { num: 11, nome: "Novembro",  abrev: "Nov" },
   { num: 12, nome: "Dezembro",  abrev: "Dez" },
 ];
-
-const fmtBRL = (v: number | string | null | undefined): string =>
-  Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-const fmtData = (iso: string | null | undefined): string => {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("pt-BR");
-};
 
 // ============ TIPOS ============
 

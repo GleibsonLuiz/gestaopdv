@@ -11,6 +11,8 @@ import SelectBusca from "./components/SelectBusca";
 import { Abas } from "./components/AbasFormulario";
 import { UNIDADES_MEDIDA, SIGLAS_UNIDADE } from "./lib/unidades";
 
+import { fmtBRL, fmtQtd } from "./lib/format";
+
 // ============ TIPOS ============
 
 type TipoItem = "PRODUTO" | "SERVICO";
@@ -189,20 +191,6 @@ export function urlImagem(imagem: string | null | undefined): string | null {
   if (/^https?:\/\//i.test(imagem)) return imagem;
   return `${BASE_URL}${imagem}`;
 }
-
-const fmtBRL = (v: number | string | null | undefined): string => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-};
-
-// Estoque agora aceita decimal (Decimal(12,3)) — exibe ate 3 casas suprimindo
-// zeros a direita. "1.500" -> "1,5", "2.000" -> "2".
-const fmtQtd = (v: number | string | null | undefined): string => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "0";
-  return n.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
-};
 
 function proximoCodigoSugerido(produtos: Produto[]): string {
   const numericos = produtos

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { C } from "../lib/theme";
 import { api, ApiError } from "../lib/api";
 import { useModalKeys } from "../lib/modalKeys";
+import { fmtBRL } from "../lib/format";
+
 
 // ============ PIX QR CODE MODAL ============
 //
@@ -32,9 +34,6 @@ interface PixQrCodeModalProps {
   onFechar: () => void;
   onConcluido: (info: { vendaId: string; vendaNumero: number | null; valor: number }) => void;
 }
-
-const fmtBRL = (v: number) =>
-  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 export default function PixQrCodeModal({
   totalReais, vendaPayload, onFechar, onConcluido,

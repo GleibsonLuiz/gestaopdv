@@ -17,19 +17,8 @@ import { useEffect, useState } from "react";
 import { C } from "./lib/theme";
 import { api, getToken, getUser, setSession, clearSession } from "./lib/api";
 import { MODULOS_PLANO } from "./lib/permissoes";
-
-const fmtBRL = (v: any) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-const fmtNum = (v: any) => Number(v || 0).toLocaleString("pt-BR");
-const fmtData = (iso: any) => iso ? new Date(iso).toLocaleDateString("pt-BR") : "—";
-
-function mascararCnpj(v: any) {
-  const d = String(v || "").replace(/\D/g, "").slice(0, 14);
-  if (d.length <= 2) return d;
-  if (d.length <= 5) return `${d.slice(0, 2)}.${d.slice(2)}`;
-  if (d.length <= 8) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`;
-  if (d.length <= 12) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8)}`;
-  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
-}
+import { fmtBRL, fmtData, fmtNum } from "./lib/format";
+import { mascararCnpj } from "./lib/masks";
 
 export default function AdminMasterApp() {
   const [user, setUser] = useState(getUser());

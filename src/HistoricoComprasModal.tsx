@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { C } from "./lib/theme";
 import { api } from "./lib/api";
+import { fmtBRL, fmtData, fmtQtd } from "./lib/format";
+
 
 // ============ TIPOS ============
 
@@ -49,25 +51,6 @@ interface HistoricoComprasModalProps {
 }
 
 // ============ HELPERS ============
-
-const fmtBRL = (v: number | string | null | undefined): string => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-};
-
-const fmtQtd = (v: number | string | null | undefined): string => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "0";
-  return n.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
-};
-
-const fmtData = (iso: string | null | undefined): string => {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("pt-BR");
-};
 
 // ============ COMPONENTE ============
 

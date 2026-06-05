@@ -6,6 +6,8 @@
 // =====================================================================
 import * as e from "./escpos";
 import type { SegmentoEmpresa } from "./api";
+import { fmtBRL, fmtData, fmtQtd } from "../lib/format";
+
 
 export interface ItemPedidoImp {
   quantidade: number | string;
@@ -51,19 +53,6 @@ export interface OpcoesImp {
   segmento?: SegmentoEmpresa;    // controla quais campos extras renderizar
   mensagemRodape?: string | null;
   vendedorAssinatura?: boolean;  // linha "Assinatura: ___" no rodape
-}
-
-function fmtBRL(n: number | string): string {
-  const v = Number(n) || 0;
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-function fmtQtd(n: number | string): string {
-  const v = Number(n) || 0;
-  return Number.isInteger(v) ? String(v) : v.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
-}
-function fmtData(d: string | Date): string {
-  const dt = d instanceof Date ? d : new Date(d);
-  return dt.toLocaleString("pt-BR");
 }
 
 export function gerarComandosPedido(

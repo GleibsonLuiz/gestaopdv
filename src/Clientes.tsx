@@ -5,6 +5,9 @@ import ActionsMenu from "./components/ActionsMenu";
 import { FormularioLuxuoso, Secao, Linha, Campo } from "./components/FormularioLuxuoso";
 import PerfilClienteModal from "./components/PerfilClienteModal";
 import { consultarCnpj } from "./lib/cnpj";
+import { mascararCep, mascararCpfCnpj } from "./lib/masks";
+import { buscarCepViaCEP } from "./lib/viaCep";
+
 
 // ============ CONSTANTES ============
 
@@ -126,13 +129,6 @@ interface FormCliente {
   dataNascimento: string;
 }
 
-interface ViaCepDados {
-  endereco: string;
-  bairro: string;
-  cidade: string;
-  estado: string;
-}
-
 const VAZIO: FormCliente = {
   nome: "", cpfCnpj: "", email: "", telefone: "",
   endereco: "", numero: "", complemento: "", bairro: "",
@@ -141,45 +137,6 @@ const VAZIO: FormCliente = {
 };
 
 // ============ HELPERS ============
-
-function mascararCpfCnpj(valor: string): string {
-  const d = (valor || "").replace(/\D/g, "").slice(0, 14);
-  if (d.length <= 11) {
-    if (d.length <= 3) return d;
-    if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
-    if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
-    return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
-  }
-  if (d.length <= 5) return `${d.slice(0, 2)}.${d.slice(2)}`;
-  if (d.length <= 8) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`;
-  if (d.length <= 12) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8)}`;
-  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
-}
-
-function mascararCep(valor: string): string {
-  const d = (valor || "").replace(/\D/g, "").slice(0, 8);
-  if (d.length <= 5) return d;
-  return `${d.slice(0, 5)}-${d.slice(5)}`;
-}
-
-async function buscarCepViaCEP(cepMascarado: string): Promise<ViaCepDados | null> {
-  const d = cepMascarado.replace(/\D/g, "");
-  if (d.length !== 8) return null;
-  try {
-    const r = await fetch(`https://viacep.com.br/ws/${d}/json/`);
-    if (!r.ok) return null;
-    const j = await r.json();
-    if (j.erro) return null;
-    return {
-      endereco: j.logradouro || "",
-      bairro: j.bairro || "",
-      cidade: j.localidade || "",
-      estado: j.uf || "",
-    };
-  } catch {
-    return null;
-  }
-}
 
 function dividirEnderecoCompleto(enderecoCompleto: string | null | undefined): {
   endereco: string;
@@ -365,7 +322,7 @@ export default function Clientes({ user }: ClientesProps) {
     }
     setForm((prev) => ({
       ...prev,
-      endereco: dados.endereco || prev.endereco,
+      endereco: dados.logradouro || prev.endereco,
       bairro: dados.bairro || prev.bairro,
       cidade: dados.cidade || prev.cidade,
       estado: dados.estado || prev.estado,

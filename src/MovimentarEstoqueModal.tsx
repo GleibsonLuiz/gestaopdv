@@ -3,13 +3,7 @@ import { C } from "./lib/theme";
 import { api } from "./lib/api";
 import SelectBusca from "./components/SelectBusca";
 
-// Estoque/quantidade agora aceitam decimal (Decimal(12,3) no banco) —
-// produtos vendidos por metro/kg/L preservam fracao.
-const fmtQtd = (v: number | string | null | undefined): string => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "0";
-  return n.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
-};
+import { fmtQtd } from "./lib/format";
 
 // ============ TIPOS ============
 

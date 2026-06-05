@@ -3,6 +3,8 @@ import { C } from "./lib/theme";
 import { api, type SessionUser } from "./lib/api";
 import ActionsMenu from "./components/ActionsMenu";
 import SelectBusca from "./components/SelectBusca";
+import { fmtBRL, fmtData, fmtQtd } from "./lib/format";
+
 import {
   listarRascunhos,
   salvarRascunho,
@@ -92,25 +94,6 @@ interface ItemForm {
 }
 
 // ============ HELPERS ============
-
-const fmtBRL = (v: number | string | null | undefined): string => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-};
-
-// Quantidade fracionaria (Decimal(12,3) no banco) — exibe ate 3 casas,
-// suprime zeros a direita.
-const fmtQtd = (v: number | string | null | undefined): string => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "0";
-  return n.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
-};
-
-const fmtData = (iso: string | null | undefined): string => {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-};
 
 function dataDaqui(diasAFrente: number): string {
   const d = new Date();

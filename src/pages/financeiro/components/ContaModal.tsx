@@ -3,6 +3,8 @@ import ModalShell, {
   Alerta, BtnPrimario, BtnSecundario, Campo, Input, Select, Textarea,
 } from "./ModalShell";
 import { api } from "../../../lib/api";
+import { fmtBRL } from "../../../lib/format";
+
 
 interface Entidade { id: string; nome: string }
 interface Conta {
@@ -28,10 +30,6 @@ interface ContaModalProps {
   entidades?: Entidade[];
   onCancelar: () => void;
   onSalvar: () => void;
-}
-
-function fmtBRL(n: number): string {
-  return (n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 function parseNum(v: string): number {

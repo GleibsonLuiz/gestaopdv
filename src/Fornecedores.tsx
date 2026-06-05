@@ -4,6 +4,9 @@ import { api, type SessionUser } from "./lib/api";
 import ActionsMenu from "./components/ActionsMenu";
 import { FormularioLuxuoso, Secao, Linha, Campo } from "./components/FormularioLuxuoso";
 import { consultarCnpj } from "./lib/cnpj";
+import { mascararCep, mascararCnpj, mascararCpf, mascararDocumento, mascararTelefone } from "./lib/masks";
+import { buscarCepViaCEP } from "./lib/viaCep";
+
 
 // ============ CONSTANTES ============
 
@@ -100,14 +103,6 @@ interface FormFornecedor {
   nomePais: string;
 }
 
-interface ViaCepDados {
-  logradouro: string;
-  bairro: string;
-  cidade: string;
-  estado: string;
-  codMunicipioIBGE: string;
-}
-
 const VAZIO: FormFornecedor = {
   nome: "", nomeFantasia: "", tipoPessoa: "PJ", cnpj: "",
   email: "", telefone: "",
@@ -127,61 +122,6 @@ const CAMPOS_PROGRESSO: (keyof FormFornecedor)[] = [
 ];
 
 // ============ HELPERS ============
-
-function mascararCnpj(v: string): string {
-  const d = (v || "").replace(/\D/g, "").slice(0, 14);
-  if (d.length <= 2) return d;
-  if (d.length <= 5) return `${d.slice(0, 2)}.${d.slice(2)}`;
-  if (d.length <= 8) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`;
-  if (d.length <= 12) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8)}`;
-  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
-}
-
-function mascararCpf(v: string): string {
-  const d = (v || "").replace(/\D/g, "").slice(0, 11);
-  if (d.length <= 3) return d;
-  if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
-  if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
-  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
-}
-
-function mascararDocumento(tipoPessoa: TipoPessoa, v: string): string {
-  return tipoPessoa === "PF" ? mascararCpf(v) : mascararCnpj(v);
-}
-
-function mascararCep(v: string): string {
-  const d = (v || "").replace(/\D/g, "").slice(0, 8);
-  if (d.length <= 5) return d;
-  return `${d.slice(0, 5)}-${d.slice(5)}`;
-}
-
-function mascararTelefone(v: string): string {
-  const d = (v || "").replace(/\D/g, "").slice(0, 11);
-  if (d.length <= 10) {
-    return d.replace(/^(\d{2})(\d)/, "($1) $2").replace(/(\d{4})(\d)/, "$1-$2");
-  }
-  return d.replace(/^(\d{2})(\d)/, "($1) $2").replace(/(\d{5})(\d)/, "$1-$2");
-}
-
-async function buscarCepViaCEP(cepMascarado: string): Promise<ViaCepDados | null> {
-  const d = cepMascarado.replace(/\D/g, "");
-  if (d.length !== 8) return null;
-  try {
-    const r = await fetch(`https://viacep.com.br/ws/${d}/json/`);
-    if (!r.ok) return null;
-    const j = await r.json();
-    if (j.erro) return null;
-    return {
-      logradouro: j.logradouro || "",
-      bairro: j.bairro || "",
-      cidade: j.localidade || "",
-      estado: j.uf || "",
-      codMunicipioIBGE: j.ibge || "",
-    };
-  } catch {
-    return null;
-  }
-}
 
 // ============ COMPONENTE PRINCIPAL ============
 

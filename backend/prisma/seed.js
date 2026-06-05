@@ -42,7 +42,8 @@ async function seedEmpresa() {
 // ==================== USUÁRIO ADMIN ====================
 
 async function seedAdmin() {
-  const senhaHash = await bcrypt.hash("admin123", 10);
+  const senhaDefault = process.env.SEED_ADMIN_PASSWORD || "admin123";
+  const senhaHash = await bcrypt.hash(senhaDefault, 10);
   return prisma.user.upsert({
     where: { tenantId_email: { tenantId: TENANT_ID, email: "admin@gestaopro.local" } },
     update: { nome: "GLEIBSON LUIZ NUNES SILVA", permissoes: IDS_MODULOS },

@@ -226,6 +226,7 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
   const [salvando, setSalvando] = useState(false);
   const [lendo, setLendo] = useState(false);
   const [origemOcr, setOrigemOcr] = useState(false);
+  const [erroLocal, setErroLocal] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const chips = contas.filter(c => recentes.includes(c.id));
@@ -259,9 +260,9 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
 
   async function salvar() {
     const v = Number(String(valor).replace(",", "."));
-    if (!v || v <= 0) { onErro("Informe um valor maior que zero."); return; }
-    if (!planoContaId) { onErro("Escolha uma categoria."); return; }
-    setSalvando(true); onErro("");
+    if (!v || v <= 0) { setErroLocal("Informe um valor maior que zero."); return; }
+    if (!planoContaId) { setErroLocal("Escolha uma categoria."); return; }
+    setSalvando(true); setErroLocal(""); onErro("");
     try {
       await api.criarDespesa(
         { valor: v, planoContaId, data, descricao, formaPagamento, origem: origemOcr ? "OCR" : "MANUAL" },
@@ -286,7 +287,7 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
         <span style={{ color: C.muted, fontSize: 22, fontWeight: 700 }}>R$</span>
         <input
           type="text" inputMode="decimal" placeholder="0,00" value={valor} autoFocus
-          onChange={e => setValor(e.target.value.replace(/[^0-9.,]/g, ""))}
+          onChange={e => { setValor(e.target.value.replace(/[^0-9.,]/g, "")); setErroLocal(""); }}
           onKeyDown={e => { if (e.key === "Enter") salvar(); }}
           style={{ ...input(), fontSize: 32, fontWeight: 800, color: C.text, padding: "8px 12px", width: 220 }}
         />
@@ -306,7 +307,7 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
         <Campo label="Categoria *" flex={2}>
-          <select value={planoContaId} onChange={e => setPlanoContaId(e.target.value)} style={input()}>
+          <select value={planoContaId} onChange={e => { setPlanoContaId(e.target.value); setErroLocal(""); }} style={input()}>
             <option value="">Selecione…</option>
             {contas.map(c => <option key={c.id} value={c.id}>{c.codigo} — {c.nome}</option>)}
           </select>
@@ -327,6 +328,10 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
             placeholder="Ex.: café e açúcar da copa" style={input()} />
         </Campo>
       </div>
+
+      {erroLocal && (
+        <div style={{ marginTop: 8, color: C.red, fontSize: 13, fontWeight: 600 }}>{erroLocal}</div>
+      )}
 
       <div style={{ display: "flex", gap: 12, marginTop: 12, alignItems: "center", flexWrap: "wrap" }}>
         <button type="button" onClick={() => fileRef.current?.click()} disabled={lendo} style={btnSec()}>

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { authRequired, requireRole, requirePermissao } from "../middlewares/auth.js";
 import {
   listar, obter, criar, atualizar, excluir, anexar, excluirAnexo, ocr,
+  previstoRealizado,
 } from "../controllers/despesaController.js";
 import { upload, tratarErroUpload } from "../controllers/anexoController.js";
 
@@ -11,6 +12,10 @@ router.use(authRequired);
 router.use(requirePermissao("DESPESAS"));
 
 router.get("/", listar);
+
+// Relatorio Previsto x Realizado + ledger de contas pagas (leitura). Antes de
+// "/:id" para o segmento fixo nao ser capturado pelo parametro.
+router.get("/previsto-realizado", previstoRealizado);
 
 // OCR de comprovante (le e devolve campos sugeridos; nao cria despesa).
 router.post(

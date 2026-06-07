@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import ModalShell, {
   Alerta, BtnPrimario, BtnSecundario, Campo, Input, Select, Textarea,
 } from "./ModalShell";
 import { api } from "../../../lib/api";
 
 interface Entidade { id: string; nome: string }
+interface Categoria { id: string; codigo: string; nome: string }
 interface Conta {
   id: string;
   descricao?: string;
@@ -16,6 +17,7 @@ interface Conta {
   vencimento?: string;
   fornecedorId?: string;
   clienteId?: string;
+  planoContaId?: string | null;
   observacoes?: string | null;
 }
 
@@ -58,6 +60,8 @@ export default function ContaModal({
   const [entidadeId, setEntidadeId] = useState(
     (ehPagar ? conta?.fornecedorId : conta?.clienteId) || ""
   );
+  const [planoContaId, setPlanoContaId] = useState(conta?.planoContaId || "");
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [observacoes, setObservacoes] = useState(conta?.observacoes || "");
   const [tipoRecorrencia, setTipoRecorrencia] = useState<TipoRecorrencia>("NENHUMA");
   const [parcelaTotal, setParcelaTotal] = useState("3");
@@ -65,6 +69,16 @@ export default function ContaModal({
   const [entradaForma, setEntradaForma] = useState("DINHEIRO");
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
+
+  // Categoria (Plano de Contas) só se aplica a contas a pagar — usa as mesmas
+  // contas analíticas de DESPESA do módulo de Despesas, mantendo a classificação
+  // unificada entre os dois módulos.
+  useEffect(() => {
+    if (!ehPagar) return;
+    api.listarPlanosContas({ natureza: "DESPESA", analitica: "true", ativo: "true" })
+      .then(d => setCategorias((d as Categoria[]) || []))
+      .catch(() => {});
+  }, [ehPagar]);
 
   // Entrada à vista só faz sentido em conta parcelada (pagar ou receber).
   const usaEntrada = tipoRecorrencia === "PARCELADA";
@@ -95,6 +109,7 @@ export default function ContaModal({
     if (!Number.isFinite(vb) || vb <= 0) { setErro("Valor bruto deve ser maior que zero"); return; }
     if (!vencimento) { setErro("Vencimento é obrigatório"); return; }
     if (liquido <= 0) { setErro("Valor líquido (bruto + juros + multa − desconto) deve ser maior que zero"); return; }
+    if (ehPagar && !planoContaId) { setErro("Categoria é obrigatória"); return; }
 
     const payload: Record<string, unknown> = {
       descricao,
@@ -105,8 +120,12 @@ export default function ContaModal({
       vencimento,
       observacoes: observacoes || null,
     };
-    if (ehPagar) payload.fornecedorId = entidadeId || null;
-    else payload.clienteId = entidadeId || null;
+    if (ehPagar) {
+      payload.fornecedorId = entidadeId || null;
+      payload.planoContaId = planoContaId;
+    } else {
+      payload.clienteId = entidadeId || null;
+    }
 
     if (!editar && tipoRecorrencia !== "NENHUMA") {
       payload.tipoRecorrencia = tipoRecorrencia;
@@ -197,12 +216,31 @@ export default function ContaModal({
           </div>
         </div>
 
-        <Campo label={ehPagar ? "Fornecedor" : "Cliente"}>
-          <Select value={entidadeId} onChange={e => setEntidadeId(e.target.value)}>
-            <option value="">— Sem vínculo —</option>
-            {entidades.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
-          </Select>
-        </Campo>
+        {ehPagar ? (
+          <div className="grid grid-cols-2 gap-3">
+            <Campo label="Fornecedor">
+              <Select value={entidadeId} onChange={e => setEntidadeId(e.target.value)}>
+                <option value="">— Sem vínculo —</option>
+                {entidades.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
+              </Select>
+            </Campo>
+            <Campo label="Categoria *">
+              <Select value={planoContaId} onChange={e => setPlanoContaId(e.target.value)} required>
+                <option value="">— Selecione —</option>
+                {categorias.map(c => (
+                  <option key={c.id} value={c.id}>{c.codigo} · {c.nome}</option>
+                ))}
+              </Select>
+            </Campo>
+          </div>
+        ) : (
+          <Campo label="Cliente">
+            <Select value={entidadeId} onChange={e => setEntidadeId(e.target.value)}>
+              <option value="">— Sem vínculo —</option>
+              {entidades.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
+            </Select>
+          </Campo>
+        )}
 
         {!editar && (
           <div className="bg-white/[.025] border border-hairline-soft rounded-[10px] p-3.5 mb-4">

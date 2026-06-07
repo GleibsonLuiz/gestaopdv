@@ -714,6 +714,8 @@ Cada grupo tem header colapsável com contagem + subtotal.
 
 **Ações em lote:** marcar checkbox de várias contas → barra flutuante mostra "X selecionadas · R$ Y" → botões "Pagar selecionadas" / "Cancelar contas".
 
+**Categoria (obrigatória nas Contas a Pagar):** ao criar uma conta a pagar, escolha a **Categoria** — são as mesmas categorias do **Plano de Contas** usadas em Despesas. Isso classifica o gasto desde o nascimento da conta e alimenta o relatório **Previsto × Realizado** (em Despesas) e a exportação do contador. Em contas **parceladas/recorrentes**, a categoria é aplicada a todas as parcelas.
+
 **Recorrência:** ao criar conta, marque **PARCELADA** (gera N contas mês a mês com `grupoRecorrenciaId` compartilhado) ou **RECORRENTE_MENSAL**.
 
 **Entrada + parcelado:** ao marcar **PARCELADA** (em contas a pagar **ou** a receber), informe opcionalmente uma **Entrada à vista** e a **forma de pagamento** dela (dinheiro, PIX, cartão, boleto). O sistema separa um lançamento já **quitado** com o valor da entrada — lançando a movimentação no caixa aberto, se houver (saída em contas a pagar; entrada em contas a receber) — e parcela apenas o **restante** nas N parcelas. Ex.: total R$ 200, entrada R$ 50, 3 parcelas → entrada de R$ 50 + 3× de R$ 50. A entrada aparece na lista marcada como **🅴 Entrada**.
@@ -724,7 +726,7 @@ Cada grupo tem header colapsável com contagem + subtotal.
 
 **Para que serve:** registrar gastos em segundos (pensado para ser tão rápido quanto mandar um WhatsApp) e deixar tudo organizado para o contador.
 
-**Diferença para "Financeiro":** o Financeiro controla o que **vai vencer** (boletos, parcelas). Despesas é o que **você já gastou** agora. Os dois alimentam os relatórios, mas não se misturam.
+**Diferença para "Financeiro":** o Financeiro controla o que **vai vencer** (boletos, parcelas). Despesas é o que **você já gastou** agora. Quando você **dá baixa** numa conta a pagar no Financeiro, ela **já vira gasto realizado** — e aparece aqui na tela de Despesas, no ledger unificado, marcada com a etiqueta **conta a pagar** (em modo leitura; para editar/reabrir, use o Financeiro). **Não há registro duplicado:** a conta paga *é* o realizado, contando uma única vez no caixa e nos relatórios.
 
 **Como usar:**
 
@@ -737,6 +739,10 @@ Cada grupo tem header colapsável com contagem + subtotal.
 **📷 Leitura automática do comprovante (OCR com IA):** ao escolher a foto/PDF do cupom, o sistema **lê o comprovante com inteligência artificial** e preenche sozinho o **valor, a data, a descrição e sugere a categoria**. Aparece a marca *"preenchido por IA — confira"*: revise e ajuste se precisar antes de lançar (a IA nunca grava sozinha). Despesas lançadas assim ficam marcadas com a etiqueta **OCR** na lista. Requer a chave da IA configurada no servidor (`ANTHROPIC_API_KEY`); se a leitura falhar, é só preencher na mão normalmente.
 
 **Baixa no caixa:** se houver um caixa **aberto**, a despesa sai dele automaticamente (movimentação `DESPESA`). Excluir a despesa **estorna** o valor no caixa (se ainda estiver aberto).
+
+**📊 Previsto × Realizado por categoria:** no topo da tela, o painel compara, no período filtrado, o que estava **previsto** (contas a pagar com vencimento no período) com o que foi **realizado** (contas a pagar pagas **+** despesas avulsas), categoria por categoria. As barras mostram a proporção e indicam **sobra** (gastou menos que o previsto) ou **estouro** (gastou mais, em vermelho). É o relatório de orçamento × execução do mês.
+
+**📒 Realizado no período (ledger unificado):** a lista reúne, em um só lugar e ordenadas por data, as **despesas avulsas** lançadas aqui e as **contas a pagar pagas** no período. Cada gasto conta uma única vez. Filtre por **período** e **categoria**.
 
 **Plano de Contas:** na primeira vez, o sistema cria um plano padrão para comércio/serviço (Ocupação, Pessoal, Administrativas, Comerciais, Financeiras, Impostos). Admin/Gerente podem editar as categorias.
 

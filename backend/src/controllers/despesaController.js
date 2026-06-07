@@ -174,6 +174,92 @@ export async function criar(req, res, next) {
   }
 }
 
+// Relatorio Previsto x Realizado por categoria, no periodo [inicio, fim].
+//
+//   PREVISTO  = contas a pagar planejadas (vencimento no periodo, exceto
+//               canceladas) — o que se esperava desembolsar por categoria.
+//   REALIZADO = contas a pagar QUITADAS (pagamento no periodo) + despesas
+//               operacionais (data no periodo) — o que de fato saiu.
+//
+// Modelo "sem duplicar" (decisao de arquitetura): a conta paga JA e o gasto
+// realizado — nao existe Despesa-espelho criada na baixa. Por isso o realizado
+// soma os dois lados sem risco de dupla contagem (uma conta paga aparece so em
+// `realizadoContas`; uma despesa avulsa so em `realizadoDespesas`). Tambem
+// devolve `contasPagas` para a tela de Despesas exibir o ledger unificado
+// (despesas avulsas + contas a pagar pagas) em modo leitura.
+export async function previstoRealizado(req, res, next) {
+  try {
+    const hoje = new Date();
+    const inicio = parseDate(req.query.inicio)
+      || new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    const fim = req.query.fim
+      ? new Date(req.query.fim + "T23:59:59.999Z")
+      : hoje;
+
+    const catSelect = { select: { id: true, codigo: true, nome: true } };
+    const [previstas, contasPagas, despesas] = await Promise.all([
+      prisma.contaPagar.findMany({
+        where: { status: { not: "CANCELADA" }, vencimento: { gte: inicio, lte: fim } },
+        include: { planoConta: catSelect },
+      }),
+      prisma.contaPagar.findMany({
+        where: { status: "PAGA", pagamento: { gte: inicio, lte: fim } },
+        include: { planoConta: catSelect, fornecedor: { select: { id: true, nome: true } } },
+        orderBy: { pagamento: "desc" },
+      }),
+      prisma.despesa.findMany({
+        where: { data: { gte: inicio, lte: fim } },
+        include: { planoConta: catSelect },
+      }),
+    ]);
+
+    // Agrupa por categoria. Contas sem classificacao (ex.: geradas por compras
+    // antes deste fluxo) caem num balde "Sem categoria".
+    const grupos = new Map();
+    const SEM = { id: "sem", codigo: "—", nome: "Sem categoria" };
+    const bucket = (pc) => {
+      const cat = pc || SEM;
+      if (!grupos.has(cat.id)) {
+        grupos.set(cat.id, {
+          planoContaId: cat.id === "sem" ? null : cat.id,
+          codigo: cat.codigo, nome: cat.nome,
+          previsto: 0, realizadoContas: 0, realizadoDespesas: 0,
+        });
+      }
+      return grupos.get(cat.id);
+    };
+
+    for (const c of previstas) bucket(c.planoConta).previsto += Number(c.valor);
+    for (const c of contasPagas) bucket(c.planoConta).realizadoContas += Number(c.valor);
+    for (const d of despesas) bucket(d.planoConta).realizadoDespesas += Number(d.valor);
+
+    const porCategoria = [...grupos.values()]
+      .map(g => ({ ...g, realizado: g.realizadoContas + g.realizadoDespesas }))
+      .sort((a, b) => (b.previsto + b.realizado) - (a.previsto + a.realizado));
+
+    const totais = porCategoria.reduce((t, g) => ({
+      previsto: t.previsto + g.previsto,
+      realizado: t.realizado + g.realizado,
+      realizadoContas: t.realizadoContas + g.realizadoContas,
+      realizadoDespesas: t.realizadoDespesas + g.realizadoDespesas,
+    }), { previsto: 0, realizado: 0, realizadoContas: 0, realizadoDespesas: 0 });
+
+    res.json({
+      inicio, fim, totais, porCategoria,
+      contasPagas: contasPagas.map(c => ({
+        id: c.id,
+        descricao: c.descricao,
+        valor: Number(c.valor),
+        pagamento: c.pagamento,
+        planoConta: c.planoConta,
+        fornecedor: c.fornecedor,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // OCR do comprovante: recebe a foto/PDF, le com a IA e devolve os campos
 // sugeridos { valor, data, descricao, cnpj, planoContaSugeridaId } para o
 // frontend pre-preencher. NAO cria a despesa — o usuario confere e confirma.

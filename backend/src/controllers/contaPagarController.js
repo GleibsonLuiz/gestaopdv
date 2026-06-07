@@ -9,9 +9,23 @@ const FORMAS_VALIDAS = new Set([
 ]);
 
 const INCLUDE = {
+  planoConta: { select: { id: true, codigo: true, nome: true, natureza: true } },
   fornecedor: { select: { id: true, nome: true, cnpj: true } },
   anexos: { orderBy: { createdAt: "asc" } },
 };
+
+// Valida a categoria (Plano de Contas): precisa existir, estar ativa e ser
+// analitica (folha). Contas sinteticas so agrupam — nao recebem lancamento.
+// Espelha a mesma regra do despesaController, mantendo os modulos consistentes.
+async function validarCategoria(planoContaId) {
+  const pc = await prisma.planoConta.findUnique({ where: { id: planoContaId } });
+  if (!pc) return { ok: false, erro: "Categoria inexistente" };
+  if (!pc.ativo) return { ok: false, erro: "Categoria inativa" };
+  if (!pc.analitica) {
+    return { ok: false, erro: "Selecione uma categoria analitica (nao um grupo)" };
+  }
+  return { ok: true, planoConta: pc };
+}
 
 export async function listar(req, res, next) {
   try {
@@ -71,7 +85,7 @@ export async function obter(req, res, next) {
 
 export async function criar(req, res, next) {
   try {
-    const { descricao, vencimento, fornecedorId, observacoes,
+    const { descricao, vencimento, fornecedorId, observacoes, planoContaId,
             tipoRecorrencia = "NENHUMA", parcelaTotal } = req.body;
 
     if (!descricao || !String(descricao).trim()) {
@@ -80,6 +94,15 @@ export async function criar(req, res, next) {
     if (!TIPOS_RECORRENCIA.has(tipoRecorrencia)) {
       return res.status(400).json({ erro: "Tipo de recorrencia invalido" });
     }
+
+    // Categoria (Plano de Contas) obrigatoria: garante que toda conta a pagar
+    // nasce classificada, permitindo o relatorio Previsto x Realizado por
+    // categoria e a exportacao ja classificada para o contador.
+    if (!planoContaId) {
+      return res.status(400).json({ erro: "Categoria (plano de contas) e obrigatoria" });
+    }
+    const cat = await validarCategoria(planoContaId);
+    if (!cat.ok) return res.status(400).json({ erro: cat.erro });
 
     // Compatibilidade: se cliente mandar so `valor` (sem valorBruto), tratamos
     // como bruto. Reflete clientes antigos antes do refinamento.
@@ -97,6 +120,7 @@ export async function criar(req, res, next) {
       descricao: String(descricao).trim(),
       fornecedorId: fornecedorId || null,
       observacoes: observacoes ? String(observacoes).trim() : null,
+      planoContaId,
     };
 
     const entradaForma = req.body.entradaForma || "DINHEIRO";
@@ -191,6 +215,14 @@ export async function atualizar(req, res, next) {
     }
     if (req.body.fornecedorId !== undefined) {
       data.fornecedorId = req.body.fornecedorId || null;
+    }
+    if (req.body.planoContaId !== undefined) {
+      if (!req.body.planoContaId) {
+        return res.status(400).json({ erro: "Categoria (plano de contas) e obrigatoria" });
+      }
+      const cat = await validarCategoria(req.body.planoContaId);
+      if (!cat.ok) return res.status(400).json({ erro: cat.erro });
+      data.planoContaId = req.body.planoContaId;
     }
     if (req.body.observacoes !== undefined) {
       data.observacoes = req.body.observacoes ? String(req.body.observacoes).trim() : null;

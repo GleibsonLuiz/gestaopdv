@@ -44,9 +44,53 @@ interface Despesa {
   anexos?: Anexo[];
 }
 
+// Conta a pagar JÁ QUITADA no período — entra no ledger unificado como "realizado"
+// em modo leitura (não há registro duplicado; a baixa acontece no Financeiro).
+interface ContaPaga {
+  id: string;
+  descricao: string;
+  valor: number | string;
+  pagamento: string | null;
+  planoConta?: { id: string; codigo: string; nome: string } | null;
+  fornecedor?: { id: string; nome: string } | null;
+}
+
+interface CategoriaPR {
+  planoContaId: string | null;
+  codigo: string;
+  nome: string;
+  previsto: number;
+  realizado: number;
+  realizadoContas: number;
+  realizadoDespesas: number;
+}
+
+interface RelatorioPR {
+  inicio: string;
+  fim: string;
+  totais: { previsto: number; realizado: number; realizadoContas: number; realizadoDespesas: number };
+  porCategoria: CategoriaPR[];
+  contasPagas: ContaPaga[];
+}
+
+// Linha do ledger unificado: despesa avulsa OU conta a pagar paga.
+interface LinhaLedger {
+  key: string;
+  tipo: "despesa" | "conta";
+  data: string;
+  categoria: string;
+  descricao: string;
+  forma: string;
+  valor: number;
+  origem?: string;
+  anexoUrl?: string | null;
+  despesa?: Despesa;
+}
+
 export default function Despesas({ user }: { user: SessionUser }) {
   const [contas, setContas] = useState<PlanoConta[]>([]);
   const [despesas, setDespesas] = useState<Despesa[]>([]);
+  const [relatorio, setRelatorio] = useState<RelatorioPR | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [ok, setOk] = useState("");
@@ -80,8 +124,18 @@ export default function Despesas({ user }: { user: SessionUser }) {
     finally { setCarregando(false); }
   }, [fInicio, fFim, fCategoria]);
 
+  // Previsto x Realizado + contas a pagar pagas no período. O filtro de
+  // categoria é aplicado no cliente (o relatório vem com todas as categorias).
+  const carregarRelatorio = useCallback(async () => {
+    try {
+      const r = await api.previstoRealizado({ inicio: fInicio, fim: fFim }) as RelatorioPR;
+      setRelatorio(r || null);
+    } catch (e) { setErro((e as Error).message); }
+  }, [fInicio, fFim]);
+
   useEffect(() => { carregarContas(); }, [carregarContas]);
   useEffect(() => { carregarDespesas(); }, [carregarDespesas]);
+  useEffect(() => { carregarRelatorio(); }, [carregarRelatorio]);
 
   // Categorias usadas com mais frequencia nas despesas carregadas — viram chips
   // de 1 toque no formulario (atalho para o gasto recorrente).
@@ -93,9 +147,62 @@ export default function Despesas({ user }: { user: SessionUser }) {
     return [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([id]) => id);
   }, [despesas]);
 
-  const totalPeriodo = useMemo(
+  // Contas a pagar pagas no período (filtradas por categoria no cliente).
+  const contasPagas = useMemo(() => {
+    const lista = relatorio?.contasPagas || [];
+    return fCategoria ? lista.filter(c => c.planoConta?.id === fCategoria) : lista;
+  }, [relatorio, fCategoria]);
+
+  // Ledger unificado: despesas avulsas + contas a pagar pagas, por data desc.
+  const ledger = useMemo<LinhaLedger[]>(() => {
+    const linhas: LinhaLedger[] = [];
+    for (const d of despesas) {
+      linhas.push({
+        key: `d-${d.id}`,
+        tipo: "despesa",
+        data: d.data,
+        categoria: d.planoConta?.nome || "—",
+        descricao: d.descricao,
+        forma: FORMAS.find(f => f.id === d.formaPagamento)?.label || d.formaPagamento,
+        valor: Number(d.valor || 0),
+        origem: d.origem,
+        anexoUrl: d.anexos && d.anexos.length > 0 ? d.anexos[0].url : null,
+        despesa: d,
+      });
+    }
+    for (const c of contasPagas) {
+      linhas.push({
+        key: `c-${c.id}`,
+        tipo: "conta",
+        data: c.pagamento || "",
+        categoria: c.planoConta?.nome || "—",
+        descricao: c.fornecedor?.nome ? `${c.descricao} · ${c.fornecedor.nome}` : c.descricao,
+        forma: "—",
+        valor: Number(c.valor || 0),
+        anexoUrl: null,
+      });
+    }
+    return linhas.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
+  }, [despesas, contasPagas]);
+
+  // Previsto x Realizado por categoria (respeita o filtro de categoria).
+  const porCategoria = useMemo<CategoriaPR[]>(() => {
+    const lista = relatorio?.porCategoria || [];
+    return fCategoria ? lista.filter(c => c.planoContaId === fCategoria) : lista;
+  }, [relatorio, fCategoria]);
+
+  const totalDespesas = useMemo(
     () => despesas.reduce((s, d) => s + Number(d.valor || 0), 0),
     [despesas],
+  );
+  const totalContasPagas = useMemo(
+    () => contasPagas.reduce((s, c) => s + Number(c.valor || 0), 0),
+    [contasPagas],
+  );
+  const totalRealizado = totalDespesas + totalContasPagas;
+  const totalPrevisto = useMemo(
+    () => porCategoria.reduce((s, c) => s + c.previsto, 0),
+    [porCategoria],
   );
 
   async function excluir(d: Despesa) {
@@ -104,6 +211,7 @@ export default function Despesas({ user }: { user: SessionUser }) {
       await api.excluirDespesa(d.id);
       setOk("Despesa excluída.");
       carregarDespesas();
+      carregarRelatorio();
     } catch (e) { setErro((e as Error).message); }
   }
 
@@ -112,6 +220,7 @@ export default function Despesas({ user }: { user: SessionUser }) {
     setTimeout(() => setOk(""), 2500);
     carregarDespesas();
     carregarContas();
+    carregarRelatorio();
   }
 
   return (
@@ -119,24 +228,43 @@ export default function Despesas({ user }: { user: SessionUser }) {
       {erro && <Aviso cor={C.red} texto={erro} onClose={() => setErro("")} />}
       {ok && <Aviso cor={C.green} texto={ok} onClose={() => setOk("")} />}
 
-      {/* Resumo do periodo */}
-      <div style={card()}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
-          <div>
-            <div style={{ color: C.muted, fontSize: 13 }}>Total de despesas no período</div>
-            <div style={{ color: C.red, fontSize: 28, fontWeight: 800 }}>{fmtBRL(totalPeriodo)}</div>
-          </div>
-          <div style={{ color: C.muted, fontSize: 13 }}>{despesas.length} lançamento(s)</div>
-        </div>
+      {/* Resumo do periodo: Previsto x Realizado (sem duplicar — a conta paga
+          já é o realizado, não há despesa-espelho). */}
+      <div style={{ ...card(), display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 16 }}>
+        <ResumoKpi
+          label="Realizado no período"
+          valor={fmtBRL(totalRealizado)}
+          cor={C.red}
+          sub={`${fmtBRL(totalDespesas)} avulsas · ${fmtBRL(totalContasPagas)} contas pagas`}
+        />
+        <ResumoKpi
+          label="Previsto no período"
+          valor={fmtBRL(totalPrevisto)}
+          cor={C.muted}
+          sub="contas a pagar com vencimento no período"
+        />
+        <ResumoKpi
+          label="Diferença (prev. − real.)"
+          valor={fmtBRL(totalPrevisto - totalRealizado)}
+          cor={totalRealizado <= totalPrevisto ? C.green : C.red}
+          sub={`${despesas.length + contasPagas.length} lançamento(s)`}
+        />
       </div>
 
       {podeEditar && (
-        <LancarDespesa
-          contas={analiticas}
-          recentes={recentes}
-          onSalvo={aposSalvar}
-          onErro={setErro}
-        />
+        <>
+          <LancarDespesa
+            contas={analiticas}
+            recentes={recentes}
+            onSalvo={aposSalvar}
+            onErro={setErro}
+          />
+          <GerenciarCategorias
+            contas={analiticas}
+            onAtualizado={() => { carregarContas(); carregarDespesas(); }}
+            onErro={setErro}
+          />
+        </>
       )}
 
       {/* Filtros */}
@@ -155,13 +283,22 @@ export default function Despesas({ user }: { user: SessionUser }) {
         </Campo>
       </div>
 
-      {/* Lista */}
+      {/* Previsto x Realizado por categoria */}
+      <PrevistoRealizado porCategoria={porCategoria} />
+
+      {/* Ledger unificado: despesas avulsas + contas a pagar pagas (leitura) */}
       <div style={card()}>
+        <div style={{ fontWeight: 700, color: C.white, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+          <span>📒</span> Realizado no período
+          <span style={{ color: C.muted, fontWeight: 400, fontSize: 12 }}>
+            · despesas avulsas + contas a pagar pagas
+          </span>
+        </div>
         {carregando ? (
           <div style={{ color: C.muted, padding: 24, textAlign: "center" }}>Carregando…</div>
-        ) : despesas.length === 0 ? (
+        ) : ledger.length === 0 ? (
           <div style={{ color: C.muted, padding: 24, textAlign: "center" }}>
-            Nenhuma despesa no período. {podeEditar ? "Lance a primeira acima 👆" : ""}
+            Nenhum gasto realizado no período. {podeEditar ? "Lance uma despesa acima 👆" : ""}
           </div>
         ) : (
           <div style={{ overflowX: "auto" }}>
@@ -178,24 +315,27 @@ export default function Despesas({ user }: { user: SessionUser }) {
                 </tr>
               </thead>
               <tbody>
-                {despesas.map(d => (
-                  <tr key={d.id} style={{ borderTop: `1px solid ${C.border}` }}>
-                    <td style={td()}>{fmtData(d.data)}</td>
+                {ledger.map(l => (
+                  <tr key={l.key} style={{ borderTop: `1px solid ${C.border}` }}>
+                    <td style={td()}>{fmtData(l.data)}</td>
                     <td style={td()}>
-                      <span style={{ color: C.text }}>{d.planoConta?.nome || "—"}</span>
-                      {d.origem === "OCR" && <span style={tag(C.purple)}>OCR</span>}
+                      <span style={{ color: C.text }}>{l.categoria}</span>
+                      {l.origem === "OCR" && <span style={tag(C.purple)}>OCR</span>}
+                      {l.tipo === "conta" && <span style={tag(C.muted)}>conta a pagar</span>}
                     </td>
-                    <td style={td()}>{d.descricao}</td>
-                    <td style={{ ...td(), color: C.muted }}>{FORMAS.find(f => f.id === d.formaPagamento)?.label || d.formaPagamento}</td>
-                    <td style={{ ...td(), textAlign: "right", color: C.red, fontWeight: 600 }}>{fmtBRL(d.valor)}</td>
+                    <td style={td()}>{l.descricao}</td>
+                    <td style={{ ...td(), color: C.muted }}>{l.forma}</td>
+                    <td style={{ ...td(), textAlign: "right", color: C.red, fontWeight: 600 }}>{fmtBRL(l.valor)}</td>
                     <td style={{ ...td(), textAlign: "center" }}>
-                      {d.anexos && d.anexos.length > 0
-                        ? <a href={d.anexos[0].url} target="_blank" rel="noreferrer" title="Ver comprovante" style={{ textDecoration: "none" }}>📎</a>
+                      {l.anexoUrl
+                        ? <a href={l.anexoUrl} target="_blank" rel="noreferrer" title="Ver comprovante" style={{ textDecoration: "none" }}>📎</a>
                         : <span style={{ color: C.muted }}>—</span>}
                     </td>
                     {podeEditar && (
                       <td style={{ ...td(), textAlign: "right" }}>
-                        <button onClick={() => excluir(d)} title="Excluir" style={btnIcone(C.red)}>🗑</button>
+                        {l.tipo === "despesa" && l.despesa
+                          ? <button onClick={() => excluir(l.despesa!)} title="Excluir" style={btnIcone(C.red)}>🗑</button>
+                          : <span style={{ color: C.muted, fontSize: 11 }} title="Gerencie no Financeiro">↗ Financeiro</span>}
                       </td>
                     )}
                   </tr>
@@ -261,6 +401,7 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
     const v = Number(String(valor).replace(",", "."));
     if (!v || v <= 0) { onErro("Informe um valor maior que zero."); return; }
     if (!planoContaId) { onErro("Escolha uma categoria."); return; }
+    if (!descricao || !descricao.trim()) { onErro("Informe uma descrição para a despesa."); return; }
     setSalvando(true); onErro("");
     try {
       await api.criarDespesa(
@@ -288,7 +429,7 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
           type="text" inputMode="decimal" placeholder="0,00" value={valor} autoFocus
           onChange={e => setValor(e.target.value.replace(/[^0-9.,]/g, ""))}
           onKeyDown={e => { if (e.key === "Enter") salvar(); }}
-          style={{ ...input(), fontSize: 32, fontWeight: 800, color: C.text, padding: "8px 12px", width: 220 }}
+          style={{ ...input(), fontSize: 32, fontWeight: 800, color: C.text, padding: "8px 12px", width: 150 }}
         />
       </div>
 
@@ -305,7 +446,7 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
       )}
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-        <Campo label="Categoria *" flex={2}>
+        <Campo label="Categoria *" flex={1}>
           <select value={planoContaId} onChange={e => setPlanoContaId(e.target.value)} style={input()}>
             <option value="">Selecione…</option>
             {contas.map(c => <option key={c.id} value={c.id}>{c.codigo} — {c.nome}</option>)}
@@ -322,9 +463,9 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
       </div>
 
       <div style={{ marginTop: 12 }}>
-        <Campo label="Descrição (opcional)">
+        <Campo label="Descrição *">
           <input value={descricao} onChange={e => setDescricao(e.target.value)}
-            placeholder="Ex.: café e açúcar da copa" style={input()} />
+            placeholder="Ex.: café e açúcar da copa" style={{ ...input(), maxWidth: 400 }} />
         </Campo>
       </div>
 
@@ -344,6 +485,179 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
         <button type="button" onClick={salvar} disabled={salvando || lendo} style={btnPri(salvando)}>
           {salvando ? "Salvando…" : "Lançar despesa"}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ============ GERENCIAR CATEGORIAS ============
+
+function GerenciarCategorias({ contas, onAtualizado, onErro }: {
+  contas: PlanoConta[];
+  onAtualizado: () => void;
+  onErro: (msg: string) => void;
+}) {
+  const [mostrarForm, setMostrarForm] = useState(false);
+  const [novoNome, setNovoNome] = useState("");
+  const [novoCodigo, setNovoCodigo] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  async function adicionarCategoria() {
+    const nome = novoNome.trim();
+    const codigo = novoCodigo.trim();
+    
+    if (!nome) { onErro("Informe o nome da categoria."); return; }
+    if (!codigo) { onErro("Informe o código da categoria."); return; }
+    
+    setSalvando(true); onErro("");
+    try {
+      await api.criarPlanoConta({
+        codigo,
+        nome,
+        natureza: "DESPESA",
+        analitica: true,
+      });
+      setNovoNome("");
+      setNovoCodigo("");
+      setMostrarForm(false);
+      onAtualizado();
+    } catch (e) { onErro((e as Error).message); }
+    finally { setSalvando(false); }
+  }
+
+  // Gerar código automático baseado no último código
+  const proximoCodigo = useMemo(() => {
+    if (contas.length === 0) return "1.01";
+    const ultimo = contas[contas.length - 1];
+    const partes = ultimo.codigo.split(".");
+    const ultimaParte = parseInt(partes[partes.length - 1] || "0", 10);
+    return `${partes.slice(0, -1).join(".")}.${(ultimaParte + 1).toString().padStart(2, "0")}`;
+  }, [contas]);
+
+  return (
+    <div style={card()}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <div style={{ fontWeight: 700, color: C.white, display: "flex", alignItems: "center", gap: 8 }}>
+          <span>📁</span> Categorias de despesa
+        </div>
+        <button
+          type="button"
+          onClick={() => { setMostrarForm(!mostrarForm); setNovoCodigo(proximoCodigo); }}
+          style={btnSec()}
+        >
+          {mostrarForm ? "✕ Cancelar" : "+ Nova categoria"}
+        </button>
+      </div>
+
+      {mostrarForm && (
+        <div style={{ background: C.surface, padding: 12, borderRadius: 8, marginBottom: 12 }}>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
+            <Campo label="Código *" flex={1}>
+              <input
+                type="text"
+                value={novoCodigo}
+                onChange={e => setNovoCodigo(e.target.value)}
+                placeholder="Ex.: 1.05"
+                style={input()}
+              />
+            </Campo>
+            <Campo label="Nome *" flex={2}>
+              <input
+                type="text"
+                value={novoNome}
+                onChange={e => setNovoNome(e.target.value)}
+                placeholder="Ex.: Manutenção"
+                style={input()}
+              />
+            </Campo>
+          </div>
+          <button
+            type="button"
+            onClick={adicionarCategoria}
+            disabled={salvando}
+            style={btnPri(salvando)}
+          >
+            {salvando ? "Salvando…" : "Adicionar categoria"}
+          </button>
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {contas.length === 0 ? (
+          <div style={{ color: C.muted, fontSize: 13, padding: 8 }}>
+            Nenhuma categoria cadastrada. Adicione a primeira acima.
+          </div>
+        ) : (
+          contas.map(c => (
+            <span
+              key={c.id}
+              style={{
+                background: C.surface,
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+                padding: "6px 10px",
+                fontSize: 12,
+                color: C.text,
+              }}
+            >
+              <span style={{ color: C.muted, fontWeight: 600 }}>{c.codigo}</span>
+              {" — "}
+              {c.nome}
+            </span>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============ RESUMO + PREVISTO x REALIZADO ============
+
+function ResumoKpi({ label, valor, cor, sub }: { label: string; valor: string; cor: string; sub?: string }) {
+  return (
+    <div>
+      <div style={{ color: C.muted, fontSize: 13 }}>{label}</div>
+      <div style={{ color: cor, fontSize: 26, fontWeight: 800 }}>{valor}</div>
+      {sub && <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
+
+// Barras comparativas por categoria. Fundo = previsto; frente = realizado
+// (vermelho quando o realizado estoura o previsto). "Sobra" = previsto ainda
+// não gasto; "estouro" = gastou mais que o previsto.
+function PrevistoRealizado({ porCategoria }: { porCategoria: CategoriaPR[] }) {
+  if (porCategoria.length === 0) return null;
+  const max = Math.max(1, ...porCategoria.map(c => Math.max(c.previsto, c.realizado)));
+  return (
+    <div style={card()}>
+      <div style={{ fontWeight: 700, color: C.white, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+        <span>📊</span> Previsto × Realizado por categoria
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {porCategoria.map(c => {
+          const diff = c.previsto - c.realizado;
+          const estourou = c.previsto > 0 && c.realizado > c.previsto;
+          return (
+            <div key={c.planoContaId || "sem"}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13, marginBottom: 5, flexWrap: "wrap" }}>
+                <span style={{ color: C.text }}>{c.nome}</span>
+                <span style={{ color: C.muted }}>
+                  prev. <span style={{ color: C.text }}>{fmtBRL(c.previsto)}</span>
+                  {"  ·  "}real. <span style={{ color: C.red }}>{fmtBRL(c.realizado)}</span>
+                  {"  ·  "}
+                  <span style={{ color: estourou ? C.red : C.green }}>
+                    {diff >= 0 ? "sobra " : "estouro "}{fmtBRL(Math.abs(diff))}
+                  </span>
+                </span>
+              </div>
+              <div style={{ position: "relative", height: 8, background: C.surface, borderRadius: 999 }}>
+                <div style={{ position: "absolute", top: 0, left: 0, height: 8, width: `${(c.previsto / max) * 100}%`, background: C.border, borderRadius: 999 }} />
+                <div style={{ position: "absolute", top: 0, left: 0, height: 8, width: `${(c.realizado / max) * 100}%`, background: estourou ? C.red : C.accent, borderRadius: 999 }} />
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

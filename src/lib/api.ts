@@ -774,6 +774,10 @@ export const api = {
   // como multipart (mesmo padrao dos anexos de contas).
   listarDespesas: (filtros: StringDict = {}) =>
     request(`/despesas${qsFrom(filtros)}`),
+  // Relatorio Previsto x Realizado por categoria + contas a pagar pagas no
+  // periodo (para o ledger unificado da tela de Despesas).
+  previstoRealizado: (filtros: StringDict = {}) =>
+    request(`/despesas/previsto-realizado${qsFrom(filtros)}`),
   obterDespesa: (id: string) => request(`/despesas/${id}`),
   criarDespesa: (data: Record<string, unknown>, file?: File | null) => {
     const fd = new FormData();

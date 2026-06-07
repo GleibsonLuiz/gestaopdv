@@ -8,6 +8,7 @@ import autoTable from "jspdf-autotable";
 import { api, BASE_URL } from "./lib/api";
 import HeaderRelatorio, { formatarEndereco, obterConfiguracaoCache } from "./HeaderRelatorio.jsx";
 import { urlLogotipo } from "./Configuracoes";
+import { detectarFormatoImagem } from "./lib/folhaCegaPdf";
 import SelectBusca from "./components/SelectBusca.jsx";
 
 
@@ -3606,8 +3607,7 @@ async function criarPDF(titulo) {
       const urlLogo = urlLogotipo(empresa.logotipo);
       if (!urlLogo) throw new Error("logo sem url");
       const dataUrl = await carregarImagemDataUrl(urlLogo);
-      const ext = (empresa.logotipo.split(".").pop() || "png").toLowerCase();
-      const formato = ext === "jpg" || ext === "jpeg" ? "JPEG" : "PNG";
+      const formato = detectarFormatoImagem(dataUrl);
       doc.addImage(dataUrl, formato, 14, 10, 22, 22);
       xTexto = 40;
     } catch {

@@ -8,7 +8,7 @@ import autoTable from "jspdf-autotable";
 import { api, BASE_URL } from "./lib/api";
 import HeaderRelatorio, { formatarEndereco, obterConfiguracaoCache } from "./HeaderRelatorio.jsx";
 import { urlLogotipo } from "./Configuracoes";
-import { detectarFormatoImagem } from "./lib/folhaCegaPdf";
+import { detectarFormatoImagem, dimensionarLogo } from "./lib/folhaCegaPdf";
 import SelectBusca from "./components/SelectBusca.jsx";
 
 
@@ -3598,55 +3598,64 @@ async function criarPDF(titulo) {
   const empresa = await obterConfiguracaoCache();
 
   let yCursor = 16;
-  let xTexto = 14;
 
-  // Logo (quando ha — carrega via fetch + dataURL pra jsPDF.addImage).
-  // urlLogotipo trata absoluta (Vercel Blob em prod) vs relativa (/uploads em dev).
+  // ---- Cabecalho da empresa: logo a ESQUERDA, dados a DIREITA ----
+  // Layout executivo de duas colunas. O logo preserva a proporcao (via
+  // dimensionarLogo) dentro de uma caixa generosa, em vez de forcar 22x22 —
+  // que achatava logos retangulares. Os dados ficam alinhados a direita, na
+  // margem oposta, deixando o logo respirar.
+  const margemDir = 196;
+  const topo = 11;
+  let logoBottom = topo;
   if (empresa?.logotipo) {
     try {
       const urlLogo = urlLogotipo(empresa.logotipo);
       if (!urlLogo) throw new Error("logo sem url");
       const dataUrl = await carregarImagemDataUrl(urlLogo);
       const formato = detectarFormatoImagem(dataUrl);
-      doc.addImage(dataUrl, formato, 14, 10, 22, 22);
-      xTexto = 40;
+      const { w, h } = dimensionarLogo(doc, dataUrl, 50, 24);
+      doc.addImage(dataUrl, formato, 14, topo, w, h);
+      logoBottom = topo + h;
     } catch {
       // logo falhou — segue sem
     }
   }
 
+  let dadosBottom = topo;
   if (empresa) {
     doc.setFontSize(14);
     doc.setFont("helvetica", "bold");
-    doc.text(empresa.nomeFantasia || empresa.razaoSocial, xTexto, yCursor);
+    doc.setTextColor(0, 0, 0);
+    let y = topo + 4;
+    doc.text(empresa.nomeFantasia || empresa.razaoSocial, margemDir, y, { align: "right" });
 
     doc.setFontSize(8);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(100, 100, 100);
-    let yLinhas = yCursor + 5;
     if (empresa.razaoSocial && empresa.razaoSocial !== empresa.nomeFantasia) {
-      doc.text(empresa.razaoSocial, xTexto, yLinhas); yLinhas += 4;
+      y += 4.5; doc.text(empresa.razaoSocial, margemDir, y, { align: "right" });
     }
     const linhaContato = [
       empresa.cnpj && `CNPJ ${empresa.cnpj}`,
       empresa.telefone && `Tel ${empresa.telefone}`,
       empresa.email,
     ].filter(Boolean).join(" · ");
-    if (linhaContato) { doc.text(linhaContato, xTexto, yLinhas); yLinhas += 4; }
+    if (linhaContato) { y += 4; doc.text(linhaContato, margemDir, y, { align: "right" }); }
     const endereco = formatarEndereco(empresa);
-    if (endereco) { doc.text(endereco, xTexto, yLinhas); yLinhas += 4; }
+    if (endereco) { y += 4; doc.text(endereco, margemDir, y, { align: "right" }); }
     doc.setTextColor(0, 0, 0);
-    yCursor = Math.max(yLinhas, 34);
+    dadosBottom = y;
   } else {
     doc.setFontSize(16);
     doc.setFont("helvetica", "bold");
-    doc.text("GestãoPRO", 14, 16);
-    yCursor = 26;
+    doc.text("GestãoPRO", 14, topo + 5);
+    dadosBottom = topo + 5;
   }
 
-  // Linha separadora
+  // Linha separadora abaixo da coluna mais alta (logo ou dados).
+  yCursor = Math.max(logoBottom, dadosBottom, 30) + 6;
   doc.setDrawColor(200, 200, 200);
-  doc.line(14, yCursor, 196, yCursor);
+  doc.line(14, yCursor, margemDir, yCursor);
   yCursor += 6;
 
   doc.setFontSize(13);

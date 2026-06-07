@@ -309,8 +309,13 @@ Ordem acordada com o cliente (executar em fases, validando cada uma):
    (azul/verde/vermelho/roxo). `criarPDF` já desenha cabeçalho da empresa
    (logo/CNPJ/endereço) + título + período. Build OK. _Pendente:_ alinhar à
    direita + fonte mono as colunas numéricas no PDF (paridade total com a tela).
-6. **Temas** — criar Claro off-white/grafite e suavizar o Dark.
-7. 🟡 **Fase 7 — Novos relatórios** — _em andamento_.
+6. ✅ **Fase 6 — Temas** — novo tema **Claro** (off-white `#f5f6f8` + cards
+   brancos + texto grafite `#1f2937`, status recalibrados p/ contraste AA) e
+   **Grafite** suavizado (sem preto absoluto: `bg #161618` / `surface #1f1f22` /
+   `card #27272b`). Alto Contraste mantido como exceção de acessibilidade. Os
+   temas vêm de `TEMAS` em [`theme.ts`](src/lib/theme.ts) e aparecem sozinhos na
+   tela de Aparência. Build + typecheck OK.
+7. ✅ **Fase 7 — Novos relatórios** — _concluída (4/4)_.
    - ✅ **Curva ABC** — backend `GET /relatorios/curva-abc` (Pareto 80/15/5 por
      receita/lucro/quantidade, multi-tenant) + aba na tela com faixa de
      distribuição A/B/C, % acumulado e badges de classe + export PDF. Manual
@@ -321,10 +326,15 @@ Ordem acordada com o cliente (executar em fases, validando cada uma):
    - ✅ **Sazonalidade** — backend `GET /relatorios/sazonalidade` (matriz 7×24
      dia×hora em fuso America/Sao_Paulo; pico, melhor dia/hora) + aba com heatmap
      interativo (métrica faturamento/vendas) + export PDF. Manual atualizado.
-   - ⬜ Aging de recebíveis.
+   - ✅ **Aging de recebíveis** — backend `GET /relatorios/aging-receber`
+     (contas em aberto por faixa de idade: a vencer / 1–30 / 31–60 / 61–90 / 90+;
+     total vencido, ranking de devedores) + aba com distribuição por idade e
+     badges de faixa + export PDF. Manual atualizado.
+
+> **Pendências menores (refinamentos, não bloqueiam):** alinhar à direita + fonte
+> mono as colunas numéricas dentro do PDF (paridade total com a tela); estender o
+> estilo executivo ao Dashboard; polir o highlight dos cards no tema Claro.
 
 > Conforme cada fase é concluída, atualizar este arquivo (tokens reais, novos
 > componentes compartilhados, decisões tomadas) para que ele permaneça a fonte
 > única de verdade.
-</content>
-</invoke>

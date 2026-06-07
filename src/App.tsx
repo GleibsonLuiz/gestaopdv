@@ -523,7 +523,7 @@ export default function App() {
           <div style={{ fontSize: 24 }}>🏪</div>
           {!sidebarCollapsed && (
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ color: C.white, fontWeight: 800, fontSize: 16, lineHeight: 1.1 }}>GestãoPRO</div>
+              <div style={{ color: C.white, fontWeight: 800, fontSize: 16, lineHeight: 1.1, whiteSpace: "nowrap" }}>Gestão<span style={{ fontWeight: 600 }}>Pro</span><span className="gp-brand-max">Max</span></div>
               <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>Gestão + PDV</div>
             </div>
           )}
@@ -800,7 +800,7 @@ export default function App() {
           >☰</button>
           <div style={{ flex: 1, color: C.muted, fontSize: 12 }}>
             <span className="gp-mobile-bar" style={{ color: C.white, fontWeight: 700, fontSize: 14 }}>
-              GestãoPRO
+              Gestão<span style={{ fontWeight: 600 }}>Pro</span><span className="gp-brand-max">Max</span>
             </span>
           </div>
           <button

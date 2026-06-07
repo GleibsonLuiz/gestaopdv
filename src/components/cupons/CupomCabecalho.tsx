@@ -32,7 +32,7 @@ export default function CupomCabecalho({ empresa, cfg }: Props) {
         </div>
       )}
       <div className="cupom-centro cupom-bold">
-        {empresa?.nomeFantasia || empresa?.razaoSocial || "GESTÃOPRO"}
+        {empresa?.nomeFantasia || empresa?.razaoSocial || "GESTÃOPROMAX"}
       </div>
       {empresa?.nomeFantasia && empresa?.razaoSocial && empresa.razaoSocial !== empresa.nomeFantasia && (
         <div className="cupom-centro cupom-mini">{empresa.razaoSocial}</div>

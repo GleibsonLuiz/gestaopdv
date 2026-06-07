@@ -8,6 +8,7 @@ import autoTable from "jspdf-autotable";
 import { api, BASE_URL } from "./lib/api";
 import HeaderRelatorio, { formatarEndereco, obterConfiguracaoCache } from "./HeaderRelatorio.jsx";
 import { urlLogotipo } from "./Configuracoes";
+import { detectarFormatoImagem } from "./lib/folhaCegaPdf";
 import SelectBusca from "./components/SelectBusca.jsx";
 
 
@@ -31,6 +32,11 @@ const fmtPct = (v) => {
   if (!Number.isFinite(n)) return "0,0%";
   return `${n.toFixed(1).replace(".", ",")}%`;
 };
+
+// Identidade executiva dos PDFs (DESIGN_STANDARDS.md §5): header de tabela
+// sobrio em grafite-azulado em vez dos headers coloridos chapados de antes.
+// Fonte unica de verdade — ajuste aqui reflete em todos os relatorios.
+const COR_HEADER_PDF = [30, 33, 45];
 
 const ROTULO_PAGAMENTO = {
   DINHEIRO: "Dinheiro",
@@ -200,7 +206,7 @@ function RelatorioVendas() {
         ["Ticket médio", fmtBRL(dados.resumo.ticketMedio)],
         ["Descontos concedidos", fmtBRL(dados.resumo.descontoTotal)],
       ],
-      theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
       styles: { fontSize: 10 },
     });
 
@@ -213,7 +219,7 @@ function RelatorioVendas() {
           fmtNum(f.quantidade),
           fmtBRL(f.total),
         ]),
-        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 10 },
       });
     }
@@ -229,7 +235,7 @@ function RelatorioVendas() {
           `${fmtNum(t.quantidade)} ${t.produto?.unidade || ""}`,
           fmtBRL(t.total),
         ]),
-        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -247,7 +253,7 @@ function RelatorioVendas() {
           v.qtdItens,
           fmtBRL(v.total),
         ]),
-        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 8 },
       });
     }
@@ -367,7 +373,7 @@ function RelatorioCompras() {
         ["Valor total", fmtBRL(dados.resumo.valorTotal)],
         ["Ticket médio", fmtBRL(dados.resumo.ticketMedio)],
       ],
-      theme: "striped", headStyles: { fillColor: [245, 158, 11] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
       styles: { fontSize: 10 },
     });
 
@@ -381,7 +387,7 @@ function RelatorioCompras() {
           fmtNum(t.quantidade),
           fmtBRL(t.total),
         ]),
-        theme: "striped", headStyles: { fillColor: [245, 158, 11] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -397,7 +403,7 @@ function RelatorioCompras() {
           c.qtdItens,
           fmtBRL(c.total),
         ]),
-        theme: "striped", headStyles: { fillColor: [245, 158, 11] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -496,7 +502,7 @@ function RelatorioFinanceiro() {
         fmtNum(dados.resumo.receber[s].qtd),
         fmtBRL(dados.resumo.receber[s].total),
       ]),
-      theme: "striped", headStyles: { fillColor: [34, 197, 94] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
       styles: { fontSize: 9 },
     });
 
@@ -507,7 +513,7 @@ function RelatorioFinanceiro() {
         ["Saldo previsto (a receber - a pagar pendentes)", fmtBRL(dados.resumo.saldoPrevisto)],
         ["Fluxo de caixa realizado (recebido - pago)", fmtBRL(dados.resumo.fluxoCaixaRealizado)],
       ],
-      theme: "striped", headStyles: { fillColor: [34, 197, 94] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
       styles: { fontSize: 10 },
     });
 
@@ -526,7 +532,7 @@ function RelatorioFinanceiro() {
           c.descricao, c.fornecedor || "—",
           fmtData(c.vencimento), ROTULO_STATUS[c.status], fmtBRL(c.valor),
         ]),
-        theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -546,7 +552,7 @@ function RelatorioFinanceiro() {
           c.descricao, c.cliente || "—",
           fmtData(c.vencimento), ROTULO_STATUS[c.status], fmtBRL(c.valor),
         ]),
-        theme: "striped", headStyles: { fillColor: [34, 197, 94] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -681,7 +687,7 @@ function RelatorioEstoque() {
         ["Valor em estoque (venda)", fmtBRL(dados.resumo.valorEstoqueVenda)],
         ["Margem estimada", fmtBRL(dados.resumo.margemEstimada)],
       ],
-      theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
       styles: { fontSize: 10 },
     });
 
@@ -695,7 +701,7 @@ function RelatorioEstoque() {
         fmtBRL(p.precoVenda),
         fmtBRL(p.valorEmEstoqueVenda),
       ]),
-      theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
       styles: { fontSize: 8 },
     });
 
@@ -789,7 +795,7 @@ function RelatorioProdutosFabricante() {
         ["Valor em estoque (custo)", fmtBRL(dados.resumo.valorEstoqueCusto)],
         ["Valor em estoque (venda)", fmtBRL(dados.resumo.valorEstoqueVenda)],
       ],
-      theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
       styles: { fontSize: 10 },
     });
 
@@ -801,7 +807,7 @@ function RelatorioProdutosFabricante() {
           f.fabricante, fmtNum(f.qtdProdutos), fmtNum(f.unidades),
           fmtBRL(f.valorCusto), fmtBRL(f.valorVenda),
         ]),
-        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -816,7 +822,7 @@ function RelatorioProdutosFabricante() {
           p.precoCusto != null ? fmtBRL(p.precoCusto) : "—",
           fmtBRL(p.precoVenda),
         ]),
-        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 8 },
       });
     }
@@ -921,7 +927,7 @@ function RelatorioCaixas() {
         ["Sobras (excedeu o esperado)", fmtBRL(dados.resumo.sobras)],
         ["Diferença líquida", fmtBRL(dados.resumo.diferencaLiquida)],
       ],
-      theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
       styles: { fontSize: 10 },
     });
 
@@ -934,7 +940,7 @@ function RelatorioCaixas() {
         fmtBRL(d.entradas), fmtBRL(d.saidas),
         fmtBRL(d.quebras), fmtBRL(d.sobras),
       ]),
-      theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
       styles: { fontSize: 9 },
     });
 
@@ -949,7 +955,7 @@ function RelatorioCaixas() {
         c.saldoFinalContado != null ? fmtBRL(c.saldoFinalContado) : "—",
         c.diferenca > 0 ? `+${fmtBRL(c.diferenca)}` : fmtBRL(c.diferenca),
       ]),
-      theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
       styles: { fontSize: 8 },
     });
 
@@ -1064,7 +1070,7 @@ function RelatorioLucratividade() {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body,
-      theme: "striped", headStyles: { fillColor: [34, 197, 94] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
       styles: { fontSize: 10 },
     });
 
@@ -1075,7 +1081,7 @@ function RelatorioLucratividade() {
         body: dados.porCategoria.map(c => [
           c.categoria, fmtBRL(c.receita), fmtBRL(c.custo), fmtBRL(c.lucro), fmtPct(c.margem),
         ]),
-        theme: "striped", headStyles: { fillColor: [34, 197, 94] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -1092,7 +1098,7 @@ function RelatorioLucratividade() {
           fmtBRL(p.lucro),
           p.custoIndefinido ? "s/ custo" : fmtPct(p.margem),
         ]),
-        theme: "striped", headStyles: { fillColor: [34, 197, 94] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 8 },
       });
     }
@@ -1204,7 +1210,7 @@ function RelatorioComissoesLista() {
         ["Vendedores", fmtNum(dados.resumo.vendedoresCount)],
         ["Top vendedor", dados.resumo.melhorVendedor || "—"],
       ],
-      theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
       styles: { fontSize: 10 },
     });
 
@@ -1223,7 +1229,7 @@ function RelatorioComissoesLista() {
             ? `${v.mesesAcimaDaMeta}/${v.mesesNoPeriodo}`
             : "—",
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -1241,7 +1247,7 @@ function RelatorioComissoesLista() {
           fmtBRL(v.total),
           fmtBRL(v.comissao),
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 8 },
       });
     }
@@ -1357,7 +1363,7 @@ function RelatorioFunilCrm() {
         ["Ticket médio (ganho)", fmtBRL(dados.resumo.ticketMedioGanho)],
         ["Ciclo médio de venda (dias)", dados.resumo.cicloMedioGanhoDias.toFixed(1)],
       ],
-      theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
       styles: { fontSize: 10 },
     });
 
@@ -1370,7 +1376,7 @@ function RelatorioFunilCrm() {
         fmtBRL(e.valorEstimado),
         fmtBRL(e.valorPonderado),
       ]),
-      theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
       styles: { fontSize: 9 },
     });
 
@@ -1385,7 +1391,7 @@ function RelatorioFunilCrm() {
           fmtNum(c.qtdPara),
           `${c.taxa.toFixed(1)}%`,
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -1401,7 +1407,7 @@ function RelatorioFunilCrm() {
           `${v.taxaConversao.toFixed(1)}%`,
           fmtBRL(v.valorGanho),
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -1415,7 +1421,7 @@ function RelatorioFunilCrm() {
           fmtNum(o.ganhas), fmtNum(o.perdidas),
           `${o.taxaConversao.toFixed(1)}%`, fmtBRL(o.valorGanho),
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -1425,7 +1431,7 @@ function RelatorioFunilCrm() {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Motivo de perda", "Qtd", "Valor perdido"]],
         body: dados.motivosPerda.map(m => [m.motivo, fmtNum(m.quantidade), fmtBRL(m.valorPerdido)]),
-        theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -1439,7 +1445,7 @@ function RelatorioFunilCrm() {
           o.responsavel || "—", ROTULO_ETAPA[o.etapa] || o.etapa,
           `${o.probabilidade}%`, fmtBRL(o.valorEstimado), fmtNum(o.diasNaEtapa),
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 8 },
       });
     }
@@ -1638,7 +1644,7 @@ function RelatorioPerformanceCrm() {
         ["Interações registradas", fmtNum(dados.resumo.totalInteracoes)],
         ["Tarefas concluídas", fmtNum(dados.resumo.totalTarefasConcluidas)],
       ],
-      theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
       styles: { fontSize: 10 },
     });
 
@@ -1655,7 +1661,7 @@ function RelatorioPerformanceCrm() {
         body: dados.topFaturamento.map((v, i) => [
           i + 1, v.nome, fmtBRL(v.faturamento), fmtNum(v.vendasQtd),
         ]),
-        theme: "striped", headStyles: { fillColor: [34, 197, 94] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -1675,7 +1681,7 @@ function RelatorioPerformanceCrm() {
           `${v.taxaConversao.toFixed(1)}%`,
           `${v.oppGanhas}/${v.oppGanhas + v.oppPerdidas}`,
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -1693,7 +1699,7 @@ function RelatorioPerformanceCrm() {
         body: dados.topAtividade.map((v, i) => [
           i + 1, v.nome, fmtNum(v.interacoes), fmtNum(v.tarefasConcluidas),
         ]),
-        theme: "striped", headStyles: { fillColor: [245, 158, 11] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -1711,7 +1717,7 @@ function RelatorioPerformanceCrm() {
           fmtNum(v.interacoes),
           `${v.tarefasConcluidas} (${v.slaTarefas.toFixed(0)}%)`,
         ]),
-        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 7 },
       });
     }
@@ -1851,7 +1857,7 @@ function RelatorioPerdasCrm() {
         ["Sem motivo registrado", fmtNum(dados.resumo.semMotivo)],
         ["Ciclo médio até a perda (dias)", dados.resumo.cicloMedioPerdaDias.toFixed(1)],
       ],
-      theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
       styles: { fontSize: 10 },
     });
 
@@ -1866,7 +1872,7 @@ function RelatorioPerdasCrm() {
           fmtBRL(m.valorPerdido),
           `${m.percentualValor.toFixed(1)}%`,
         ]),
-        theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -1878,7 +1884,7 @@ function RelatorioPerdasCrm() {
         body: dados.porResponsavel.map((v, i) => [
           i + 1, v.nome, fmtNum(v.quantidade), fmtBRL(v.valorPerdido), fmtBRL(v.ticketMedio),
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -1888,7 +1894,7 @@ function RelatorioPerdasCrm() {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Origem", "Qtd perdidas", "Valor perdido"]],
         body: dados.porOrigem.map(o => [o.origem, fmtNum(o.quantidade), fmtBRL(o.valorPerdido)]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -1898,7 +1904,7 @@ function RelatorioPerdasCrm() {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Mês", "Perdidas", "Valor perdido"]],
         body: dados.evolucaoMensal.map(e => [fmtMes(e.mes), fmtNum(e.quantidade), fmtBRL(e.valorPerdido)]),
-        theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -1918,7 +1924,7 @@ function RelatorioPerdasCrm() {
           o.motivoPerda || "(sem motivo)",
           fmtBRL(o.valorEstimado),
         ]),
-        theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 8 },
       });
     }
@@ -1934,7 +1940,7 @@ function RelatorioPerdasCrm() {
           fmtNum(o.diasNoFunil),
           fmtData(o.dataPerdida),
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 7 },
       });
     }
@@ -2249,7 +2255,7 @@ function RelatorioForecastCrm() {
         ["Opp abertas SEM data prevista", fmtNum(dados.resumo.semDataPrevistaQtd)],
         ["Valor das opp sem data prevista", fmtBRL(dados.resumo.semDataPrevistaValor)],
       ],
-      theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
       styles: { fontSize: 10 },
     });
 
@@ -2264,7 +2270,7 @@ function RelatorioForecastCrm() {
         fmtNum(m.ganhoQtd),
         fmtBRL(m.valorGanho),
       ]),
-      theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
       styles: { fontSize: 9 },
     });
 
@@ -2276,7 +2282,7 @@ function RelatorioForecastCrm() {
           i + 1, v.nome, fmtNum(v.quantidade),
           fmtBRL(v.valorEstimado), fmtBRL(v.valorPonderado),
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -2289,7 +2295,7 @@ function RelatorioForecastCrm() {
           o.origem, fmtNum(o.quantidade),
           fmtBRL(o.valorEstimado), fmtBRL(o.valorPonderado),
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -2306,7 +2312,7 @@ function RelatorioForecastCrm() {
           fmtBRL(o.valorPonderado),
           fmtData(o.dataFechamentoPrevista),
         ]),
-        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 8 },
       });
     }
@@ -2555,7 +2561,7 @@ function RelatorioAtividadesCrm() {
         ["Tarefas abertas atrasadas", fmtNum(dados.resumo.totalAtrasadas)],
         [`Clientes sem contato há ${dados.filtros.diasInativo}+ dias`, fmtNum(dados.resumo.clientesSemContato)],
       ],
-      theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
       styles: { fontSize: 10 },
     });
 
@@ -2566,7 +2572,7 @@ function RelatorioAtividadesCrm() {
         ROTULO_TIPO_INTERACAO[t.tipo] || t.tipo,
         fmtNum(t.quantidade),
       ]),
-      theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
       styles: { fontSize: 9 },
     });
 
@@ -2582,7 +2588,7 @@ function RelatorioAtividadesCrm() {
           fmtNum(v.interacoesReuniao),
           `${v.tarefasConcluidas} (${v.slaTarefas.toFixed(0)}%)`,
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 8 },
       });
     }
@@ -2602,7 +2608,7 @@ function RelatorioAtividadesCrm() {
           c.ultimaInteracao ? fmtData(c.ultimaInteracao) : "Nunca",
           fmtNum(c.diasSemContato),
         ]),
-        theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -2612,7 +2618,7 @@ function RelatorioAtividadesCrm() {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Dia da semana", "Interações"]],
         body: dados.distribuicaoSemanal.map(d => [d.dia, fmtNum(d.quantidade)]),
-        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -2864,7 +2870,7 @@ function RelatorioNpsCrm() {
         ["Neutros (7-8)", fmtNum(dados.resumo.neutros)],
         ["Promotores (9-10)", fmtNum(dados.resumo.promotores)],
       ],
-      theme: "striped", headStyles: { fillColor: [245, 158, 11] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
       styles: { fontSize: 10 },
     });
 
@@ -2874,7 +2880,7 @@ function RelatorioNpsCrm() {
       body: dados.distribuicao.map(d => [
         d.label, fmtNum(d.quantidade), `${d.percentual.toFixed(1)}%`,
       ]),
-      theme: "striped", headStyles: { fillColor: [245, 158, 11] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
       styles: { fontSize: 9 },
     });
 
@@ -2889,7 +2895,7 @@ function RelatorioNpsCrm() {
           v.notaMedia.toFixed(2),
           v.nps.toFixed(1),
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -2901,7 +2907,7 @@ function RelatorioNpsCrm() {
         body: dados.evolucaoMensal.map(e => [
           fmtMes(e.mes), fmtNum(e.respondidas), e.notaMedia.toFixed(2), e.nps.toFixed(1),
         ]),
-        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -2924,7 +2930,7 @@ function RelatorioNpsCrm() {
           d.nota,
           d.comentario || "(sem comentário)",
         ]),
-        theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 8 },
       });
     }
@@ -3175,7 +3181,7 @@ function RelatorioCarteiraCrm() {
         ["Recência média", `${dados.resumo.recenciaMedia.toFixed(0)} dias`],
         ["Faturamento total (janela)", fmtBRL(dados.resumo.faturamentoTotal)],
       ],
-      theme: "striped", headStyles: { fillColor: [34, 197, 94] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
       styles: { fontSize: 10 },
     });
 
@@ -3190,7 +3196,7 @@ function RelatorioCarteiraCrm() {
         `${s.percentualFaturamento.toFixed(1)}%`,
         fmtBRL(s.ticketMedio),
       ]),
-      theme: "striped", headStyles: { fillColor: [34, 197, 94] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
       styles: { fontSize: 9 },
     });
 
@@ -3201,7 +3207,7 @@ function RelatorioCarteiraCrm() {
         body: dados.porCidade.map((c, i) => [
           i + 1, c.cidade, c.estado, fmtNum(c.quantidade), fmtBRL(c.monetario),
         ]),
-        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -3211,7 +3217,7 @@ function RelatorioCarteiraCrm() {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Tag", "Clientes", "Faturamento"]],
         body: dados.porTag.map(t => [t.nome, fmtNum(t.quantidade), fmtBRL(t.monetario)]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 9 },
       });
     }
@@ -3225,7 +3231,7 @@ function RelatorioCarteiraCrm() {
           fmtNum(c.qtdCompras), fmtBRL(c.totalGasto), fmtBRL(c.ticketMedio),
           fmtData(c.ultimaCompra), SEGMENTOS_INFO[c.segmento]?.label || c.segmento,
         ]),
-        theme: "striped", headStyles: { fillColor: [245, 158, 11] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
         styles: { fontSize: 8 },
       });
     }
@@ -3419,11 +3425,12 @@ function BlocoRelatorio({ titulo, cor, filtros, onGerar, onExportar, carregando,
   return (
     <div>
       <div style={{
-        background: C.card, border: `1px solid ${C.border}`,
-        borderRadius: 12, padding: 16, marginBottom: 16,
+        background: "var(--surface)", border: "1px solid var(--hairline-soft)",
+        boxShadow: "var(--shadow-card)",
+        borderRadius: 14, padding: 16, marginBottom: 16,
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
-          <div style={{ color: C.white, fontSize: 14, fontWeight: 700 }}>{titulo}</div>
+          <div style={{ color: "var(--fg)", fontSize: 15, fontWeight: 600, letterSpacing: "-0.02em" }}>{titulo}</div>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={onGerar} disabled={carregando} style={{
               background: cor, color: C.white, border: "none", borderRadius: 8,
@@ -3452,10 +3459,10 @@ function BlocoRelatorio({ titulo, cor, filtros, onGerar, onExportar, carregando,
 
       {!dados && !carregando && !erro && (
         <div style={{
-          background: C.card, border: `1px dashed ${C.border}`, borderRadius: 12,
-          padding: 40, textAlign: "center", color: C.muted, fontSize: 13,
+          background: "var(--surface)", border: "1px dashed var(--hairline)", borderRadius: 14,
+          padding: 40, textAlign: "center", color: "var(--fg-muted)", fontSize: 13,
         }}>
-          Defina os filtros e clique em <strong style={{ color: C.text }}>Gerar</strong> para visualizar o relatório.
+          Defina os filtros e clique em <strong style={{ color: "var(--fg)" }}>Gerar</strong> para visualizar o relatório.
         </div>
       )}
 
@@ -3464,6 +3471,10 @@ function BlocoRelatorio({ titulo, cor, filtros, onGerar, onExportar, carregando,
   );
 }
 
+// Resumo — faixa de KPIs no padrao executivo (DESIGN_STANDARDS.md §4).
+// Mantem a API legada ({ rotulo, valor, cor }); so o visual foi elevado:
+// card com hairline + sombra em camadas, rotulo em caixa-alta com tracking,
+// e valor em fonte monoespacada tabular (numeros como heroi).
 function Resumo({ cards }: any) {
   return (
     <div style={{
@@ -3472,14 +3483,14 @@ function Resumo({ cards }: any) {
     }}>
       {cards.map((c, i) => (
         <div key={i} style={{
-          background: C.card, border: `1px solid ${C.border}`,
-          borderRadius: 10, padding: "12px 14px", position: "relative", overflow: "hidden",
+          background: "linear-gradient(180deg, color-mix(in srgb, var(--white) 2.5%, transparent), transparent), var(--surface)",
+          border: "1px solid var(--hairline-soft)", boxShadow: "var(--shadow-card)",
+          borderRadius: 14, padding: "12px 16px 11px", position: "relative", overflow: "hidden",
         }}>
-          <div style={{ position: "absolute", top: 0, left: 0, width: 4, height: "100%", background: c.cor }} />
-          <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+          <div style={{ color: "var(--fg-muted)", fontSize: 10.5, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.14em" }}>
             {c.rotulo}
           </div>
-          <div style={{ color: c.cor, fontSize: 18, fontWeight: 800, marginTop: 4, lineHeight: 1.1 }}>
+          <div className="font-mono tabular-nums" style={{ color: c.cor, fontSize: 22, fontWeight: 500, marginTop: 6, lineHeight: 1.1, letterSpacing: "-0.025em" }}>
             {c.valor}
           </div>
         </div>
@@ -3488,45 +3499,52 @@ function Resumo({ cards }: any) {
   );
 }
 
+// Tabela — tabela no padrao executivo (DESIGN_STANDARDS.md §5). Mantem a API
+// legada (titulo/colunas/alinhamentos/linhas). Convencao do arquivo: coluna
+// alinhada a direita = numerica, entao ela ganha fonte mono tabular (alinha as
+// casas) e cor de texto primaria; demais colunas usam texto suave.
 function Tabela({ titulo, colunas, alinhamentos, linhas, vazioTexto }: any) {
+  const ehNumerica = (j: number) => (alinhamentos?.[j] || "left") === "right";
   return (
     <div style={{
-      background: C.card, border: `1px solid ${C.border}`,
-      borderRadius: 12, marginBottom: 16, overflow: "hidden",
+      background: "var(--surface)", border: "1px solid var(--hairline-soft)",
+      borderRadius: 14, marginBottom: 16, overflow: "hidden", boxShadow: "var(--shadow-card)",
     }}>
       {titulo && (
         <div style={{
-          padding: "10px 14px", borderBottom: `1px solid ${C.border}`,
-          color: C.white, fontSize: 13, fontWeight: 700,
+          padding: "11px 14px", borderBottom: "1px solid var(--hairline)",
+          color: "var(--fg)", fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em",
         }}>{titulo}</div>
       )}
       {linhas.length === 0 ? (
-        <div style={{ padding: 24, color: C.muted, fontSize: 12, textAlign: "center" }}>
+        <div style={{ padding: 32, color: "var(--fg-muted)", fontSize: 13, textAlign: "center" }}>
           {vazioTexto || "Sem dados."}
         </div>
       ) : (
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
-              <tr style={{ background: C.surface }}>
+              <tr style={{ borderBottom: "1px solid var(--hairline)" }}>
                 {colunas.map((c, i) => (
                   <th key={i} style={{
-                    padding: "8px 12px", textAlign: alinhamentos?.[i] || "left",
-                    color: C.muted, fontSize: 10, fontWeight: 700,
-                    textTransform: "uppercase", letterSpacing: 0.5,
-                    borderBottom: `1px solid ${C.border}`,
+                    padding: "9px 12px", textAlign: alinhamentos?.[i] || "left",
+                    color: "var(--fg-muted)", fontSize: 10.5, fontWeight: 500,
+                    textTransform: "uppercase", letterSpacing: "0.12em",
                   }}>{c}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {linhas.map((linha, i) => (
-                <tr key={i} style={{ borderBottom: `1px solid ${C.border}55` }}>
+                <tr key={i} style={{ borderBottom: "1px solid var(--hairline-soft)" }}>
                   {linha.map((celula, j) => (
-                    <td key={j} style={{
-                      padding: "8px 12px", textAlign: alinhamentos?.[j] || "left",
-                      color: C.text, fontSize: 12, whiteSpace: "nowrap",
-                    }}>{celula}</td>
+                    <td key={j}
+                      className={ehNumerica(j) ? "font-mono tabular-nums" : undefined}
+                      style={{
+                        padding: "9px 12px", textAlign: alinhamentos?.[j] || "left",
+                        color: ehNumerica(j) ? "var(--fg)" : "var(--fg-soft)",
+                        fontSize: 13, whiteSpace: "nowrap",
+                      }}>{celula}</td>
                   ))}
                 </tr>
               ))}
@@ -3590,7 +3608,7 @@ const inputStyle = {
 //
 // criarPDF agora e async — carrega a config da empresa do cache e desenha
 // um header completo (logo + razao social + CNPJ + endereco + contato).
-// Se a config nao foi carregada ainda, cai no header simples "GestãoPRO".
+// Se a config nao foi carregada ainda, cai no header simples "GestãoProMax".
 
 async function criarPDF(titulo) {
   const doc = new jsPDF({ orientation: "p", unit: "mm", format: "a4" });
@@ -3606,8 +3624,7 @@ async function criarPDF(titulo) {
       const urlLogo = urlLogotipo(empresa.logotipo);
       if (!urlLogo) throw new Error("logo sem url");
       const dataUrl = await carregarImagemDataUrl(urlLogo);
-      const ext = (empresa.logotipo.split(".").pop() || "png").toLowerCase();
-      const formato = ext === "jpg" || ext === "jpeg" ? "JPEG" : "PNG";
+      const formato = detectarFormatoImagem(dataUrl);
       doc.addImage(dataUrl, formato, 14, 10, 22, 22);
       xTexto = 40;
     } catch {
@@ -3640,7 +3657,7 @@ async function criarPDF(titulo) {
   } else {
     doc.setFontSize(16);
     doc.setFont("helvetica", "bold");
-    doc.text("GestãoPRO", 14, 16);
+    doc.text("GestãoProMax", 14, 16);
     yCursor = 26;
   }
 

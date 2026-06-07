@@ -223,7 +223,7 @@ function PDVHeader({ user, aba, setAba, onSair, sairConta }) {
       <div className="pdv-brand">
         <div className="pdv-brand-mark">G</div>
         <div>
-          <div className="pdv-brand-name">GestãoPRO</div>
+          <div className="pdv-brand-name">Gestão<span className="gp-brand-max">ProMax</span></div>
           <div className="pdv-brand-sub">Ponto de Venda</div>
         </div>
       </div>
@@ -1516,7 +1516,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
                 {/* === HEADER DO CUPOM === */}
                 <div className="pdv-cupom-hd">
                   <div className="pdv-cupom-hd-store">
-                    {((empresa?.nomeFantasia || empresa?.razaoSocial) || "GESTÃO PRO").toUpperCase()}
+                    {((empresa?.nomeFantasia || empresa?.razaoSocial) || "GESTÃOPROMAX").toUpperCase()}
                   </div>
                   {empresa?.cnpj && (
                     <div className="pdv-cupom-hd-sub">CNPJ {empresa.cnpj}</div>
@@ -2760,7 +2760,7 @@ function OrcamentoRapidoModal({
   // _italico_) para um cupom visual; para EMAIL os marcadores sao removidos
   // (o corpo do mailto e texto puro e exibiria os asteriscos literalmente).
   function montarMensagem(numero, canal) {
-    const empresaNome = (empresa?.nomeFantasia || empresa?.razaoSocial || "Gestão PRO").trim();
+    const empresaNome = (empresa?.nomeFantasia || empresa?.razaoSocial || "GestãoProMax").trim();
     const sep = "━━━━━━━━━━━━━━━━━━";
     const L = [];
 
@@ -2867,7 +2867,7 @@ function OrcamentoRapidoModal({
           tipo: canal,
           telefone,
           email,
-          assunto: `Orçamento Nº ${orc.numero} — ${(empresa?.nomeFantasia || empresa?.razaoSocial || "Gestão PRO").trim()}`,
+          assunto: `Orçamento Nº ${orc.numero} — ${(empresa?.nomeFantasia || empresa?.razaoSocial || "GestãoProMax").trim()}`,
           corpo,
         });
         if (link) window.open(link, "_blank", "noopener,noreferrer");

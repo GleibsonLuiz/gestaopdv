@@ -3,7 +3,9 @@
 @tailwind utilities;
 
 :root {
-  font-family: 'Segoe UI', system-ui, Roboto, sans-serif;
+  /* Fonte da marca. Geist e a familia principal (carregada em index.html);
+     Segoe UI/system-ui ficam como fallback enquanto a fonte baixa. */
+  font-family: 'Geist', 'Segoe UI', system-ui, Roboto, -apple-system, 'Helvetica Neue', sans-serif;
   color-scheme: dark;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -23,6 +25,50 @@
   --muted: #64748b;
   --white: #ffffff;
   --accent-ink: #ffffff;
+
+  /* ==========================================================================
+     TOKENS EXECUTIVOS GLOBAIS (Fase 2 — fundacao do Guia de Estilo)
+     --------------------------------------------------------------------------
+     O modulo financeiro (src/pages/financeiro/tokens.css) definia tokens ricos
+     (--fg-*, --surface-2/3, --hairline, status, sombra) apenas no escopo
+     .financeiro-bg. Isso impedia reusar os componentes executivos fora dali e
+     deixava as utilitarias Tailwind (text-fg-muted, border-hairline, etc.)
+     "quebradas" no resto do app.
+
+     Aqui promovemos esses tokens ao :root global. Em vez de valores fixos, eles
+     sao DERIVADOS via color-mix das variaveis de tema acima — entao reagem
+     automaticamente aos 6 temas (claro e escuro) sem codigo extra em theme.ts.
+     O financeiro continua sobrescrevendo localmente seus valores OKLCH afinados
+     (zero regressao naquela tela); aqui garantimos o padrao para todo o resto.
+     ========================================================================== */
+
+  /* texto — escala de enfase */
+  --fg:        var(--text);
+  --fg-soft:   color-mix(in srgb, var(--text) 78%, var(--muted));
+  --fg-muted:  var(--muted);
+  --fg-faint:  color-mix(in srgb, var(--muted) 72%, transparent);
+  --fg-dim:    color-mix(in srgb, var(--muted) 50%, transparent);
+
+  /* superficies de elevacao + hairlines */
+  --surface-2:     color-mix(in srgb, var(--card) 86%, var(--border));
+  --surface-3:     color-mix(in srgb, var(--card) 70%, var(--border));
+  --hairline:      color-mix(in srgb, var(--border) 70%, transparent);
+  --hairline-soft: color-mix(in srgb, var(--border) 35%, transparent);
+
+  /* status — alias semantico para as cores do tema (mesma semantica em §1 do
+     DESIGN_STANDARDS.md). emerald=positivo, amber=atencao, coral=negativo,
+     iris=destaque neutro, sky=informativo. */
+  --emerald: var(--green);
+  --amber:   var(--yellow);
+  --coral:   var(--red);
+  --iris:    var(--purple);
+  --sky:     var(--accent);
+
+  /* sombra de card padrao (3 camadas: highlight interno, anel de 1px, profundidade) */
+  --shadow-card:
+    0 1px 0 0 color-mix(in srgb, var(--white) 5%, transparent) inset,
+    0 0 0 1px color-mix(in srgb, var(--border) 45%, transparent),
+    0 30px 50px -30px rgba(0, 0, 0, .55);
 }
 
 *, *::before, *::after {
@@ -89,6 +135,23 @@ option:hover,
 option:focus {
   background: var(--accent);
   color: var(--accent-ink);
+}
+
+/* ----------------------------------------------------------------------------
+   .gp-brand-max — sufixo "Max" do wordmark "GestãoProMax".
+   Degradê dourado→âmbar→laranja com peso extrabold e glow sutil, marcando o
+   tier premium da marca. São cores de marca FIXAS (não reagem ao tema, igual a
+   .text-brand-violet) — por isso vivem aqui no CSS, nunca em style inline.
+   O drop-shadow garante leitura mesmo sobre fundos muito escuros.
+   ---------------------------------------------------------------------------- */
+.gp-brand-max {
+  font-weight: 800;
+  background: linear-gradient(135deg, #fde68a 0%, #fbbf24 42%, #f59e0b 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, #f59e0b 35%, transparent));
 }
 
 /* ----------------------------------------------------------------------------

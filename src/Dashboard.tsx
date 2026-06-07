@@ -392,7 +392,7 @@ function ConteudoDashboard({ dados, onAtualizar, user, contagem }: any) {
           color: C.muted, fontSize: 11, marginTop: 10, fontFamily: FONT_MONO,
           opacity: 0.6,
         }}>
-          <div>GestãoPRO · sincronizado · sessão segura</div>
+          <div>Gestão<span className="gp-brand-max">ProMax</span> · sincronizado · sessão segura</div>
           <div>Atualizado {fmtDataHora(dados.geradoEm)}</div>
         </div>
       </div>

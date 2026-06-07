@@ -1,4 +1,4 @@
-# GestãoPRO — Catálogo de Funcionalidades
+# GestãoProMax — Catálogo de Funcionalidades
 
 > **Status:** documento-base para o manual do usuário final. Cada módulo descreve **o que faz**, **para que serve** e **como usar**.
 > **Versão de referência:** 26/maio/2026
@@ -32,7 +32,7 @@
 
 ## 1. Visão geral
 
-**GestãoPRO** é um sistema completo de gestão empresarial para micro e pequenas empresas, desenhado originalmente para uma **papelaria/copiadora** (Maxcollor Gráfica Rápida e Copiadora) mas genérico o suficiente para qualquer comércio que precise de:
+**GestãoProMax** é um sistema completo de gestão empresarial para micro e pequenas empresas, desenhado originalmente para uma **papelaria/copiadora** (Maxcollor Gráfica Rápida e Copiadora) mas genérico o suficiente para qualquer comércio que precise de:
 
 - **PDV (frente de caixa)** com leitor de código de barras, controle de caixa físico e cupom;
 - **Cadastros completos** de clientes (CRM), fornecedores e produtos (com tributação NF-e ready);
@@ -1340,7 +1340,7 @@ A tela de Ajuda tem **2 colunas**:
 
 ```
 ┌─ Sumário ──────────┬──────── Conteúdo ──────────┐
-│ 🔎 Buscar...       │  # GestãoPRO — Manual      │
+│ 🔎 Buscar...       │  # GestãoProMax — Manual   │
 │                    │                            │
 │ INÍCIO             │  ## Módulo: PDV            │
 │ • Visão geral      │                            │

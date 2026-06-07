@@ -494,6 +494,30 @@ O status alterna entre **ATIVO** (verde) e **INATIVO** (cinza). Use o filtro **"
 
 ---
 
+#### 🧮 Sugestões de Compra
+
+**O que faz:** monta a lista de reposição de estoque — o que precisa ser comprado.
+
+**Para que serve:** nunca deixar faltar produto. O sistema avisa o que está acabando e você gera o pedido de compra com poucos cliques.
+
+**De onde vêm os itens:**
+
+- **Sugestão do sistema (badge azul "Sistema"):** todo produto ativo cujo **estoque ≤ estoque mínimo** aparece automaticamente. A faixa vermelha na lateral da linha indica urgência. *Configure o **estoque mínimo** no cadastro do produto* (aba principal) para o produto entrar nesse radar — sem mínimo definido, ele não é sugerido automaticamente.
+- **Adição manual (badge roxo "Manual"):** use a busca no topo (**"Adicionar produto manualmente"**) para antecipar uma compra mesmo que o estoque esteja acima do mínimo (ex.: vai entrar em promoção, sazonalidade). Informe a quantidade ou deixe **auto**.
+
+**Como usar:**
+
+1. A coluna **Qtd a comprar** já vem com uma sugestão (repor até ~2× o mínimo). Ajuste à vontade — o valor é salvo ao sair do campo.
+2. Marque os itens que vai comprar (caixa de seleção; o cabeçalho marca/desmarca todos). O rodapé mostra **quantos itens** e a **estimativa de custo** (pelo custo cadastrado).
+3. **🛍️ Gerar Pedido de Compra** → abre a tela de **Nova Compra** já preenchida com os itens (e o fornecedor, se todos compartilham o mesmo). A partir daí é o fluxo normal de compra: confirma fornecedor, custos e conta a pagar.
+4. Após registrar a compra, o sistema pergunta: **🧹 Limpar da lista** (remove os itens) ou **📌 Manter** (útil quando você vai comprar de mais de um fornecedor). As sugestões automáticas somem sozinhas quando o estoque é reposto pela compra.
+
+**Dispensar / remover:** o **×** na linha dispensa uma sugestão do sistema (ela volta se o estoque cair de novo) ou remove um item manual de vez. Filtro **"Só abaixo do mínimo"** esconde os itens manuais que estão com estoque ok.
+
+> Faz parte do módulo **Compras** (mesma permissão/plano). Visualização para quem tem acesso a Compras; montar a lista e gerar pedido é para Admin/Gerente.
+
+---
+
 #### 📝 Orçamentos
 
 ![Orçamentos](img/orcamentos.png)

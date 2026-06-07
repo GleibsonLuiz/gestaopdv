@@ -126,6 +126,28 @@ enum TipoOrcamento {
   ORDEM_SERVICO
 }
 
+// MODULO SUGESTOES DE COMPRA: como uma linha da lista de reposicao entrou.
+//   SISTEMA - reposicao automatica (estoque <= estoqueMinimo). NAO e gravada:
+//             so existe como origem quando o item e materializado (ex: ao
+//             ajustar quantidade/fornecedor de um item sugerido pelo sistema).
+//   MANUAL  - o usuario adicionou explicitamente (antecipar compra), mesmo com
+//             estoque acima do minimo.
+enum OrigemSugestaoCompra {
+  SISTEMA
+  MANUAL
+}
+
+// Estado de uma linha persistida da lista de compras.
+//   PENDENTE  - aguardando virar pedido (aparece na lista)
+//   DESCARTADO - usuario ignorou esta sugestao (some da lista ate ser
+//                readicionada); usado para "dispensar" uma sugestao do sistema
+//   COMPRADO  - ja virou Compra (some da lista; mantido para historico curto)
+enum StatusSugestaoCompra {
+  PENDENTE
+  DESCARTADO
+  COMPRADO
+}
+
 enum TipoInteracao {
   LIGACAO
   WHATSAPP
@@ -506,6 +528,7 @@ model Empresa {
   itensOrdemServico      ItemOrdemServico[]
   planosContas           PlanoConta[]
   despesas               Despesa[]
+  sugestoesCompra        SugestaoCompra[]
 
   @@map("empresas")
 }
@@ -610,6 +633,7 @@ model User {
   vendasEspera             VendaEspera[]
   ordensServico            OrdemServico[] @relation("OSResponsavel")
   despesas                 Despesa[]
+  sugestoesCompra          SugestaoCompra[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -749,6 +773,7 @@ model Fornecedor {
   despesas    Despesa[]
   notasEntrada NotaFiscalEntrada[]
   deParaProdutos DeParaProdutoFornecedor[]
+  sugestoesCompra SugestaoCompra[]
 
   @@unique([tenantId, cnpj])
   @@index([tenantId])
@@ -903,6 +928,7 @@ model Produto {
   itensNotaFiscal ItemNotaFiscal[]
   deParaFornecedores DeParaProdutoFornecedor[]
   itensOrdemServico ItemOrdemServico[]
+  sugestoesCompra   SugestaoCompra[]
 
   @@unique([tenantId, codigo])
   @@unique([tenantId, codigoBarras])
@@ -959,6 +985,8 @@ model Venda {
   @@unique([tenantId, idempotencyKey])
   @@index([caixaId])
   @@index([tenantId])
+  // Agregacoes de faturamento por periodo (dashboards e painel financeiro).
+  @@index([tenantId, status, createdAt])
   @@map("vendas")
 }
 
@@ -1358,6 +1386,54 @@ model ItemCompra {
   @@map("itens_compra")
 }
 
+// ============ SUGESTOES DE COMPRA (lista de reposicao) ============
+//
+// Lista de reposicao de estoque. A parte AUTOMATICA (estoque <= estoqueMinimo)
+// NAO e gravada aqui — e calculada ao vivo na leitura (sempre fresca, sem job
+// de sincronizacao). Esta tabela persiste apenas a INTENCAO do usuario que nao
+// da pra derivar do estoque:
+//   - itens adicionados MANUALMENTE (antecipar compra, mesmo acima do minimo);
+//   - overrides de um item sugerido pelo sistema (quantidade desejada,
+//     fornecedor preferido, observacao);
+//   - sugestoes do sistema DESCARTADAS (status=DESCARTADO esconde da lista).
+//
+// O controller mescla esta tabela com a consulta de estoque baixo, marcando
+// cada item com origem (SISTEMA/MANUAL) e se esta abaixo do minimo. Unicidade
+// por (tenant, produto) garante uma linha por produto — add manual e
+// idempotente (upsert).
+model SugestaoCompra {
+  id                 String               @id @default(uuid())
+  origem             OrigemSugestaoCompra @default(MANUAL)
+  status             StatusSugestaoCompra @default(PENDENTE)
+  // Quantidade que o usuario pretende comprar. null = usar a sugestao
+  // calculada (repor ate ~2x o minimo). Decimal(12,3) espelha Produto.estoque.
+  quantidadeSugerida Decimal?             @db.Decimal(12, 3)
+  observacao         String?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  produtoId String
+  produto   Produto @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+
+  // Fornecedor preferido para este item (opcional). Pre-seleciona o fornecedor
+  // ao gerar o pedido. SetNull para nao perder o item se o fornecedor sumir.
+  fornecedorId String?
+  fornecedor   Fornecedor? @relation(fields: [fornecedorId], references: [id], onDelete: SetNull)
+
+  // Quem adicionou/alterou a linha (auditoria leve).
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, produtoId])
+  @@index([tenantId, status])
+  @@index([produtoId])
+  @@index([fornecedorId])
+  @@map("sugestoes_compra")
+}
+
 // ============ FINANCEIRO ============
 
 model MovimentacaoEstoque {
@@ -1496,6 +1572,9 @@ model ContaPagar {
   @@index([compraId])
   @@index([planoContaId])
   @@index([tenantId])
+  // Painel financeiro: contas pagas por periodo e projecao por vencimento.
+  @@index([tenantId, status, pagamento])
+  @@index([tenantId, status, vencimento])
   @@map("contas_pagar")
 }
 
@@ -1533,6 +1612,9 @@ model ContaReceber {
   @@index([grupoRecorrenciaId])
   @@index([vendaId])
   @@index([tenantId])
+  // Painel financeiro: recebimentos por periodo e projecao por vencimento.
+  @@index([tenantId, status, recebimento])
+  @@index([tenantId, status, vencimento])
   @@map("contas_receber")
 }
 

@@ -21,6 +21,7 @@ export const TELA_AJUDA: Record<string, string> = {
   estoque: "estoque",
   inventario: "inventario",
   compras: "compras",
+  sugestoes: "sugestões-de-compra",
   orcamentos: "orcamentos",
   funil: "funil-de-vendas",
   automacoes: "automacoes",
@@ -90,6 +91,7 @@ const GRUPOS: Grupo[] = [
     titulo: "Vendas & CRM",
     topicos: [
       { id: "compras",            icone: "🛍️", label: "Compras" },
+      { id: "sugestões-de-compra", icone: "🧮", label: "Sugestoes de Compra" },
       { id: "orcamentos",         icone: "📝", label: "Orcamentos" },
       { id: "funil-de-vendas",    icone: "🎯", label: "Funil de Vendas" },
       { id: "automacoes",         icone: "⚡", label: "Automacoes" },

@@ -536,6 +536,21 @@ export const api = {
   estornarCompra: (id: string, motivo: string) =>
     request(`/compras/${id}/estornar`, { method: "POST", body: { motivo } }),
 
+  // ==================== SUGESTOES DE COMPRA (reposicao) ====================
+  // A lista mescla sugestoes do sistema (estoque <= minimo, calculadas) com
+  // itens adicionados manualmente. Ver sugestaoCompraController.js.
+  listarSugestoesCompra: () => request("/sugestoes-compra"),
+  adicionarSugestaoCompra: (data: unknown) =>
+    request("/sugestoes-compra", { method: "POST", body: data }),
+  atualizarSugestaoCompra: (produtoId: string, data: unknown) =>
+    request(`/sugestoes-compra/${produtoId}`, { method: "PATCH", body: data }),
+  descartarSugestaoCompra: (produtoId: string) =>
+    request(`/sugestoes-compra/${produtoId}/descartar`, { method: "POST" }),
+  removerSugestaoCompra: (produtoId: string) =>
+    request(`/sugestoes-compra/${produtoId}`, { method: "DELETE" }),
+  limparSugestoesCompra: (produtoIds: string[]) =>
+    request("/sugestoes-compra/limpar", { method: "POST", body: { produtoIds } }),
+
   // ==================== INVENTARIO COM CONTAGEM CEGA ====================
   // O backend NUNCA expoe estoqueLogico ao operador da contagem — a
   // resposta de getFolhaContagem ja vem filtrada. So o gestor (obter)
@@ -810,6 +825,11 @@ export const api = {
   // { inicio, fim, resumo, linhas[] }. O CSV/layout Dominio sai client-side.
   contabilidadeLancamentos: (filtros: StringDict = {}) =>
     request(`/contabilidade/lancamentos${qsFrom(filtros)}`),
+
+  // Painel financeiro executivo (KPIs, distribuicao de despesas, ponto de
+  // equilibrio e projecao de fluxo de caixa 30d). Tudo agregado no banco.
+  contabilidadeDashboard: (filtros: StringDict = {}) =>
+    request(`/contabilidade/dashboard${qsFrom(filtros)}`),
 
   // ============ ORDEM DE SERVICO ============
   osListar: (filtros: StringDict = {}) => request(`/ordens-servico${qsFrom(filtros)}`),

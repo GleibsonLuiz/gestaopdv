@@ -16,6 +16,7 @@ const Etiquetas = lazy(() => import("./Etiquetas"));
 const Estoque = lazy(() => import("./Estoque"));
 const Inventario = lazy(() => import("./Inventario"));
 const Compras = lazy(() => import("./Compras"));
+const Sugestoes = lazy(() => import("./Sugestoes"));
 const Orcamentos = lazy(() => import("./Orcamentos"));
 const Funcionarios = lazy(() => import("./Funcionarios"));
 const Comissoes = lazy(() => import("./Comissoes"));
@@ -316,7 +317,7 @@ export default function App() {
     pdv: "PDV", dashboard: "DASHBOARD", dashboardcrm: "DASHBOARD", caixa: "CAIXA", clientes: "CLIENTES",
     fornecedores: "FORNECEDORES", produtos: "PRODUTOS", etiquetas: "PRODUTOS", estoque: "ESTOQUE",
     inventario: "INVENTARIO",
-    compras: "COMPRAS", orcamentos: "ORCAMENTOS",
+    compras: "COMPRAS", sugestoes: "COMPRAS", orcamentos: "ORCAMENTOS",
     funil: "OPORTUNIDADES",
     automacoes: "AUTOMACOES",
     nps: "NPS",
@@ -354,7 +355,7 @@ export default function App() {
     if (!user) return;
     if (!podeVer(tela)) {
       const primeira = ["pdv","dashboard","dashboardcrm","caixa","clientes","segmentos","reativacao","tarefas","fidelidade","funil","automacoes","nps","fornecedores","produtos","etiquetas",
-        "estoque","inventario","compras","orcamentos","ordemservico","financeiro","despesas","contabilidade","crediario","relatorios","notasfiscais","entradanfe","fiscalavancado","comissoes","painelcomandas","whatsapp","funcionarios","projeto","sistema","backup","empresa","impressora"].find(podeVer);
+        "estoque","inventario","compras","sugestoes","orcamentos","ordemservico","financeiro","despesas","contabilidade","crediario","relatorios","notasfiscais","entradanfe","fiscalavancado","comissoes","painelcomandas","whatsapp","funcionarios","projeto","sistema","backup","empresa","impressora"].find(podeVer);
       if (primeira && primeira !== tela) setTela(primeira);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -605,6 +606,9 @@ export default function App() {
           )}
           {podeAcessar(user, "COMPRAS") && (
             <Item icone="🛍️" label="Compras" ativo={tela === "compras"} onClick={() => navegar("compras")} />
+          )}
+          {podeAcessar(user, "COMPRAS") && (
+            <Item icone="🧮" label="Sugestões de Compra" ativo={tela === "sugestoes"} onClick={() => navegar("sugestoes")} />
           )}
           {podeAcessar(user, "ORCAMENTOS") && (
             <Item icone="📝" label="Orçamentos" ativo={tela === "orcamentos"} onClick={() => navegar("orcamentos")} />
@@ -867,6 +871,12 @@ export default function App() {
             <>
               <PageHeader titulo="Compras" subtitulo="Registro de compras (gera entrada de estoque automaticamente)" />
               <Compras user={user} />
+            </>
+          )}
+          {tela === "sugestoes" && (
+            <>
+              <PageHeader titulo="Sugestões de Compra" subtitulo="Reposição de estoque — itens abaixo do mínimo (automático) + adições manuais. Selecione e gere o pedido de compra." />
+              <Sugestoes user={user} />
             </>
           )}
           {tela === "orcamentos" && (

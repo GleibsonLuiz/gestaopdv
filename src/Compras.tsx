@@ -75,7 +75,7 @@ interface Compra {
   contasPagar?: ContaPagar[];
 }
 
-interface CompraResultado extends Compra {
+export interface CompraResultado extends Compra {
   contasGeradas?: unknown[];
 }
 
@@ -479,7 +479,7 @@ interface NovaCompraModalProps {
   onSalvarRascunho: (r: CompraRascunho) => void;
 }
 
-function NovaCompraModal({ fornecedores, produtos, rascunhoInicial, onCancelar, onSalvar, onSalvarRascunho }: NovaCompraModalProps) {
+export function NovaCompraModal({ fornecedores, produtos, rascunhoInicial, onCancelar, onSalvar, onSalvarRascunho }: NovaCompraModalProps) {
   const [fornecedorId, setFornecedorId] = useState(rascunhoInicial?.fornecedorId ?? "");
   const [observacoes, setObservacoes] = useState(rascunhoInicial?.observacoes ?? "");
   const [dataCompra, setDataCompra] = useState<string>(() => rascunhoInicial?.dataCompra || hojeLocalISO());

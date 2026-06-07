@@ -331,9 +331,15 @@ Ordem acordada com o cliente (executar em fases, validando cada uma):
      total vencido, ranking de devedores) + aba com distribuição por idade e
      badges de faixa + export PDF. Manual atualizado.
 
-> **Pendências menores (refinamentos, não bloqueiam):** alinhar à direita + fonte
-> mono as colunas numéricas dentro do PDF (paridade total com a tela); estender o
-> estilo executivo ao Dashboard; polir o highlight dos cards no tema Claro.
+> **Refinamentos concluídos (pós-fases):**
+> - ✅ PDF: colunas numéricas alinhadas à direita + fonte mono (courier) via hook
+>   `pdfAlinhaNumeros` em todas as tabelas — paridade total com a tela.
+> - ✅ Dashboard: KPIs com número-herói em mono + hairline/shadow-card.
+> - ✅ Tema Claro: corrigido o brilho dos cards (tokens `--elev-sheen*` em branco
+>   literal) + sombra de card mais suave nos temas claros.
+>
+> _Follow-up amplo opcional:_ varredura executiva completa do Dashboard (gráficos
+> e listas além dos KPIs) e das demais telas operacionais.
 
 > Conforme cada fase é concluída, atualizar este arquivo (tokens reais, novos
 > componentes compartilhados, decisões tomadas) para que ele permaneça a fonte

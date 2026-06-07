@@ -921,7 +921,7 @@ Documentos fiscais além da NFC-e, na tela **NF-e / NFS-e**:
 
 ![Relatórios](img/relatorios.png)
 
-**O que faz:** 8 abas de relatórios com filtros e **export PDF** com cabeçalho da empresa.
+**O que faz:** 12 abas de relatórios com filtros e **export PDF** com cabeçalho da empresa.
 
 **Abas:**
 
@@ -931,8 +931,12 @@ Documentos fiscais além da NFC-e, na tela **NF-e / NFS-e**:
 4. **🗃 Estoque** — situação atual por produto/categoria.
 5. **🏭 Fabricantes** — produtos filtrados por fabricante/marca (e categoria), agrupados por fabricante com subtotais (nº de produtos, unidades e valor de estoque a custo/venda). Filtro "(Sem fabricante)" lista os produtos sem marca cadastrada; opção de incluir inativos.
 6. **💵 Caixas (DRE)** — DRE diário com entradas/saídas/quebras/sobras + detalhe por caixa.
-7. **🏆 Comissões** — ranking por vendedor.
-8. **🎯 CRM** — 7 sub-relatórios:
+7. **📈 Lucratividade / Margem** — receita, custo (CMV), lucro e margem por categoria e por produto; filtro por categoria e vendedor.
+8. **🔤 Curva ABC** — classificação de Pareto (80/15/5) dos produtos por **Receita**, **Lucro** ou **Quantidade**. Mostra a faixa de distribuição A/B/C (quantos produtos concentram a maior parte do resultado), o % individual e acumulado de cada item e a classe (A/B/C). Filtros: período, categoria e critério. Útil para priorizar reposição, negociação com fornecedor e foco comercial nos itens vitais (classe A).
+9. **🔄 Giro & Capital Parado** — cruza o estoque atual com o que vendeu no período. Mostra **capital parado** (dinheiro empatado na prateleira), **giro** (quantas vezes o estoque girou) e **cobertura** (dias que o estoque atual dura). Classifica cada item em **Parado** (não vendeu), **Baixo giro**, **Saudável** ou **Alto giro**. Sem período informado usa os últimos 90 dias. Filtros: período, categoria e fornecedor. Útil para liquidar encalhados e evitar ruptura nos itens de alto giro.
+10. **🗓️ Sazonalidade** — mapa de calor **dia da semana × hora** com volume de vendas ou faturamento (alterna na **Métrica**). Identifica picos e vales para dimensionar escala de funcionários e programar promoções. Mostra melhor dia e horário de pico. Horários no fuso de Brasília. Sem período informado usa os últimos 90 dias.
+11. **🏆 Comissões** — ranking por vendedor.
+12. **🎯 CRM** — 7 sub-relatórios:
    - Funil de Vendas (conversão etapa-a-etapa)
    - Performance Comercial
    - Carteira (RFM detalhado)

@@ -8,7 +8,7 @@ import autoTable from "jspdf-autotable";
 import { api, BASE_URL } from "./lib/api";
 import HeaderRelatorio, { formatarEndereco, obterConfiguracaoCache } from "./HeaderRelatorio.jsx";
 import { urlLogotipo } from "./Configuracoes";
-import { detectarFormatoImagem } from "./lib/folhaCegaPdf";
+import { detectarFormatoImagem, dimensionarLogo } from "./lib/folhaCegaPdf";
 import SelectBusca from "./components/SelectBusca.jsx";
 
 
@@ -60,6 +60,9 @@ const ABAS = [
   { id: "fabricantes", label: "🏭 Fabricantes", cor: C.accent },
   { id: "caixas", label: "💵 Caixas (DRE)", cor: C.red },
   { id: "lucratividade", label: "📈 Lucratividade", cor: C.green },
+  { id: "curva-abc", label: "🔤 Curva ABC", cor: C.accent },
+  { id: "giro", label: "🔄 Giro & Capital", cor: C.purple },
+  { id: "sazonalidade", label: "🗓️ Sazonalidade", cor: C.yellow },
   { id: "comissoes", label: "🏆 Comissões", cor: C.purple },
   { id: "crm", label: "🎯 CRM", cor: "#7c3aed" },
 ];
@@ -117,6 +120,9 @@ export default function Relatorios() {
       {aba === "fabricantes" && <RelatorioProdutosFabricante key="fb" />}
       {aba === "caixas" && <RelatorioCaixas key="x" />}
       {aba === "lucratividade" && <RelatorioLucratividade key="l" />}
+      {aba === "curva-abc" && <RelatorioCurvaAbc key="abc" />}
+      {aba === "giro" && <RelatorioGiroEstoque key="giro" />}
+      {aba === "sazonalidade" && <RelatorioSazonalidade key="sz" />}
       {aba === "comissoes" && <RelatorioComissoesLista key="m" />}
       {aba === "crm" && <RelatoriosCrm key="r" />}
     </div>
@@ -1169,6 +1175,504 @@ function RelatorioLucratividade() {
         </>
       )}
     </BlocoRelatorio>
+  );
+}
+
+// ============ CURVA ABC (Pareto 80/15/5) ============
+const ABC_COR = { A: C.green, B: C.yellow, C: C.muted };
+const ABC_DESC = {
+  A: "Itens vitais — concentram o resultado",
+  B: "Importância intermediária",
+  C: "Cauda longa — pouca contribuição",
+};
+const CRITERIO_LABEL = { receita: "Receita", lucro: "Lucro", quantidade: "Quantidade" };
+
+function RelatorioCurvaAbc() {
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+  const [categoriaId, setCategoriaId] = useState("");
+  const [criterio, setCriterio] = useState("receita");
+  const [categorias, setCategorias] = useState([]);
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    api.listarCategorias().then(setCategorias).catch(() => {});
+  }, []);
+
+  // Formata o valor do criterio escolhido: moeda para receita/lucro, numero
+  // para quantidade.
+  const fmtCrit = (v) => (criterio === "quantidade" ? fmtNum(v) : fmtBRL(v));
+
+  const gerar = useCallback(async () => {
+    setCarregando(true); setErro("");
+    try {
+      const r = await api.relatorioCurvaAbc({ dataInicio, dataFim, categoriaId, criterio });
+      setDados(r);
+    } catch (err) { setErro(err.message); }
+    finally { setCarregando(false); }
+  }, [dataInicio, dataFim, categoriaId, criterio]);
+
+  async function exportar() {
+    if (!dados) return;
+    const critLabel = CRITERIO_LABEL[dados.resumo.criterio] || "Receita";
+    const doc = await criarPDF(`Curva ABC — por ${critLabel}`);
+    addPeriodo(doc, dataInicio, dataFim);
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 4,
+      head: [["Classe", "Produtos", "% Produtos", critLabel, "% do Total"]],
+      body: dados.resumo.classes.map(c => [
+        `Classe ${c.classe}`,
+        fmtNum(c.qtdProdutos),
+        fmtPct(c.pctProdutos),
+        fmtCrit(c.valor),
+        fmtPct(c.pctValor),
+      ]),
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
+      styles: { fontSize: 10 },
+    });
+
+    if (dados.produtos.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["#", "Produto", "Código", "Categoria", "Qtd", critLabel, "% Indiv.", "% Acum.", "Classe"]],
+        body: dados.produtos.map(p => [
+          p.posicao, p.nome, p.codigo, p.categoria || "—",
+          `${fmtNum(p.quantidade)} ${p.unidade}`,
+          fmtCrit(p.valor),
+          fmtPct(p.pctIndividual),
+          fmtPct(p.pctAcumulado),
+          p.classe,
+        ]),
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
+        styles: { fontSize: 8 },
+      });
+    }
+
+    doc.save(`curva-abc-${hoje()}.pdf`);
+  }
+
+  const classeA = dados?.resumo.classes.find(c => c.classe === "A");
+
+  return (
+    <BlocoRelatorio
+      titulo="Curva ABC de Produtos" cor={C.accent}
+      filtros={
+        <>
+          <CampoData label="De" value={dataInicio} onChange={setDataInicio} />
+          <CampoData label="Até" value={dataFim} onChange={setDataFim} />
+          <CampoSelectBusca label="Categoria" opcoes={categorias} value={categoriaId} onChange={setCategoriaId} placeholder="Todas" />
+          <CampoSelect label="Critério" value={criterio} onChange={setCriterio} minWidth={150}>
+            <option value="receita">Receita</option>
+            <option value="lucro">Lucro</option>
+            <option value="quantidade">Quantidade</option>
+          </CampoSelect>
+        </>
+      }
+      onGerar={gerar} onExportar={exportar} carregando={carregando}
+      erro={erro} dados={dados}
+    >
+      {dados && (
+        <>
+          <Resumo cards={[
+            { rotulo: "Produtos analisados", valor: fmtNum(dados.resumo.totalProdutos), cor: C.accent },
+            { rotulo: `Total (${CRITERIO_LABEL[dados.resumo.criterio]})`, valor: fmtCrit(dados.resumo.totalCriterio), cor: C.green },
+            { rotulo: "Itens classe A", valor: classeA ? `${fmtNum(classeA.qtdProdutos)} (${fmtPct(classeA.pctProdutos)})` : "—", cor: C.green },
+            { rotulo: "Concentração A", valor: classeA ? fmtPct(classeA.pctValor) : "—", cor: C.purple },
+          ]} />
+
+          <DistribuicaoAbc classes={dados.resumo.classes} criterio={dados.resumo.criterio} />
+
+          {dados.resumo.itensSemCusto > 0 && dados.resumo.criterio === "lucro" && (
+            <div style={{
+              padding: "10px 14px", borderRadius: 10, marginBottom: 16,
+              background: "color-mix(in srgb, var(--amber) 14%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--amber) 30%, transparent)",
+              color: "var(--amber)", fontSize: 12,
+            }}>
+              {dados.resumo.itensSemCusto} produto(s) sem preço de custo — o lucro desses itens fica superestimado.
+            </div>
+          )}
+
+          <Tabela
+            titulo={`Classificação por produto (${dados.produtos.length})`}
+            colunas={["#", "Produto", "Código", "Categoria", "Qtd", CRITERIO_LABEL[dados.resumo.criterio], "% Indiv.", "% Acum.", "Classe"]}
+            alinhamentos={["center", "left", "left", "left", "right", "right", "right", "right", "center"]}
+            linhas={dados.produtos.map(p => [
+              p.posicao,
+              p.nome,
+              p.codigo,
+              p.categoria || "—",
+              `${fmtNum(p.quantidade)} ${p.unidade}`,
+              fmtCrit(p.valor),
+              fmtPct(p.pctIndividual),
+              fmtPct(p.pctAcumulado),
+              <BadgeClasse key="b" classe={p.classe} />,
+            ])}
+            vazioTexto="Nenhuma venda no período."
+          />
+        </>
+      )}
+    </BlocoRelatorio>
+  );
+}
+
+// Faixa empilhada A/B/C: mostra a participacao de cada classe no criterio e,
+// abaixo, quantos produtos ela representa — torna visivel o efeito Pareto
+// ("poucos produtos = maior parte do resultado").
+function DistribuicaoAbc({ classes, criterio }) {
+  const fmtCrit = (v) => (criterio === "quantidade" ? fmtNum(v) : fmtBRL(v));
+  return (
+    <div style={{
+      background: "var(--surface)", border: "1px solid var(--hairline-soft)",
+      boxShadow: "var(--shadow-card)", borderRadius: 14, padding: 16, marginBottom: 16,
+    }}>
+      <div style={{ color: "var(--fg-muted)", fontSize: 10.5, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 12 }}>
+        Distribuição ABC
+      </div>
+      <div style={{ display: "flex", height: 12, borderRadius: 6, overflow: "hidden", marginBottom: 14 }}>
+        {classes.map(c => (
+          c.pctValor > 0 ? (
+            <div key={c.classe} style={{ width: `${c.pctValor}%`, background: ABC_COR[c.classe] }} title={`Classe ${c.classe}: ${fmtPct(c.pctValor)}`} />
+          ) : null
+        ))}
+      </div>
+      <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
+        {classes.map(c => (
+          <div key={c.classe} style={{
+            display: "flex", alignItems: "center", gap: 10,
+            padding: "10px 12px", borderRadius: 10,
+            border: "1px solid var(--hairline-soft)",
+          }}>
+            <div style={{
+              width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontWeight: 700, fontSize: 14, color: "#fff",
+              background: ABC_COR[c.classe],
+            }}>{c.classe}</div>
+            <div style={{ minWidth: 0 }}>
+              <div className="font-mono tabular-nums" style={{ color: "var(--fg)", fontSize: 14, fontWeight: 500 }}>
+                {fmtPct(c.pctValor)} <span style={{ color: "var(--fg-muted)", fontSize: 11 }}>do total</span>
+              </div>
+              <div style={{ color: "var(--fg-muted)", fontSize: 11 }}>
+                {fmtNum(c.qtdProdutos)} produtos ({fmtPct(c.pctProdutos)}) · {fmtCrit(c.valor)}
+              </div>
+              <div style={{ color: "var(--fg-faint)", fontSize: 10.5, marginTop: 1 }}>{ABC_DESC[c.classe]}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BadgeClasse({ classe }) {
+  return (
+    <span className="font-mono" style={{
+      display: "inline-block", minWidth: 22, padding: "2px 7px", borderRadius: 999,
+      fontSize: 11, fontWeight: 700, color: "#fff", background: ABC_COR[classe] || C.muted,
+    }}>{classe}</span>
+  );
+}
+
+// ============ GIRO DE ESTOQUE & CAPITAL PARADO ============
+const GIRO_CLASSE = {
+  PARADO:     { label: "Parado", cor: C.red },
+  BAIXO_GIRO: { label: "Baixo giro", cor: C.yellow },
+  SAUDAVEL:   { label: "Saudável", cor: C.green },
+  ALTO_GIRO:  { label: "Alto giro", cor: C.accent },
+};
+
+function RelatorioGiroEstoque() {
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+  const [categoriaId, setCategoriaId] = useState("");
+  const [fornecedorId, setFornecedorId] = useState("");
+  const [categorias, setCategorias] = useState([]);
+  const [fornecedores, setFornecedores] = useState([]);
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    api.listarCategorias().then(setCategorias).catch(() => {});
+    api.listarFornecedores({ ativo: "true" }).then(setFornecedores).catch(() => {});
+  }, []);
+
+  const fmtGiro = (v) => (v == null ? "—" : `${v.toFixed(1)}×`);
+  const fmtCobertura = (v) => {
+    if (v == null) return "Não vende";
+    if (v >= 999) return "999+ d";
+    return `${Math.round(v)} d`;
+  };
+
+  const gerar = useCallback(async () => {
+    setCarregando(true); setErro("");
+    try {
+      const r = await api.relatorioGiroEstoque({ dataInicio, dataFim, categoriaId, fornecedorId });
+      setDados(r);
+    } catch (err) { setErro(err.message); }
+    finally { setCarregando(false); }
+  }, [dataInicio, dataFim, categoriaId, fornecedorId]);
+
+  async function exportar() {
+    if (!dados) return;
+    const doc = await criarPDF("Giro de Estoque & Capital Parado");
+    addPeriodo(doc, dados.filtros.dataInicio?.slice(0, 10), dados.filtros.dataFim?.slice(0, 10));
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 4,
+      head: [["Indicador", "Valor"]],
+      body: [
+        ["Capital em estoque (custo)", fmtBRL(dados.resumo.capitalEstoqueTotal)],
+        ["Capital parado", `${fmtBRL(dados.resumo.capitalParadoTotal)} (${fmtPct(dados.resumo.pctCapitalParado)})`],
+        ["Itens parados", fmtNum(dados.resumo.qtdParados)],
+        ["Itens baixo giro", fmtNum(dados.resumo.qtdBaixoGiro)],
+        ["Itens alto giro", fmtNum(dados.resumo.qtdAltoGiro)],
+        ["Janela analisada", `${dados.resumo.diasPeriodo} dias`],
+      ],
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
+      styles: { fontSize: 10 },
+    });
+
+    if (dados.produtos.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["Produto", "Código", "Categoria", "Estoque", "Vendido", "Giro", "Cobertura", "Capital parado", "Classe"]],
+        body: dados.produtos.map(p => [
+          p.nome, p.codigo, p.categoria || "—",
+          `${fmtNum(p.estoque)} ${p.unidade}`,
+          fmtNum(p.vendidoPeriodo),
+          fmtGiro(p.giro),
+          fmtCobertura(p.coberturaDias),
+          p.capitalParado != null ? fmtBRL(p.capitalParado) : "—",
+          GIRO_CLASSE[p.classe]?.label || p.classe,
+        ]),
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
+        styles: { fontSize: 8 },
+      });
+    }
+
+    doc.save(`giro-estoque-${hoje()}.pdf`);
+  }
+
+  return (
+    <BlocoRelatorio
+      titulo="Giro de Estoque & Capital Parado" cor={C.purple}
+      filtros={
+        <>
+          <CampoData label="De" value={dataInicio} onChange={setDataInicio} />
+          <CampoData label="Até" value={dataFim} onChange={setDataFim} />
+          <CampoSelectBusca label="Categoria" opcoes={categorias} value={categoriaId} onChange={setCategoriaId} placeholder="Todas" />
+          <CampoSelectBusca label="Fornecedor" opcoes={fornecedores} value={fornecedorId} onChange={setFornecedorId} placeholder="Todos" />
+        </>
+      }
+      onGerar={gerar} onExportar={exportar} carregando={carregando}
+      erro={erro} dados={dados}
+    >
+      {dados && (
+        <>
+          <Resumo cards={[
+            { rotulo: "Capital em estoque", valor: fmtBRL(dados.resumo.capitalEstoqueTotal), cor: C.accent },
+            { rotulo: "Capital parado", valor: `${fmtBRL(dados.resumo.capitalParadoTotal)} (${fmtPct(dados.resumo.pctCapitalParado)})`, cor: C.red },
+            { rotulo: "Itens parados", valor: fmtNum(dados.resumo.qtdParados), cor: C.red },
+            { rotulo: "Itens baixo giro", valor: fmtNum(dados.resumo.qtdBaixoGiro), cor: C.yellow },
+          ]} />
+
+          <div style={{ color: "var(--fg-faint)", fontSize: 11.5, marginBottom: 16, marginTop: -4 }}>
+            Janela analisada: <strong style={{ color: "var(--fg-soft)" }}>{dados.resumo.diasPeriodo} dias</strong> · giro = vendido ÷ estoque · cobertura = dias que o estoque atual dura na venda média.
+          </div>
+
+          <Tabela
+            titulo={`Produtos por capital parado (${dados.produtos.length})`}
+            colunas={["Produto", "Código", "Categoria", "Estoque", "Vendido", "Giro", "Cobertura", "Capital parado", "Classe"]}
+            alinhamentos={["left", "left", "left", "right", "right", "right", "right", "right", "center"]}
+            linhas={dados.produtos.map(p => [
+              p.nome,
+              p.codigo,
+              p.categoria || "—",
+              `${fmtNum(p.estoque)} ${p.unidade}`,
+              fmtNum(p.vendidoPeriodo),
+              fmtGiro(p.giro),
+              fmtCobertura(p.coberturaDias),
+              p.capitalParado != null ? fmtBRL(p.capitalParado) : "—",
+              <BadgeGiro key="g" classe={p.classe} />,
+            ])}
+            vazioTexto="Nenhum produto no filtro."
+          />
+        </>
+      )}
+    </BlocoRelatorio>
+  );
+}
+
+function BadgeGiro({ classe }) {
+  const meta = GIRO_CLASSE[classe] || { label: classe, cor: C.muted };
+  return (
+    <span className="font-mono" style={{
+      display: "inline-block", padding: "2px 8px", borderRadius: 999,
+      fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap",
+      color: meta.cor,
+      background: `color-mix(in srgb, ${meta.cor} 16%, transparent)`,
+      border: `1px solid color-mix(in srgb, ${meta.cor} 30%, transparent)`,
+    }}>{meta.label}</span>
+  );
+}
+
+// ============ SAZONALIDADE (heatmap dia x hora) ============
+const DIAS_SEMANA = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+function RelatorioSazonalidade() {
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+  const [metrica, setMetrica] = useState("faturamento"); // faturamento | vendas
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  const valorCel = (cel) => (metrica === "vendas" ? cel.vendas : cel.faturamento);
+  const fmtMetrica = (v) => (metrica === "vendas" ? fmtNum(v) : fmtBRL(v));
+
+  const gerar = useCallback(async () => {
+    setCarregando(true); setErro("");
+    try {
+      const r = await api.relatorioSazonalidade({ dataInicio, dataFim });
+      setDados(r);
+    } catch (err) { setErro(err.message); }
+    finally { setCarregando(false); }
+  }, [dataInicio, dataFim]);
+
+  async function exportar() {
+    if (!dados) return;
+    const doc = await criarPDF("Sazonalidade de Vendas");
+    addPeriodo(doc, dados.filtros.dataInicio?.slice(0, 10), dados.filtros.dataFim?.slice(0, 10));
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 4,
+      head: [["Dia da semana", "Vendas", "Faturamento"]],
+      body: dados.porDia.map((d, i) => [DIAS_SEMANA[i], fmtNum(d.vendas), fmtBRL(d.faturamento)]),
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
+      styles: { fontSize: 10 },
+    });
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 6,
+      head: [["Hora", "Vendas", "Faturamento"]],
+      body: dados.porHora
+        .map((h, i) => [`${String(i).padStart(2, "0")}h`, fmtNum(h.vendas), fmtBRL(h.faturamento)])
+        .filter((_, i) => dados.porHora[i].vendas > 0),
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
+      styles: { fontSize: 9 },
+    });
+    doc.save(`sazonalidade-${hoje()}.pdf`);
+  }
+
+  // Maior valor de celula no metrica atual (para escalar a intensidade da cor).
+  const maxCel = dados
+    ? Math.max(1, ...dados.matriz.flat().map(valorCel))
+    : 1;
+
+  return (
+    <BlocoRelatorio
+      titulo="Sazonalidade de Vendas" cor={C.yellow}
+      filtros={
+        <>
+          <CampoData label="De" value={dataInicio} onChange={setDataInicio} />
+          <CampoData label="Até" value={dataFim} onChange={setDataFim} />
+          <CampoSelect label="Métrica" value={metrica} onChange={setMetrica} minWidth={150}>
+            <option value="faturamento">Faturamento</option>
+            <option value="vendas">Nº de vendas</option>
+          </CampoSelect>
+        </>
+      }
+      onGerar={gerar} onExportar={exportar} carregando={carregando}
+      erro={erro} dados={dados}
+    >
+      {dados && (
+        <>
+          <Resumo cards={[
+            { rotulo: "Vendas no período", valor: fmtNum(dados.resumo.totalVendas), cor: C.accent },
+            { rotulo: "Faturamento", valor: fmtBRL(dados.resumo.totalFaturamento), cor: C.green },
+            { rotulo: "Melhor dia", valor: dados.resumo.melhorDia ? `${DIAS_SEMANA[dados.resumo.melhorDia.dow]}` : "—", cor: C.purple },
+            { rotulo: "Horário de pico", valor: dados.resumo.pico ? `${DIAS_SEMANA[dados.resumo.pico.dow]} ${String(dados.resumo.pico.hour).padStart(2, "0")}h` : "—", cor: C.yellow },
+          ]} />
+
+          <HeatmapSazonalidade
+            matriz={dados.matriz}
+            maxCel={maxCel}
+            valorCel={valorCel}
+            fmtMetrica={fmtMetrica}
+          />
+        </>
+      )}
+    </BlocoRelatorio>
+  );
+}
+
+// Heatmap 7 dias x 24 horas. Intensidade da cor proporcional ao valor da
+// metrica escolhida; qualquer venda recebe um piso de opacidade p/ visibilidade.
+function HeatmapSazonalidade({ matriz, maxCel, valorCel, fmtMetrica }) {
+  const horas = Array.from({ length: 24 }, (_, h) => h);
+  const corCel = (v) => {
+    if (v <= 0) return "transparent";
+    const pct = 14 + (v / maxCel) * 86; // 14%..100%
+    return `color-mix(in srgb, var(--accent) ${pct.toFixed(0)}%, transparent)`;
+  };
+  return (
+    <div style={{
+      background: "var(--surface)", border: "1px solid var(--hairline-soft)",
+      boxShadow: "var(--shadow-card)", borderRadius: 14, padding: 16, marginBottom: 16,
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+        <div style={{ color: "var(--fg-muted)", fontSize: 10.5, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.12em" }}>
+          Mapa de calor · dia × hora
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--fg-faint)", fontSize: 11 }}>
+          <span>menos</span>
+          <div style={{ display: "flex", gap: 2 }}>
+            {[14, 40, 65, 100].map(p => (
+              <span key={p} style={{ width: 16, height: 10, borderRadius: 2, background: `color-mix(in srgb, var(--accent) ${p}%, transparent)` }} />
+            ))}
+          </div>
+          <span>mais</span>
+        </div>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <div style={{ minWidth: 680 }}>
+          {/* Cabecalho de horas */}
+          <div style={{ display: "grid", gridTemplateColumns: `36px repeat(24, 1fr)`, gap: 2, marginBottom: 2 }}>
+            <div />
+            {horas.map(h => (
+              <div key={h} className="font-mono" style={{ fontSize: 8.5, color: "var(--fg-faint)", textAlign: "center" }}>
+                {h % 3 === 0 ? String(h).padStart(2, "0") : ""}
+              </div>
+            ))}
+          </div>
+          {/* Linhas por dia */}
+          {matriz.map((linha, d) => (
+            <div key={d} style={{ display: "grid", gridTemplateColumns: `36px repeat(24, 1fr)`, gap: 2, marginBottom: 2 }}>
+              <div className="font-mono" style={{ fontSize: 10, color: "var(--fg-muted)", display: "flex", alignItems: "center" }}>
+                {DIAS_SEMANA[d]}
+              </div>
+              {linha.map((cel, h) => {
+                const v = valorCel(cel);
+                return (
+                  <div
+                    key={h}
+                    title={`${DIAS_SEMANA[d]} ${String(h).padStart(2, "0")}h · ${cel.vendas} venda(s) · ${fmtMetrica(cel.faturamento)}`}
+                    style={{
+                      height: 22, borderRadius: 3, background: corCel(v),
+                      border: v > 0 ? "1px solid color-mix(in srgb, var(--accent) 20%, transparent)" : "1px solid var(--hairline-soft)",
+                    }}
+                  />
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -3615,55 +4119,64 @@ async function criarPDF(titulo) {
   const empresa = await obterConfiguracaoCache();
 
   let yCursor = 16;
-  let xTexto = 14;
 
-  // Logo (quando ha — carrega via fetch + dataURL pra jsPDF.addImage).
-  // urlLogotipo trata absoluta (Vercel Blob em prod) vs relativa (/uploads em dev).
+  // ---- Cabecalho da empresa: logo a ESQUERDA, dados a DIREITA ----
+  // Layout executivo de duas colunas. O logo preserva a proporcao (via
+  // dimensionarLogo) dentro de uma caixa generosa, em vez de forcar 22x22 —
+  // que achatava logos retangulares. Os dados ficam alinhados a direita, na
+  // margem oposta, deixando o logo respirar.
+  const margemDir = 196;
+  const topo = 11;
+  let logoBottom = topo;
   if (empresa?.logotipo) {
     try {
       const urlLogo = urlLogotipo(empresa.logotipo);
       if (!urlLogo) throw new Error("logo sem url");
       const dataUrl = await carregarImagemDataUrl(urlLogo);
       const formato = detectarFormatoImagem(dataUrl);
-      doc.addImage(dataUrl, formato, 14, 10, 22, 22);
-      xTexto = 40;
+      const { w, h } = dimensionarLogo(doc, dataUrl, 50, 24);
+      doc.addImage(dataUrl, formato, 14, topo, w, h);
+      logoBottom = topo + h;
     } catch {
       // logo falhou — segue sem
     }
   }
 
+  let dadosBottom = topo;
   if (empresa) {
     doc.setFontSize(14);
     doc.setFont("helvetica", "bold");
-    doc.text(empresa.nomeFantasia || empresa.razaoSocial, xTexto, yCursor);
+    doc.setTextColor(0, 0, 0);
+    let y = topo + 4;
+    doc.text(empresa.nomeFantasia || empresa.razaoSocial, margemDir, y, { align: "right" });
 
     doc.setFontSize(8);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(100, 100, 100);
-    let yLinhas = yCursor + 5;
     if (empresa.razaoSocial && empresa.razaoSocial !== empresa.nomeFantasia) {
-      doc.text(empresa.razaoSocial, xTexto, yLinhas); yLinhas += 4;
+      y += 4.5; doc.text(empresa.razaoSocial, margemDir, y, { align: "right" });
     }
     const linhaContato = [
       empresa.cnpj && `CNPJ ${empresa.cnpj}`,
       empresa.telefone && `Tel ${empresa.telefone}`,
       empresa.email,
     ].filter(Boolean).join(" · ");
-    if (linhaContato) { doc.text(linhaContato, xTexto, yLinhas); yLinhas += 4; }
+    if (linhaContato) { y += 4; doc.text(linhaContato, margemDir, y, { align: "right" }); }
     const endereco = formatarEndereco(empresa);
-    if (endereco) { doc.text(endereco, xTexto, yLinhas); yLinhas += 4; }
+    if (endereco) { y += 4; doc.text(endereco, margemDir, y, { align: "right" }); }
     doc.setTextColor(0, 0, 0);
-    yCursor = Math.max(yLinhas, 34);
+    dadosBottom = y;
   } else {
     doc.setFontSize(16);
     doc.setFont("helvetica", "bold");
-    doc.text("GestãoProMax", 14, 16);
-    yCursor = 26;
+    doc.text("GestãoProMax", 14, topo + 5);
+    dadosBottom = topo + 5;
   }
 
-  // Linha separadora
+  // Linha separadora abaixo da coluna mais alta (logo ou dados).
+  yCursor = Math.max(logoBottom, dadosBottom, 30) + 6;
   doc.setDrawColor(200, 200, 200);
-  doc.line(14, yCursor, 196, yCursor);
+  doc.line(14, yCursor, margemDir, yCursor);
   yCursor += 6;
 
   doc.setFontSize(13);

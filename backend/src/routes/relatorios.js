@@ -8,6 +8,9 @@ import {
   relatorioProdutosPorFabricante,
   relatorioCaixas,
   relatorioLucratividade,
+  relatorioCurvaAbc,
+  relatorioGiroEstoque,
+  relatorioSazonalidade,
 } from "../controllers/relatoriosController.js";
 import {
   relatorioFunilCrm,
@@ -31,6 +34,9 @@ router.get("/estoque", relatorioEstoque);
 router.get("/produtos-fabricante", relatorioProdutosPorFabricante);
 router.get("/caixas", relatorioCaixas);
 router.get("/lucratividade", relatorioLucratividade);
+router.get("/curva-abc", relatorioCurvaAbc);
+router.get("/giro-estoque", relatorioGiroEstoque);
+router.get("/sazonalidade", relatorioSazonalidade);
 router.get("/crm/funil", relatorioFunilCrm);
 router.get("/crm/performance", relatorioPerformanceCrm);
 router.get("/crm/carteira", relatorioCarteiraCrm);

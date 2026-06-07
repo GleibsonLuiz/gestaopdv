@@ -202,7 +202,10 @@ export async function listar(req, res, next) {
 // informados. A origem e calculada: se o produto esta abaixo do minimo agora,
 // e um override de sugestao do sistema (SISTEMA); senao e antecipacao MANUAL.
 async function upsertLinha(req, produtoId, dados) {
-  const produto = await prisma.produto.findUnique({
+  // findFirst (nao findUnique) para que a extensao multi-tenant injete o
+  // filtro tenantId no where — garante que so produtos do proprio tenant
+  // entrem na lista (findUnique nao permite filtrar por tenant no where).
+  const produto = await prisma.produto.findFirst({
     where: { id: produtoId },
     select: { id: true, tipoItem: true, estoque: true, estoqueMinimo: true },
   });

@@ -57,6 +57,47 @@ function pdfAlinhaNumeros(data) {
   }
 }
 
+// --- Densidade executiva das tabelas (DESIGN_STANDARDS.md §5, Fase 5) ---------
+// Wrapper unico sobre autoTable: a densidade de TODOS os ~80 blocos de tabela
+// do modulo vive aqui, num so lugar. Em vez de cada relatorio repetir paddings
+// e tamanhos, esta funcao impoe o padrao corporativo "denso com respiro":
+//   • corpo ~1pt menor (piso de 7pt p/ nao prejudicar leitura);
+//   • espacamento vertical enxuto (0,7mm) p/ caber o maximo de linhas por pagina,
+//     mantendo respiro horizontal (1,8mm) p/ nao colar texto nas bordas;
+//   • header grafite em negrito — hierarquia por PESO, nao por tamanho — com
+//     padding um pouco maior p/ destacar sem "gritar", e sem fio (limpo);
+//   • listras alternadas sutis (zebra) + fio horizontal discreto entre linhas
+//     p/ guiar o olho em linhas longas;
+//   • numeros seguem alinhados a direita em mono via pdfAlinhaNumeros (vem no opts).
+// Ajuste a densidade UMA vez aqui e ela reflete em todos os relatorios.
+const TABELA_LISTRA = [246, 247, 249]; // zebra clara, quase imperceptivel
+const TABELA_FIO = [228, 230, 234];    // hairline horizontal entre as linhas
+
+function tabelaPDF(doc, opts = {}) {
+  const fonteCorpo =
+    typeof opts.styles?.fontSize === "number"
+      ? Math.max(7, opts.styles.fontSize - 1)
+      : undefined;
+
+  return autoTable(doc, {
+    margin: { left: 14, right: 14 },
+    alternateRowStyles: { fillColor: TABELA_LISTRA },
+    ...opts,
+    styles: {
+      ...(opts.styles || {}),
+      ...(fonteCorpo != null ? { fontSize: fonteCorpo } : {}),
+      cellPadding: { top: 0.7, right: 1.8, bottom: 0.7, left: 1.8 },
+      lineColor: TABELA_FIO,
+      lineWidth: { bottom: 0.1 },
+    },
+    headStyles: {
+      ...(opts.headStyles || {}),
+      cellPadding: { top: 1.3, right: 1.8, bottom: 1.3, left: 1.8 },
+      lineWidth: 0,
+    },
+  });
+}
+
 const ROTULO_PAGAMENTO = {
   DINHEIRO: "Dinheiro",
   CARTAO_CREDITO: "Cartão crédito",
@@ -224,7 +265,7 @@ function RelatorioVendas() {
     addPeriodo(doc, dataInicio, dataFim);
 
     let y = doc.lastAutoTable?.finalY || 50;
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: y,
       head: [["Indicador", "Valor"]],
       body: [
@@ -238,7 +279,7 @@ function RelatorioVendas() {
     });
 
     if (dados.formasPagamento.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Forma de pagamento", "Vendas", "Total"]],
         body: dados.formasPagamento.map(f => [
@@ -252,7 +293,7 @@ function RelatorioVendas() {
     }
 
     if (dados.topProdutos.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Produto", "Código", "Qtd.", "Total"]],
         body: dados.topProdutos.map((t, i) => [
@@ -268,7 +309,7 @@ function RelatorioVendas() {
     }
 
     if (dados.vendas.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Data", "Cliente", "Vendedor", "Pgto", "Itens", "Total"]],
         body: dados.vendas.map(v => [
@@ -392,7 +433,7 @@ function RelatorioCompras() {
     const doc = await criarPDF("Relatório de Compras");
     addPeriodo(doc, dataInicio, dataFim);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -405,7 +446,7 @@ function RelatorioCompras() {
     });
 
     if (dados.topFornecedores.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Fornecedor", "Compras", "Total"]],
         body: dados.topFornecedores.map((t, i) => [
@@ -420,7 +461,7 @@ function RelatorioCompras() {
     }
 
     if (dados.compras.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Data", "Fornecedor", "Itens", "Total"]],
         body: dados.compras.map(c => [
@@ -519,7 +560,7 @@ function RelatorioFinanceiro() {
     addPeriodo(doc, dataInicio, dataFim);
     if (status) addLinha(doc, `Situação (detalhamento): ${ROTULO_STATUS[status]}`);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Status", "Contas a pagar — Qtd", "Total", "Contas a receber — Qtd", "Total"]],
       body: ["PENDENTE", "ATRASADA", "PAGA", "CANCELADA"].map(s => [
@@ -533,7 +574,7 @@ function RelatorioFinanceiro() {
       styles: { fontSize: 9 },
     });
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 6,
       head: [["Indicador", "Valor"]],
       body: [
@@ -545,14 +586,14 @@ function RelatorioFinanceiro() {
     });
 
     if (dados.contasPagar.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Contas a pagar", "", "", "", ""]],
         body: [],
         styles: { fontSize: 11, fontStyle: "bold" },
         theme: "plain",
       });
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY,
         head: [["Descrição", "Fornecedor", "Vencimento", "Status", "Valor"]],
         body: dados.contasPagar.map(c => [
@@ -565,14 +606,14 @@ function RelatorioFinanceiro() {
     }
 
     if (dados.contasReceber.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Contas a receber", "", "", "", ""]],
         body: [],
         styles: { fontSize: 11, fontStyle: "bold" },
         theme: "plain",
       });
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY,
         head: [["Descrição", "Cliente", "Vencimento", "Status", "Valor"]],
         body: dados.contasReceber.map(c => [
@@ -702,7 +743,7 @@ function RelatorioEstoque() {
     const doc = await criarPDF("Relatório de Estoque");
     addLinha(doc, `Gerado em ${fmtDataHora(dados.geradoEm)}`);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -718,7 +759,7 @@ function RelatorioEstoque() {
       styles: { fontSize: 10 },
     });
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 6,
       head: [["Código", "Produto", "Categoria", "Estoque", "Mín.", "Custo", "Venda", "Total venda"]],
       body: dados.produtos.map(p => [
@@ -812,7 +853,7 @@ function RelatorioProdutosFabricante() {
     const doc = await criarPDF("Relatório de Produtos por Fabricante");
     addLinha(doc, `Gerado em ${fmtDataHora(dados.geradoEm)}`);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -827,7 +868,7 @@ function RelatorioProdutosFabricante() {
     });
 
     if (dados.porFabricante.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Fabricante", "Produtos", "Unidades", "Valor custo", "Valor venda"]],
         body: dados.porFabricante.map(f => [
@@ -840,7 +881,7 @@ function RelatorioProdutosFabricante() {
     }
 
     if (dados.produtos.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Código", "Produto", "Fabricante", "Categoria", "Estoque", "Custo", "Venda"]],
         body: dados.produtos.map(p => [
@@ -942,7 +983,7 @@ function RelatorioCaixas() {
     addPeriodo(doc, dataInicio, dataFim);
     addLinha(doc, `Gerado em ${fmtDataHora(dados.geradoEm)}`);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -958,7 +999,7 @@ function RelatorioCaixas() {
       styles: { fontSize: 10 },
     });
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 6,
       head: [["Dia", "Caixas", "Vendas", "Entradas", "Saídas", "Quebras", "Sobras"]],
       body: dados.dre.map(d => [
@@ -971,7 +1012,7 @@ function RelatorioCaixas() {
       styles: { fontSize: 9 },
     });
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 6,
       head: [["#", "Operador", "Aberto em", "Fechado em", "Saldo Inic.", "Esperado", "Contado", "Diferença"]],
       body: dados.caixas.map(c => [
@@ -1093,7 +1134,7 @@ function RelatorioLucratividade() {
       body.push(["Produtos sem custo cadastrado", fmtNum(dados.resumo.itensSemCusto)]);
     }
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body,
@@ -1102,7 +1143,7 @@ function RelatorioLucratividade() {
     });
 
     if (dados.porCategoria.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Categoria", "Receita", "Custo", "Lucro", "Margem"]],
         body: dados.porCategoria.map(c => [
@@ -1114,7 +1155,7 @@ function RelatorioLucratividade() {
     }
 
     if (dados.porProduto.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Produto", "Código", "Categoria", "Qtd", "Receita", "Custo", "Lucro", "Margem"]],
         body: dados.porProduto.map((p, i) => [
@@ -1241,7 +1282,7 @@ function RelatorioCurvaAbc() {
     const doc = await criarPDF(`Curva ABC — por ${critLabel}`);
     addPeriodo(doc, dataInicio, dataFim);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Classe", "Produtos", "% Produtos", critLabel, "% do Total"]],
       body: dados.resumo.classes.map(c => [
@@ -1256,7 +1297,7 @@ function RelatorioCurvaAbc() {
     });
 
     if (dados.produtos.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Produto", "Código", "Categoria", "Qtd", critLabel, "% Indiv.", "% Acum.", "Classe"]],
         body: dados.produtos.map(p => [
@@ -1443,7 +1484,7 @@ function RelatorioGiroEstoque() {
     const doc = await criarPDF("Giro de Estoque & Capital Parado");
     addPeriodo(doc, dados.filtros.dataInicio?.slice(0, 10), dados.filtros.dataFim?.slice(0, 10));
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -1459,7 +1500,7 @@ function RelatorioGiroEstoque() {
     });
 
     if (dados.produtos.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Produto", "Código", "Categoria", "Estoque", "Vendido", "Giro", "Cobertura", "Capital parado", "Classe"]],
         body: dados.produtos.map(p => [
@@ -1570,14 +1611,14 @@ function RelatorioSazonalidade() {
     const doc = await criarPDF("Sazonalidade de Vendas");
     addPeriodo(doc, dados.filtros.dataInicio?.slice(0, 10), dados.filtros.dataFim?.slice(0, 10));
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Dia da semana", "Vendas", "Faturamento"]],
       body: dados.porDia.map((d, i) => [DIAS_SEMANA[i], fmtNum(d.vendas), fmtBRL(d.faturamento)]),
       theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 10 },
     });
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 6,
       head: [["Hora", "Vendas", "Faturamento"]],
       body: dados.porHora
@@ -1731,7 +1772,7 @@ function RelatorioAgingReceber() {
     if (!dados) return;
     const doc = await criarPDF("Aging de Recebíveis");
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Faixa", "Contas", "Valor", "% do total"]],
       body: dados.resumo.faixas.map(f => [
@@ -1745,7 +1786,7 @@ function RelatorioAgingReceber() {
     });
 
     if (dados.clientes.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Cliente", "Contas", "Total em aberto", "Vencido", "Maior atraso"]],
         body: dados.clientes.map(c => [
@@ -1893,7 +1934,7 @@ function RelatorioComissoesLista() {
     const doc = await criarPDF("Relatório de Comissões");
     addPeriodo(doc, dataInicio, dataFim);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -1908,7 +1949,7 @@ function RelatorioComissoesLista() {
     });
 
     if (dados.vendedores.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Vendedor", "Vendas", "Faturamento", "Ticket médio", "Comissão", "Meses ≥ meta"]],
         body: dados.vendedores.map((v, i) => [
@@ -1928,7 +1969,7 @@ function RelatorioComissoesLista() {
     }
 
     if (dados.vendas.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Data", "Vendedor", "Cliente", "Pgto", "Total", "Comissão"]],
         body: dados.vendas.map(v => [
@@ -2041,7 +2082,7 @@ function RelatorioFunilCrm() {
     const doc = await criarPDF("Relatório de Funil de Vendas (CRM)");
     addPeriodo(doc, dataInicio, dataFim);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -2060,7 +2101,7 @@ function RelatorioFunilCrm() {
       styles: { fontSize: 10 },
     });
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 6,
       head: [["Etapa", "Qtd", "Valor estimado", "Valor ponderado"]],
       body: dados.porEtapa.map(e => [
@@ -2074,7 +2115,7 @@ function RelatorioFunilCrm() {
     });
 
     if (dados.conversaoEtapaEtapa.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["De", "Para", "Qtd na etapa de origem", "Qtd avançou", "Taxa"]],
         body: dados.conversaoEtapaEtapa.map(c => [
@@ -2090,7 +2131,7 @@ function RelatorioFunilCrm() {
     }
 
     if (dados.porResponsavel.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Vendedor", "Total", "Abertas", "Ganhas", "Perdidas", "Conv.", "Valor ganho"]],
         body: dados.porResponsavel.map((v, i) => [
@@ -2106,7 +2147,7 @@ function RelatorioFunilCrm() {
     }
 
     if (dados.porOrigem.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Origem", "Qtd", "Ganhas", "Perdidas", "Conv.", "Valor ganho"]],
         body: dados.porOrigem.map(o => [
@@ -2120,7 +2161,7 @@ function RelatorioFunilCrm() {
     }
 
     if (dados.motivosPerda.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Motivo de perda", "Qtd", "Valor perdido"]],
         body: dados.motivosPerda.map(m => [m.motivo, fmtNum(m.quantidade), fmtBRL(m.valorPerdido)]),
@@ -2130,7 +2171,7 @@ function RelatorioFunilCrm() {
     }
 
     if (dados.oportunidades.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Título", "Cliente", "Vendedor", "Etapa", "Prob.", "Valor", "Dias etapa"]],
         body: dados.oportunidades.map(o => [
@@ -2321,7 +2362,7 @@ function RelatorioPerformanceCrm() {
     const doc = await criarPDF("Relatório de Performance Comercial (CRM)");
     addPeriodo(doc, dataInicio, dataFim);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -2342,13 +2383,13 @@ function RelatorioPerformanceCrm() {
     });
 
     if (dados.topFaturamento.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["🏆 Top faturamento", "", ""]],
         body: [],
         styles: { fontSize: 11, fontStyle: "bold" }, theme: "plain",
       });
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY,
         head: [["#", "Vendedor", "Faturamento", "Vendas"]],
         body: dados.topFaturamento.map((v, i) => [
@@ -2360,13 +2401,13 @@ function RelatorioPerformanceCrm() {
     }
 
     if (dados.topConversao.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["🎯 Top conversão (min. 3 oportunidades fechadas)", "", ""]],
         body: [],
         styles: { fontSize: 11, fontStyle: "bold" }, theme: "plain",
       });
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY,
         head: [["#", "Vendedor", "Taxa", "Ganhas/Fechadas"]],
         body: dados.topConversao.map((v, i) => [
@@ -2380,13 +2421,13 @@ function RelatorioPerformanceCrm() {
     }
 
     if (dados.topAtividade.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["💬 Top atividade", "", ""]],
         body: [],
         styles: { fontSize: 11, fontStyle: "bold" }, theme: "plain",
       });
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY,
         head: [["#", "Vendedor", "Interações", "Tarefas conc."]],
         body: dados.topAtividade.map((v, i) => [
@@ -2398,7 +2439,7 @@ function RelatorioPerformanceCrm() {
     }
 
     if (dados.porVendedor.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Vendedor", "Role", "Vendas", "Faturamento", "Ticket", "Opp criadas", "Ganhas", "Conv.", "Pipeline", "Interações", "Tarefas (SLA)"]],
         body: dados.porVendedor.map(v => [
@@ -2537,7 +2578,7 @@ function RelatorioPerdasCrm() {
     const doc = await criarPDF("Relatório de Motivos de Perda (CRM)");
     addPeriodo(doc, dataInicio, dataFim);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -2555,7 +2596,7 @@ function RelatorioPerdasCrm() {
     });
 
     if (dados.porMotivo.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Motivo", "Qtd", "% perdas", "Valor perdido", "% valor"]],
         body: dados.porMotivo.map((m, i) => [
@@ -2571,7 +2612,7 @@ function RelatorioPerdasCrm() {
     }
 
     if (dados.porResponsavel.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Vendedor", "Perdidas", "Valor perdido", "Ticket médio"]],
         body: dados.porResponsavel.map((v, i) => [
@@ -2583,7 +2624,7 @@ function RelatorioPerdasCrm() {
     }
 
     if (dados.porOrigem.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Origem", "Qtd perdidas", "Valor perdido"]],
         body: dados.porOrigem.map(o => [o.origem, fmtNum(o.quantidade), fmtBRL(o.valorPerdido)]),
@@ -2593,7 +2634,7 @@ function RelatorioPerdasCrm() {
     }
 
     if (dados.evolucaoMensal.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Mês", "Perdidas", "Valor perdido"]],
         body: dados.evolucaoMensal.map(e => [fmtMes(e.mes), fmtNum(e.quantidade), fmtBRL(e.valorPerdido)]),
@@ -2603,13 +2644,13 @@ function RelatorioPerdasCrm() {
     }
 
     if (dados.topPerdas.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["💸 Top vazamentos (oportunidades de maior valor perdidas)", "", "", "", "", ""]],
         body: [],
         styles: { fontSize: 11, fontStyle: "bold" }, theme: "plain",
       });
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY,
         head: [["#", "Título", "Cliente", "Vendedor", "Motivo", "Valor"]],
         body: dados.topPerdas.map(o => [
@@ -2623,7 +2664,7 @@ function RelatorioPerdasCrm() {
     }
 
     if (dados.oportunidades.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Título", "Cliente", "Vendedor", "Motivo", "Origem", "Valor", "Dias", "Perdida em"]],
         body: dados.oportunidades.map(o => [
@@ -2936,7 +2977,7 @@ function RelatorioForecastCrm() {
     const doc = await criarPDF("Relatório de Forecast / Previsão de Receita (CRM)");
     addLinha(doc, `Horizonte: próximos ${dados.resumo.horizonte} meses`);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -2952,7 +2993,7 @@ function RelatorioForecastCrm() {
       styles: { fontSize: 10 },
     });
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 6,
       head: [["Mês", "Opp previstas", "Valor estimado", "Valor ponderado", "Ganhas", "Valor ganho"]],
       body: dados.porMes.map(m => [
@@ -2968,7 +3009,7 @@ function RelatorioForecastCrm() {
     });
 
     if (dados.porVendedor.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Vendedor", "Opp", "Valor estimado", "Valor ponderado"]],
         body: dados.porVendedor.map((v, i) => [
@@ -2981,7 +3022,7 @@ function RelatorioForecastCrm() {
     }
 
     if (dados.porOrigem.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Origem", "Opp", "Valor estimado", "Valor ponderado"]],
         body: dados.porOrigem.map(o => [
@@ -2994,7 +3035,7 @@ function RelatorioForecastCrm() {
     }
 
     if (dados.oportunidades.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Título", "Cliente", "Vendedor", "Etapa", "Prob.", "Valor", "Ponderado", "Previsão"]],
         body: dados.oportunidades.map(o => [
@@ -3239,7 +3280,7 @@ function RelatorioAtividadesCrm() {
     const doc = await criarPDF("Relatório de Atividades & Cadência (CRM)");
     addPeriodo(doc, dataInicio, dataFim);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -3258,7 +3299,7 @@ function RelatorioAtividadesCrm() {
       styles: { fontSize: 10 },
     });
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 6,
       head: [["Tipo", "Quantidade"]],
       body: dados.porTipo.map(t => [
@@ -3270,7 +3311,7 @@ function RelatorioAtividadesCrm() {
     });
 
     if (dados.porVendedor.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Vendedor", "Total", "Clientes únicos", "Ligação", "WhatsApp", "E-mail", "Visita", "Reunião", "Tarefas (SLA)"]],
         body: dados.porVendedor.map((v, i) => [
@@ -3287,13 +3328,13 @@ function RelatorioAtividadesCrm() {
     }
 
     if (dados.clientesSemContato.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["🔔 Clientes sem contato — agir agora", "", "", "", ""]],
         body: [],
         styles: { fontSize: 11, fontStyle: "bold" }, theme: "plain",
       });
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY,
         head: [["Cliente", "Cidade", "Telefone", "Última interação", "Dias sem contato"]],
         body: dados.clientesSemContato.map(c => [
@@ -3307,7 +3348,7 @@ function RelatorioAtividadesCrm() {
     }
 
     if (dados.distribuicaoSemanal.some(d => d.quantidade > 0)) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Dia da semana", "Interações"]],
         body: dados.distribuicaoSemanal.map(d => [d.dia, fmtNum(d.quantidade)]),
@@ -3550,7 +3591,7 @@ function RelatorioNpsCrm() {
     const doc = await criarPDF("Relatório de NPS & Satisfação (CRM)");
     addPeriodo(doc, dataInicio, dataFim);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -3567,7 +3608,7 @@ function RelatorioNpsCrm() {
       styles: { fontSize: 10 },
     });
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 6,
       head: [["Faixa", "Quantidade", "%"]],
       body: dados.distribuicao.map(d => [
@@ -3578,7 +3619,7 @@ function RelatorioNpsCrm() {
     });
 
     if (dados.porVendedor.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Vendedor", "Enviadas", "Respondidas", "Taxa resp.", "Nota méd.", "NPS"]],
         body: dados.porVendedor.map((v, i) => [
@@ -3594,7 +3635,7 @@ function RelatorioNpsCrm() {
     }
 
     if (dados.evolucaoMensal.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Mês", "Respondidas", "Nota média", "NPS"]],
         body: dados.evolucaoMensal.map(e => [
@@ -3606,13 +3647,13 @@ function RelatorioNpsCrm() {
     }
 
     if (dados.detratoresRecentes.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["🚨 Detratores recentes (últimos 30 dias) — PRIORIDADE DE CONTATO", "", "", "", ""]],
         body: [],
         styles: { fontSize: 11, fontStyle: "bold" }, theme: "plain",
       });
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY,
         head: [["Data", "Cliente", "Venda", "Vendedor", "Nota", "Comentário"]],
         body: dados.detratoresRecentes.map(d => [
@@ -3860,7 +3901,7 @@ function RelatorioCarteiraCrm() {
     const doc = await criarPDF("Relatório de Carteira de Clientes (RFM)");
     addLinha(doc, `Janela RFM: últimos ${dados.filtros.janelaDias} dias`);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -3878,7 +3919,7 @@ function RelatorioCarteiraCrm() {
       styles: { fontSize: 10 },
     });
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 6,
       head: [["Segmento", "Clientes", "% base", "Faturamento", "% fat.", "Ticket médio"]],
       body: dados.porSegmento.map(s => [
@@ -3894,7 +3935,7 @@ function RelatorioCarteiraCrm() {
     });
 
     if (dados.porCidade.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Cidade", "UF", "Clientes", "Faturamento"]],
         body: dados.porCidade.map((c, i) => [
@@ -3906,7 +3947,7 @@ function RelatorioCarteiraCrm() {
     }
 
     if (dados.porTag.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Tag", "Clientes", "Faturamento"]],
         body: dados.porTag.map(t => [t.nome, fmtNum(t.quantidade), fmtBRL(t.monetario)]),
@@ -3916,7 +3957,7 @@ function RelatorioCarteiraCrm() {
     }
 
     if (dados.topLtv.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Cliente", "Cidade", "Compras", "Total gasto", "Ticket médio", "Última compra", "Segmento"]],
         body: dados.topLtv.map((c, i) => [

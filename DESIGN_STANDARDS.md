@@ -309,6 +309,12 @@ Ordem acordada com o cliente (executar em fases, validando cada uma):
    (azul/verde/vermelho/roxo). `criarPDF` já desenha cabeçalho da empresa
    (logo/CNPJ/endereço) + título + período. Build OK. _Pendente:_ alinhar à
    direita + fonte mono as colunas numéricas no PDF (paridade total com a tela).
+   **Densidade centralizada:** um wrapper único `tabelaPDF(doc, opts)` em
+   [`Relatorios.tsx`](src/Relatorios.tsx) impõe a todos os ~80 blocos de tabela o
+   padrão "denso com respiro" — corpo ~1pt menor (piso 7pt), `cellPadding`
+   vertical enxuto (0,7mm), header grafite em negrito com padding maior
+   (hierarquia por peso, não por tamanho), zebra sutil e hairline horizontal
+   entre linhas. Ajuste a densidade uma vez ali e reflete em todos os relatórios.
 6. ✅ **Fase 6 — Temas** — novo tema **Claro** (off-white `#f5f6f8` + cards
    brancos + texto grafite `#1f2937`, status recalibrados p/ contraste AA) e
    **Grafite** suavizado (sem preto absoluto: `bg #161618` / `surface #1f1f22` /

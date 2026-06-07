@@ -14,6 +14,13 @@ import { put, del } from "@vercel/blob";
 const PASTA_LOCAL = path.resolve("uploads");
 const TEM_BLOB = !!process.env.BLOB_READ_WRITE_TOKEN;
 
+// Exposto para os controllers decidirem a estrategia de persistencia. Em
+// serverless (Vercel) o filesystem e efemero/read-only, entao quando NAO ha
+// Blob configurado o caminho local nao persiste — quem precisa de durabilidade
+// garantida (ex: logotipo, que aparece em relatorios) deve cair para data URI
+// no banco. Ver configuracaoLogotipoController.js.
+export const temBlobStore = () => TEM_BLOB;
+
 // Cria a pasta local sob demanda (lazy). Importante: em ambiente serverless
 // (Vercel) o filesystem e read-only — fazer mkdir no top-level quebra o
 // load do modulo. Em dev, isso garante a pasta antes do primeiro upload.
@@ -52,6 +59,8 @@ export async function salvarArquivo({ pasta = "", buffer, extensao, mimeType }) 
 // completa.
 export async function removerArquivo(urlOuNome) {
   if (!urlOuNome) return;
+  // Data URI (logo embutido no banco) nao tem arquivo fisico associado.
+  if (urlOuNome.startsWith("data:")) return;
   if (TEM_BLOB) {
     try {
       await del(urlOuNome);

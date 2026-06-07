@@ -55,6 +55,17 @@ async function carregarImagemDataUrl(url: string): Promise<string> {
   });
 }
 
+// Detecta o formato que o jsPDF espera (PNG/JPEG/WEBP) a partir do mime de
+// uma data URL ("data:image/png;base64,..."). Como carregarImagemDataUrl
+// sempre devolve uma data URL, isso funciona tanto p/ logo em Blob/URL quanto
+// p/ logo embutido como data URI no banco. Default PNG.
+export function detectarFormatoImagem(dataUrl: string): "PNG" | "JPEG" | "WEBP" {
+  const mime = /^data:(image\/[a-z0-9.+-]+)/i.exec(dataUrl)?.[1]?.toLowerCase() || "";
+  if (mime.includes("jpeg") || mime.includes("jpg")) return "JPEG";
+  if (mime.includes("webp")) return "WEBP";
+  return "PNG";
+}
+
 function fmtDataHora(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -94,8 +105,7 @@ export async function gerarFolhaCegaPdf(folha: FolhaCegaPayload, empresa: Empres
       const urlLogo = urlLogotipo(empresa.logotipo);
       if (urlLogo) {
         const dataUrl = await carregarImagemDataUrl(urlLogo);
-        const ext = (empresa.logotipo.split(".").pop() || "png").toLowerCase();
-        const formato = ext === "jpg" || ext === "jpeg" ? "JPEG" : "PNG";
+        const formato = detectarFormatoImagem(dataUrl);
         doc.addImage(dataUrl, formato, marginX, 8, 18, 18);
         xTexto = marginX + 22;
       }

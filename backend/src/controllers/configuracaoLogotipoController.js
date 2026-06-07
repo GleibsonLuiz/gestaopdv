@@ -1,7 +1,7 @@
 import path from "node:path";
 import multer from "multer";
 import prisma from "../lib/prisma.js";
-import { salvarArquivo, removerArquivo } from "../lib/storage.js";
+import { salvarArquivo, removerArquivo, temBlobStore } from "../lib/storage.js";
 
 const TAMANHO_MAX = 2 * 1024 * 1024; // 2 MB
 // SVG removido propositalmente: pode conter <script>/handlers e virar
@@ -26,7 +26,7 @@ export function tratarErroUploadLogotipo(err, _req, res, next) {
     return res.status(400).json({ erro: "Logotipo muito grande (max 2MB)" });
   }
   if (err.message === "TIPO_NAO_PERMITIDO") {
-    return res.status(400).json({ erro: "Tipo invalido (apenas JPG, PNG, WEBP, SVG)" });
+    return res.status(400).json({ erro: "Tipo invalido (apenas JPG, PNG ou WEBP)" });
   }
   next(err);
 }
@@ -48,13 +48,26 @@ export async function enviarLogotipo(req, res, next) {
 
     if (cfg.logotipo) await removerArquivo(cfg.logotipo);
 
-    const ext = path.extname(req.file.originalname).toLowerCase() || ".png";
-    const { url } = await salvarArquivo({
-      pasta: "logo",
-      buffer: req.file.buffer,
-      extensao: ext,
-      mimeType: req.file.mimetype,
-    });
+    // Estrategia de persistencia:
+    //   - Com Vercel Blob -> sobe para o bucket (URL absoluta/CDN, banco leve).
+    //   - Sem Blob (dev OU serverless sem store conectada) -> grava como data
+    //     URI base64 NO PROPRIO BANCO. Antes caia para o filesystem local, que
+    //     em serverless e efemero: o arquivo sumia no proximo request e o logo
+    //     "desaparecia" ao atualizar / nao aparecia nos relatorios. Data URI
+    //     viaja junto com a config (multi-tenant), sobrevive a refresh e embute
+    //     direto em <img> e nos PDFs (jsPDF) sem precisar de fetch/CORS.
+    let url;
+    if (temBlobStore()) {
+      const ext = path.extname(req.file.originalname).toLowerCase() || ".png";
+      ({ url } = await salvarArquivo({
+        pasta: "logo",
+        buffer: req.file.buffer,
+        extensao: ext,
+        mimeType: req.file.mimetype,
+      }));
+    } else {
+      url = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+    }
 
     const atualizado = await prisma.configuracaoEmpresa.update({
       where: { id: cfg.id },

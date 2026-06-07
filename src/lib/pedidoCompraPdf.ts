@@ -11,7 +11,7 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { urlLogotipo } from "../Configuracoes";
-import { detectarFormatoImagem, type EmpresaParaCabecalho } from "./folhaCegaPdf";
+import { detectarFormatoImagem, dimensionarLogo, type EmpresaParaCabecalho } from "./folhaCegaPdf";
 
 export interface ItemPedidoPdf {
   codigo: string;
@@ -115,8 +115,9 @@ export async function gerarPedidoCompraPdf(
     let xTexto = marginX;
     if (logoDataUrl) {
       try {
-        doc.addImage(logoDataUrl, logoFormato, marginX, 10, 18, 18);
-        xTexto = marginX + 22;
+        const { w, h } = dimensionarLogo(doc, logoDataUrl, 38, 20);
+        doc.addImage(logoDataUrl, logoFormato, marginX, 9, w, h);
+        xTexto = marginX + w + 5;
       } catch { /* ignora */ }
     }
     doc.setFont("helvetica", "bold");

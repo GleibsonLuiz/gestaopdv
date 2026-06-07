@@ -66,6 +66,27 @@ export function detectarFormatoImagem(dataUrl: string): "PNG" | "JPEG" | "WEBP" 
   return "PNG";
 }
 
+// Calcula largura/altura (mm) preservando a proporcao do logo dentro de uma
+// caixa maxW x maxH. Evita o "achatado" de forcar dimensoes fixas no addImage
+// (ex.: 22x22 distorce um logo retangular). Le o tamanho natural via
+// getImageProperties do jsPDF; cai para 1:1 se a leitura falhar.
+export function dimensionarLogo(
+  doc: jsPDF,
+  dataUrl: string,
+  maxW: number,
+  maxH: number,
+): { w: number; h: number } {
+  let ratio = 1;
+  try {
+    const p = doc.getImageProperties(dataUrl);
+    if (p?.width && p?.height) ratio = p.width / p.height;
+  } catch { /* sem props — usa 1:1 */ }
+  let w = maxW;
+  let h = maxW / ratio;
+  if (h > maxH) { h = maxH; w = maxH * ratio; }
+  return { w, h };
+}
+
 function fmtDataHora(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -106,8 +127,9 @@ export async function gerarFolhaCegaPdf(folha: FolhaCegaPayload, empresa: Empres
       if (urlLogo) {
         const dataUrl = await carregarImagemDataUrl(urlLogo);
         const formato = detectarFormatoImagem(dataUrl);
-        doc.addImage(dataUrl, formato, marginX, 8, 18, 18);
-        xTexto = marginX + 22;
+        const { w, h } = dimensionarLogo(doc, dataUrl, 40, 18);
+        doc.addImage(dataUrl, formato, marginX, 8, w, h);
+        xTexto = marginX + w + 5;
       }
     } catch {
       // logo falhou — segue sem

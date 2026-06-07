@@ -724,6 +724,8 @@ Cada grupo tem header colapsável com contagem + subtotal.
 
 **O que faz:** lançamento **rápido** de despesas operacionais do dia a dia que **não** entram no estoque — café, água, material de limpeza, taxas, manutenção, etc. — já classificadas pelo **Plano de Contas**.
 
+![Tela de Despesas](img/despesas.png)
+
 **Para que serve:** registrar gastos em segundos (pensado para ser tão rápido quanto mandar um WhatsApp) e deixar tudo organizado para o contador.
 
 **Diferença para "Financeiro":** o Financeiro controla o que **vai vencer** (boletos, parcelas). Despesas é o que **você já gastou** agora. Quando você **dá baixa** numa conta a pagar no Financeiro, ela **já vira gasto realizado** — e aparece aqui na tela de Despesas, no ledger unificado, marcada com a etiqueta **conta a pagar** (em modo leitura; para editar/reabrir, use o Financeiro). **Não há registro duplicado:** a conta paga *é* o realizado, contando uma única vez no caixa e nos relatórios.
@@ -731,10 +733,23 @@ Cada grupo tem header colapsável com contagem + subtotal.
 **Como usar:**
 
 1. **Valor em destaque** — digite o valor (Enter já lança).
-2. **Categoria** — escolha no seletor ou toque em um dos **chips de categorias recentes** (atalho de 1 toque para o gasto do dia a dia). As categorias vêm do Plano de Contas.
+2. **Categoria** — use o **seletor pesquisável**: clique, digite parte do nome ou do código para filtrar e escolha. Se a categoria ainda **não existe**, digite o nome e toque em **➕ Criar categoria "…"** — ela é criada na hora (com código sugerido automaticamente) e já fica selecionada, sem sair do lançamento. Para o gasto do dia a dia, toque direto em um dos **chips de categorias recentes** (atalho de 1 toque). As categorias vêm do Plano de Contas.
 3. **Data** (padrão hoje) e **Forma de pagamento** (Dinheiro, Pix, Débito, Crédito, Boleto).
-4. **Descrição** (opcional) e **📷 Comprovante** (foto ou PDF até 5 MB — no celular abre a câmera direto).
+4. **Descrição** e **📷 Comprovante** (foto ou PDF até 5 MB — no celular abre a câmera direto).
 5. **Lançar despesa.**
+
+**🏷️ Como criar uma categoria nova (sem sair do lançamento):** você não precisa cadastrar a categoria antes em outra tela — ela nasce no próprio campo **Categoria**:
+
+![Criar categoria pelo seletor](img/despesas-criar-categoria.png)
+
+1. No card **⚡ Lançar despesa**, clique no campo **Categoria** para abrir o seletor.
+2. No campo **"Buscar ou criar categoria…"**, **digite o nome** da nova categoria (ex.: `Estacionamento`).
+3. Como ela ainda não existe, aparece a opção **➕ Criar categoria "…"**. Clique nela (ou apenas aperte **Enter**).
+4. Pronto: a categoria é criada na hora — com o **código gerado automaticamente** seguindo o padrão do Plano de Contas (ex.: `3.1.05.002`) — e **já fica selecionada** na despesa. É só continuar e lançar.
+
+> A opção **Criar** só aparece quando o texto digitado tem 2+ letras e **não corresponde** a nenhuma categoria existente (evita duplicar). Se já houver algo parecido, ele mostra na lista para você escolher.
+>
+> Esse é o **atalho rápido**. Para **editar nome/código, reorganizar, desativar** ou definir o **código contábil de-para** (usado na exportação do contador), use **Contabilidade → Plano de Contas**. Criar/editar categorias exige **Admin** ou **Gerente**.
 
 **📷 Leitura automática do comprovante (OCR com IA):** ao escolher a foto/PDF do cupom, o sistema **lê o comprovante com inteligência artificial** e preenche sozinho o **valor, a data, a descrição e sugere a categoria**. Aparece a marca *"preenchido por IA — confira"*: revise e ajuste se precisar antes de lançar (a IA nunca grava sozinha). Despesas lançadas assim ficam marcadas com a etiqueta **OCR** na lista. Requer a chave da IA configurada no servidor (`ANTHROPIC_API_KEY`); se a leitura falhar, é só preencher na mão normalmente.
 
@@ -744,7 +759,7 @@ Cada grupo tem header colapsável com contagem + subtotal.
 
 **📒 Realizado no período (ledger unificado):** a lista reúne, em um só lugar e ordenadas por data, as **despesas avulsas** lançadas aqui e as **contas a pagar pagas** no período. Cada gasto conta uma única vez. Filtre por **período** e **categoria**.
 
-**Plano de Contas:** na primeira vez, o sistema cria um plano padrão para comércio/serviço (Ocupação, Pessoal, Administrativas, Comerciais, Financeiras, Impostos). Admin/Gerente podem editar as categorias.
+**Plano de Contas:** na primeira vez, o sistema cria um plano padrão para comércio/serviço (Ocupação, Pessoal, Administrativas, Comerciais, Financeiras, Impostos). Novas categorias podem ser criadas direto no seletor de categoria ao lançar a despesa (atalho rápido); a **gestão completa** do Plano de Contas (editar, reorganizar, desativar, código contábil de-para) fica em **Contabilidade**. Apenas Admin/Gerente criam/editam categorias.
 
 **Comprovante:** clique no 📎 na lista para abrir/baixar o comprovante anexado.
 

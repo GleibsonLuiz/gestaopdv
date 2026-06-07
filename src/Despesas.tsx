@@ -1,8 +1,11 @@
 // Despesas.tsx — lancamento rapido de despesas operacionais (cafe, agua,
 // limpeza, etc.), classificadas pelo Plano de Contas. Pensado para ser tao
 // rapido quanto mandar um WhatsApp: valor em destaque, categorias recentes em
-// 1 toque, foto do comprovante opcional. Lista as despesas do periodo com
-// filtro por categoria. (Modulo DESPESAS — backend /despesas + /planos-contas.)
+// 1 toque, seletor de categoria pesquisavel (com criacao inline da categoria
+// quando nao existe), foto do comprovante opcional. Lista as despesas do
+// periodo com filtro por categoria. (Modulo DESPESAS — backend /despesas +
+// /planos-contas.) A gestao completa do plano de contas vive em Contabilidade;
+// aqui a categoria e criada/escolhida no proprio fluxo de lancamento.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { C } from "./lib/theme";
@@ -252,19 +255,13 @@ export default function Despesas({ user }: { user: SessionUser }) {
       </div>
 
       {podeEditar && (
-        <>
-          <LancarDespesa
-            contas={analiticas}
-            recentes={recentes}
-            onSalvo={aposSalvar}
-            onErro={setErro}
-          />
-          <GerenciarCategorias
-            contas={analiticas}
-            onAtualizado={() => { carregarContas(); carregarDespesas(); }}
-            onErro={setErro}
-          />
-        </>
+        <LancarDespesa
+          contas={analiticas}
+          recentes={recentes}
+          onSalvo={aposSalvar}
+          onErro={setErro}
+          onCategoriaCriada={carregarContas}
+        />
       )}
 
       {/* Filtros */}
@@ -351,11 +348,12 @@ export default function Despesas({ user }: { user: SessionUser }) {
 
 // ============ FORMULARIO DE LANCAMENTO RAPIDO ============
 
-function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
+function LancarDespesa({ contas, recentes, onSalvo, onErro, onCategoriaCriada }: {
   contas: PlanoConta[];
   recentes: string[];
   onSalvo: () => void;
   onErro: (msg: string) => void;
+  onCategoriaCriada: () => void;
 }) {
   const [valor, setValor] = useState("");
   const [planoContaId, setPlanoContaId] = useState("");
@@ -417,40 +415,52 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
   }
 
   return (
-    <div style={{ ...card(), borderColor: C.accent }}>
-      <div style={{ fontWeight: 700, color: C.white, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+    <div style={{ ...card(), borderColor: C.accent, display: "flex", flexDirection: "column", gap: 18 }}>
+      <div style={{ fontWeight: 700, color: C.white, display: "flex", alignItems: "center", gap: 8 }}>
         <span>⚡</span> Lançar despesa
       </div>
 
-      {/* Valor em destaque */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <span style={{ color: C.muted, fontSize: 22, fontWeight: 700 }}>R$</span>
-        <input
-          type="text" inputMode="decimal" placeholder="0,00" value={valor} autoFocus
-          onChange={e => setValor(e.target.value.replace(/[^0-9.,]/g, ""))}
-          onKeyDown={e => { if (e.key === "Enter") salvar(); }}
-          style={{ ...input(), fontSize: 32, fontWeight: 800, color: C.text, padding: "8px 12px", width: 150 }}
-        />
+      {/* Linha 1 — valor em destaque + atalhos de categorias recentes lado a lado */}
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <span style={{ color: C.muted, fontSize: 12 }}>Valor *</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ color: C.muted, fontSize: 22, fontWeight: 700 }}>R$</span>
+            <input
+              type="text" inputMode="decimal" placeholder="0,00" value={valor} autoFocus
+              onChange={e => setValor(e.target.value.replace(/[^0-9.,]/g, ""))}
+              onKeyDown={e => { if (e.key === "Enter") salvar(); }}
+              style={{ ...input(), fontSize: 32, fontWeight: 800, color: C.text, padding: "6px 12px", width: 170 }}
+            />
+          </div>
+        </label>
+
+        {chips.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1, minWidth: 220 }}>
+            <span style={{ color: C.muted, fontSize: 12 }}>Recentes</span>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {chips.map(c => (
+                <button key={c.id} type="button" onClick={() => setPlanoContaId(c.id)}
+                  style={chip(planoContaId === c.id)}>
+                  {c.nome}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Chips de categorias recentes */}
-      {chips.length > 0 && (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-          {chips.map(c => (
-            <button key={c.id} type="button" onClick={() => setPlanoContaId(c.id)}
-              style={chip(planoContaId === c.id)}>
-              {c.nome}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-        <Campo label="Categoria *" flex={1}>
-          <select value={planoContaId} onChange={e => setPlanoContaId(e.target.value)} style={input()}>
-            <option value="">Selecione…</option>
-            {contas.map(c => <option key={c.id} value={c.id}>{c.codigo} — {c.nome}</option>)}
-          </select>
+      {/* Linha 2 — grid responsivo: categoria (larga) + data + forma; descricao
+          ocupa a faixa inteira embaixo. auto-fit colapsa sozinho no mobile. */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16 }}>
+        <Campo label="Categoria *" style={{ gridColumn: "span 2" }}>
+          <SeletorCategoria
+            contas={contas}
+            value={planoContaId}
+            onChange={setPlanoContaId}
+            onCriada={onCategoriaCriada}
+            onErro={onErro}
+          />
         </Campo>
         <Campo label="Data">
           <input type="date" value={data} onChange={e => setData(e.target.value)} style={input()} />
@@ -460,16 +470,15 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
             {FORMAS.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
           </select>
         </Campo>
-      </div>
-
-      <div style={{ marginTop: 12 }}>
-        <Campo label="Descrição *">
+        <Campo label="Descrição *" style={{ gridColumn: "1 / -1" }}>
           <input value={descricao} onChange={e => setDescricao(e.target.value)}
-            placeholder="Ex.: café e açúcar da copa" style={{ ...input(), maxWidth: 400 }} />
+            onKeyDown={e => { if (e.key === "Enter") salvar(); }}
+            placeholder="Ex.: café e açúcar da copa" style={input()} />
         </Campo>
       </div>
 
-      <div style={{ display: "flex", gap: 12, marginTop: 12, alignItems: "center", flexWrap: "wrap" }}>
+      {/* Linha 3 — comprovante + acao principal */}
+      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
         <button type="button" onClick={() => fileRef.current?.click()} disabled={lendo} style={btnSec()}>
           {lendo ? "🔎 Lendo comprovante…" : arquivo ? `📎 ${arquivo.name.slice(0, 24)}` : "📷 Comprovante (lê sozinho)"}
         </button>
@@ -490,123 +499,122 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro }: {
   );
 }
 
-// ============ GERENCIAR CATEGORIAS ============
-
-function GerenciarCategorias({ contas, onAtualizado, onErro }: {
+// ============ SELETOR DE CATEGORIA (combobox pesquisavel + criacao inline) ============
+//
+// Substitui o <select> nativo (sem busca) e o antigo card "Gerenciar
+// categorias" (parede de badges). Um unico ponto: busca, seleciona e, se a
+// categoria nao existe, cria na hora (sem sair do lancamento). Respeita o tema
+// via CSS-vars; fecha ao clicar fora / Esc; navegacao por teclado.
+function SeletorCategoria({ contas, value, onChange, onCriada, onErro }: {
   contas: PlanoConta[];
-  onAtualizado: () => void;
+  value: string;
+  onChange: (id: string) => void;
+  onCriada: () => void;
   onErro: (msg: string) => void;
 }) {
-  const [mostrarForm, setMostrarForm] = useState(false);
-  const [novoNome, setNovoNome] = useState("");
-  const [novoCodigo, setNovoCodigo] = useState("");
-  const [salvando, setSalvando] = useState(false);
+  const [aberto, setAberto] = useState(false);
+  const [busca, setBusca] = useState("");
+  const [criando, setCriando] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const buscaRef = useRef<HTMLInputElement>(null);
 
-  async function adicionarCategoria() {
-    const nome = novoNome.trim();
-    const codigo = novoCodigo.trim();
-    
-    if (!nome) { onErro("Informe o nome da categoria."); return; }
-    if (!codigo) { onErro("Informe o código da categoria."); return; }
-    
-    setSalvando(true); onErro("");
-    try {
-      await api.criarPlanoConta({
-        codigo,
-        nome,
-        natureza: "DESPESA",
-        analitica: true,
-      });
-      setNovoNome("");
-      setNovoCodigo("");
-      setMostrarForm(false);
-      onAtualizado();
-    } catch (e) { onErro((e as Error).message); }
-    finally { setSalvando(false); }
-  }
+  const selecionada = contas.find(c => c.id === value);
 
-  // Gerar código automático baseado no último código
+  const filtradas = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    if (!q) return contas;
+    return contas.filter(c => c.nome.toLowerCase().includes(q) || c.codigo.toLowerCase().includes(q));
+  }, [contas, busca]);
+
+  // Termo digitado nao bate com nenhuma categoria existente (por nome) → oferece
+  // criar. >=2 chars evita oferecer criacao a cada tecla.
+  const termo = busca.trim();
+  const podeCriar = termo.length >= 2 && !contas.some(c => c.nome.toLowerCase() === termo.toLowerCase());
+
+  // Proximo codigo sugerido: incrementa o ultimo segmento do codigo da ultima
+  // conta, preservando a largura do segmento (ex.: "3.1.05.001" → "3.1.05.002",
+  // nao "3.1.05.02") para manter o padrao do plano de contas.
   const proximoCodigo = useMemo(() => {
     if (contas.length === 0) return "1.01";
-    const ultimo = contas[contas.length - 1];
-    const partes = ultimo.codigo.split(".");
-    const ultimaParte = parseInt(partes[partes.length - 1] || "0", 10);
-    return `${partes.slice(0, -1).join(".")}.${(ultimaParte + 1).toString().padStart(2, "0")}`;
+    const partes = contas[contas.length - 1].codigo.split(".");
+    const ultimoSeg = partes[partes.length - 1] || "0";
+    const proximo = (parseInt(ultimoSeg, 10) + 1).toString().padStart(ultimoSeg.length, "0");
+    return `${partes.slice(0, -1).join(".")}.${proximo}`;
   }, [contas]);
 
-  return (
-    <div style={card()}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <div style={{ fontWeight: 700, color: C.white, display: "flex", alignItems: "center", gap: 8 }}>
-          <span>📁</span> Categorias de despesa
-        </div>
-        <button
-          type="button"
-          onClick={() => { setMostrarForm(!mostrarForm); setNovoCodigo(proximoCodigo); }}
-          style={btnSec()}
-        >
-          {mostrarForm ? "✕ Cancelar" : "+ Nova categoria"}
-        </button>
-      </div>
+  // Fecha ao clicar fora.
+  useEffect(() => {
+    if (!aberto) return;
+    function onDoc(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setAberto(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [aberto]);
 
-      {mostrarForm && (
-        <div style={{ background: C.surface, padding: 12, borderRadius: 8, marginBottom: 12 }}>
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
-            <Campo label="Código *" flex={1}>
-              <input
-                type="text"
-                value={novoCodigo}
-                onChange={e => setNovoCodigo(e.target.value)}
-                placeholder="Ex.: 1.05"
-                style={input()}
-              />
-            </Campo>
-            <Campo label="Nome *" flex={2}>
-              <input
-                type="text"
-                value={novoNome}
-                onChange={e => setNovoNome(e.target.value)}
-                placeholder="Ex.: Manutenção"
-                style={input()}
-              />
-            </Campo>
+  // Foca a busca ao abrir.
+  useEffect(() => { if (aberto) buscaRef.current?.focus(); }, [aberto]);
+
+  function escolher(id: string) {
+    onChange(id);
+    setAberto(false);
+    setBusca("");
+  }
+
+  async function criarCategoria() {
+    if (!termo) return;
+    setCriando(true); onErro("");
+    try {
+      const nova = await api.criarPlanoConta({
+        codigo: proximoCodigo, nome: termo, natureza: "DESPESA", analitica: true,
+      }) as PlanoConta;
+      onCriada();                 // recarrega a lista no pai
+      if (nova?.id) onChange(nova.id);
+      setAberto(false);
+      setBusca("");
+    } catch (e) { onErro((e as Error).message); }
+    finally { setCriando(false); }
+  }
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative" }}>
+      <button type="button" onClick={() => setAberto(a => !a)}
+        style={{ ...input(), display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", textAlign: "left", gap: 8 }}>
+        <span style={{ color: selecionada ? C.text : C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {selecionada ? `${selecionada.codigo} — ${selecionada.nome}` : "Selecione a categoria…"}
+        </span>
+        <span style={{ color: C.muted, transform: aberto ? "rotate(180deg)" : "none", transition: "transform .15s" }}>▾</span>
+      </button>
+
+      {aberto && (
+        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 30, background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, boxShadow: "0 12px 32px rgba(0,0,0,.4)", overflow: "hidden" }}>
+          <div style={{ padding: 8, borderBottom: `1px solid ${C.border}` }}>
+            <input ref={buscaRef} value={busca} onChange={e => setBusca(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter") { e.preventDefault(); if (filtradas[0]) escolher(filtradas[0].id); else if (podeCriar) criarCategoria(); }
+                else if (e.key === "Escape") setAberto(false);
+              }}
+              placeholder="Buscar ou criar categoria…" style={input()} />
           </div>
-          <button
-            type="button"
-            onClick={adicionarCategoria}
-            disabled={salvando}
-            style={btnPri(salvando)}
-          >
-            {salvando ? "Salvando…" : "Adicionar categoria"}
-          </button>
+          <div style={{ maxHeight: 240, overflowY: "auto" }}>
+            {filtradas.map(c => (
+              <button key={c.id} type="button" onClick={() => escolher(c.id)}
+                style={{ display: "block", width: "100%", textAlign: "left", background: c.id === value ? C.surface : "transparent", border: "none", borderBottom: `1px solid ${C.border}`, padding: "9px 12px", color: C.text, fontSize: 13, cursor: "pointer" }}>
+                <span style={{ color: C.muted, fontWeight: 600 }}>{c.codigo}</span> — {c.nome}
+              </button>
+            ))}
+            {filtradas.length === 0 && !podeCriar && (
+              <div style={{ padding: 12, color: C.muted, fontSize: 13, textAlign: "center" }}>Nenhuma categoria encontrada.</div>
+            )}
+            {podeCriar && (
+              <button type="button" onClick={criarCategoria} disabled={criando}
+                style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "10px 12px", color: C.accent, fontSize: 13, fontWeight: 600, cursor: criando ? "default" : "pointer", opacity: criando ? 0.7 : 1 }}>
+                {criando ? "Criando…" : `➕ Criar categoria “${termo}”`}
+              </button>
+            )}
+          </div>
         </div>
       )}
-
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        {contas.length === 0 ? (
-          <div style={{ color: C.muted, fontSize: 13, padding: 8 }}>
-            Nenhuma categoria cadastrada. Adicione a primeira acima.
-          </div>
-        ) : (
-          contas.map(c => (
-            <span
-              key={c.id}
-              style={{
-                background: C.surface,
-                border: `1px solid ${C.border}`,
-                borderRadius: 6,
-                padding: "6px 10px",
-                fontSize: 12,
-                color: C.text,
-              }}
-            >
-              <span style={{ color: C.muted, fontWeight: 600 }}>{c.codigo}</span>
-              {" — "}
-              {c.nome}
-            </span>
-          ))
-        )}
-      </div>
     </div>
   );
 }
@@ -665,9 +673,9 @@ function PrevistoRealizado({ porCategoria }: { porCategoria: CategoriaPR[] }) {
 
 // ============ UI helpers ============
 
-function Campo({ label, children, flex }: { label: string; children: React.ReactNode; flex?: number }) {
+function Campo({ label, children, flex, style }: { label: string; children: ReactNode; flex?: number; style?: CSSProperties }) {
   return (
-    <label style={{ display: "flex", flexDirection: "column", gap: 4, flex: flex ?? 1, minWidth: 140 }}>
+    <label style={{ display: "flex", flexDirection: "column", gap: 4, flex: flex ?? 1, minWidth: 140, ...style }}>
       <span style={{ color: C.muted, fontSize: 12 }}>{label}</span>
       {children}
     </label>

@@ -10,3 +10,4 @@ logs
 scripts/nuvemfiscal-empresa.json
 scripts/*.pfx
 scripts/*.p12
+.vercel

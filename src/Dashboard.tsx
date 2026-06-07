@@ -392,7 +392,7 @@ function ConteudoDashboard({ dados, onAtualizar, user, contagem }: any) {
           color: C.muted, fontSize: 11, marginTop: 10, fontFamily: FONT_MONO,
           opacity: 0.6,
         }}>
-          <div>GestãoPRO · sincronizado · sessão segura</div>
+          <div>Gestão<span className="gp-brand-max">ProMax</span> · sincronizado · sessão segura</div>
           <div>Atualizado {fmtDataHora(dados.geradoEm)}</div>
         </div>
       </div>
@@ -469,7 +469,8 @@ function KpiCard({ cor, icone, rotulo, valor, descricao, comparativo, delta, spa
   return (
     <article style={{
       background: `linear-gradient(180deg, ${C.card}, ${C.surface})`,
-      border: `1px solid ${C.border}`, borderRadius: 14,
+      border: "1px solid var(--hairline-soft)", borderRadius: 14,
+      boxShadow: "var(--shadow-card)",
       padding: 18, position: "relative", overflow: "hidden",
     }}>
       <div style={{
@@ -493,15 +494,16 @@ function KpiCard({ cor, icone, rotulo, valor, descricao, comparativo, delta, spa
       </div>
 
       <div style={{
-        fontSize: 28, fontWeight: 700, letterSpacing: "-0.02em",
+        fontSize: 28, fontWeight: 600, letterSpacing: "-0.025em",
         color: C.white, marginTop: 10,
-        fontVariantNumeric: "tabular-nums",
+        fontFamily: FONT_MONO, fontVariantNumeric: "tabular-nums",
         position: "relative",
       }}>
         {valor.reais}
         {valor.centavos && (
           <small style={{
             fontSize: 14, fontWeight: 500, color: C.muted, marginLeft: 1,
+            fontFamily: FONT_MONO,
           }}>{valor.centavos}</small>
         )}
       </div>

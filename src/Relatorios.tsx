@@ -33,6 +33,71 @@ const fmtPct = (v) => {
   return `${n.toFixed(1).replace(".", ",")}%`;
 };
 
+// Identidade executiva dos PDFs (DESIGN_STANDARDS.md §5): header de tabela
+// sobrio em grafite-azulado em vez dos headers coloridos chapados de antes.
+// Fonte unica de verdade — ajuste aqui reflete em todos os relatorios.
+const COR_HEADER_PDF = [30, 33, 45];
+
+// Hook didParseCell compartilhado: alinha a direita + fonte mono (courier) as
+// celulas numericas do CORPO da tabela no PDF, espelhando o padrao da tela
+// (numeros mono tabular). Deteccao por conteudo: moeda (R$...), percentual,
+// numero puro, ou numero com sufixo curto (d, x, un, kg, h). Datas (com "/") e
+// textos ficam alinhados a esquerda. Injetado em todas as chamadas autoTable.
+function pdfAlinhaNumeros(data) {
+  if (data.section !== "body") return;
+  const raw = Array.isArray(data.cell.text) ? data.cell.text.join("") : String(data.cell.text ?? "");
+  const t = raw.trim();
+  const ehNumero =
+    /^R\$/.test(t) ||
+    /^-?[\d.]+(,\d+)?%?$/.test(t) ||
+    /^-?[\d.]+(,\d+)?\s?(d|x|un|kg|g|h)$/i.test(t);
+  if (ehNumero) {
+    data.cell.styles.halign = "right";
+    data.cell.styles.font = "courier";
+  }
+}
+
+// --- Densidade executiva das tabelas (DESIGN_STANDARDS.md §5, Fase 5) ---------
+// Wrapper unico sobre autoTable: a densidade de TODOS os ~80 blocos de tabela
+// do modulo vive aqui, num so lugar. Em vez de cada relatorio repetir paddings
+// e tamanhos, esta funcao impoe o padrao corporativo "denso com respiro":
+//   • corpo ~1pt menor (piso de 7pt p/ nao prejudicar leitura);
+//   • espacamento vertical enxuto (0,7mm) p/ caber o maximo de linhas por pagina,
+//     mantendo respiro horizontal (1,8mm) p/ nao colar texto nas bordas;
+//   • header grafite em negrito — hierarquia por PESO, nao por tamanho — com
+//     padding um pouco maior p/ destacar sem "gritar", e sem fio (limpo);
+//   • listras alternadas sutis (zebra) + fio horizontal discreto entre linhas
+//     p/ guiar o olho em linhas longas;
+//   • numeros seguem alinhados a direita em mono via pdfAlinhaNumeros (vem no opts).
+// Ajuste a densidade UMA vez aqui e ela reflete em todos os relatorios.
+const TABELA_LISTRA = [246, 247, 249]; // zebra clara, quase imperceptivel
+const TABELA_FIO = [228, 230, 234];    // hairline horizontal entre as linhas
+
+function tabelaPDF(doc, opts = {}) {
+  const fonteCorpo =
+    typeof opts.styles?.fontSize === "number"
+      ? Math.max(7, opts.styles.fontSize - 1)
+      : undefined;
+
+  return autoTable(doc, {
+    margin: { left: 14, right: 14 },
+    alternateRowStyles: { fillColor: TABELA_LISTRA },
+    ...opts,
+    styles: {
+      ...(opts.styles || {}),
+      ...(fonteCorpo != null ? { fontSize: fonteCorpo } : {}),
+      cellPadding: { top: 0.7, right: 1.8, bottom: 0.7, left: 1.8 },
+      lineColor: TABELA_FIO,
+      lineWidth: { bottom: 0.1 },
+    },
+    headStyles: {
+      ...(opts.headStyles || {}),
+      cellPadding: { top: 1.3, right: 1.8, bottom: 1.3, left: 1.8 },
+      lineWidth: 0,
+    },
+  });
+}
+
 const ROTULO_PAGAMENTO = {
   DINHEIRO: "Dinheiro",
   CARTAO_CREDITO: "Cartão crédito",
@@ -55,6 +120,10 @@ const ABAS = [
   { id: "fabricantes", label: "🏭 Fabricantes", cor: C.accent },
   { id: "caixas", label: "💵 Caixas (DRE)", cor: C.red },
   { id: "lucratividade", label: "📈 Lucratividade", cor: C.green },
+  { id: "curva-abc", label: "🔤 Curva ABC", cor: C.accent },
+  { id: "giro", label: "🔄 Giro & Capital", cor: C.purple },
+  { id: "sazonalidade", label: "🗓️ Sazonalidade", cor: C.yellow },
+  { id: "aging", label: "⏳ Aging Receber", cor: C.red },
   { id: "comissoes", label: "🏆 Comissões", cor: C.purple },
   { id: "crm", label: "🎯 CRM", cor: "#7c3aed" },
 ];
@@ -112,6 +181,10 @@ export default function Relatorios() {
       {aba === "fabricantes" && <RelatorioProdutosFabricante key="fb" />}
       {aba === "caixas" && <RelatorioCaixas key="x" />}
       {aba === "lucratividade" && <RelatorioLucratividade key="l" />}
+      {aba === "curva-abc" && <RelatorioCurvaAbc key="abc" />}
+      {aba === "giro" && <RelatorioGiroEstoque key="giro" />}
+      {aba === "sazonalidade" && <RelatorioSazonalidade key="sz" />}
+      {aba === "aging" && <RelatorioAgingReceber key="ag" />}
       {aba === "comissoes" && <RelatorioComissoesLista key="m" />}
       {aba === "crm" && <RelatoriosCrm key="r" />}
     </div>
@@ -192,7 +265,7 @@ function RelatorioVendas() {
     addPeriodo(doc, dataInicio, dataFim);
 
     let y = doc.lastAutoTable?.finalY || 50;
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: y,
       head: [["Indicador", "Valor"]],
       body: [
@@ -201,12 +274,12 @@ function RelatorioVendas() {
         ["Ticket médio", fmtBRL(dados.resumo.ticketMedio)],
         ["Descontos concedidos", fmtBRL(dados.resumo.descontoTotal)],
       ],
-      theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 10 },
     });
 
     if (dados.formasPagamento.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Forma de pagamento", "Vendas", "Total"]],
         body: dados.formasPagamento.map(f => [
@@ -214,13 +287,13 @@ function RelatorioVendas() {
           fmtNum(f.quantidade),
           fmtBRL(f.total),
         ]),
-        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 10 },
       });
     }
 
     if (dados.topProdutos.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Produto", "Código", "Qtd.", "Total"]],
         body: dados.topProdutos.map((t, i) => [
@@ -230,13 +303,13 @@ function RelatorioVendas() {
           `${fmtNum(t.quantidade)} ${t.produto?.unidade || ""}`,
           fmtBRL(t.total),
         ]),
-        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
 
     if (dados.vendas.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Data", "Cliente", "Vendedor", "Pgto", "Itens", "Total"]],
         body: dados.vendas.map(v => [
@@ -248,7 +321,7 @@ function RelatorioVendas() {
           v.qtdItens,
           fmtBRL(v.total),
         ]),
-        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 8 },
       });
     }
@@ -360,7 +433,7 @@ function RelatorioCompras() {
     const doc = await criarPDF("Relatório de Compras");
     addPeriodo(doc, dataInicio, dataFim);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -368,12 +441,12 @@ function RelatorioCompras() {
         ["Valor total", fmtBRL(dados.resumo.valorTotal)],
         ["Ticket médio", fmtBRL(dados.resumo.ticketMedio)],
       ],
-      theme: "striped", headStyles: { fillColor: [245, 158, 11] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 10 },
     });
 
     if (dados.topFornecedores.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Fornecedor", "Compras", "Total"]],
         body: dados.topFornecedores.map((t, i) => [
@@ -382,13 +455,13 @@ function RelatorioCompras() {
           fmtNum(t.quantidade),
           fmtBRL(t.total),
         ]),
-        theme: "striped", headStyles: { fillColor: [245, 158, 11] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
 
     if (dados.compras.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Data", "Fornecedor", "Itens", "Total"]],
         body: dados.compras.map(c => [
@@ -398,7 +471,7 @@ function RelatorioCompras() {
           c.qtdItens,
           fmtBRL(c.total),
         ]),
-        theme: "striped", headStyles: { fillColor: [245, 158, 11] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
@@ -487,7 +560,7 @@ function RelatorioFinanceiro() {
     addPeriodo(doc, dataInicio, dataFim);
     if (status) addLinha(doc, `Situação (detalhamento): ${ROTULO_STATUS[status]}`);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Status", "Contas a pagar — Qtd", "Total", "Contas a receber — Qtd", "Total"]],
       body: ["PENDENTE", "ATRASADA", "PAGA", "CANCELADA"].map(s => [
@@ -497,57 +570,57 @@ function RelatorioFinanceiro() {
         fmtNum(dados.resumo.receber[s].qtd),
         fmtBRL(dados.resumo.receber[s].total),
       ]),
-      theme: "striped", headStyles: { fillColor: [34, 197, 94] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 9 },
     });
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 6,
       head: [["Indicador", "Valor"]],
       body: [
         ["Saldo previsto (a receber - a pagar pendentes)", fmtBRL(dados.resumo.saldoPrevisto)],
         ["Fluxo de caixa realizado (recebido - pago)", fmtBRL(dados.resumo.fluxoCaixaRealizado)],
       ],
-      theme: "striped", headStyles: { fillColor: [34, 197, 94] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 10 },
     });
 
     if (dados.contasPagar.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Contas a pagar", "", "", "", ""]],
         body: [],
         styles: { fontSize: 11, fontStyle: "bold" },
         theme: "plain",
       });
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY,
         head: [["Descrição", "Fornecedor", "Vencimento", "Status", "Valor"]],
         body: dados.contasPagar.map(c => [
           c.descricao, c.fornecedor || "—",
           fmtData(c.vencimento), ROTULO_STATUS[c.status], fmtBRL(c.valor),
         ]),
-        theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
 
     if (dados.contasReceber.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Contas a receber", "", "", "", ""]],
         body: [],
         styles: { fontSize: 11, fontStyle: "bold" },
         theme: "plain",
       });
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY,
         head: [["Descrição", "Cliente", "Vencimento", "Status", "Valor"]],
         body: dados.contasReceber.map(c => [
           c.descricao, c.cliente || "—",
           fmtData(c.vencimento), ROTULO_STATUS[c.status], fmtBRL(c.valor),
         ]),
-        theme: "striped", headStyles: { fillColor: [34, 197, 94] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
@@ -670,7 +743,7 @@ function RelatorioEstoque() {
     const doc = await criarPDF("Relatório de Estoque");
     addLinha(doc, `Gerado em ${fmtDataHora(dados.geradoEm)}`);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -682,11 +755,11 @@ function RelatorioEstoque() {
         ["Valor em estoque (venda)", fmtBRL(dados.resumo.valorEstoqueVenda)],
         ["Margem estimada", fmtBRL(dados.resumo.margemEstimada)],
       ],
-      theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 10 },
     });
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 6,
       head: [["Código", "Produto", "Categoria", "Estoque", "Mín.", "Custo", "Venda", "Total venda"]],
       body: dados.produtos.map(p => [
@@ -696,7 +769,7 @@ function RelatorioEstoque() {
         fmtBRL(p.precoVenda),
         fmtBRL(p.valorEmEstoqueVenda),
       ]),
-      theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 8 },
     });
 
@@ -780,7 +853,7 @@ function RelatorioProdutosFabricante() {
     const doc = await criarPDF("Relatório de Produtos por Fabricante");
     addLinha(doc, `Gerado em ${fmtDataHora(dados.geradoEm)}`);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -790,25 +863,25 @@ function RelatorioProdutosFabricante() {
         ["Valor em estoque (custo)", fmtBRL(dados.resumo.valorEstoqueCusto)],
         ["Valor em estoque (venda)", fmtBRL(dados.resumo.valorEstoqueVenda)],
       ],
-      theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 10 },
     });
 
     if (dados.porFabricante.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Fabricante", "Produtos", "Unidades", "Valor custo", "Valor venda"]],
         body: dados.porFabricante.map(f => [
           f.fabricante, fmtNum(f.qtdProdutos), fmtNum(f.unidades),
           fmtBRL(f.valorCusto), fmtBRL(f.valorVenda),
         ]),
-        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
 
     if (dados.produtos.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Código", "Produto", "Fabricante", "Categoria", "Estoque", "Custo", "Venda"]],
         body: dados.produtos.map(p => [
@@ -817,7 +890,7 @@ function RelatorioProdutosFabricante() {
           p.precoCusto != null ? fmtBRL(p.precoCusto) : "—",
           fmtBRL(p.precoVenda),
         ]),
-        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 8 },
       });
     }
@@ -910,7 +983,7 @@ function RelatorioCaixas() {
     addPeriodo(doc, dataInicio, dataFim);
     addLinha(doc, `Gerado em ${fmtDataHora(dados.geradoEm)}`);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -922,11 +995,11 @@ function RelatorioCaixas() {
         ["Sobras (excedeu o esperado)", fmtBRL(dados.resumo.sobras)],
         ["Diferença líquida", fmtBRL(dados.resumo.diferencaLiquida)],
       ],
-      theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 10 },
     });
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 6,
       head: [["Dia", "Caixas", "Vendas", "Entradas", "Saídas", "Quebras", "Sobras"]],
       body: dados.dre.map(d => [
@@ -935,11 +1008,11 @@ function RelatorioCaixas() {
         fmtBRL(d.entradas), fmtBRL(d.saidas),
         fmtBRL(d.quebras), fmtBRL(d.sobras),
       ]),
-      theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 9 },
     });
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 6,
       head: [["#", "Operador", "Aberto em", "Fechado em", "Saldo Inic.", "Esperado", "Contado", "Diferença"]],
       body: dados.caixas.map(c => [
@@ -950,7 +1023,7 @@ function RelatorioCaixas() {
         c.saldoFinalContado != null ? fmtBRL(c.saldoFinalContado) : "—",
         c.diferenca > 0 ? `+${fmtBRL(c.diferenca)}` : fmtBRL(c.diferenca),
       ]),
-      theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 8 },
     });
 
@@ -1061,28 +1134,28 @@ function RelatorioLucratividade() {
       body.push(["Produtos sem custo cadastrado", fmtNum(dados.resumo.itensSemCusto)]);
     }
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body,
-      theme: "striped", headStyles: { fillColor: [34, 197, 94] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 10 },
     });
 
     if (dados.porCategoria.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Categoria", "Receita", "Custo", "Lucro", "Margem"]],
         body: dados.porCategoria.map(c => [
           c.categoria, fmtBRL(c.receita), fmtBRL(c.custo), fmtBRL(c.lucro), fmtPct(c.margem),
         ]),
-        theme: "striped", headStyles: { fillColor: [34, 197, 94] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
 
     if (dados.porProduto.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Produto", "Código", "Categoria", "Qtd", "Receita", "Custo", "Lucro", "Margem"]],
         body: dados.porProduto.map((p, i) => [
@@ -1093,7 +1166,7 @@ function RelatorioLucratividade() {
           fmtBRL(p.lucro),
           p.custoIndefinido ? "s/ custo" : fmtPct(p.margem),
         ]),
-        theme: "striped", headStyles: { fillColor: [34, 197, 94] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 8 },
       });
     }
@@ -1167,6 +1240,672 @@ function RelatorioLucratividade() {
   );
 }
 
+// ============ CURVA ABC (Pareto 80/15/5) ============
+const ABC_COR = { A: C.green, B: C.yellow, C: C.muted };
+const ABC_DESC = {
+  A: "Itens vitais — concentram o resultado",
+  B: "Importância intermediária",
+  C: "Cauda longa — pouca contribuição",
+};
+const CRITERIO_LABEL = { receita: "Receita", lucro: "Lucro", quantidade: "Quantidade" };
+
+function RelatorioCurvaAbc() {
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+  const [categoriaId, setCategoriaId] = useState("");
+  const [criterio, setCriterio] = useState("receita");
+  const [categorias, setCategorias] = useState([]);
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    api.listarCategorias().then(setCategorias).catch(() => {});
+  }, []);
+
+  // Formata o valor do criterio escolhido: moeda para receita/lucro, numero
+  // para quantidade.
+  const fmtCrit = (v) => (criterio === "quantidade" ? fmtNum(v) : fmtBRL(v));
+
+  const gerar = useCallback(async () => {
+    setCarregando(true); setErro("");
+    try {
+      const r = await api.relatorioCurvaAbc({ dataInicio, dataFim, categoriaId, criterio });
+      setDados(r);
+    } catch (err) { setErro(err.message); }
+    finally { setCarregando(false); }
+  }, [dataInicio, dataFim, categoriaId, criterio]);
+
+  async function exportar() {
+    if (!dados) return;
+    const critLabel = CRITERIO_LABEL[dados.resumo.criterio] || "Receita";
+    const doc = await criarPDF(`Curva ABC — por ${critLabel}`);
+    addPeriodo(doc, dataInicio, dataFim);
+
+    tabelaPDF(doc, {
+      startY: doc.lastAutoTable.finalY + 4,
+      head: [["Classe", "Produtos", "% Produtos", critLabel, "% do Total"]],
+      body: dados.resumo.classes.map(c => [
+        `Classe ${c.classe}`,
+        fmtNum(c.qtdProdutos),
+        fmtPct(c.pctProdutos),
+        fmtCrit(c.valor),
+        fmtPct(c.pctValor),
+      ]),
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
+      styles: { fontSize: 10 },
+    });
+
+    if (dados.produtos.length) {
+      tabelaPDF(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["#", "Produto", "Código", "Categoria", "Qtd", critLabel, "% Indiv.", "% Acum.", "Classe"]],
+        body: dados.produtos.map(p => [
+          p.posicao, p.nome, p.codigo, p.categoria || "—",
+          `${fmtNum(p.quantidade)} ${p.unidade}`,
+          fmtCrit(p.valor),
+          fmtPct(p.pctIndividual),
+          fmtPct(p.pctAcumulado),
+          p.classe,
+        ]),
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
+        styles: { fontSize: 8 },
+      });
+    }
+
+    doc.save(`curva-abc-${hoje()}.pdf`);
+  }
+
+  const classeA = dados?.resumo.classes.find(c => c.classe === "A");
+
+  return (
+    <BlocoRelatorio
+      titulo="Curva ABC de Produtos" cor={C.accent}
+      filtros={
+        <>
+          <CampoData label="De" value={dataInicio} onChange={setDataInicio} />
+          <CampoData label="Até" value={dataFim} onChange={setDataFim} />
+          <CampoSelectBusca label="Categoria" opcoes={categorias} value={categoriaId} onChange={setCategoriaId} placeholder="Todas" />
+          <CampoSelect label="Critério" value={criterio} onChange={setCriterio} minWidth={150}>
+            <option value="receita">Receita</option>
+            <option value="lucro">Lucro</option>
+            <option value="quantidade">Quantidade</option>
+          </CampoSelect>
+        </>
+      }
+      onGerar={gerar} onExportar={exportar} carregando={carregando}
+      erro={erro} dados={dados}
+    >
+      {dados && (
+        <>
+          <Resumo cards={[
+            { rotulo: "Produtos analisados", valor: fmtNum(dados.resumo.totalProdutos), cor: C.accent },
+            { rotulo: `Total (${CRITERIO_LABEL[dados.resumo.criterio]})`, valor: fmtCrit(dados.resumo.totalCriterio), cor: C.green },
+            { rotulo: "Itens classe A", valor: classeA ? `${fmtNum(classeA.qtdProdutos)} (${fmtPct(classeA.pctProdutos)})` : "—", cor: C.green },
+            { rotulo: "Concentração A", valor: classeA ? fmtPct(classeA.pctValor) : "—", cor: C.purple },
+          ]} />
+
+          <DistribuicaoAbc classes={dados.resumo.classes} criterio={dados.resumo.criterio} />
+
+          {dados.resumo.itensSemCusto > 0 && dados.resumo.criterio === "lucro" && (
+            <div style={{
+              padding: "10px 14px", borderRadius: 10, marginBottom: 16,
+              background: "color-mix(in srgb, var(--amber) 14%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--amber) 30%, transparent)",
+              color: "var(--amber)", fontSize: 12,
+            }}>
+              {dados.resumo.itensSemCusto} produto(s) sem preço de custo — o lucro desses itens fica superestimado.
+            </div>
+          )}
+
+          <Tabela
+            titulo={`Classificação por produto (${dados.produtos.length})`}
+            colunas={["#", "Produto", "Código", "Categoria", "Qtd", CRITERIO_LABEL[dados.resumo.criterio], "% Indiv.", "% Acum.", "Classe"]}
+            alinhamentos={["center", "left", "left", "left", "right", "right", "right", "right", "center"]}
+            linhas={dados.produtos.map(p => [
+              p.posicao,
+              p.nome,
+              p.codigo,
+              p.categoria || "—",
+              `${fmtNum(p.quantidade)} ${p.unidade}`,
+              fmtCrit(p.valor),
+              fmtPct(p.pctIndividual),
+              fmtPct(p.pctAcumulado),
+              <BadgeClasse key="b" classe={p.classe} />,
+            ])}
+            vazioTexto="Nenhuma venda no período."
+          />
+        </>
+      )}
+    </BlocoRelatorio>
+  );
+}
+
+// Faixa empilhada A/B/C: mostra a participacao de cada classe no criterio e,
+// abaixo, quantos produtos ela representa — torna visivel o efeito Pareto
+// ("poucos produtos = maior parte do resultado").
+function DistribuicaoAbc({ classes, criterio }) {
+  const fmtCrit = (v) => (criterio === "quantidade" ? fmtNum(v) : fmtBRL(v));
+  return (
+    <div style={{
+      background: "var(--surface)", border: "1px solid var(--hairline-soft)",
+      boxShadow: "var(--shadow-card)", borderRadius: 14, padding: 16, marginBottom: 16,
+    }}>
+      <div style={{ color: "var(--fg-muted)", fontSize: 10.5, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 12 }}>
+        Distribuição ABC
+      </div>
+      <div style={{ display: "flex", height: 12, borderRadius: 6, overflow: "hidden", marginBottom: 14 }}>
+        {classes.map(c => (
+          c.pctValor > 0 ? (
+            <div key={c.classe} style={{ width: `${c.pctValor}%`, background: ABC_COR[c.classe] }} title={`Classe ${c.classe}: ${fmtPct(c.pctValor)}`} />
+          ) : null
+        ))}
+      </div>
+      <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
+        {classes.map(c => (
+          <div key={c.classe} style={{
+            display: "flex", alignItems: "center", gap: 10,
+            padding: "10px 12px", borderRadius: 10,
+            border: "1px solid var(--hairline-soft)",
+          }}>
+            <div style={{
+              width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontWeight: 700, fontSize: 14, color: "#fff",
+              background: ABC_COR[c.classe],
+            }}>{c.classe}</div>
+            <div style={{ minWidth: 0 }}>
+              <div className="font-mono tabular-nums" style={{ color: "var(--fg)", fontSize: 14, fontWeight: 500 }}>
+                {fmtPct(c.pctValor)} <span style={{ color: "var(--fg-muted)", fontSize: 11 }}>do total</span>
+              </div>
+              <div style={{ color: "var(--fg-muted)", fontSize: 11 }}>
+                {fmtNum(c.qtdProdutos)} produtos ({fmtPct(c.pctProdutos)}) · {fmtCrit(c.valor)}
+              </div>
+              <div style={{ color: "var(--fg-faint)", fontSize: 10.5, marginTop: 1 }}>{ABC_DESC[c.classe]}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BadgeClasse({ classe }) {
+  return (
+    <span className="font-mono" style={{
+      display: "inline-block", minWidth: 22, padding: "2px 7px", borderRadius: 999,
+      fontSize: 11, fontWeight: 700, color: "#fff", background: ABC_COR[classe] || C.muted,
+    }}>{classe}</span>
+  );
+}
+
+// ============ GIRO DE ESTOQUE & CAPITAL PARADO ============
+const GIRO_CLASSE = {
+  PARADO:     { label: "Parado", cor: C.red },
+  BAIXO_GIRO: { label: "Baixo giro", cor: C.yellow },
+  SAUDAVEL:   { label: "Saudável", cor: C.green },
+  ALTO_GIRO:  { label: "Alto giro", cor: C.accent },
+};
+
+function RelatorioGiroEstoque() {
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+  const [categoriaId, setCategoriaId] = useState("");
+  const [fornecedorId, setFornecedorId] = useState("");
+  const [categorias, setCategorias] = useState([]);
+  const [fornecedores, setFornecedores] = useState([]);
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    api.listarCategorias().then(setCategorias).catch(() => {});
+    api.listarFornecedores({ ativo: "true" }).then(setFornecedores).catch(() => {});
+  }, []);
+
+  const fmtGiro = (v) => (v == null ? "—" : `${v.toFixed(1)}×`);
+  const fmtCobertura = (v) => {
+    if (v == null) return "Não vende";
+    if (v >= 999) return "999+ d";
+    return `${Math.round(v)} d`;
+  };
+
+  const gerar = useCallback(async () => {
+    setCarregando(true); setErro("");
+    try {
+      const r = await api.relatorioGiroEstoque({ dataInicio, dataFim, categoriaId, fornecedorId });
+      setDados(r);
+    } catch (err) { setErro(err.message); }
+    finally { setCarregando(false); }
+  }, [dataInicio, dataFim, categoriaId, fornecedorId]);
+
+  async function exportar() {
+    if (!dados) return;
+    const doc = await criarPDF("Giro de Estoque & Capital Parado");
+    addPeriodo(doc, dados.filtros.dataInicio?.slice(0, 10), dados.filtros.dataFim?.slice(0, 10));
+
+    tabelaPDF(doc, {
+      startY: doc.lastAutoTable.finalY + 4,
+      head: [["Indicador", "Valor"]],
+      body: [
+        ["Capital em estoque (custo)", fmtBRL(dados.resumo.capitalEstoqueTotal)],
+        ["Capital parado", `${fmtBRL(dados.resumo.capitalParadoTotal)} (${fmtPct(dados.resumo.pctCapitalParado)})`],
+        ["Itens parados", fmtNum(dados.resumo.qtdParados)],
+        ["Itens baixo giro", fmtNum(dados.resumo.qtdBaixoGiro)],
+        ["Itens alto giro", fmtNum(dados.resumo.qtdAltoGiro)],
+        ["Janela analisada", `${dados.resumo.diasPeriodo} dias`],
+      ],
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
+      styles: { fontSize: 10 },
+    });
+
+    if (dados.produtos.length) {
+      tabelaPDF(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["Produto", "Código", "Categoria", "Estoque", "Vendido", "Giro", "Cobertura", "Capital parado", "Classe"]],
+        body: dados.produtos.map(p => [
+          p.nome, p.codigo, p.categoria || "—",
+          `${fmtNum(p.estoque)} ${p.unidade}`,
+          fmtNum(p.vendidoPeriodo),
+          fmtGiro(p.giro),
+          fmtCobertura(p.coberturaDias),
+          p.capitalParado != null ? fmtBRL(p.capitalParado) : "—",
+          GIRO_CLASSE[p.classe]?.label || p.classe,
+        ]),
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
+        styles: { fontSize: 8 },
+      });
+    }
+
+    doc.save(`giro-estoque-${hoje()}.pdf`);
+  }
+
+  return (
+    <BlocoRelatorio
+      titulo="Giro de Estoque & Capital Parado" cor={C.purple}
+      filtros={
+        <>
+          <CampoData label="De" value={dataInicio} onChange={setDataInicio} />
+          <CampoData label="Até" value={dataFim} onChange={setDataFim} />
+          <CampoSelectBusca label="Categoria" opcoes={categorias} value={categoriaId} onChange={setCategoriaId} placeholder="Todas" />
+          <CampoSelectBusca label="Fornecedor" opcoes={fornecedores} value={fornecedorId} onChange={setFornecedorId} placeholder="Todos" />
+        </>
+      }
+      onGerar={gerar} onExportar={exportar} carregando={carregando}
+      erro={erro} dados={dados}
+    >
+      {dados && (
+        <>
+          <Resumo cards={[
+            { rotulo: "Capital em estoque", valor: fmtBRL(dados.resumo.capitalEstoqueTotal), cor: C.accent },
+            { rotulo: "Capital parado", valor: `${fmtBRL(dados.resumo.capitalParadoTotal)} (${fmtPct(dados.resumo.pctCapitalParado)})`, cor: C.red },
+            { rotulo: "Itens parados", valor: fmtNum(dados.resumo.qtdParados), cor: C.red },
+            { rotulo: "Itens baixo giro", valor: fmtNum(dados.resumo.qtdBaixoGiro), cor: C.yellow },
+          ]} />
+
+          <div style={{ color: "var(--fg-faint)", fontSize: 11.5, marginBottom: 16, marginTop: -4 }}>
+            Janela analisada: <strong style={{ color: "var(--fg-soft)" }}>{dados.resumo.diasPeriodo} dias</strong> · giro = vendido ÷ estoque · cobertura = dias que o estoque atual dura na venda média.
+          </div>
+
+          <Tabela
+            titulo={`Produtos por capital parado (${dados.produtos.length})`}
+            colunas={["Produto", "Código", "Categoria", "Estoque", "Vendido", "Giro", "Cobertura", "Capital parado", "Classe"]}
+            alinhamentos={["left", "left", "left", "right", "right", "right", "right", "right", "center"]}
+            linhas={dados.produtos.map(p => [
+              p.nome,
+              p.codigo,
+              p.categoria || "—",
+              `${fmtNum(p.estoque)} ${p.unidade}`,
+              fmtNum(p.vendidoPeriodo),
+              fmtGiro(p.giro),
+              fmtCobertura(p.coberturaDias),
+              p.capitalParado != null ? fmtBRL(p.capitalParado) : "—",
+              <BadgeGiro key="g" classe={p.classe} />,
+            ])}
+            vazioTexto="Nenhum produto no filtro."
+          />
+        </>
+      )}
+    </BlocoRelatorio>
+  );
+}
+
+function BadgeGiro({ classe }) {
+  const meta = GIRO_CLASSE[classe] || { label: classe, cor: C.muted };
+  return (
+    <span className="font-mono" style={{
+      display: "inline-block", padding: "2px 8px", borderRadius: 999,
+      fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap",
+      color: meta.cor,
+      background: `color-mix(in srgb, ${meta.cor} 16%, transparent)`,
+      border: `1px solid color-mix(in srgb, ${meta.cor} 30%, transparent)`,
+    }}>{meta.label}</span>
+  );
+}
+
+// ============ SAZONALIDADE (heatmap dia x hora) ============
+const DIAS_SEMANA = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+function RelatorioSazonalidade() {
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+  const [metrica, setMetrica] = useState("faturamento"); // faturamento | vendas
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  const valorCel = (cel) => (metrica === "vendas" ? cel.vendas : cel.faturamento);
+  const fmtMetrica = (v) => (metrica === "vendas" ? fmtNum(v) : fmtBRL(v));
+
+  const gerar = useCallback(async () => {
+    setCarregando(true); setErro("");
+    try {
+      const r = await api.relatorioSazonalidade({ dataInicio, dataFim });
+      setDados(r);
+    } catch (err) { setErro(err.message); }
+    finally { setCarregando(false); }
+  }, [dataInicio, dataFim]);
+
+  async function exportar() {
+    if (!dados) return;
+    const doc = await criarPDF("Sazonalidade de Vendas");
+    addPeriodo(doc, dados.filtros.dataInicio?.slice(0, 10), dados.filtros.dataFim?.slice(0, 10));
+
+    tabelaPDF(doc, {
+      startY: doc.lastAutoTable.finalY + 4,
+      head: [["Dia da semana", "Vendas", "Faturamento"]],
+      body: dados.porDia.map((d, i) => [DIAS_SEMANA[i], fmtNum(d.vendas), fmtBRL(d.faturamento)]),
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
+      styles: { fontSize: 10 },
+    });
+    tabelaPDF(doc, {
+      startY: doc.lastAutoTable.finalY + 6,
+      head: [["Hora", "Vendas", "Faturamento"]],
+      body: dados.porHora
+        .map((h, i) => [`${String(i).padStart(2, "0")}h`, fmtNum(h.vendas), fmtBRL(h.faturamento)])
+        .filter((_, i) => dados.porHora[i].vendas > 0),
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
+      styles: { fontSize: 9 },
+    });
+    doc.save(`sazonalidade-${hoje()}.pdf`);
+  }
+
+  // Maior valor de celula no metrica atual (para escalar a intensidade da cor).
+  const maxCel = dados
+    ? Math.max(1, ...dados.matriz.flat().map(valorCel))
+    : 1;
+
+  return (
+    <BlocoRelatorio
+      titulo="Sazonalidade de Vendas" cor={C.yellow}
+      filtros={
+        <>
+          <CampoData label="De" value={dataInicio} onChange={setDataInicio} />
+          <CampoData label="Até" value={dataFim} onChange={setDataFim} />
+          <CampoSelect label="Métrica" value={metrica} onChange={setMetrica} minWidth={150}>
+            <option value="faturamento">Faturamento</option>
+            <option value="vendas">Nº de vendas</option>
+          </CampoSelect>
+        </>
+      }
+      onGerar={gerar} onExportar={exportar} carregando={carregando}
+      erro={erro} dados={dados}
+    >
+      {dados && (
+        <>
+          <Resumo cards={[
+            { rotulo: "Vendas no período", valor: fmtNum(dados.resumo.totalVendas), cor: C.accent },
+            { rotulo: "Faturamento", valor: fmtBRL(dados.resumo.totalFaturamento), cor: C.green },
+            { rotulo: "Melhor dia", valor: dados.resumo.melhorDia ? `${DIAS_SEMANA[dados.resumo.melhorDia.dow]}` : "—", cor: C.purple },
+            { rotulo: "Horário de pico", valor: dados.resumo.pico ? `${DIAS_SEMANA[dados.resumo.pico.dow]} ${String(dados.resumo.pico.hour).padStart(2, "0")}h` : "—", cor: C.yellow },
+          ]} />
+
+          <HeatmapSazonalidade
+            matriz={dados.matriz}
+            maxCel={maxCel}
+            valorCel={valorCel}
+            fmtMetrica={fmtMetrica}
+          />
+        </>
+      )}
+    </BlocoRelatorio>
+  );
+}
+
+// Heatmap 7 dias x 24 horas. Intensidade da cor proporcional ao valor da
+// metrica escolhida; qualquer venda recebe um piso de opacidade p/ visibilidade.
+function HeatmapSazonalidade({ matriz, maxCel, valorCel, fmtMetrica }) {
+  const horas = Array.from({ length: 24 }, (_, h) => h);
+  const corCel = (v) => {
+    if (v <= 0) return "transparent";
+    const pct = 14 + (v / maxCel) * 86; // 14%..100%
+    return `color-mix(in srgb, var(--accent) ${pct.toFixed(0)}%, transparent)`;
+  };
+  return (
+    <div style={{
+      background: "var(--surface)", border: "1px solid var(--hairline-soft)",
+      boxShadow: "var(--shadow-card)", borderRadius: 14, padding: 16, marginBottom: 16,
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+        <div style={{ color: "var(--fg-muted)", fontSize: 10.5, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.12em" }}>
+          Mapa de calor · dia × hora
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--fg-faint)", fontSize: 11 }}>
+          <span>menos</span>
+          <div style={{ display: "flex", gap: 2 }}>
+            {[14, 40, 65, 100].map(p => (
+              <span key={p} style={{ width: 16, height: 10, borderRadius: 2, background: `color-mix(in srgb, var(--accent) ${p}%, transparent)` }} />
+            ))}
+          </div>
+          <span>mais</span>
+        </div>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <div style={{ minWidth: 680 }}>
+          {/* Cabecalho de horas */}
+          <div style={{ display: "grid", gridTemplateColumns: `36px repeat(24, 1fr)`, gap: 2, marginBottom: 2 }}>
+            <div />
+            {horas.map(h => (
+              <div key={h} className="font-mono" style={{ fontSize: 8.5, color: "var(--fg-faint)", textAlign: "center" }}>
+                {h % 3 === 0 ? String(h).padStart(2, "0") : ""}
+              </div>
+            ))}
+          </div>
+          {/* Linhas por dia */}
+          {matriz.map((linha, d) => (
+            <div key={d} style={{ display: "grid", gridTemplateColumns: `36px repeat(24, 1fr)`, gap: 2, marginBottom: 2 }}>
+              <div className="font-mono" style={{ fontSize: 10, color: "var(--fg-muted)", display: "flex", alignItems: "center" }}>
+                {DIAS_SEMANA[d]}
+              </div>
+              {linha.map((cel, h) => {
+                const v = valorCel(cel);
+                return (
+                  <div
+                    key={h}
+                    title={`${DIAS_SEMANA[d]} ${String(h).padStart(2, "0")}h · ${cel.vendas} venda(s) · ${fmtMetrica(cel.faturamento)}`}
+                    style={{
+                      height: 22, borderRadius: 3, background: corCel(v),
+                      border: v > 0 ? "1px solid color-mix(in srgb, var(--accent) 20%, transparent)" : "1px solid var(--hairline-soft)",
+                    }}
+                  />
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============ AGING DE RECEBÍVEIS (idade da dívida) ============
+const AGING_META = {
+  AVENCER:  { label: "A vencer",   cor: C.green },
+  D1_30:    { label: "1–30 dias",  cor: C.yellow },
+  D31_60:   { label: "31–60 dias", cor: "color-mix(in srgb, var(--yellow) 55%, var(--red))" },
+  D61_90:   { label: "61–90 dias", cor: C.red },
+  D90MAIS:  { label: "90+ dias",   cor: "color-mix(in srgb, var(--red) 70%, #000)" },
+};
+const AGING_ORDEM = ["AVENCER", "D1_30", "D31_60", "D61_90", "D90MAIS"];
+
+function RelatorioAgingReceber() {
+  const [clienteId, setClienteId] = useState("");
+  const [clientes, setClientes] = useState([]);
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    api.listarClientes({ ativo: "true" }).then(setClientes).catch(() => {});
+  }, []);
+
+  const gerar = useCallback(async () => {
+    setCarregando(true); setErro("");
+    try {
+      const r = await api.relatorioAgingReceber({ clienteId });
+      setDados(r);
+    } catch (err) { setErro(err.message); }
+    finally { setCarregando(false); }
+  }, [clienteId]);
+
+  async function exportar() {
+    if (!dados) return;
+    const doc = await criarPDF("Aging de Recebíveis");
+
+    tabelaPDF(doc, {
+      startY: doc.lastAutoTable.finalY + 4,
+      head: [["Faixa", "Contas", "Valor", "% do total"]],
+      body: dados.resumo.faixas.map(f => [
+        AGING_META[f.faixa]?.label || f.faixa,
+        fmtNum(f.qtd),
+        fmtBRL(f.total),
+        fmtPct(f.pct),
+      ]),
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
+      styles: { fontSize: 10 },
+    });
+
+    if (dados.clientes.length) {
+      tabelaPDF(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["Cliente", "Contas", "Total em aberto", "Vencido", "Maior atraso"]],
+        body: dados.clientes.map(c => [
+          c.cliente, fmtNum(c.qtd), fmtBRL(c.total), fmtBRL(c.vencido),
+          c.maiorAtraso > 0 ? `${c.maiorAtraso} d` : "—",
+        ]),
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
+        styles: { fontSize: 9 },
+      });
+    }
+
+    doc.save(`aging-recebiveis-${hoje()}.pdf`);
+  }
+
+  return (
+    <BlocoRelatorio
+      titulo="Aging de Recebíveis" cor={C.red}
+      filtros={
+        <>
+          <CampoSelectBusca label="Cliente" opcoes={clientes} value={clienteId} onChange={setClienteId} placeholder="Todos" />
+        </>
+      }
+      onGerar={gerar} onExportar={exportar} carregando={carregando}
+      erro={erro} dados={dados}
+    >
+      {dados && (
+        <>
+          <Resumo cards={[
+            { rotulo: "Total em aberto", valor: fmtBRL(dados.resumo.totalAberto), cor: C.accent },
+            { rotulo: "Vencido (inadimplência)", valor: `${fmtBRL(dados.resumo.totalVencido)} (${fmtPct(dados.resumo.pctVencido)})`, cor: C.red },
+            { rotulo: "A vencer", valor: fmtBRL(dados.resumo.totalAVencer), cor: C.green },
+            { rotulo: "Clientes devedores", valor: fmtNum(dados.resumo.qtdClientes), cor: C.purple },
+          ]} />
+
+          <DistribuicaoAging faixas={dados.resumo.faixas} />
+
+          {dados.clientes.length > 0 && (
+            <Tabela
+              titulo={`Clientes devedores (${dados.clientes.length})`}
+              colunas={["Cliente", "Contas", "Total em aberto", "Vencido", "Maior atraso"]}
+              alinhamentos={["left", "right", "right", "right", "right"]}
+              linhas={dados.clientes.map(c => [
+                c.cliente,
+                fmtNum(c.qtd),
+                fmtBRL(c.total),
+                fmtBRL(c.vencido),
+                c.maiorAtraso > 0 ? `${fmtNum(c.maiorAtraso)} d` : "—",
+              ])}
+            />
+          )}
+
+          <Tabela
+            titulo={`Contas em aberto (${dados.contas.length})`}
+            colunas={["Vencimento", "Cliente", "Descrição", "Atraso", "Faixa", "Valor"]}
+            alinhamentos={["left", "left", "left", "right", "center", "right"]}
+            linhas={dados.contas.map(c => [
+              fmtData(c.vencimento),
+              c.cliente,
+              c.descricao || "—",
+              c.diasAtraso > 0 ? `${fmtNum(c.diasAtraso)} d` : "—",
+              <BadgeAging key="f" faixa={c.faixa} />,
+              fmtBRL(c.valor),
+            ])}
+            vazioTexto="Nenhuma conta em aberto."
+          />
+        </>
+      )}
+    </BlocoRelatorio>
+  );
+}
+
+function DistribuicaoAging({ faixas }) {
+  const ordenadas = AGING_ORDEM.map(f => faixas.find(x => x.faixa === f)).filter(Boolean);
+  return (
+    <div style={{
+      background: "var(--surface)", border: "1px solid var(--hairline-soft)",
+      boxShadow: "var(--shadow-card)", borderRadius: 14, padding: 16, marginBottom: 16,
+    }}>
+      <div style={{ color: "var(--fg-muted)", fontSize: 10.5, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 12 }}>
+        Distribuição por idade
+      </div>
+      <div style={{ display: "flex", height: 12, borderRadius: 6, overflow: "hidden", marginBottom: 14 }}>
+        {ordenadas.map(f => (
+          f.pct > 0 ? (
+            <div key={f.faixa} style={{ width: `${f.pct}%`, background: AGING_META[f.faixa].cor }} title={`${AGING_META[f.faixa].label}: ${fmtPct(f.pct)}`} />
+          ) : null
+        ))}
+      </div>
+      <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
+        {ordenadas.map(f => (
+          <div key={f.faixa} style={{
+            padding: "10px 12px", borderRadius: 10, border: "1px solid var(--hairline-soft)",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4 }}>
+              <span style={{ width: 10, height: 10, borderRadius: 3, background: AGING_META[f.faixa].cor, flexShrink: 0 }} />
+              <span style={{ color: "var(--fg-soft)", fontSize: 11.5, fontWeight: 500 }}>{AGING_META[f.faixa].label}</span>
+            </div>
+            <div className="font-mono tabular-nums" style={{ color: "var(--fg)", fontSize: 15, fontWeight: 500 }}>{fmtBRL(f.total)}</div>
+            <div style={{ color: "var(--fg-muted)", fontSize: 11 }}>{fmtNum(f.qtd)} conta(s) · {fmtPct(f.pct)}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BadgeAging({ faixa }) {
+  const meta = AGING_META[faixa] || { label: faixa, cor: C.muted };
+  return (
+    <span className="font-mono" style={{
+      display: "inline-block", padding: "2px 8px", borderRadius: 999,
+      fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap",
+      color: meta.cor,
+      background: `color-mix(in srgb, ${meta.cor} 16%, transparent)`,
+      border: `1px solid color-mix(in srgb, ${meta.cor} 30%, transparent)`,
+    }}>{meta.label}</span>
+  );
+}
+
 // ============ RELATÓRIO DE COMISSÕES ============
 function RelatorioComissoesLista() {
   const [dataInicio, setDataInicio] = useState("");
@@ -1195,7 +1934,7 @@ function RelatorioComissoesLista() {
     const doc = await criarPDF("Relatório de Comissões");
     addPeriodo(doc, dataInicio, dataFim);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -1205,12 +1944,12 @@ function RelatorioComissoesLista() {
         ["Vendedores", fmtNum(dados.resumo.vendedoresCount)],
         ["Top vendedor", dados.resumo.melhorVendedor || "—"],
       ],
-      theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 10 },
     });
 
     if (dados.vendedores.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Vendedor", "Vendas", "Faturamento", "Ticket médio", "Comissão", "Meses ≥ meta"]],
         body: dados.vendedores.map((v, i) => [
@@ -1224,13 +1963,13 @@ function RelatorioComissoesLista() {
             ? `${v.mesesAcimaDaMeta}/${v.mesesNoPeriodo}`
             : "—",
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
 
     if (dados.vendas.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Data", "Vendedor", "Cliente", "Pgto", "Total", "Comissão"]],
         body: dados.vendas.map(v => [
@@ -1242,7 +1981,7 @@ function RelatorioComissoesLista() {
           fmtBRL(v.total),
           fmtBRL(v.comissao),
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 8 },
       });
     }
@@ -1343,7 +2082,7 @@ function RelatorioFunilCrm() {
     const doc = await criarPDF("Relatório de Funil de Vendas (CRM)");
     addPeriodo(doc, dataInicio, dataFim);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -1358,11 +2097,11 @@ function RelatorioFunilCrm() {
         ["Ticket médio (ganho)", fmtBRL(dados.resumo.ticketMedioGanho)],
         ["Ciclo médio de venda (dias)", dados.resumo.cicloMedioGanhoDias.toFixed(1)],
       ],
-      theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 10 },
     });
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 6,
       head: [["Etapa", "Qtd", "Valor estimado", "Valor ponderado"]],
       body: dados.porEtapa.map(e => [
@@ -1371,12 +2110,12 @@ function RelatorioFunilCrm() {
         fmtBRL(e.valorEstimado),
         fmtBRL(e.valorPonderado),
       ]),
-      theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 9 },
     });
 
     if (dados.conversaoEtapaEtapa.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["De", "Para", "Qtd na etapa de origem", "Qtd avançou", "Taxa"]],
         body: dados.conversaoEtapaEtapa.map(c => [
@@ -1386,13 +2125,13 @@ function RelatorioFunilCrm() {
           fmtNum(c.qtdPara),
           `${c.taxa.toFixed(1)}%`,
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
 
     if (dados.porResponsavel.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Vendedor", "Total", "Abertas", "Ganhas", "Perdidas", "Conv.", "Valor ganho"]],
         body: dados.porResponsavel.map((v, i) => [
@@ -1402,13 +2141,13 @@ function RelatorioFunilCrm() {
           `${v.taxaConversao.toFixed(1)}%`,
           fmtBRL(v.valorGanho),
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
 
     if (dados.porOrigem.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Origem", "Qtd", "Ganhas", "Perdidas", "Conv.", "Valor ganho"]],
         body: dados.porOrigem.map(o => [
@@ -1416,23 +2155,23 @@ function RelatorioFunilCrm() {
           fmtNum(o.ganhas), fmtNum(o.perdidas),
           `${o.taxaConversao.toFixed(1)}%`, fmtBRL(o.valorGanho),
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
 
     if (dados.motivosPerda.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Motivo de perda", "Qtd", "Valor perdido"]],
         body: dados.motivosPerda.map(m => [m.motivo, fmtNum(m.quantidade), fmtBRL(m.valorPerdido)]),
-        theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
 
     if (dados.oportunidades.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Título", "Cliente", "Vendedor", "Etapa", "Prob.", "Valor", "Dias etapa"]],
         body: dados.oportunidades.map(o => [
@@ -1440,7 +2179,7 @@ function RelatorioFunilCrm() {
           o.responsavel || "—", ROTULO_ETAPA[o.etapa] || o.etapa,
           `${o.probabilidade}%`, fmtBRL(o.valorEstimado), fmtNum(o.diasNaEtapa),
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 8 },
       });
     }
@@ -1623,7 +2362,7 @@ function RelatorioPerformanceCrm() {
     const doc = await criarPDF("Relatório de Performance Comercial (CRM)");
     addPeriodo(doc, dataInicio, dataFim);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -1639,36 +2378,36 @@ function RelatorioPerformanceCrm() {
         ["Interações registradas", fmtNum(dados.resumo.totalInteracoes)],
         ["Tarefas concluídas", fmtNum(dados.resumo.totalTarefasConcluidas)],
       ],
-      theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 10 },
     });
 
     if (dados.topFaturamento.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["🏆 Top faturamento", "", ""]],
         body: [],
         styles: { fontSize: 11, fontStyle: "bold" }, theme: "plain",
       });
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY,
         head: [["#", "Vendedor", "Faturamento", "Vendas"]],
         body: dados.topFaturamento.map((v, i) => [
           i + 1, v.nome, fmtBRL(v.faturamento), fmtNum(v.vendasQtd),
         ]),
-        theme: "striped", headStyles: { fillColor: [34, 197, 94] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
 
     if (dados.topConversao.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["🎯 Top conversão (min. 3 oportunidades fechadas)", "", ""]],
         body: [],
         styles: { fontSize: 11, fontStyle: "bold" }, theme: "plain",
       });
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY,
         head: [["#", "Vendedor", "Taxa", "Ganhas/Fechadas"]],
         body: dados.topConversao.map((v, i) => [
@@ -1676,31 +2415,31 @@ function RelatorioPerformanceCrm() {
           `${v.taxaConversao.toFixed(1)}%`,
           `${v.oppGanhas}/${v.oppGanhas + v.oppPerdidas}`,
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
 
     if (dados.topAtividade.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["💬 Top atividade", "", ""]],
         body: [],
         styles: { fontSize: 11, fontStyle: "bold" }, theme: "plain",
       });
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY,
         head: [["#", "Vendedor", "Interações", "Tarefas conc."]],
         body: dados.topAtividade.map((v, i) => [
           i + 1, v.nome, fmtNum(v.interacoes), fmtNum(v.tarefasConcluidas),
         ]),
-        theme: "striped", headStyles: { fillColor: [245, 158, 11] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
 
     if (dados.porVendedor.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Vendedor", "Role", "Vendas", "Faturamento", "Ticket", "Opp criadas", "Ganhas", "Conv.", "Pipeline", "Interações", "Tarefas (SLA)"]],
         body: dados.porVendedor.map(v => [
@@ -1712,7 +2451,7 @@ function RelatorioPerformanceCrm() {
           fmtNum(v.interacoes),
           `${v.tarefasConcluidas} (${v.slaTarefas.toFixed(0)}%)`,
         ]),
-        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 7 },
       });
     }
@@ -1839,7 +2578,7 @@ function RelatorioPerdasCrm() {
     const doc = await criarPDF("Relatório de Motivos de Perda (CRM)");
     addPeriodo(doc, dataInicio, dataFim);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -1852,12 +2591,12 @@ function RelatorioPerdasCrm() {
         ["Sem motivo registrado", fmtNum(dados.resumo.semMotivo)],
         ["Ciclo médio até a perda (dias)", dados.resumo.cicloMedioPerdaDias.toFixed(1)],
       ],
-      theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 10 },
     });
 
     if (dados.porMotivo.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Motivo", "Qtd", "% perdas", "Valor perdido", "% valor"]],
         body: dados.porMotivo.map((m, i) => [
@@ -1867,51 +2606,51 @@ function RelatorioPerdasCrm() {
           fmtBRL(m.valorPerdido),
           `${m.percentualValor.toFixed(1)}%`,
         ]),
-        theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
 
     if (dados.porResponsavel.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Vendedor", "Perdidas", "Valor perdido", "Ticket médio"]],
         body: dados.porResponsavel.map((v, i) => [
           i + 1, v.nome, fmtNum(v.quantidade), fmtBRL(v.valorPerdido), fmtBRL(v.ticketMedio),
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
 
     if (dados.porOrigem.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Origem", "Qtd perdidas", "Valor perdido"]],
         body: dados.porOrigem.map(o => [o.origem, fmtNum(o.quantidade), fmtBRL(o.valorPerdido)]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
 
     if (dados.evolucaoMensal.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Mês", "Perdidas", "Valor perdido"]],
         body: dados.evolucaoMensal.map(e => [fmtMes(e.mes), fmtNum(e.quantidade), fmtBRL(e.valorPerdido)]),
-        theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
 
     if (dados.topPerdas.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["💸 Top vazamentos (oportunidades de maior valor perdidas)", "", "", "", "", ""]],
         body: [],
         styles: { fontSize: 11, fontStyle: "bold" }, theme: "plain",
       });
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY,
         head: [["#", "Título", "Cliente", "Vendedor", "Motivo", "Valor"]],
         body: dados.topPerdas.map(o => [
@@ -1919,13 +2658,13 @@ function RelatorioPerdasCrm() {
           o.motivoPerda || "(sem motivo)",
           fmtBRL(o.valorEstimado),
         ]),
-        theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 8 },
       });
     }
 
     if (dados.oportunidades.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Título", "Cliente", "Vendedor", "Motivo", "Origem", "Valor", "Dias", "Perdida em"]],
         body: dados.oportunidades.map(o => [
@@ -1935,7 +2674,7 @@ function RelatorioPerdasCrm() {
           fmtNum(o.diasNoFunil),
           fmtData(o.dataPerdida),
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 7 },
       });
     }
@@ -2238,7 +2977,7 @@ function RelatorioForecastCrm() {
     const doc = await criarPDF("Relatório de Forecast / Previsão de Receita (CRM)");
     addLinha(doc, `Horizonte: próximos ${dados.resumo.horizonte} meses`);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -2250,11 +2989,11 @@ function RelatorioForecastCrm() {
         ["Opp abertas SEM data prevista", fmtNum(dados.resumo.semDataPrevistaQtd)],
         ["Valor das opp sem data prevista", fmtBRL(dados.resumo.semDataPrevistaValor)],
       ],
-      theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 10 },
     });
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 6,
       head: [["Mês", "Opp previstas", "Valor estimado", "Valor ponderado", "Ganhas", "Valor ganho"]],
       body: dados.porMes.map(m => [
@@ -2265,38 +3004,38 @@ function RelatorioForecastCrm() {
         fmtNum(m.ganhoQtd),
         fmtBRL(m.valorGanho),
       ]),
-      theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 9 },
     });
 
     if (dados.porVendedor.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Vendedor", "Opp", "Valor estimado", "Valor ponderado"]],
         body: dados.porVendedor.map((v, i) => [
           i + 1, v.nome, fmtNum(v.quantidade),
           fmtBRL(v.valorEstimado), fmtBRL(v.valorPonderado),
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
 
     if (dados.porOrigem.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Origem", "Opp", "Valor estimado", "Valor ponderado"]],
         body: dados.porOrigem.map(o => [
           o.origem, fmtNum(o.quantidade),
           fmtBRL(o.valorEstimado), fmtBRL(o.valorPonderado),
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
 
     if (dados.oportunidades.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Título", "Cliente", "Vendedor", "Etapa", "Prob.", "Valor", "Ponderado", "Previsão"]],
         body: dados.oportunidades.map(o => [
@@ -2307,7 +3046,7 @@ function RelatorioForecastCrm() {
           fmtBRL(o.valorPonderado),
           fmtData(o.dataFechamentoPrevista),
         ]),
-        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 8 },
       });
     }
@@ -2541,7 +3280,7 @@ function RelatorioAtividadesCrm() {
     const doc = await criarPDF("Relatório de Atividades & Cadência (CRM)");
     addPeriodo(doc, dataInicio, dataFim);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -2556,23 +3295,23 @@ function RelatorioAtividadesCrm() {
         ["Tarefas abertas atrasadas", fmtNum(dados.resumo.totalAtrasadas)],
         [`Clientes sem contato há ${dados.filtros.diasInativo}+ dias`, fmtNum(dados.resumo.clientesSemContato)],
       ],
-      theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 10 },
     });
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 6,
       head: [["Tipo", "Quantidade"]],
       body: dados.porTipo.map(t => [
         ROTULO_TIPO_INTERACAO[t.tipo] || t.tipo,
         fmtNum(t.quantidade),
       ]),
-      theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 9 },
     });
 
     if (dados.porVendedor.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Vendedor", "Total", "Clientes únicos", "Ligação", "WhatsApp", "E-mail", "Visita", "Reunião", "Tarefas (SLA)"]],
         body: dados.porVendedor.map((v, i) => [
@@ -2583,19 +3322,19 @@ function RelatorioAtividadesCrm() {
           fmtNum(v.interacoesReuniao),
           `${v.tarefasConcluidas} (${v.slaTarefas.toFixed(0)}%)`,
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 8 },
       });
     }
 
     if (dados.clientesSemContato.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["🔔 Clientes sem contato — agir agora", "", "", "", ""]],
         body: [],
         styles: { fontSize: 11, fontStyle: "bold" }, theme: "plain",
       });
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY,
         head: [["Cliente", "Cidade", "Telefone", "Última interação", "Dias sem contato"]],
         body: dados.clientesSemContato.map(c => [
@@ -2603,17 +3342,17 @@ function RelatorioAtividadesCrm() {
           c.ultimaInteracao ? fmtData(c.ultimaInteracao) : "Nunca",
           fmtNum(c.diasSemContato),
         ]),
-        theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
 
     if (dados.distribuicaoSemanal.some(d => d.quantidade > 0)) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Dia da semana", "Interações"]],
         body: dados.distribuicaoSemanal.map(d => [d.dia, fmtNum(d.quantidade)]),
-        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
@@ -2852,7 +3591,7 @@ function RelatorioNpsCrm() {
     const doc = await criarPDF("Relatório de NPS & Satisfação (CRM)");
     addPeriodo(doc, dataInicio, dataFim);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -2865,22 +3604,22 @@ function RelatorioNpsCrm() {
         ["Neutros (7-8)", fmtNum(dados.resumo.neutros)],
         ["Promotores (9-10)", fmtNum(dados.resumo.promotores)],
       ],
-      theme: "striped", headStyles: { fillColor: [245, 158, 11] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 10 },
     });
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 6,
       head: [["Faixa", "Quantidade", "%"]],
       body: dados.distribuicao.map(d => [
         d.label, fmtNum(d.quantidade), `${d.percentual.toFixed(1)}%`,
       ]),
-      theme: "striped", headStyles: { fillColor: [245, 158, 11] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 9 },
     });
 
     if (dados.porVendedor.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Vendedor", "Enviadas", "Respondidas", "Taxa resp.", "Nota méd.", "NPS"]],
         body: dados.porVendedor.map((v, i) => [
@@ -2890,31 +3629,31 @@ function RelatorioNpsCrm() {
           v.notaMedia.toFixed(2),
           v.nps.toFixed(1),
         ]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
 
     if (dados.evolucaoMensal.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Mês", "Respondidas", "Nota média", "NPS"]],
         body: dados.evolucaoMensal.map(e => [
           fmtMes(e.mes), fmtNum(e.respondidas), e.notaMedia.toFixed(2), e.nps.toFixed(1),
         ]),
-        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
 
     if (dados.detratoresRecentes.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["🚨 Detratores recentes (últimos 30 dias) — PRIORIDADE DE CONTATO", "", "", "", ""]],
         body: [],
         styles: { fontSize: 11, fontStyle: "bold" }, theme: "plain",
       });
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY,
         head: [["Data", "Cliente", "Venda", "Vendedor", "Nota", "Comentário"]],
         body: dados.detratoresRecentes.map(d => [
@@ -2925,7 +3664,7 @@ function RelatorioNpsCrm() {
           d.nota,
           d.comentario || "(sem comentário)",
         ]),
-        theme: "striped", headStyles: { fillColor: [239, 68, 68] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 8 },
       });
     }
@@ -3162,7 +3901,7 @@ function RelatorioCarteiraCrm() {
     const doc = await criarPDF("Relatório de Carteira de Clientes (RFM)");
     addLinha(doc, `Janela RFM: últimos ${dados.filtros.janelaDias} dias`);
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
@@ -3176,11 +3915,11 @@ function RelatorioCarteiraCrm() {
         ["Recência média", `${dados.resumo.recenciaMedia.toFixed(0)} dias`],
         ["Faturamento total (janela)", fmtBRL(dados.resumo.faturamentoTotal)],
       ],
-      theme: "striped", headStyles: { fillColor: [34, 197, 94] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 10 },
     });
 
-    autoTable(doc, {
+    tabelaPDF(doc, {
       startY: doc.lastAutoTable.finalY + 6,
       head: [["Segmento", "Clientes", "% base", "Faturamento", "% fat.", "Ticket médio"]],
       body: dados.porSegmento.map(s => [
@@ -3191,34 +3930,34 @@ function RelatorioCarteiraCrm() {
         `${s.percentualFaturamento.toFixed(1)}%`,
         fmtBRL(s.ticketMedio),
       ]),
-      theme: "striped", headStyles: { fillColor: [34, 197, 94] },
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 9 },
     });
 
     if (dados.porCidade.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Cidade", "UF", "Clientes", "Faturamento"]],
         body: dados.porCidade.map((c, i) => [
           i + 1, c.cidade, c.estado, fmtNum(c.quantidade), fmtBRL(c.monetario),
         ]),
-        theme: "striped", headStyles: { fillColor: [79, 142, 247] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
 
     if (dados.porTag.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["Tag", "Clientes", "Faturamento"]],
         body: dados.porTag.map(t => [t.nome, fmtNum(t.quantidade), fmtBRL(t.monetario)]),
-        theme: "striped", headStyles: { fillColor: [124, 58, 237] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 9 },
       });
     }
 
     if (dados.topLtv.length) {
-      autoTable(doc, {
+      tabelaPDF(doc, {
         startY: doc.lastAutoTable.finalY + 6,
         head: [["#", "Cliente", "Cidade", "Compras", "Total gasto", "Ticket médio", "Última compra", "Segmento"]],
         body: dados.topLtv.map((c, i) => [
@@ -3226,7 +3965,7 @@ function RelatorioCarteiraCrm() {
           fmtNum(c.qtdCompras), fmtBRL(c.totalGasto), fmtBRL(c.ticketMedio),
           fmtData(c.ultimaCompra), SEGMENTOS_INFO[c.segmento]?.label || c.segmento,
         ]),
-        theme: "striped", headStyles: { fillColor: [245, 158, 11] },
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
         styles: { fontSize: 8 },
       });
     }
@@ -3420,11 +4159,12 @@ function BlocoRelatorio({ titulo, cor, filtros, onGerar, onExportar, carregando,
   return (
     <div>
       <div style={{
-        background: C.card, border: `1px solid ${C.border}`,
-        borderRadius: 12, padding: 16, marginBottom: 16,
+        background: "var(--surface)", border: "1px solid var(--hairline-soft)",
+        boxShadow: "var(--shadow-card)",
+        borderRadius: 14, padding: 16, marginBottom: 16,
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
-          <div style={{ color: C.white, fontSize: 14, fontWeight: 700 }}>{titulo}</div>
+          <div style={{ color: "var(--fg)", fontSize: 15, fontWeight: 600, letterSpacing: "-0.02em" }}>{titulo}</div>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={onGerar} disabled={carregando} style={{
               background: cor, color: C.white, border: "none", borderRadius: 8,
@@ -3453,10 +4193,10 @@ function BlocoRelatorio({ titulo, cor, filtros, onGerar, onExportar, carregando,
 
       {!dados && !carregando && !erro && (
         <div style={{
-          background: C.card, border: `1px dashed ${C.border}`, borderRadius: 12,
-          padding: 40, textAlign: "center", color: C.muted, fontSize: 13,
+          background: "var(--surface)", border: "1px dashed var(--hairline)", borderRadius: 14,
+          padding: 40, textAlign: "center", color: "var(--fg-muted)", fontSize: 13,
         }}>
-          Defina os filtros e clique em <strong style={{ color: C.text }}>Gerar</strong> para visualizar o relatório.
+          Defina os filtros e clique em <strong style={{ color: "var(--fg)" }}>Gerar</strong> para visualizar o relatório.
         </div>
       )}
 
@@ -3465,6 +4205,10 @@ function BlocoRelatorio({ titulo, cor, filtros, onGerar, onExportar, carregando,
   );
 }
 
+// Resumo — faixa de KPIs no padrao executivo (DESIGN_STANDARDS.md §4).
+// Mantem a API legada ({ rotulo, valor, cor }); so o visual foi elevado:
+// card com hairline + sombra em camadas, rotulo em caixa-alta com tracking,
+// e valor em fonte monoespacada tabular (numeros como heroi).
 function Resumo({ cards }: any) {
   return (
     <div style={{
@@ -3473,14 +4217,14 @@ function Resumo({ cards }: any) {
     }}>
       {cards.map((c, i) => (
         <div key={i} style={{
-          background: C.card, border: `1px solid ${C.border}`,
-          borderRadius: 10, padding: "12px 14px", position: "relative", overflow: "hidden",
+          background: "linear-gradient(180deg, var(--elev-sheen), transparent), var(--surface)",
+          border: "1px solid var(--hairline-soft)", boxShadow: "var(--shadow-card)",
+          borderRadius: 14, padding: "12px 16px 11px", position: "relative", overflow: "hidden",
         }}>
-          <div style={{ position: "absolute", top: 0, left: 0, width: 4, height: "100%", background: c.cor }} />
-          <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+          <div style={{ color: "var(--fg-muted)", fontSize: 10.5, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.14em" }}>
             {c.rotulo}
           </div>
-          <div style={{ color: c.cor, fontSize: 18, fontWeight: 800, marginTop: 4, lineHeight: 1.1 }}>
+          <div className="font-mono tabular-nums" style={{ color: c.cor, fontSize: 22, fontWeight: 500, marginTop: 6, lineHeight: 1.1, letterSpacing: "-0.025em" }}>
             {c.valor}
           </div>
         </div>
@@ -3489,45 +4233,52 @@ function Resumo({ cards }: any) {
   );
 }
 
+// Tabela — tabela no padrao executivo (DESIGN_STANDARDS.md §5). Mantem a API
+// legada (titulo/colunas/alinhamentos/linhas). Convencao do arquivo: coluna
+// alinhada a direita = numerica, entao ela ganha fonte mono tabular (alinha as
+// casas) e cor de texto primaria; demais colunas usam texto suave.
 function Tabela({ titulo, colunas, alinhamentos, linhas, vazioTexto }: any) {
+  const ehNumerica = (j: number) => (alinhamentos?.[j] || "left") === "right";
   return (
     <div style={{
-      background: C.card, border: `1px solid ${C.border}`,
-      borderRadius: 12, marginBottom: 16, overflow: "hidden",
+      background: "var(--surface)", border: "1px solid var(--hairline-soft)",
+      borderRadius: 14, marginBottom: 16, overflow: "hidden", boxShadow: "var(--shadow-card)",
     }}>
       {titulo && (
         <div style={{
-          padding: "10px 14px", borderBottom: `1px solid ${C.border}`,
-          color: C.white, fontSize: 13, fontWeight: 700,
+          padding: "11px 14px", borderBottom: "1px solid var(--hairline)",
+          color: "var(--fg)", fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em",
         }}>{titulo}</div>
       )}
       {linhas.length === 0 ? (
-        <div style={{ padding: 24, color: C.muted, fontSize: 12, textAlign: "center" }}>
+        <div style={{ padding: 32, color: "var(--fg-muted)", fontSize: 13, textAlign: "center" }}>
           {vazioTexto || "Sem dados."}
         </div>
       ) : (
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
-              <tr style={{ background: C.surface }}>
+              <tr style={{ borderBottom: "1px solid var(--hairline)" }}>
                 {colunas.map((c, i) => (
                   <th key={i} style={{
-                    padding: "8px 12px", textAlign: alinhamentos?.[i] || "left",
-                    color: C.muted, fontSize: 10, fontWeight: 700,
-                    textTransform: "uppercase", letterSpacing: 0.5,
-                    borderBottom: `1px solid ${C.border}`,
+                    padding: "9px 12px", textAlign: alinhamentos?.[i] || "left",
+                    color: "var(--fg-muted)", fontSize: 10.5, fontWeight: 500,
+                    textTransform: "uppercase", letterSpacing: "0.12em",
                   }}>{c}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {linhas.map((linha, i) => (
-                <tr key={i} style={{ borderBottom: `1px solid ${C.border}55` }}>
+                <tr key={i} style={{ borderBottom: "1px solid var(--hairline-soft)" }}>
                   {linha.map((celula, j) => (
-                    <td key={j} style={{
-                      padding: "8px 12px", textAlign: alinhamentos?.[j] || "left",
-                      color: C.text, fontSize: 12, whiteSpace: "nowrap",
-                    }}>{celula}</td>
+                    <td key={j}
+                      className={ehNumerica(j) ? "font-mono tabular-nums" : undefined}
+                      style={{
+                        padding: "9px 12px", textAlign: alinhamentos?.[j] || "left",
+                        color: ehNumerica(j) ? "var(--fg)" : "var(--fg-soft)",
+                        fontSize: 13, whiteSpace: "nowrap",
+                      }}>{celula}</td>
                   ))}
                 </tr>
               ))}
@@ -3591,7 +4342,7 @@ const inputStyle = {
 //
 // criarPDF agora e async — carrega a config da empresa do cache e desenha
 // um header completo (logo + razao social + CNPJ + endereco + contato).
-// Se a config nao foi carregada ainda, cai no header simples "GestãoPRO".
+// Se a config nao foi carregada ainda, cai no header simples "GestãoProMax".
 
 async function criarPDF(titulo) {
   const doc = new jsPDF({ orientation: "p", unit: "mm", format: "a4" });
@@ -3648,7 +4399,7 @@ async function criarPDF(titulo) {
   } else {
     doc.setFontSize(16);
     doc.setFont("helvetica", "bold");
-    doc.text("GestãoPRO", 14, topo + 5);
+    doc.text("GestãoProMax", 14, topo + 5);
     dadosBottom = topo + 5;
   }
 

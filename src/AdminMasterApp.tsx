@@ -260,7 +260,7 @@ function Painel({ user, onSair }: any) {
           <span style={{ fontSize: 22 }}>🛡️</span>
           <div>
             <div style={{ color: C.white, fontWeight: 800, fontSize: 18, lineHeight: 1.1 }}>
-              Admin Master — GestãoPRO
+              Admin Master — Gestão<span style={{ fontWeight: 600 }}>Pro</span><span className="gp-brand-max">Max</span>
             </div>
             <div style={{ color: C.muted, fontSize: 11 }}>
               Logado como <strong>{user.nome}</strong> ({user.email})

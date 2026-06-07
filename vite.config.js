@@ -17,8 +17,8 @@ export default defineConfig({
       registerType: 'prompt',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'GestãoPRO — Inventário Mobile',
-        short_name: 'GestãoPRO',
+        name: 'GestãoProMax — Inventário Mobile',
+        short_name: 'GestãoProMax',
         description: 'Inventário móvel com contagem cega e leitura de código de barras.',
         theme_color: '#0f1117',
         background_color: '#0f1117',

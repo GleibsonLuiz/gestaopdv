@@ -169,7 +169,7 @@ export default function Signup({ onSuccess, onVoltarLogin }: SignupProps) {
           <DefaultMark size={44} />
           <div className="leading-tight">
             <div className="text-[15px] font-medium tracking-tight">
-              Gestão<span className="text-brand-violet font-semibold">PRO</span>
+              Gestão<span className="font-semibold">Pro</span><span className="gp-brand-max">Max</span>
             </div>
             <div className="text-[11px] text-mist-400 font-mono tracking-wider uppercase">CRM · PDV</div>
           </div>
@@ -198,7 +198,7 @@ export default function Signup({ onSuccess, onVoltarLogin }: SignupProps) {
         <div className="lg:hidden flex items-center gap-3 p-6 border-b border-line">
           <DefaultMark size={36} />
           <div className="text-[14px] font-medium">
-            Gestão<span className="text-brand-violet font-semibold">PRO</span>
+            Gestão<span className="font-semibold">Pro</span><span className="gp-brand-max">Max</span>
           </div>
         </div>
 
@@ -311,7 +311,7 @@ export default function Signup({ onSuccess, onVoltarLogin }: SignupProps) {
 
             <div className="mt-6 flex items-center justify-between text-[11px] font-mono text-mist-500">
               <span>SOC 2 · LGPD</span>
-              <span>© GestãoPRO 2026</span>
+              <span>© GestãoProMax 2026</span>
             </div>
           </form>
         </div>

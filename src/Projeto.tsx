@@ -201,7 +201,7 @@ function gerarPrompt(etapas: EtapaSalva[], notas: string): string {
   const extrasLista = EXTRAS.map((x) => `✨ ${x.titulo} — ${x.descricao}`).join("\n");
 
   return `Você é um desenvolvedor Fullstack experiente.
-Estamos desenvolvendo juntos o GestãoPRO — sistema web completo de Gestão + PDV.
+Estamos desenvolvendo juntos o GestãoProMax — sistema web completo de Gestão + PDV.
 
 ## 🛠️ Stack Tecnológica (real)
 - Frontend: React 19 + Vite + TypeScript + Tailwind (migração em andamento)

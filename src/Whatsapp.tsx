@@ -352,7 +352,7 @@ function AbaConexao(p: ConexaoProps) {
         background: C.accent + "11", border: `1px solid ${C.accent}44`,
         color: C.text, fontSize: 11.5, lineHeight: 1.5,
       }}>
-        💡 <b>Como funciona:</b> O webhook publico do GestãoPRO está em
+        💡 <b>Como funciona:</b> O webhook publico do GestãoProMax está em
         {" "}<code style={{ background: C.surface, padding: "1px 6px", borderRadius: 3 }}>
           POST /webhooks/whatsapp
         </code>. Configure essa URL no painel do seu Evolution API com o

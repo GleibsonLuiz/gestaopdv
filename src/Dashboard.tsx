@@ -1185,7 +1185,8 @@ function PainelFinanceiro({ tipo, titulo, icone, dados }: any) {
 
   return (
     <article style={{
-      background: fundo, border: `1px solid ${C.border}`, borderRadius: 14,
+      background: fundo, border: "1px solid var(--hairline-soft)", borderRadius: 14,
+      boxShadow: "var(--shadow-card)",
       padding: 18, position: "relative", overflow: "hidden",
     }}>
       <div style={{

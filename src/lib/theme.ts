@@ -122,6 +122,22 @@ export const TEMAS: Tema[] = [
     },
   },
   {
+    id: "claro",
+    nome: "Claro",
+    descricao: "Off-white com texto grafite — claro neutro e sóbrio",
+    claro: true,
+    cores: {
+      // Modo claro neutro (DESIGN_STANDARDS.md §7): fundo off-white (nao branco
+      // puro), superficies brancas para os cards "saltarem", texto grafite
+      // (nao preto puro). Cores de status recalibradas para contraste AA sobre
+      // fundo claro.
+      bg: "#f5f6f8", surface: "#ffffff", card: "#ffffff",
+      border: "#e3e6ea", accent: "#2563eb", purple: "#7c3aed",
+      green: "#16a34a", red: "#dc2626", yellow: "#c2740a",
+      text: "#1f2937", muted: "#667085", white: "#0f1422",
+    },
+  },
+  {
     id: "pergaminho",
     nome: "Pergaminho",
     descricao: "Tema claro quente — para leitura prolongada",
@@ -136,11 +152,14 @@ export const TEMAS: Tema[] = [
   {
     id: "grafite",
     nome: "Grafite",
-    descricao: "Neutro absoluto — foco e neutralidade total",
+    descricao: "Cinza neutro profundo — foco total, sem preto absoluto",
     claro: false,
     cores: {
-      bg: "#0a0a0a", surface: "#171717", card: "#1f1f1f",
-      border: "#2a2a2a", accent: "#fafafa", purple: "#d4d4d4",
+      // Sem preto absoluto (DESIGN_STANDARDS.md §7): cinzas profundos em vez
+      // de #000/#0a0a0a, para reduzir o contraste agressivo e o "smearing"
+      // em telas OLED. Mantem a neutralidade total (sem matiz).
+      bg: "#161618", surface: "#1f1f22", card: "#27272b",
+      border: "#34343a", accent: "#fafafa", purple: "#d4d4d4",
       green: "#22c55e", red: "#ef4444", yellow: "#f59e0b",
       text: "#fafafa", muted: "#a3a3a3", white: "#ffffff",
     },

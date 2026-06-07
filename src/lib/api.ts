@@ -718,6 +718,8 @@ export const api = {
     request(`/relatorios/giro-estoque${qsFrom(filtros)}`),
   relatorioSazonalidade: (filtros: StringDict = {}) =>
     request(`/relatorios/sazonalidade${qsFrom(filtros)}`),
+  relatorioAgingReceber: (filtros: StringDict = {}) =>
+    request(`/relatorios/aging-receber${qsFrom(filtros)}`),
   relatorioFunilCrm: (filtros: StringDict = {}) =>
     request(`/relatorios/crm/funil${qsFrom(filtros)}`),
   relatorioPerformanceCrm: (filtros: StringDict = {}) =>

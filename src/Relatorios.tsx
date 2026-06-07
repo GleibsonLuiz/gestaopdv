@@ -63,6 +63,7 @@ const ABAS = [
   { id: "curva-abc", label: "🔤 Curva ABC", cor: C.accent },
   { id: "giro", label: "🔄 Giro & Capital", cor: C.purple },
   { id: "sazonalidade", label: "🗓️ Sazonalidade", cor: C.yellow },
+  { id: "aging", label: "⏳ Aging Receber", cor: C.red },
   { id: "comissoes", label: "🏆 Comissões", cor: C.purple },
   { id: "crm", label: "🎯 CRM", cor: "#7c3aed" },
 ];
@@ -123,6 +124,7 @@ export default function Relatorios() {
       {aba === "curva-abc" && <RelatorioCurvaAbc key="abc" />}
       {aba === "giro" && <RelatorioGiroEstoque key="giro" />}
       {aba === "sazonalidade" && <RelatorioSazonalidade key="sz" />}
+      {aba === "aging" && <RelatorioAgingReceber key="ag" />}
       {aba === "comissoes" && <RelatorioComissoesLista key="m" />}
       {aba === "crm" && <RelatoriosCrm key="r" />}
     </div>
@@ -1673,6 +1675,174 @@ function HeatmapSazonalidade({ matriz, maxCel, valorCel, fmtMetrica }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// ============ AGING DE RECEBÍVEIS (idade da dívida) ============
+const AGING_META = {
+  AVENCER:  { label: "A vencer",   cor: C.green },
+  D1_30:    { label: "1–30 dias",  cor: C.yellow },
+  D31_60:   { label: "31–60 dias", cor: "color-mix(in srgb, var(--yellow) 55%, var(--red))" },
+  D61_90:   { label: "61–90 dias", cor: C.red },
+  D90MAIS:  { label: "90+ dias",   cor: "color-mix(in srgb, var(--red) 70%, #000)" },
+};
+const AGING_ORDEM = ["AVENCER", "D1_30", "D31_60", "D61_90", "D90MAIS"];
+
+function RelatorioAgingReceber() {
+  const [clienteId, setClienteId] = useState("");
+  const [clientes, setClientes] = useState([]);
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    api.listarClientes({ ativo: "true" }).then(setClientes).catch(() => {});
+  }, []);
+
+  const gerar = useCallback(async () => {
+    setCarregando(true); setErro("");
+    try {
+      const r = await api.relatorioAgingReceber({ clienteId });
+      setDados(r);
+    } catch (err) { setErro(err.message); }
+    finally { setCarregando(false); }
+  }, [clienteId]);
+
+  async function exportar() {
+    if (!dados) return;
+    const doc = await criarPDF("Aging de Recebíveis");
+
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 4,
+      head: [["Faixa", "Contas", "Valor", "% do total"]],
+      body: dados.resumo.faixas.map(f => [
+        AGING_META[f.faixa]?.label || f.faixa,
+        fmtNum(f.qtd),
+        fmtBRL(f.total),
+        fmtPct(f.pct),
+      ]),
+      theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
+      styles: { fontSize: 10 },
+    });
+
+    if (dados.clientes.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 6,
+        head: [["Cliente", "Contas", "Total em aberto", "Vencido", "Maior atraso"]],
+        body: dados.clientes.map(c => [
+          c.cliente, fmtNum(c.qtd), fmtBRL(c.total), fmtBRL(c.vencido),
+          c.maiorAtraso > 0 ? `${c.maiorAtraso} d` : "—",
+        ]),
+        theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" },
+        styles: { fontSize: 9 },
+      });
+    }
+
+    doc.save(`aging-recebiveis-${hoje()}.pdf`);
+  }
+
+  return (
+    <BlocoRelatorio
+      titulo="Aging de Recebíveis" cor={C.red}
+      filtros={
+        <>
+          <CampoSelectBusca label="Cliente" opcoes={clientes} value={clienteId} onChange={setClienteId} placeholder="Todos" />
+        </>
+      }
+      onGerar={gerar} onExportar={exportar} carregando={carregando}
+      erro={erro} dados={dados}
+    >
+      {dados && (
+        <>
+          <Resumo cards={[
+            { rotulo: "Total em aberto", valor: fmtBRL(dados.resumo.totalAberto), cor: C.accent },
+            { rotulo: "Vencido (inadimplência)", valor: `${fmtBRL(dados.resumo.totalVencido)} (${fmtPct(dados.resumo.pctVencido)})`, cor: C.red },
+            { rotulo: "A vencer", valor: fmtBRL(dados.resumo.totalAVencer), cor: C.green },
+            { rotulo: "Clientes devedores", valor: fmtNum(dados.resumo.qtdClientes), cor: C.purple },
+          ]} />
+
+          <DistribuicaoAging faixas={dados.resumo.faixas} />
+
+          {dados.clientes.length > 0 && (
+            <Tabela
+              titulo={`Clientes devedores (${dados.clientes.length})`}
+              colunas={["Cliente", "Contas", "Total em aberto", "Vencido", "Maior atraso"]}
+              alinhamentos={["left", "right", "right", "right", "right"]}
+              linhas={dados.clientes.map(c => [
+                c.cliente,
+                fmtNum(c.qtd),
+                fmtBRL(c.total),
+                fmtBRL(c.vencido),
+                c.maiorAtraso > 0 ? `${fmtNum(c.maiorAtraso)} d` : "—",
+              ])}
+            />
+          )}
+
+          <Tabela
+            titulo={`Contas em aberto (${dados.contas.length})`}
+            colunas={["Vencimento", "Cliente", "Descrição", "Atraso", "Faixa", "Valor"]}
+            alinhamentos={["left", "left", "left", "right", "center", "right"]}
+            linhas={dados.contas.map(c => [
+              fmtData(c.vencimento),
+              c.cliente,
+              c.descricao || "—",
+              c.diasAtraso > 0 ? `${fmtNum(c.diasAtraso)} d` : "—",
+              <BadgeAging key="f" faixa={c.faixa} />,
+              fmtBRL(c.valor),
+            ])}
+            vazioTexto="Nenhuma conta em aberto."
+          />
+        </>
+      )}
+    </BlocoRelatorio>
+  );
+}
+
+function DistribuicaoAging({ faixas }) {
+  const ordenadas = AGING_ORDEM.map(f => faixas.find(x => x.faixa === f)).filter(Boolean);
+  return (
+    <div style={{
+      background: "var(--surface)", border: "1px solid var(--hairline-soft)",
+      boxShadow: "var(--shadow-card)", borderRadius: 14, padding: 16, marginBottom: 16,
+    }}>
+      <div style={{ color: "var(--fg-muted)", fontSize: 10.5, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 12 }}>
+        Distribuição por idade
+      </div>
+      <div style={{ display: "flex", height: 12, borderRadius: 6, overflow: "hidden", marginBottom: 14 }}>
+        {ordenadas.map(f => (
+          f.pct > 0 ? (
+            <div key={f.faixa} style={{ width: `${f.pct}%`, background: AGING_META[f.faixa].cor }} title={`${AGING_META[f.faixa].label}: ${fmtPct(f.pct)}`} />
+          ) : null
+        ))}
+      </div>
+      <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
+        {ordenadas.map(f => (
+          <div key={f.faixa} style={{
+            padding: "10px 12px", borderRadius: 10, border: "1px solid var(--hairline-soft)",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4 }}>
+              <span style={{ width: 10, height: 10, borderRadius: 3, background: AGING_META[f.faixa].cor, flexShrink: 0 }} />
+              <span style={{ color: "var(--fg-soft)", fontSize: 11.5, fontWeight: 500 }}>{AGING_META[f.faixa].label}</span>
+            </div>
+            <div className="font-mono tabular-nums" style={{ color: "var(--fg)", fontSize: 15, fontWeight: 500 }}>{fmtBRL(f.total)}</div>
+            <div style={{ color: "var(--fg-muted)", fontSize: 11 }}>{fmtNum(f.qtd)} conta(s) · {fmtPct(f.pct)}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BadgeAging({ faixa }) {
+  const meta = AGING_META[faixa] || { label: faixa, cor: C.muted };
+  return (
+    <span className="font-mono" style={{
+      display: "inline-block", padding: "2px 8px", borderRadius: 999,
+      fontSize: 10.5, fontWeight: 600, whiteSpace: "nowrap",
+      color: meta.cor,
+      background: `color-mix(in srgb, ${meta.cor} 16%, transparent)`,
+      border: `1px solid color-mix(in srgb, ${meta.cor} 30%, transparent)`,
+    }}>{meta.label}</span>
   );
 }
 

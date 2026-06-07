@@ -791,7 +791,23 @@ Cada grupo tem header colapsável com contagem + subtotal.
 
 #### 📚 Contabilidade
 
-**O que faz:** consolida, num período, tudo que interessa à contabilidade (fechamento) e gera os arquivos para o contador.
+**O que faz:** tem **duas abas** — um **Painel** financeiro gerencial (para você decidir) e o **Fechamento** do período (para o contador). Um **filtro de período** no topo (Este mês · Últimos 3 meses · Este ano · Personalizado) atualiza as duas abas.
+
+##### 📊 Aba Painel (visão gerencial)
+
+Transforma vendas, despesas e contas a pagar/receber em gráficos de decisão rápida:
+
+- **Faturamento líquido real** — (vendas do PDV + recebimentos avulsos) − (despesas + contas pagas) no período. As receitas de **crediário não são contadas em dobro**: recebimentos vinculados a uma venda já entraram pelo total da venda, então só os recebimentos **avulsos** somam aqui.
+- **Distribuição de despesas (donut)** — para onde o dinheiro foi, por categoria do Plano de Contas. Mostra as **5 maiores categorias + "Outros"** (regra de Pareto) para o gráfico não virar um arco-íris ilegível.
+- **Ponto de equilíbrio (breakeven)** — quanto você precisa faturar para cobrir os custos fixos do período. Calculado como *custos fixos ÷ margem de contribuição* (a margem vem do preço de venda menos o custo dos produtos vendidos). A barra mostra o quanto você já atingiu. Exige o **custo cadastrado nos produtos**; sem isso, aparece "sem dados de margem".
+- **Entradas × saídas** — linha do período comparando o que entrou (vendas) com o que saiu (despesas + contas pagas).
+- **Projeção de fluxo de caixa (30 dias)** — cruza **contas a receber** e **contas a pagar** pelos vencimentos dos próximos 30 dias, partindo do saldo dos caixas abertos. Se o saldo projetado **ficar negativo** em algum dia, aquele trecho é pintado de **vermelho** com um aviso — antecipe cobranças ou segure pagamentos. Contas **já vencidas** em aberto entram no 1º dia.
+
+> O painel é só leitura e carrega rápido mesmo com muito histórico: tudo é somado direto no banco (índices por data/vencimento), sem baixar os lançamentos um a um.
+
+##### 📚 Aba Fechamento (para o contador)
+
+Consolida, num período, tudo que interessa à contabilidade e gera os arquivos para o contador.
 
 **O que entra na consolidação:**
 - **Despesas** do período (saídas);

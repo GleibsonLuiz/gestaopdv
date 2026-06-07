@@ -920,7 +920,7 @@ export default function App() {
           )}
           {tela === "contabilidade" && (
             <>
-              <PageHeader titulo="Contabilidade" subtitulo="Fechamento do período e exportação para o contador (CSV / layout Domínio·Alterdata)" />
+              <PageHeader titulo="Contabilidade" subtitulo="Painel financeiro gerencial + fechamento do período e exportação para o contador (CSV / layout Domínio·Alterdata)" />
               <Contabilidade user={user} />
             </>
           )}

@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { C } from "./lib/theme";
 import { api, type SessionUser } from "./lib/api";
+import PainelFinanceiro from "./PainelFinanceiro";
 
 const fmtBRL = (v: unknown) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const fmtData = (iso: string | null | undefined) => iso ? new Date(iso).toLocaleDateString("pt-BR") : "—";
@@ -50,6 +51,7 @@ interface Payload { inicio: string; fim: string; resumo: Resumo; linhas: Linha[]
 export default function Contabilidade({ user }: { user: SessionUser }) {
   void user;
   const inicioMes = useMemo(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10); }, []);
+  const [aba, setAba] = useState<"painel" | "fechamento">("painel");
   const [inicio, setInicio] = useState(inicioMes);
   const [fim, setFim] = useState(hojeISO());
   const [dados, setDados] = useState<Payload | null>(null);
@@ -65,7 +67,33 @@ export default function Contabilidade({ user }: { user: SessionUser }) {
     finally { setCarregando(false); }
   }, [inicio, fim]);
 
-  useEffect(() => { carregar(); }, [carregar]);
+  // O fechamento (lista detalhada) so e buscado quando a aba esta ativa — o
+  // painel busca os proprios agregados. Evita uma chamada pesada no load.
+  useEffect(() => { if (aba === "fechamento") carregar(); }, [aba, carregar]);
+
+  // Presets do filtro global de datas (atualizam ambas as abas via estado).
+  const aplicarPreset = useCallback((preset: "mes" | "3meses" | "ano") => {
+    const hoje = new Date();
+    let de: Date;
+    if (preset === "mes") de = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    else if (preset === "3meses") de = new Date(hoje.getFullYear(), hoje.getMonth() - 2, 1);
+    else de = new Date(hoje.getFullYear(), 0, 1);
+    setInicio(de.toISOString().slice(0, 10));
+    setFim(hojeISO());
+  }, []);
+
+  // Qual preset esta ativo (para destacar o botao). "Personalizado" quando
+  // o intervalo nao bate com nenhum preset.
+  const presetAtivo = useMemo(() => {
+    const hoje = new Date();
+    const ini = (m: number) => new Date(hoje.getFullYear(), hoje.getMonth() - m, 1).toISOString().slice(0, 10);
+    const ano = new Date(hoje.getFullYear(), 0, 1).toISOString().slice(0, 10);
+    if (fim !== hojeISO()) return "custom";
+    if (inicio === ini(0)) return "mes";
+    if (inicio === ini(2)) return "3meses";
+    if (inicio === ano) return "ano";
+    return "custom";
+  }, [inicio, fim]);
 
   const periodoLabel = `${fmtData(inicio)}_a_${fmtData(fim)}`.replace(/\//g, "-");
 
@@ -102,17 +130,36 @@ export default function Contabilidade({ user }: { user: SessionUser }) {
         <div style={{ background: C.red + "22", border: `1px solid ${C.red}`, color: C.text, padding: "10px 14px", borderRadius: 10 }}>{erro}</div>
       )}
 
-      {/* Filtro de periodo + exportacao */}
+      {/* Abas: Painel (gerencial) x Fechamento (contador) */}
+      <div style={{ display: "inline-flex", border: `1px solid ${C.border}`, borderRadius: 10, background: C.card, padding: 3, gap: 2, alignSelf: "flex-start" }}>
+        <button type="button" onClick={() => setAba("painel")} style={tab(aba === "painel")}>📊 Painel</button>
+        <button type="button" onClick={() => setAba("fechamento")} style={tab(aba === "fechamento")}>📚 Fechamento</button>
+      </div>
+
+      {/* Filtro global de periodo (presets + datas) — atualiza ambas as abas */}
       <div style={{ ...card(), display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <div style={{ display: "inline-flex", border: `1px solid ${C.border}`, borderRadius: 10, background: C.surface, padding: 3, gap: 2 }}>
+          <button type="button" onClick={() => aplicarPreset("mes")} style={seg(presetAtivo === "mes")}>Este mês</button>
+          <button type="button" onClick={() => aplicarPreset("3meses")} style={seg(presetAtivo === "3meses")}>Últimos 3 meses</button>
+          <button type="button" onClick={() => aplicarPreset("ano")} style={seg(presetAtivo === "ano")}>Este ano</button>
+          {presetAtivo === "custom" && <span style={{ ...seg(true), cursor: "default" }}>Personalizado</span>}
+        </div>
+        <div style={{ flex: 1 }} />
         <label style={campo()}><span style={lbl()}>De</span>
           <input type="date" value={inicio} onChange={e => setInicio(e.target.value)} style={input()} /></label>
         <label style={campo()}><span style={lbl()}>Até</span>
           <input type="date" value={fim} onChange={e => setFim(e.target.value)} style={input()} /></label>
-        <div style={{ flex: 1 }} />
-        <button onClick={exportarPlanilha} disabled={!dados || dados.linhas.length === 0} style={btnSec()}>⬇ Planilha (CSV)</button>
-        <button onClick={exportarDominio} disabled={!dados || dados.linhas.length === 0} style={btnPri()}>⬇ CSV Contábil (Domínio/Alterdata)</button>
+        {aba === "fechamento" && <>
+          <button type="button" onClick={exportarPlanilha} disabled={!dados || dados.linhas.length === 0} style={btnSec()}>⬇ Planilha (CSV)</button>
+          <button type="button" onClick={exportarDominio} disabled={!dados || dados.linhas.length === 0} style={btnPri()}>⬇ CSV Contábil (Domínio/Alterdata)</button>
+        </>}
       </div>
 
+      {/* ===== ABA PAINEL ===== */}
+      {aba === "painel" && <PainelFinanceiro inicio={inicio} fim={fim} />}
+
+      {/* ===== ABA FECHAMENTO ===== */}
+      {aba === "fechamento" && <>
       {/* KPIs */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
         <Kpi titulo="Entradas (receitas)" valor={fmtBRL(r?.totalEntradas)} cor={C.green} />
@@ -182,6 +229,7 @@ export default function Contabilidade({ user }: { user: SessionUser }) {
           </div>
         )}
       </div>
+      </>}
     </div>
   );
 }
@@ -231,3 +279,5 @@ const td = (): CSSProperties => ({ padding: "9px 10px", color: C.text, verticalA
 const badge = (cor: string): CSSProperties => ({ background: cor + "22", color: cor, border: `1px solid ${cor}`, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap" });
 const btnPri = (): CSSProperties => ({ background: C.accent, color: "var(--accent-ink, #fff)", border: "none", borderRadius: 8, padding: "9px 16px", fontWeight: 700, fontSize: 13, cursor: "pointer" });
 const btnSec = (): CSSProperties => ({ background: C.surface, color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, padding: "9px 14px", fontSize: 13, cursor: "pointer" });
+const tab = (ativo: boolean): CSSProperties => ({ border: 0, background: ativo ? "rgba(255,255,255,0.08)" : "transparent", color: ativo ? C.white : C.muted, height: 32, padding: "0 16px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer" });
+const seg = (ativo: boolean): CSSProperties => ({ border: 0, background: ativo ? "rgba(255,255,255,0.10)" : "transparent", color: ativo ? C.white : C.muted, height: 28, padding: "0 12px", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer" });

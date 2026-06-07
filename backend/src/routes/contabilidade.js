@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authRequired, requirePermissao } from "../middlewares/auth.js";
-import { lancamentos } from "../controllers/contabilidadeController.js";
+import { lancamentos, dashboard } from "../controllers/contabilidadeController.js";
 
 const router = Router();
 
@@ -10,5 +10,6 @@ router.use(authRequired);
 router.use(requirePermissao("CONTABILIDADE"));
 
 router.get("/lancamentos", lancamentos);
+router.get("/dashboard", dashboard);
 
 export default router;

@@ -62,7 +62,9 @@ const VAZIO: FormState = {
 
 export function urlLogotipo(logotipo: string | null | undefined): string | null {
   if (!logotipo) return null;
-  if (/^https?:\/\//i.test(logotipo)) return logotipo;
+  // Data URI (logo embutido no banco) ou URL absoluta (Vercel Blob): usa direto.
+  if (/^(data:|https?:\/\/)/i.test(logotipo)) return logotipo;
+  // Caminho relativo (/uploads em dev): prefixa o host da API.
   return `${BASE_URL}${logotipo}`;
 }
 
@@ -79,6 +81,7 @@ export default function Configuracoes({ user }: ConfiguracoesProps) {
   const [logotipoAtual, setLogotipoAtual] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [enviandoLogo, setEnviandoLogo] = useState(false);
   const inputLogoRef = useRef<HTMLInputElement | null>(null);
 
   const podeEditar = user.role === "ADMIN" || user.role === "GERENTE";
@@ -121,12 +124,15 @@ export default function Configuracoes({ user }: ConfiguracoesProps) {
 
   function escolherLogo(file: File | undefined) {
     if (!file) return;
-    if (!/^image\/(jpe?g|png|webp|svg\+xml)$/i.test(file.type)) {
-      setErro("Apenas JPG, PNG, WEBP ou SVG.");
+    // Formatos rasterizados apenas — alinhado ao backend (SVG e' rejeitado por
+    // poder carregar script/XSS). PNG preserva transparencia, ideal p/ logo.
+    if (!/^image\/(jpe?g|png|webp)$/i.test(file.type)) {
+      setErro("Formato não suportado. Envie um arquivo PNG, JPG ou WEBP.");
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
-      setErro("Logotipo maior que 2MB.");
+      const mb = (file.size / (1024 * 1024)).toFixed(1);
+      setErro(`Logotipo muito grande (${mb}MB). O limite é 2MB — use uma imagem menor.`);
       return;
     }
     setErro("");
@@ -169,16 +175,27 @@ export default function Configuracoes({ user }: ConfiguracoesProps) {
       await api.salvarConfiguracao(form);
       // Logo: upload separado se houver arquivo selecionado.
       if (logoFile) {
+        setEnviandoLogo(true);
         try {
           const cfg = await api.enviarLogotipo(logoFile) as ConfiguracaoEmpresa;
           setLogotipoAtual(cfg.logotipo || null);
           setLogoFile(null);
           if (inputLogoRef.current) inputLogoRef.current.value = "";
+          // Troca o preview local (blob:) pela URL canonica devolvida pelo
+          // servidor — assim o que aparece na tela e' exatamente o que foi
+          // persistido (e o que os relatorios vao renderizar).
+          setLogoPreview((prev) => {
+            if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+            return urlLogotipo(cfg.logotipo);
+          });
         } catch (errLogo) {
           invalidarCacheConfiguracao();
-          flash(`Dados salvos, mas o logotipo falhou: ${(errLogo as Error).message}`);
+          setErro(`Dados salvos, mas o logotipo falhou: ${(errLogo as Error).message}`);
+          setEnviandoLogo(false);
           setSalvando(false);
           return;
+        } finally {
+          setEnviandoLogo(false);
         }
       }
       // Header/cupom/PDFs leem config via cache de 30s — invalida para refletir
@@ -215,11 +232,11 @@ export default function Configuracoes({ user }: ConfiguracoesProps) {
               LOGOTIPO
             </div>
             <div
-              onClick={() => podeEditar && inputLogoRef.current?.click()}
-              className="w-[148px] h-[148px] rounded-xl bg-gp-surface flex items-center justify-center overflow-hidden"
+              onClick={() => podeEditar && !enviandoLogo && inputLogoRef.current?.click()}
+              className="w-[148px] h-[148px] rounded-xl bg-gp-surface flex items-center justify-center overflow-hidden relative"
               style={{
                 border: `2px dashed ${C.border}`,
-                cursor: podeEditar ? "pointer" : "default",
+                cursor: podeEditar && !enviandoLogo ? "pointer" : "default",
               }}
             >
               {logoPreview ? (
@@ -230,26 +247,47 @@ export default function Configuracoes({ user }: ConfiguracoesProps) {
                   {podeEditar ? "Clique para enviar" : "Sem logotipo"}
                 </div>
               )}
+              {/* Overlay de envio — feedback visual claro durante o upload. */}
+              {enviandoLogo && (
+                <div
+                  className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-gp-white text-[11px] font-bold"
+                  style={{ background: "rgba(0,0,0,0.6)" }}
+                >
+                  <div className="text-[22px] animate-pulse">⏳</div>
+                  Enviando…
+                </div>
+              )}
             </div>
             {podeEditar && (
               <>
                 <input
                   ref={inputLogoRef}
                   type="file"
-                  accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                  accept="image/jpeg,image/png,image/webp"
                   onChange={(e) => escolherLogo(e.target.files?.[0])}
                   className="hidden"
                 />
-                <button type="button" onClick={() => inputLogoRef.current?.click()} style={btnSecundario}>
+                <button
+                  type="button"
+                  onClick={() => inputLogoRef.current?.click()}
+                  disabled={enviandoLogo}
+                  style={{ ...btnSecundario, opacity: enviandoLogo ? 0.6 : 1 }}
+                >
                   {logoPreview ? "Trocar" : "Escolher arquivo"}
                 </button>
-                {logoPreview && (
+                {logoPreview && !enviandoLogo && (
                   <button type="button" onClick={removerLogoAtual} style={btnPerigo}>
                     Remover
                   </button>
                 )}
+                {logoFile && !enviandoLogo && (
+                  <div className="text-center text-[10px] font-semibold" style={{ color: C.yellow }}>
+                    Selecionado — clique em “Salvar” para aplicar
+                  </div>
+                )}
                 <div className="text-gp-muted text-[10px] text-center leading-[1.4]">
-                  PNG / JPG / WEBP / SVG<br />max 2 MB
+                  PNG / JPG / WEBP · máx 2 MB<br />
+                  <span style={{ opacity: 0.7 }}>ideal: fundo transparente (PNG)</span>
                 </div>
               </>
             )}

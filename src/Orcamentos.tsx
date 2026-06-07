@@ -187,7 +187,8 @@ interface VendaConvertida {
 
 function urlLogotipo(logotipo: string | null | undefined): string | null {
   if (!logotipo) return null;
-  if (/^https?:\/\//i.test(logotipo)) return logotipo;
+  // Data URI (logo no banco) ou URL absoluta (Vercel Blob): usa direto.
+  if (/^(data:|https?:\/\/)/i.test(logotipo)) return logotipo;
   return `${BASE_URL}${logotipo}`;
 }
 

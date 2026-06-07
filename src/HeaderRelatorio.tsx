@@ -111,18 +111,18 @@ export default function HeaderRelatorio({
 
   return (
     <div
-      className="flex items-center gap-[14px] px-4 py-3 rounded-[10px]"
+      className="flex items-center justify-between gap-4 px-4 py-3 rounded-[10px]"
       style={{ background: corFundo, border: `1px solid ${corBorda}` }}
     >
       {logoUrl ? (
         <img
           src={logoUrl}
           alt="logotipo"
-          className="h-[60px] max-w-[140px] object-contain shrink-0"
+          className="h-[64px] max-w-[200px] object-contain object-left shrink-0"
         />
       ) : (
         <div
-          className="w-[60px] h-[60px] rounded-lg shrink-0 flex items-center justify-center text-2xl"
+          className="w-[64px] h-[64px] rounded-lg shrink-0 flex items-center justify-center text-2xl"
           style={{
             background: modoCupom ? "#f0f0f0" : C.bg,
             border: `1px dashed ${corBorda}`,
@@ -133,7 +133,9 @@ export default function HeaderRelatorio({
         </div>
       )}
 
-      <div className="flex-1 min-w-0 leading-[1.4]">
+      {/* Dados da empresa alinhados a DIREITA — logo de um lado, dados do
+          outro (mesmo layout dos PDFs de relatorio). */}
+      <div className="min-w-0 leading-[1.4] text-right">
         <div className="font-extrabold text-[16px]" style={{ color: corTitulo }}>
           {cfg.nomeFantasia || cfg.razaoSocial}
         </div>

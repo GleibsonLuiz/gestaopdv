@@ -1778,11 +1778,12 @@ function gerarHTMLImpressao(orc: Orcamento, empresa: ConfiguracaoEmpresa | null)
   body { font-family: Arial, sans-serif; max-width: 760px; margin: 20px auto; color: #222; padding: 0 16px; }
   h1 { font-size: 20px; border-bottom: 2px solid #333; padding-bottom: 6px; margin: 0 0 4px; }
   .meta { font-size: 12px; color: #666; margin-bottom: 16px; }
-  .empresa { display: flex; gap: 14px; align-items: center; padding: 12px 14px;
-             border: 1px solid #333; border-radius: 6px; margin-bottom: 14px; background: #fafafa; }
-  .empresa-logo { flex-shrink: 0; max-width: 110px; }
-  .empresa-logo img { max-width: 110px; max-height: 90px; object-fit: contain; display: block; }
-  .empresa-dados { flex: 1; font-size: 12px; line-height: 1.4; }
+  /* Logo de um lado, dados da empresa do outro (alinhados a direita). */
+  .empresa { display: flex; gap: 16px; align-items: center; justify-content: space-between;
+             padding: 12px 14px; border: 1px solid #333; border-radius: 6px; margin-bottom: 14px; background: #fafafa; }
+  .empresa-logo { flex-shrink: 0; max-width: 160px; }
+  .empresa-logo img { max-width: 160px; max-height: 84px; object-fit: contain; object-position: left center; display: block; }
+  .empresa-dados { font-size: 12px; line-height: 1.4; text-align: right; min-width: 0; }
   .empresa-nome { font-size: 16px; font-weight: 700; color: #111; margin-bottom: 2px; }
   .empresa-razao { font-size: 11px; color: #555; margin-bottom: 4px; }
   .empresa-linha { color: #444; font-size: 11px; }

@@ -922,6 +922,13 @@ model Venda {
   formaPagamento FormaPagamento
   status         StatusVenda    @default(CONCLUIDA)
   observacoes    String?
+  // Chave de idempotencia gerada pelo cliente (PDV) por checkout. Duas
+  // requisicoes identicas (double-click, F10 repetido, retry de rede)
+  // carregam a MESMA chave — o @@unique([tenantId, idempotencyKey]) garante
+  // que a 2a falhe com P2002 e o controller devolva a venda ja criada em vez
+  // de duplicar. NULL para clientes legados/API publica que nao enviam chave
+  // (Postgres trata NULLs como distintos, entao varios NULLs sao permitidos).
+  idempotencyKey String?
   createdAt      DateTime       @default(now())
 
   clienteId String?
@@ -948,6 +955,8 @@ model Venda {
   notasFiscais        NotaFiscal[]
 
   @@unique([tenantId, numero])
+  // Idempotencia do checkout: bloqueia 2a venda com a mesma chave no tenant.
+  @@unique([tenantId, idempotencyKey])
   @@index([caixaId])
   @@index([tenantId])
   @@map("vendas")

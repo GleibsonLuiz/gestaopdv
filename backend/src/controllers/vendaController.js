@@ -297,6 +297,26 @@ export async function criar(req, res, next) {
 export async function criarVenda({ body, userId, tenantId }) {
   const { clienteId, observacoes, itens, gerarContaReceber, oportunidadeId } = body;
 
+  // Idempotencia: o PDV gera uma chave unica por checkout e a reenvia em
+  // qualquer retry (double-click, F10 repetido, retry de rede). Duas
+  // requisicoes com a mesma chave NAO podem virar duas vendas. Normaliza
+  // (string curta) — chave ausente/invalida = sem protecao (legado/API).
+  const idempotencyKey = typeof body?.idempotencyKey === "string" && body.idempotencyKey.trim()
+    ? body.idempotencyKey.trim().slice(0, 100)
+    : null;
+
+  // Fast path: se ja existe uma venda com esta chave no tenant, e um replay
+  // (a 1a requisicao ja gravou). Devolve a venda existente — o cliente mostra
+  // o recibo normalmente, sem duplicar nem dar erro. O prisma estendido ja
+  // filtra por tenant via AsyncLocalStorage.
+  if (idempotencyKey) {
+    const existente = await prisma.venda.findFirst({
+      where: { idempotencyKey },
+      include: INCLUDE_DETALHE,
+    });
+    if (existente) return existente;
+  }
+
   // Conversao Oportunidade GANHO -> Venda: valida fora da transacao para
   // falhar rapido antes de qualquer write. Re-checado dentro da transacao
   // (linha de update) contra race conditions de outro usuario tocando a
@@ -426,7 +446,9 @@ export async function criarVenda({ body, userId, tenantId }) {
     // Defesa explicita: nao deixa registrar venda sem caixa aberto.
     const caixaAtivo = await exigirCaixaAberto(userId);
 
-    const venda = await prisma.$transaction(async (tx) => {
+    let venda;
+    try {
+      venda = await prisma.$transaction(async (tx) => {
         if (clienteId) {
           const c = await tx.cliente.findUnique({ where: { id: clienteId } });
           if (!c) {
@@ -468,6 +490,7 @@ export async function criarVenda({ body, userId, tenantId }) {
               caixaId: caixaAtivo.id,
               formaPagamento: formaPrincipal,
               status: "CONCLUIDA",
+              idempotencyKey,
               desconto,
               total,
               observacoes: observacoes ? String(observacoes).trim() : null,
@@ -664,7 +687,28 @@ export async function criarVenda({ body, userId, tenantId }) {
           where: { id: vendaCriada.id },
           include: INCLUDE_DETALHE,
         });
-    }, TX_OPTS);
+      }, TX_OPTS);
+    } catch (err) {
+      // Race de idempotencia: duas requisicoes identicas chegaram quase
+      // juntas; ambas passaram o fast-path (nenhuma viu a outra ainda) e a 2a
+      // perdeu a corrida do unique (tenantId, idempotencyKey) -> P2002. Em vez
+      // de propagar erro, devolve a venda que a 1a gravou. (P2002 de `numero`
+      // ja foi tratado/re-tentado dentro de criarComNumeroRetry e nao chega
+      // aqui.)
+      const alvo = err?.meta?.target;
+      const ehIdemKey = err?.code === "P2002" && (
+        (Array.isArray(alvo) && alvo.some(t => String(t).includes("idempotencyKey")))
+        || (typeof alvo === "string" && alvo.includes("idempotencyKey"))
+      );
+      if (ehIdemKey && idempotencyKey) {
+        const existente = await prisma.venda.findFirst({
+          where: { idempotencyKey },
+          include: INCLUDE_DETALHE,
+        });
+        if (existente) return existente;
+      }
+      throw err;
+    }
 
     return venda;
 }

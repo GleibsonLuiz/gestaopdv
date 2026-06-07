@@ -384,6 +384,19 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
   const qtdInputRef = useRef(null);
   const qtdConfirmarRef = useRef(null);
 
+  // Trava SINCRONA contra duplo envio da venda. O estado `salvando` (React)
+  // so vira true no proximo render — entre dois disparos no MESMO tick (F10
+  // repetido, F10 + clique, double-click) o closure ainda le salvando=false e
+  // ambos passariam. Esta ref muda na hora e fecha essa janela.
+  const enviandoVendaRef = useRef(false);
+  // Chave de idempotencia do checkout atual. Gerada sob demanda e reenviada
+  // identica em qualquer retry da MESMA venda — o backend usa-a para nunca
+  // duplicar. Rotaciona (volta a null) ao concluir a venda ou limpar o
+  // carrinho, para a PROXIMA venda nascer com chave nova. NAO rotaciona em
+  // erro/validacao: se a 1a requisicao chegou a gravar mas a resposta se
+  // perdeu, o retry com a mesma chave devolve a venda existente (sem dup).
+  const idempotencyKeyRef = useRef(null);
+
   const [abrirCaixaAberto, setAbrirCaixaAberto] = useState(false);
 
   // Vendas em espera (park/hold): atendimentos congelados no servidor para
@@ -816,6 +829,10 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
     // Limpa rascunho — venda finalizou ou foi explicitamente descartada.
     rascunhoCarrinho.descartar();
     setRascunhoOferta(null);
+    // Carrinho zerado = novo atendimento: descarta a chave de idempotencia
+    // para a proxima venda nascer com chave nova (em sucesso ja foi rotacionada
+    // antes; aqui cobre cancelamento/limpeza manual do carrinho).
+    idempotencyKeyRef.current = null;
     if (refocar) focarBusca();
   }
 
@@ -1131,6 +1148,10 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
   useEffect(() => { abrirPagamentoRef.current = abrirPagamento; });
 
   async function confirmarPagamento() {
+    // Trava sincrona: barra o 2o disparo no mesmo tick (F10 repetido, F10 +
+    // clique, double-click) antes que `salvando` reflita no estado. Sem este
+    // return imediato, dois disparos viravam duas vendas (#1046/#1047).
+    if (enviandoVendaRef.current) return;
     setErro("");
     if (!podeFinalizarRede) {
       setErro("Sem conexao com o servidor. Aguarde a conexao voltar para finalizar.");
@@ -1155,10 +1176,17 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
       }
     }
 
+    // Fecha a trava sincrona ANTES de qualquer await. Liberada no finally.
+    enviandoVendaRef.current = true;
+    // Gera a chave de idempotencia uma vez por checkout e reusa em retries.
+    if (!idempotencyKeyRef.current) idempotencyKeyRef.current = novoId();
     setSalvando(true);
     try {
       const payload = {
         clienteId: clienteId || null,
+        // Idempotencia: backend rejeita (devolve a venda ja criada) se receber
+        // 2 requisicoes com esta mesma chave. Blindagem definitiva contra dup.
+        idempotencyKey: idempotencyKeyRef.current,
         // Backend deriva Venda.formaPagamento como a forma do pagamento de
         // MAIOR valor — nao precisamos enviar formaPagamento singular.
         pagamentos: pagamentos.map(p => ({
@@ -1191,6 +1219,10 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
         payload.oportunidadeId = oportunidadeConvertendo.id;
       }
       const venda = await api.criarVenda(payload);
+      // Venda gravada: rotaciona a chave para a PROXIMA venda nascer com chave
+      // nova. (Em erro nao rotaciona — o retry reaproveita a chave e o backend
+      // devolve a venda existente se a 1a tiver gravado apesar da falha de rede.)
+      idempotencyKeyRef.current = null;
       // Limpa estado de conversao apos sucesso para evitar reaplicar.
       if (oportunidadeConvertendo) setOportunidadeConvertendo(null);
       // Atualiza estoques locais (estoque do backend chega como Decimal
@@ -1221,6 +1253,9 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
       focarBusca();
     } finally {
       setSalvando(false);
+      // Libera a trava sincrona — permite novo envio (mesmo carrinho em caso
+      // de erro, ou a proxima venda apos sucesso).
+      enviandoVendaRef.current = false;
     }
   }
   useEffect(() => { confirmarPagamentoRef.current = confirmarPagamento; });

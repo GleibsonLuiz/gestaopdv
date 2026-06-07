@@ -28,6 +28,12 @@ dist-ssr
 atualizacao.md
 image.png
 
+# Scripts/prints temporarios de captura (regerar prints do manual).
+# Os scripts definitivos vivem em scripts/; estes "_"-prefixados sao descartaveis.
+_cap-*.mjs
+_*.png
+docs/img/_*.png
+
 # Arquivos com credenciais — NUNCA versionar
 senha.rtf
 *.rtf

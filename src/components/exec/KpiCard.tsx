@@ -51,8 +51,8 @@ export default function KpiCard({
   const interactive = !!onClick;
 
   const cardBg = active
-    ? `radial-gradient(120% 100% at 0% 0%, ${t.bg}, transparent 65%), linear-gradient(180deg, color-mix(in srgb, var(--white) 4%, transparent), transparent), var(--surface-2)`
-    : `linear-gradient(180deg, color-mix(in srgb, var(--white) 2.5%, transparent), transparent), var(--surface)`;
+    ? `radial-gradient(120% 100% at 0% 0%, ${t.bg}, transparent 65%), linear-gradient(180deg, var(--elev-sheen-strong), transparent), var(--surface-2)`
+    : `linear-gradient(180deg, var(--elev-sheen), transparent), var(--surface)`;
 
   const Tag = interactive ? "button" : "div";
 
@@ -140,7 +140,7 @@ function DeltaPill({ delta, dir }: { delta: string; dir?: DeltaDir }) {
       ? "color-mix(in srgb, var(--emerald) 14%, transparent)"
       : dir === "down"
         ? "color-mix(in srgb, var(--coral) 16%, transparent)"
-        : "color-mix(in srgb, var(--white) 3%, transparent)";
+        : "color-mix(in srgb, #fff 3%, transparent)";
   const border = dir === "flat" ? "1px solid var(--hairline-soft)" : "none";
   return (
     <span

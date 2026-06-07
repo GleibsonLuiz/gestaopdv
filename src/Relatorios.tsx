@@ -4157,7 +4157,7 @@ function Resumo({ cards }: any) {
     }}>
       {cards.map((c, i) => (
         <div key={i} style={{
-          background: "linear-gradient(180deg, color-mix(in srgb, var(--white) 2.5%, transparent), transparent), var(--surface)",
+          background: "linear-gradient(180deg, var(--elev-sheen), transparent), var(--surface)",
           border: "1px solid var(--hairline-soft)", boxShadow: "var(--shadow-card)",
           borderRadius: 14, padding: "12px 16px 11px", position: "relative", overflow: "hidden",
         }}>

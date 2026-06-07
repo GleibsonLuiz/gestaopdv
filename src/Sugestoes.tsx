@@ -4,6 +4,9 @@ import { api, type SessionUser } from "./lib/api";
 import SelectBusca from "./components/SelectBusca";
 import { NovaCompraModal, type CompraResultado } from "./Compras";
 import { novoRascunhoId, salvarRascunho, type CompraRascunho } from "./lib/comprasRascunho";
+import { gerarPedidoCompraPdf, type ItemPedidoPdf } from "./lib/pedidoCompraPdf";
+import { obterConfiguracaoCache } from "./HeaderRelatorio";
+import type { EmpresaParaCabecalho } from "./lib/folhaCegaPdf";
 
 // ============ TIPOS ============
 
@@ -89,6 +92,7 @@ export default function Sugestoes({ user }: SugestoesProps) {
   const [rascunhoPedido, setRascunhoPedido] = useState<CompraRascunho | null>(null);
   const [idsGerados, setIdsGerados] = useState<string[]>([]);
   const [dialogoLimpar, setDialogoLimpar] = useState<CompraResultado | null>(null);
+  const [gerandoPdf, setGerandoPdf] = useState(false);
 
   const podeEditar = user.role === "ADMIN" || user.role === "GERENTE";
 
@@ -241,6 +245,36 @@ export default function Sugestoes({ user }: SugestoesProps) {
     setIdsGerados(selItens.map((i) => i.produtoId));
     setRascunhoPedido(rascunho);
     setPedidoAberto(true);
+  }
+
+  // Gera o PDF do pedido (para imprimir e levar ao fornecedor). NÃO mexe em
+  // estoque/financeiro — é só o documento de compra, agrupado por fornecedor.
+  async function imprimirPdf() {
+    const selItens = itens.filter((i) => selecionados.has(i.produtoId));
+    if (selItens.length === 0) return;
+    setGerandoPdf(true);
+    try {
+      const cnpjPorFornecedor = new Map(fornecedores.map((f) => [f.id, f.cnpj ?? null]));
+      const linhas: ItemPedidoPdf[] = selItens.map((i) => ({
+        codigo: i.codigo,
+        nome: i.nome,
+        unidade: i.unidade,
+        estoque: i.estoque,
+        estoqueMinimo: i.estoqueMinimo,
+        quantidade: parseFloat(qtdDe(i).replace(",", ".")) || i.quantidadeSugerida,
+        precoCusto: i.precoCusto,
+        fornecedorId: i.fornecedorId,
+        fornecedorNome: i.fornecedorNome,
+        fornecedorCnpj: i.fornecedorId ? cnpjPorFornecedor.get(i.fornecedorId) ?? null : null,
+      }));
+      const empresa = await obterConfiguracaoCache() as EmpresaParaCabecalho | null;
+      await gerarPedidoCompraPdf(linhas, empresa);
+      flash("PDF do pedido gerado.");
+    } catch (err) {
+      flash(`Falha ao gerar PDF: ${(err as Error).message}`);
+    } finally {
+      setGerandoPdf(false);
+    }
   }
 
   async function aplicarLimpeza(limpar: boolean) {
@@ -486,14 +520,33 @@ export default function Sugestoes({ user }: SugestoesProps) {
               <span className="text-gp-muted"> · estimativa <b style={{ color: C.green }}>{fmtBRL(valorEstimado)}</b></span>
             )}
           </div>
-          <button
-            type="button"
-            onClick={gerarPedido}
-            className="text-gp-white border-none rounded-lg text-sm font-bold cursor-pointer"
-            style={{ background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`, padding: "10px 20px" }}
-          >
-            🛍️ Gerar Pedido de Compra
-          </button>
+          <div className="flex gap-2.5 flex-wrap">
+            <button
+              type="button"
+              onClick={imprimirPdf}
+              disabled={gerandoPdf}
+              title="Gera um PDF do pedido (por fornecedor) para imprimir e levar na compra. Não altera estoque."
+              className="rounded-lg text-sm font-bold cursor-pointer"
+              style={{
+                background: C.surface,
+                border: `1px solid ${C.accent}66`,
+                color: C.accent,
+                padding: "10px 18px",
+                opacity: gerandoPdf ? 0.6 : 1,
+              }}
+            >
+              {gerandoPdf ? "Gerando..." : "📄 Imprimir Pedido (PDF)"}
+            </button>
+            <button
+              type="button"
+              onClick={gerarPedido}
+              title="Registra a compra no sistema (atualiza estoque e conta a pagar)."
+              className="text-gp-white border-none rounded-lg text-sm font-bold cursor-pointer"
+              style={{ background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`, padding: "10px 20px" }}
+            >
+              🛍️ Gerar Pedido de Compra
+            </button>
+          </div>
         </div>
       )}
 

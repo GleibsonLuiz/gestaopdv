@@ -509,8 +509,10 @@ O status alterna entre **ATIVO** (verde) e **INATIVO** (cinza). Use o filtro **"
 
 1. A coluna **Qtd a comprar** já vem com uma sugestão (repor até ~2× o mínimo). Ajuste à vontade — o valor é salvo ao sair do campo.
 2. Marque os itens que vai comprar (caixa de seleção; o cabeçalho marca/desmarca todos). O rodapé mostra **quantos itens** e a **estimativa de custo** (pelo custo cadastrado).
-3. **🛍️ Gerar Pedido de Compra** → abre a tela de **Nova Compra** já preenchida com os itens (e o fornecedor, se todos compartilham o mesmo). A partir daí é o fluxo normal de compra: confirma fornecedor, custos e conta a pagar.
-4. Após registrar a compra, o sistema pergunta: **🧹 Limpar da lista** (remove os itens) ou **📌 Manter** (útil quando você vai comprar de mais de um fornecedor). As sugestões automáticas somem sozinhas quando o estoque é reposto pela compra.
+3. Com itens marcados, aparecem **dois botões** — escolha conforme a situação:
+   - **📄 Imprimir Pedido (PDF):** gera um PDF para **imprimir e levar ao fornecedor** (ex.: você se desloca até o atacadista). **Não altera estoque nem financeiro** — é só o documento de compra. Vem **agrupado por fornecedor (uma página por fornecedor)** com código, produto, estoque atual, quantidade e o último custo como referência; as colunas **Preço** e **Total ficam em branco** para preencher na hora da negociação, além de linhas de assinatura (Comprador / Fornecedor). Itens sem fornecedor definido saem numa folha "Fornecedor a definir".
+   - **🛍️ Gerar Pedido de Compra:** quando a mercadoria já chegou (ou você compra e recebe na hora) → abre a tela de **Nova Compra** já preenchida com os itens (e o fornecedor, se todos compartilham o mesmo). A partir daí é o fluxo normal: confirma fornecedor, custos e conta a pagar — e **aí sim** atualiza o estoque.
+4. Após registrar a compra (botão 🛍️), o sistema pergunta: **🧹 Limpar da lista** (remove os itens) ou **📌 Manter** (útil quando você vai comprar de mais de um fornecedor). As sugestões automáticas somem sozinhas quando o estoque é reposto pela compra.
 
 **Dispensar / remover:** o **×** na linha dispensa uma sugestão do sistema (ela volta se o estoque cair de novo) ou remove um item manual de vez. Filtro **"Só abaixo do mínimo"** esconde os itens manuais que estão com estoque ok.
 

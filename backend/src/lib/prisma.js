@@ -20,8 +20,13 @@ import { AsyncLocalStorage } from "node:async_hooks";
 //   - create
 //        injeta `data.tenantId = store.tenantId` se nao foi passado
 //
-//   - update / upsert / delete (por id)
-//        valida ownership chamando findFirst antes, throw P2025 se nao pertence
+//   - update / delete (por id)
+//        injeta where.tenantId como filtro adicional (extendedWhereUnique);
+//        Prisma lanca P2025 se o registro nao pertence ao tenant
+//
+//   - upsert
+//        injeta create.tenantId; ownership do update implicito fica a cargo
+//        do composto unique de cada tabela
 //
 //   - updateMany / deleteMany
 //        injeta where.tenantId no filtro
@@ -65,11 +70,9 @@ function precisaFiltrar(modelo) {
 
 const base = new PrismaClient();
 
-// Cliente raw (sem extension) usado para validacoes internas que nao
-// devem disparar o filtro de novo (evita recursao). TAMBEM exportado
-// para uso pelo adminMasterController, que precisa operar cross-tenant
-// (criar/atualizar/deletar em empresas que nao sao o tenant logado).
-const baseSemFiltro = base;
+// Cliente raw (sem extension) exportado para uso pelo adminMasterController,
+// que precisa operar cross-tenant (criar/atualizar/deletar em empresas que
+// nao sao o tenant logado) e por scripts/crons cross-tenant.
 export const prismaRaw = base;
 
 const prisma = base.$extends({
@@ -174,9 +177,15 @@ const prisma = base.$extends({
       },
 
       // ---------- UPDATES (por id) ----------
+      // Injeta tenantId como filtro ADICIONAL no where (extendedWhereUnique,
+      // GA no Prisma 5). Isso roda via query(args) — preservando o contexto de
+      // transacao — entao enxerga linhas recem-criadas na mesma tx (ao
+      // contrario de uma findFirst pelo cliente base) e ainda garante
+      // isolamento de tenant atomicamente. Se nada casa (registro de outro
+      // tenant ou inexistente), o proprio Prisma lanca P2025.
       async update({ model, args, query }) {
         if (precisaFiltrar(model)) {
-          await garantirOwnership(model, args.where);
+          args.where = { ...(args.where || {}), tenantId: tenantAtual() };
         }
         return query(args);
       },
@@ -200,9 +209,11 @@ const prisma = base.$extends({
       },
 
       // ---------- DELETES (por id) ----------
+      // Mesmo racional do update: tenantId como filtro adicional no where,
+      // atomico e visivel dentro da tx (ver comentario do update).
       async delete({ model, args, query }) {
         if (precisaFiltrar(model)) {
-          await garantirOwnership(model, args.where);
+          args.where = { ...(args.where || {}), tenantId: tenantAtual() };
         }
         return query(args);
       },
@@ -215,35 +226,6 @@ const prisma = base.$extends({
     },
   },
 });
-
-// Verifica que o registro existe e pertence ao tenant atual. Se nao,
-// dispara um erro P2025 (Prisma "Record not found"), igual ao que os
-// controllers ja tratam.
-async function garantirOwnership(model, where) {
-  if (!where) return;
-  const tenant = tenantAtual();
-  if (!tenant) return;
-  const delegate = baseSemFiltro[lower(model)];
-  // Tenta achar uma chave de identificacao no where. Caso comum: id.
-  // Para findFirst nao precisamos respeitar unique-key.
-  const found = await delegate.findFirst({
-    where: { ...where, tenantId: tenant },
-    select: { id: true },
-  });
-  if (!found) {
-    const e = new Error(
-      `No ${model} found with the provided where conditions or it does not belong to the current tenant`
-    );
-    e.code = "P2025";
-    e.meta = { cause: "Cross-tenant access prevented" };
-    throw e;
-  }
-}
-
-// Prisma Client expoe delegates em camelCase do nome do model. "User" -> "user".
-function lower(model) {
-  return model.charAt(0).toLowerCase() + model.slice(1);
-}
 
 // Propaga tenantId recursivamente em nested writes do `create`.
 //

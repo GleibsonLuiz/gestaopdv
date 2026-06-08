@@ -426,8 +426,11 @@ export async function calcularTotaisCaixa(caixaId, saldoInicial, tx = prisma) {
 
   // ESTORNO_PAGAR_CONTA reverte uma saida (PAGAR_CONTA), entao entra dinheiro de volta.
   // ESTORNO_RECEBER_CONTA reverte uma entrada (RECEBER_CONTA), entao sai dinheiro.
-  const ehEntrada = (t) => t === "VENDA" || t === "SUPRIMENTO" || t === "RECEBER_CONTA" || t === "ESTORNO_PAGAR_CONTA";
-  const ehSaida = (t) => t === "SANGRIA" || t === "PAGAR_CONTA" || t === "ESTORNO_VENDA" || t === "ESTORNO_RECEBER_CONTA";
+  // DESPESA e uma saida; ESTORNO_DESPESA devolve o dinheiro (entrada). Manter em
+  // sincronia com a classificacao de registrarEmCaixa, senao o saldo esperado
+  // recalculado diverge dos snapshots saldoDepois das movimentacoes.
+  const ehEntrada = (t) => t === "VENDA" || t === "SUPRIMENTO" || t === "RECEBER_CONTA" || t === "ESTORNO_PAGAR_CONTA" || t === "ESTORNO_DESPESA";
+  const ehSaida = (t) => t === "SANGRIA" || t === "PAGAR_CONTA" || t === "ESTORNO_VENDA" || t === "ESTORNO_RECEBER_CONTA" || t === "DESPESA";
 
   let entradasDinheiro = 0;
   let saidasDinheiro = 0;

@@ -1,52 +1,41 @@
 /* ============================================================
-   Tela Financeiro — design tokens (scoped em .financeiro-bg
-   para nao colidir com as variaveis globais do tema em :root)
+   Tela Financeiro — design tokens (scoped em .financeiro-bg)
+
+   ANTES: este escopo re-declarava --bg/--surface/--fg/--hairline...
+   com valores OKLCH FIXOS ESCUROS, sobrescrevendo os tokens globais
+   do tema. Resultado: a tela ficava "presa" no dark mesmo quando o
+   usuário escolhia o tema Claro (o resto do app clareava, o Financeiro
+   não). Era exatamente a "sobreposição local a reconciliar" prevista
+   no DESIGN_STANDARDS.md §1.
+
+   AGORA: o Financeiro NÃO sobrescreve mais as superfícies/texto. Ele
+   herda os tokens executivos globais do :root (index.css), que já são
+   DERIVADOS via color-mix das variáveis do tema — então a tela segue
+   os 6 temas (claro e escuro) automaticamente. Aqui ficam só:
+     - a decoração de fundo (nuvens radiais, apenas nos temas escuros);
+     - os tokens de MARCA (ouro do logo) para ações primárias;
+     - a utilitária .tnum.
    ============================================================ */
 
 .financeiro-bg {
-  /* surface */
-  --bg:           oklch(0.155 0.012 260);
-  --bg-grad-1:    oklch(0.18  0.020 270);
-  --bg-grad-2:    oklch(0.14  0.010 250);
-  --surface:      oklch(0.205 0.014 260);
-  --surface-2:    oklch(0.235 0.016 260);
-  --surface-3:    oklch(0.275 0.018 260);
-  --hairline:     oklch(0.32  0.014 260 / .55);
-  --hairline-soft:oklch(0.32  0.014 260 / .28);
-
-  /* text */
-  --fg:           oklch(0.975 0.004 260);
-  --fg-soft:      oklch(0.82  0.010 260);
-  --fg-muted:     oklch(0.66  0.014 260);
-  --fg-faint:     oklch(0.50  0.014 260);
-  --fg-dim:       oklch(0.40  0.012 260);
-
-  /* status — chroma constante */
-  --emerald:      oklch(0.80 0.13 158);
-  --emerald-bg:   oklch(0.42 0.11 158 / .14);
-  --amber:        oklch(0.82 0.13 78);
-  --amber-bg:     oklch(0.50 0.12 78  / .14);
-  --coral:        oklch(0.74 0.14 22);
-  --coral-bg:     oklch(0.46 0.13 22  / .16);
-  --iris:         oklch(0.74 0.13 286);
-  --iris-bg:      oklch(0.46 0.12 286 / .16);
-  --sky:          oklch(0.78 0.11 235);
-  --sky-bg:       oklch(0.55 0.11 235 / .14);
-
-  /* shadow */
-  --shadow-card:
-    0 1px 0 0 oklch(1 0 0 / .04) inset,
-    0 0 0 1px oklch(0.32 0.014 260 / .28),
-    0 30px 50px -30px oklch(0 0 0 / .55);
-
-  /* fundo da pagina com nuvens radiais sutis */
+  /* A identidade de marca (ouro no modo claro) vem do accent do tema
+     (var(--accent)/var(--purple)), definido em theme.ts. Aqui o escopo só
+     herda os tokens executivos globais e segue os 6 temas. */
   background-color: var(--bg);
-  background-image:
-    radial-gradient(ellipse 90% 60% at 12% -10%, oklch(0.32 0.08 280 / .35), transparent 60%),
-    radial-gradient(ellipse 70% 50% at 110% 0%, oklch(0.30 0.07 200 / .25), transparent 55%),
-    linear-gradient(180deg, var(--bg-grad-1), var(--bg-grad-2));
   color: var(--fg);
 }
 
-/* tabular numerals para qualquer text via classe utilitaria */
+/* Decoração de fundo (nuvens radiais sutis) só nos temas ESCUROS. Nos
+   temas claros o fundo fica liso (off-white do tema) para não "sujar" a
+   superfície clara com manchas coloridas. data-brilho é escrito por
+   aplicarTema() no <html>. */
+:root[data-brilho="escuro"] .financeiro-bg {
+  background-image:
+    radial-gradient(ellipse 90% 60% at 12% -10%,
+      color-mix(in srgb, var(--purple) 22%, transparent), transparent 60%),
+    radial-gradient(ellipse 70% 50% at 110% 0%,
+      color-mix(in srgb, var(--accent) 16%, transparent), transparent 55%);
+}
+
+/* tabular numerals para qualquer texto via classe utilitária */
 .financeiro-bg .tnum { font-feature-settings: "tnum","zero"; font-variant-numeric: tabular-nums; }

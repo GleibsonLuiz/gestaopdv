@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import ModalShell, {
-  Alerta, BtnPrimario, BtnSecundario, Campo, Input, Select, Textarea,
-} from "./ModalShell";
+import { FormularioLuxuoso, Secao, Linha, Campo } from "../../../components/FormularioLuxuoso";
+import { C } from "../../../lib/theme";
 import { api } from "../../../lib/api";
 
 interface Entidade { id: string; nome: string }
@@ -38,6 +37,10 @@ function fmtBRL(n: number): string {
 
 function parseNum(v: string): number {
   return parseFloat(v.replace(",", ".")) || 0;
+}
+
+function mix(cor: string, pct: number): string {
+  return `color-mix(in srgb, ${cor} ${pct}%, transparent)`;
 }
 
 export default function ContaModal({
@@ -101,6 +104,17 @@ export default function ContaModal({
     return vb;
   }, [tipoRecorrencia, parcelaTotal, valorBruto, restanteParcelar]);
 
+  // Progresso do preenchimento (campos essenciais), p/ a barra do FormularioLuxuoso.
+  const progresso = useMemo(() => {
+    const req = [
+      !!descricao.trim(),
+      parseNum(valorBruto) > 0,
+      !!vencimento,
+      ehPagar ? !!planoContaId : true,
+    ];
+    return (req.filter(Boolean).length / req.length) * 100;
+  }, [descricao, valorBruto, vencimento, planoContaId, ehPagar]);
+
   async function salvar(e: React.FormEvent) {
     e.preventDefault();
     setErro("");
@@ -161,179 +175,233 @@ export default function ContaModal({
     }
   }
 
+  const entidadeLabel = ehPagar ? "Fornecedor" : "Cliente";
+
   return (
-    <ModalShell
-      titulo={editar ? "Editar conta" : `Nova conta ${ehPagar ? "a pagar" : "a receber"}`}
-      subtitulo={ehPagar ? "Despesa · pagamento" : "Receita · recebimento"}
-      largura={600}
-      bloquearEsc={salvando}
-      onFechar={onCancelar}
+    <FormularioLuxuoso
+      aberto
+      onFechar={() => !salvando && onCancelar()}
+      onSubmit={salvar}
+      titulo={editar ? "Editar" : "Nova"}
+      tituloDestaque={ehPagar ? "conta a pagar" : "conta a receber"}
+      subtitulo={
+        ehPagar
+          ? "Despesa · pagamento. Campos marcados com • são obrigatórios."
+          : "Receita · recebimento. Campos marcados com • são obrigatórios."
+      }
+      eyebrow={ehPagar ? "Financeiro · A pagar" : "Financeiro · A receber"}
+      data={new Date().toLocaleDateString("pt-BR")}
+      progresso={progresso}
+      salvando={salvando}
+      textoSalvar={editar ? "Salvar alterações" : "Criar conta"}
+      editando={editar}
+      erro={erro}
+      larguraMax={680}
+      compacto
     >
-      <form onSubmit={salvar}>
-        <Campo label="Descrição *">
-          <Input
-            value={descricao}
-            onChange={e => setDescricao(e.target.value)}
-            required autoFocus
-            placeholder="Ex: Aluguel, Energia, NF #123…"
-          />
-        </Campo>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Campo label="Valor bruto *">
-            <Input type="number" step="0.01" min="0.01" value={valorBruto}
-              onChange={e => setValorBruto(e.target.value)} required placeholder="0,00" />
+      <Secao legenda="Lançamento">
+        <Linha cols={1}>
+          <Campo label="Descrição" obrigatorio>
+            <input
+              className="lux-input"
+              value={descricao}
+              onChange={e => setDescricao(e.target.value)}
+              placeholder="Ex.: Aluguel, Energia, NF #123…"
+              autoFocus
+            />
           </Campo>
-          <Campo label="Vencimento *">
-            <Input type="date" value={vencimento}
-              onChange={e => setVencimento(e.target.value)} required />
+        </Linha>
+        <Linha style={{ gridTemplateColumns: "1fr 200px" }}>
+          <Campo label="Valor bruto" obrigatorio>
+            <input
+              className="lux-input"
+              type="number" step="0.01" min="0.01" inputMode="decimal"
+              value={valorBruto}
+              onChange={e => setValorBruto(e.target.value)}
+              placeholder="0,00"
+            />
           </Campo>
-        </div>
+          <Campo label="Vencimento" obrigatorio>
+            <input
+              className="lux-input"
+              type="date"
+              aria-label="Vencimento"
+              value={vencimento}
+              onChange={e => setVencimento(e.target.value)}
+            />
+          </Campo>
+        </Linha>
+      </Secao>
 
-        <div className="bg-white/[.025] border border-hairline-soft rounded-[10px] p-3.5 mb-4">
-          <div className="text-[10.5px] uppercase tracking-[.12em] text-fg-muted font-medium mb-2.5">
-            Juros, multa e desconto (opcionais)
-          </div>
-          <div className="grid grid-cols-3 gap-2.5">
-            <Campo label="Juros">
-              <Input type="number" step="0.01" min="0" value={juros}
-                onChange={e => setJuros(e.target.value)} placeholder="0,00" />
-            </Campo>
-            <Campo label="Multa">
-              <Input type="number" step="0.01" min="0" value={multa}
-                onChange={e => setMulta(e.target.value)} placeholder="0,00" />
-            </Campo>
-            <Campo label="Desconto">
-              <Input type="number" step="0.01" min="0" value={desconto}
-                onChange={e => setDesconto(e.target.value)} placeholder="0,00" />
-            </Campo>
-          </div>
-          <div className="flex items-center justify-between px-3 py-2 rounded-[8px] bg-black/[.18] border border-hairline-soft">
-            <span className="text-[11.5px] font-medium text-fg-muted">Valor líquido</span>
-            <span className={`font-mono text-[15px] font-semibold tnum ${liquido > 0 ? "text-emerald2" : "text-coral"}`}>
-              {fmtBRL(liquido)}
-            </span>
-          </div>
+      <Secao legenda="Juros, multa e desconto (opcionais)">
+        <Linha cols={3}>
+          <Campo label="Juros">
+            <input className="lux-input" type="number" step="0.01" min="0" inputMode="decimal"
+              value={juros} onChange={e => setJuros(e.target.value)} placeholder="0,00" />
+          </Campo>
+          <Campo label="Multa">
+            <input className="lux-input" type="number" step="0.01" min="0" inputMode="decimal"
+              value={multa} onChange={e => setMulta(e.target.value)} placeholder="0,00" />
+          </Campo>
+          <Campo label="Desconto">
+            <input className="lux-input" type="number" step="0.01" min="0" inputMode="decimal"
+              value={desconto} onChange={e => setDesconto(e.target.value)} placeholder="0,00" />
+          </Campo>
+        </Linha>
+        <div
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "8px 14px", borderRadius: 8,
+            background: mix(liquido > 0 ? C.green : C.red, 9),
+            border: `1px solid ${mix(liquido > 0 ? C.green : C.red, 28)}`,
+          }}
+        >
+          <span style={{ fontSize: 12, fontWeight: 500, color: C.muted }}>Valor líquido</span>
+          <span style={{
+            fontFamily: "ui-monospace, 'JetBrains Mono', Menlo, monospace",
+            fontSize: 15, fontWeight: 600, fontVariantNumeric: "tabular-nums",
+            color: liquido > 0 ? C.green : C.red,
+          }}>
+            {fmtBRL(liquido)}
+          </span>
         </div>
+      </Secao>
 
+      <Secao legenda="Classificação">
         {ehPagar ? (
-          <div className="grid grid-cols-2 gap-3">
-            <Campo label="Fornecedor">
-              <Select value={entidadeId} onChange={e => setEntidadeId(e.target.value)}>
+          <Linha cols={2}>
+            <Campo label={entidadeLabel} hint="Vínculo opcional">
+              <select className="lux-select" aria-label={entidadeLabel} value={entidadeId} onChange={e => setEntidadeId(e.target.value)}>
                 <option value="">— Sem vínculo —</option>
                 {entidades.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
-              </Select>
+              </select>
             </Campo>
-            <Campo label="Categoria *">
-              <Select value={planoContaId} onChange={e => setPlanoContaId(e.target.value)} required>
+            <Campo label="Categoria" obrigatorio hint="Plano de contas (Despesas)">
+              <select className="lux-select" aria-label="Categoria" value={planoContaId} onChange={e => setPlanoContaId(e.target.value)}>
                 <option value="">— Selecione —</option>
                 {categorias.map(c => (
                   <option key={c.id} value={c.id}>{c.codigo} · {c.nome}</option>
                 ))}
-              </Select>
+              </select>
             </Campo>
-          </div>
+          </Linha>
         ) : (
-          <Campo label="Cliente">
-            <Select value={entidadeId} onChange={e => setEntidadeId(e.target.value)}>
-              <option value="">— Sem vínculo —</option>
-              {entidades.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
-            </Select>
-          </Campo>
+          <Linha cols={1}>
+            <Campo label={entidadeLabel} hint="Vínculo opcional">
+              <select className="lux-select" aria-label={entidadeLabel} value={entidadeId} onChange={e => setEntidadeId(e.target.value)}>
+                <option value="">— Sem vínculo —</option>
+                {entidades.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
+              </select>
+            </Campo>
+          </Linha>
         )}
+      </Secao>
 
-        {!editar && (
-          <div className="bg-white/[.025] border border-hairline-soft rounded-[10px] p-3.5 mb-4">
-            <div className="text-[10.5px] uppercase tracking-[.12em] text-fg-muted font-medium mb-2.5">
-              Recorrência
-            </div>
-            <div className="grid grid-cols-3 gap-1 p-1 bg-black/[.18] border border-hairline-soft rounded-[8px] mb-3">
-              {(["NENHUMA", "PARCELADA", "RECORRENTE"] as TipoRecorrencia[]).map(t => (
+      {!editar && (
+        <Secao legenda="Recorrência">
+          <div
+            style={{
+              display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 4,
+              padding: 4, borderRadius: 8,
+              background: mix(C.muted, 10),
+              border: `1px solid ${C.border}`,
+            }}
+            role="radiogroup" aria-label="Recorrência"
+          >
+            {(["NENHUMA", "PARCELADA", "RECORRENTE"] as TipoRecorrencia[]).map(t => {
+              const on = tipoRecorrencia === t;
+              return (
                 <button
                   key={t} type="button"
                   onClick={() => setTipoRecorrencia(t)}
-                  className={[
-                    "h-9 rounded-[6px] text-[12px] font-medium transition",
-                    tipoRecorrencia === t
-                      ? "bg-iris/20 text-iris border border-iris/40"
-                      : "text-fg-muted hover:text-fg-soft",
-                  ].join(" ")}
+                  aria-pressed={on ? "true" : "false"}
+                  style={{
+                    height: 34, borderRadius: 6, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                    transition: "all .16s ease",
+                    background: on ? mix(C.accent, 16) : "transparent",
+                    color: on ? C.accent : C.muted,
+                    border: `1px solid ${on ? mix(C.accent, 45) : "transparent"}`,
+                  }}
                 >
                   {t === "NENHUMA" ? "Nenhuma" : t === "PARCELADA" ? "Parcelada" : "Recorrente"}
                 </button>
-              ))}
-            </div>
-            {usaEntrada && (
-              <div className="grid grid-cols-2 gap-2.5">
-                <Campo label="Entrada à vista (opcional)">
-                  <Input type="number" step="0.01" min="0" value={entrada}
-                    onChange={e => setEntrada(e.target.value)} placeholder="0,00" />
-                </Campo>
-                <Campo label="Forma da entrada">
-                  <Select value={entradaForma} onChange={e => setEntradaForma(e.target.value)}
-                    disabled={parseNum(entrada) <= 0}>
-                    <option value="DINHEIRO">Dinheiro</option>
-                    <option value="PIX">PIX</option>
-                    <option value="CARTAO_DEBITO">Cartão de débito</option>
-                    <option value="CARTAO_CREDITO">Cartão de crédito</option>
-                    <option value="BOLETO">Boleto</option>
-                  </Select>
-                </Campo>
-              </div>
-            )}
-            {tipoRecorrencia !== "NENHUMA" && (
-              <div className="grid grid-cols-2 gap-2.5 items-end">
-                <Campo label={tipoRecorrencia === "PARCELADA" ? "Nº de parcelas" : "Repetir por (meses)"}>
-                  <Input type="number" min="2" max="60" value={parcelaTotal}
-                    onChange={e => setParcelaTotal(e.target.value)} />
-                </Campo>
-                <div className="h-10 px-3 rounded-[9px] border border-hairline-soft bg-black/[.15] flex items-center justify-between mb-3.5">
-                  <span className="text-[11px] text-fg-faint">
-                    {tipoRecorrencia === "PARCELADA" ? "Cada parcela" : "Cada mês"}
-                  </span>
-                  <span className="font-mono text-[13px] font-semibold text-iris tnum">
-                    {valorParcela != null ? fmtBRL(valorParcela) : "—"}
-                  </span>
-                </div>
-              </div>
-            )}
-            {usaEntrada && parseNum(entrada) > 0 && (
-              <p className="text-[11px] text-iris mt-1">
-                Entrada de {fmtBRL(parseNum(entrada))} ({ehPagar ? "registrada como paga" : "já recebida"}) + {parcelaTotal}× de{" "}
-                {valorParcela != null ? fmtBRL(valorParcela) : "—"} ={" "}
-                {fmtBRL(restanteParcelar)} parcelados.
-              </p>
-            )}
-            {tipoRecorrencia === "PARCELADA" && (
-              <p className="text-[11px] text-fg-faint mt-1">
-                {usaEntrada && parseNum(entrada) > 0
-                  ? `A entrada é lançada no caixa aberto, se houver. Juros, multa e desconto se aplicam só à 1ª parcela.`
-                  : "Juros, multa e desconto se aplicam apenas à 1ª parcela."}
-              </p>
-            )}
-            {tipoRecorrencia === "RECORRENTE" && (
-              <p className="text-[11px] text-fg-faint mt-1">
-                Cria N contas com o mesmo valor, vencendo em meses subsequentes.
-              </p>
-            )}
+              );
+            })}
           </div>
-        )}
 
-        <Campo label="Observações">
-          <Textarea rows={3} value={observacoes} onChange={e => setObservacoes(e.target.value)} />
-        </Campo>
+          {usaEntrada && (
+            <Linha cols={2}>
+              <Campo label="Entrada à vista" hint="Opcional">
+                <input className="lux-input" type="number" step="0.01" min="0" inputMode="decimal"
+                  value={entrada} onChange={e => setEntrada(e.target.value)} placeholder="0,00" />
+              </Campo>
+              <Campo label="Forma da entrada">
+                <select className="lux-select" aria-label="Forma da entrada" value={entradaForma} onChange={e => setEntradaForma(e.target.value)}
+                  disabled={parseNum(entrada) <= 0}>
+                  <option value="DINHEIRO">Dinheiro</option>
+                  <option value="PIX">PIX</option>
+                  <option value="CARTAO_DEBITO">Cartão de débito</option>
+                  <option value="CARTAO_CREDITO">Cartão de crédito</option>
+                  <option value="BOLETO">Boleto</option>
+                </select>
+              </Campo>
+            </Linha>
+          )}
 
-        {erro && <Alerta>{erro}</Alerta>}
+          {tipoRecorrencia !== "NENHUMA" && (
+            <Linha style={{ gridTemplateColumns: "1fr 1fr", alignItems: "end" }}>
+              <Campo label={tipoRecorrencia === "PARCELADA" ? "Nº de parcelas" : "Repetir por (meses)"}>
+                <input className="lux-input" type="number" min="2" max="60"
+                  value={parcelaTotal} onChange={e => setParcelaTotal(e.target.value)} />
+              </Campo>
+              <div style={{
+                height: 36, padding: "0 12px", borderRadius: 8,
+                border: `1px solid ${C.border}`, background: mix(C.accent, 7),
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+              }}>
+                <span style={{ fontSize: 11, color: C.muted }}>
+                  {tipoRecorrencia === "PARCELADA" ? "Cada parcela" : "Cada mês"}
+                </span>
+                <span style={{
+                  fontFamily: "ui-monospace, 'JetBrains Mono', Menlo, monospace",
+                  fontSize: 13, fontWeight: 600, color: C.accent, fontVariantNumeric: "tabular-nums",
+                }}>
+                  {valorParcela != null ? fmtBRL(valorParcela) : "—"}
+                </span>
+              </div>
+            </Linha>
+          )}
 
-        <div className="flex justify-end gap-2.5 mt-5 pt-4 border-t border-hairline-soft">
-          <BtnSecundario type="button" disabled={salvando} onClick={onCancelar}>
-            Cancelar
-          </BtnSecundario>
-          <BtnPrimario type="submit" disabled={salvando}>
-            {salvando ? "Salvando…" : (editar ? "Salvar alterações" : "Criar conta")}
-          </BtnPrimario>
-        </div>
-      </form>
-    </ModalShell>
+          {usaEntrada && parseNum(entrada) > 0 && (
+            <p style={{ fontSize: 11, color: C.accent, margin: "2px 2px 0" }}>
+              Entrada de {fmtBRL(parseNum(entrada))} ({ehPagar ? "registrada como paga" : "já recebida"}) + {parcelaTotal}× de{" "}
+              {valorParcela != null ? fmtBRL(valorParcela) : "—"} = {fmtBRL(restanteParcelar)} parcelados.
+            </p>
+          )}
+          {tipoRecorrencia === "PARCELADA" && (
+            <p style={{ fontSize: 11, color: C.muted, margin: "2px 2px 0" }}>
+              {usaEntrada && parseNum(entrada) > 0
+                ? "A entrada é lançada no caixa aberto, se houver. Juros, multa e desconto se aplicam só à 1ª parcela."
+                : "Juros, multa e desconto se aplicam apenas à 1ª parcela."}
+            </p>
+          )}
+          {tipoRecorrencia === "RECORRENTE" && (
+            <p style={{ fontSize: 11, color: C.muted, margin: "2px 2px 0" }}>
+              Cria N contas com o mesmo valor, vencendo em meses subsequentes.
+            </p>
+          )}
+        </Secao>
+      )}
+
+      <Secao legenda="Observações">
+        <Linha cols={1}>
+          <Campo label="Notas internas">
+            <textarea className="lux-textarea" value={observacoes}
+              onChange={e => setObservacoes(e.target.value)}
+              placeholder="Detalhes, número do documento, condições…" />
+          </Campo>
+        </Linha>
+      </Secao>
+    </FormularioLuxuoso>
   );
 }

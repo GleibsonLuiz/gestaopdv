@@ -6,12 +6,15 @@ interface StatusMeta {
   bg: string;
 }
 
+// bg derivado da mesma var de status (theme-aware): translúcido sobre o card,
+// vira pastel claro nos temas claros e tint escuro nos escuros — sem perder a
+// semântica fixa de cor (§1).
 const MAP: Record<StatusKey, StatusMeta> = {
-  late:     { label: "Atrasada",  color: "var(--coral)",   bg: "oklch(0.74 0.14 22 / .16)" },
-  pending:  { label: "Pendente",  color: "var(--amber)",   bg: "oklch(0.82 0.13 78 / .14)" },
-  paid:     { label: "Paga",      color: "var(--emerald)", bg: "oklch(0.80 0.13 158 / .14)" },
-  soon:     { label: "Em breve",  color: "var(--sky)",     bg: "oklch(0.55 0.11 235 / .14)" },
-  canceled: { label: "Cancelada", color: "var(--fg-muted)", bg: "oklch(1 0 0 / .04)"       },
+  late:     { label: "Atrasada",  color: "var(--coral)",    bg: "color-mix(in srgb, var(--coral) 15%, transparent)"   },
+  pending:  { label: "Pendente",  color: "var(--amber)",    bg: "color-mix(in srgb, var(--amber) 14%, transparent)"   },
+  paid:     { label: "Paga",      color: "var(--emerald)",  bg: "color-mix(in srgb, var(--emerald) 14%, transparent)" },
+  soon:     { label: "Em breve",  color: "var(--sky)",      bg: "color-mix(in srgb, var(--sky) 14%, transparent)"     },
+  canceled: { label: "Cancelada", color: "var(--fg-muted)", bg: "color-mix(in srgb, var(--fg-muted) 12%, transparent)" },
 };
 
 interface StatusPillProps {

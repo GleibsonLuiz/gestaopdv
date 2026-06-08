@@ -27,11 +27,14 @@ interface ToneMeta {
   bar: string;
 }
 
+// Tons theme-aware: derivados das vars de status do tema (não OKLCH fixo),
+// então o chip do ícone, a borda e a barra de progresso seguem o tema claro
+// e escuro mantendo a semântica fixa (§1 do DESIGN_STANDARDS.md).
 const TONES: Record<KpiTone, ToneMeta> = {
-  amber:   { color: "oklch(0.82 0.13 78)",  intClass: "text-amber2",   bg: "oklch(0.82 0.13 78 / .14)",  border: "oklch(0.82 0.13 78 / .25)",  bar: "linear-gradient(90deg, var(--amber), oklch(0.84 0.12 100))" },
-  coral:   { color: "oklch(0.74 0.14 22)",  intClass: "text-coral",    bg: "oklch(0.74 0.14 22 / .16)",  border: "oklch(0.74 0.14 22 / .25)",  bar: "linear-gradient(90deg, var(--coral), oklch(0.80 0.12 50))" },
-  iris:    { color: "oklch(0.74 0.13 286)", intClass: "text-fg",       bg: "oklch(0.74 0.13 286 / .16)", border: "oklch(0.74 0.13 286 / .25)", bar: "linear-gradient(90deg, var(--iris), oklch(0.78 0.12 235))" },
-  emerald: { color: "oklch(0.80 0.13 158)", intClass: "text-emerald2", bg: "oklch(0.80 0.13 158 / .14)", border: "oklch(0.80 0.13 158 / .25)", bar: "linear-gradient(90deg, var(--emerald), oklch(0.84 0.12 180))" },
+  amber:   { color: "var(--amber)",   intClass: "text-amber2",   bg: "color-mix(in srgb, var(--amber) 14%, transparent)",   border: "color-mix(in srgb, var(--amber) 30%, transparent)",   bar: "linear-gradient(90deg, var(--amber), color-mix(in srgb, var(--amber) 70%, #fff))" },
+  coral:   { color: "var(--coral)",   intClass: "text-coral",    bg: "color-mix(in srgb, var(--coral) 16%, transparent)",   border: "color-mix(in srgb, var(--coral) 30%, transparent)",   bar: "linear-gradient(90deg, var(--coral), color-mix(in srgb, var(--coral) 70%, #fff))" },
+  iris:    { color: "var(--iris)",    intClass: "text-fg",       bg: "color-mix(in srgb, var(--iris) 16%, transparent)",    border: "color-mix(in srgb, var(--iris) 30%, transparent)",    bar: "linear-gradient(90deg, var(--iris), color-mix(in srgb, var(--iris) 70%, #fff))" },
+  emerald: { color: "var(--emerald)", intClass: "text-emerald2", bg: "color-mix(in srgb, var(--emerald) 14%, transparent)", border: "color-mix(in srgb, var(--emerald) 30%, transparent)", bar: "linear-gradient(90deg, var(--emerald), color-mix(in srgb, var(--emerald) 70%, #fff))" },
 };
 
 interface KpiCardProps {
@@ -47,7 +50,7 @@ export default function KpiCard({ kpi, active, onClick }: KpiCardProps) {
   const cardBg = active
     ? `radial-gradient(120% 100% at 0% 0%, ${tone.bg}, transparent 65%), linear-gradient(180deg, oklch(1 0 0 / .04), oklch(1 0 0 / 0)), var(--surface-2)`
     : kpi.tone === "coral"
-      ? "radial-gradient(120% 100% at 0% 0%, oklch(0.32 0.10 22 / .22), transparent 55%), linear-gradient(180deg, oklch(1 0 0 / .035), oklch(1 0 0 / 0)), var(--surface)"
+      ? "radial-gradient(120% 100% at 0% 0%, color-mix(in srgb, var(--coral) 14%, transparent), transparent 55%), linear-gradient(180deg, oklch(1 0 0 / .035), oklch(1 0 0 / 0)), var(--surface)"
       : "linear-gradient(180deg, oklch(1 0 0 / .025), oklch(1 0 0 / 0)), var(--surface)";
 
   const Tag = interactive ? "button" : "div";

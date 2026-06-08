@@ -360,7 +360,7 @@ export function FormularioLuxuoso({
         }
         .lux-btn--primary {
           background: linear-gradient(135deg, ${C.accent}, ${C.purple});
-          color: ${C.white};
+          color: var(--accent-ink);
           border-color: ${mix(C.accent, 60)};
           box-shadow: 0 1px 0 rgba(255,255,255,0.18) inset,
                       0 10px 24px -10px ${mix(C.accent, 70)};

@@ -99,10 +99,29 @@ e de **borda** (`/ .25`). Padrão: texto na cor cheia sobre fundo translúcido.
 > As utilitárias Tailwind (`text-fg-muted`, `border-hairline`, `bg-surface-2`,
 > `text-emerald2`…) passam a funcionar no app inteiro.
 >
-> O módulo financeiro mantém **intencionalmente** seu próprio override OKLCH
-> afinado em `.financeiro-bg` ([`tokens.css`](src/pages/financeiro/tokens.css)),
-> sem regressão. Essa sobreposição local será reconciliada quando o financeiro
-> for migrado. Fora de `.financeiro-bg`, prefira sempre os tokens globais.
+> **✅ Reconciliado (2026-06-08).** O módulo financeiro **deixou de sobrescrever**
+> as superfícies/texto com OKLCH fixo escuro em `.financeiro-bg`
+> ([`tokens.css`](src/pages/financeiro/tokens.css)) — era isso que prendia a tela
+> no dark mesmo no tema Claro. Agora ele **herda os tokens executivos globais**
+> (theme-aware) e segue os 6 temas automaticamente. O `tokens.css` ficou só com:
+> a decoração de fundo (nuvens radiais **apenas nos temas escuros**, via
+> `:root[data-brilho="escuro"]`) e os **tokens de marca** (`--gold`/`--gold-strong`/
+> `--gold-ink`, o ouro do logo). Os componentes que tinham OKLCH fixo de status
+> (`KpiCard`, `StatusPill`) passaram a derivar das vars de status do tema. Fora de
+> `.financeiro-bg`, continue preferindo sempre os tokens globais.
+>
+> **Identidade de marca (ouro do logo) no modo claro.** No tema **Claro**, o
+> "lilás" (accent azul + roxo) dá lugar ao **ouro do logo GestãoProMax** —
+> definido direto no tema ([`theme.ts`](src/lib/theme.ts)): `accent = #B8860B`
+> (DarkGoldenrod, detalhes legíveis: foco, bordas, título-destaque, texto-accent)
+> e `purple = #D4AF37` (Metallic Gold, par do gradiente e realces "iris"). Como
+> tudo na UI resolve de `var(--accent)`/`var(--purple)`, **todo o sistema** vira
+> ouro no modo claro de uma vez: anéis de foco, barras de progresso, botões
+> primários, abas ativas, ícones. Nos temas **escuros** o accent continua azul.
+> Texto sobre os botões de ouro usa `--white` (que é grafite nos temas claros) →
+> folha de ouro + tinta escura, alto contraste e sóbrio (não um bloco brassy).
+> **Nunca** em status — a semântica (§1) é fixa: pago=emerald, pendente=amber,
+> atrasado=coral; e cores de funil/CRM (Lead, Ativo…) são classificação, não marca.
 
 ---
 
@@ -315,12 +334,19 @@ Ordem acordada com o cliente (executar em fases, validando cada uma):
    vertical enxuto (0,7mm), header grafite em negrito com padding maior
    (hierarquia por peso, não por tamanho), zebra sutil e hairline horizontal
    entre linhas. Ajuste a densidade uma vez ali e reflete em todos os relatórios.
-6. ✅ **Fase 6 — Temas** — novo tema **Claro** (off-white `#f5f6f8` + cards
-   brancos + texto grafite `#1f2937`, status recalibrados p/ contraste AA) e
-   **Grafite** suavizado (sem preto absoluto: `bg #161618` / `surface #1f1f22` /
-   `card #27272b`). Alto Contraste mantido como exceção de acessibilidade. Os
-   temas vêm de `TEMAS` em [`theme.ts`](src/lib/theme.ts) e aparecem sozinhos na
-   tela de Aparência. Build + typecheck OK.
+6. ✅ **Fase 6 — Temas** — novo tema **Claro** (agora **identidade ouro**:
+   off-white quente + accent `#B8860B` / purple `#D4AF37`, ver §1) e **Grafite**
+   suavizado. Alto Contraste mantido como exceção de acessibilidade. Os temas vêm
+   de `TEMAS` em [`theme.ts`](src/lib/theme.ts) e aparecem sozinhos na Aparência.
+   **Par de marca ouro (claro + escuro):** além do Claro, há o **Escuro Ouro**
+   (`bg #141210` quase-preto quente + ouro vivo `#D4AF37`/`#E8C766`) — contraparte
+   escura da identidade; Azul/Esmeralda/Roxo/Grafite seguem como alternativas
+   coloridas/neutras.
+   **Tinta dos botões primários:** `--accent-ink` é calculado pelo **tom mais
+   claro** do gradiente accent→purple (`inkDoAccent` em theme.ts), não pelo
+   brilho do tema — isso garante texto legível em botões de accent claro (ouro,
+   Grafite quase-branco, Esmeralda) e corrigiu o CTA branco-no-branco do Grafite.
+   Botões primários usam `var(--accent-ink)` (não `--white`). Build + typecheck OK.
 7. ✅ **Fase 7 — Novos relatórios** — _concluída (4/4)_.
    - ✅ **Curva ABC** — backend `GET /relatorios/curva-abc` (Pareto 80/15/5 por
      receita/lucro/quantidade, multi-tenant) + aba na tela com faixa de

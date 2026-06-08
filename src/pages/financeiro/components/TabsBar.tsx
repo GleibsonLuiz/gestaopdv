@@ -18,10 +18,7 @@ interface TabsBarProps {
 export default function TabsBar({ tabs, active, onChange, onNew, novoLabel = "Nova conta a pagar" }: TabsBarProps) {
   return (
     <div className="flex items-center justify-between gap-6 pt-2 pb-6">
-      <div
-        className="inline-flex gap-1 p-1 bg-white/[.025] border border-hairline-soft rounded-xl"
-        role="tablist"
-      >
+      <div className="inline-flex gap-1 p-1 bg-surface border border-hairline rounded-xl">
         {tabs.map((t) => {
           const on = t.id === active;
           return (
@@ -30,10 +27,18 @@ export default function TabsBar({ tabs, active, onChange, onNew, novoLabel = "No
               onClick={() => onChange?.(t.id)}
               className={[
                 "px-4 py-2 rounded-[9px] text-[13px] font-medium inline-flex items-center gap-2 transition",
+                // Inativo: texto fg-soft (legível em TODOS os temas, ao contrário
+                // do fg-muted que sumia no Roxo/Esmeralda) + realce no hover.
+                // Ativo: anel na cor de marca (accent — ouro no claro, azul no
+                // escuro) + elevação surface-3, inconfundível em qualquer tema.
                 on
-                  ? "text-fg bg-surface-2 shadow-[0_0_0_1px_var(--hairline),0_6px_14px_-8px_oklch(0_0_0_/.6)]"
-                  : "text-fg-muted hover:text-fg-soft",
+                  ? "text-fg bg-surface-3"
+                  : "text-fg-soft hover:text-fg hover:bg-surface-2",
               ].join(" ")}
+              style={on ? {
+                boxShadow:
+                  "0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent), 0 6px 14px -8px rgba(0,0,0,.5)",
+              } : undefined}
             >
               {t.icon && <Icon name={t.icon} />}
               {t.label}
@@ -43,9 +48,9 @@ export default function TabsBar({ tabs, active, onChange, onNew, novoLabel = "No
                     "font-mono text-[11px] px-1.5 py-px rounded-full border",
                     on
                       ? "text-iris border-transparent"
-                      : "text-fg-faint bg-white/[.04] border-hairline-soft",
+                      : "text-fg-muted bg-surface-2 border-hairline-soft",
                   ].join(" ")}
-                  style={on ? { background: "oklch(0.76 0.13 286 / .16)" } : undefined}
+                  style={on ? { background: "color-mix(in srgb, var(--iris) 16%, transparent)" } : undefined}
                 >
                   {String(t.count).padStart(2, "0")}
                 </span>
@@ -58,17 +63,17 @@ export default function TabsBar({ tabs, active, onChange, onNew, novoLabel = "No
       {onNew && (
         <button
           onClick={onNew}
-          className="h-[38px] px-4 inline-flex items-center gap-2 rounded-[10px] font-semibold text-[13px] transition hover:brightness-110"
+          className="h-[38px] px-4 inline-flex items-center gap-2 rounded-[10px] font-semibold text-[13px] transition hover:brightness-[1.04]"
           style={{
-            background: "linear-gradient(180deg, oklch(0.78 0.13 286), oklch(0.62 0.16 286))",
-            color: "oklch(0.12 0.02 286)",
+            background: "linear-gradient(135deg, var(--accent), var(--purple))",
+            color: "var(--accent-ink)",
             boxShadow:
-              "0 1px 0 0 oklch(1 0 0 / .25) inset, 0 8px 22px -10px oklch(0.55 0.16 286 / .8)",
+              "0 1px 0 0 oklch(1 0 0 / .28) inset, 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent), 0 6px 16px -10px color-mix(in srgb, var(--accent) 50%, transparent)",
           }}
         >
           <span
             className="w-[18px] h-[18px] rounded-[5px] inline-flex items-center justify-center text-sm leading-none"
-            style={{ background: "oklch(0.18 0.04 286)", color: "oklch(0.85 0.10 286)" }}
+            style={{ background: "color-mix(in srgb, var(--accent-ink) 14%, transparent)", color: "var(--accent-ink)" }}
           >
             +
           </span>

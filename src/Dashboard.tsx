@@ -587,8 +587,8 @@ function MiniTile({ icone, label, valor, hint, warn, tagDelta }: any) {
       background: warn
         ? `linear-gradient(180deg, ${C.yellow}15, ${C.card})`
         : `linear-gradient(180deg, ${C.card}, ${C.surface})`,
-      border: `1px solid ${warn ? C.yellow + "55" : C.border}`,
-      borderRadius: 14, padding: "14px 16px",
+      border: `1px solid ${warn ? C.yellow + "55" : "var(--hairline-soft)"}`,
+      borderRadius: 14, padding: "14px 16px", boxShadow: "var(--shadow-card)",
       display: "flex", alignItems: "center", gap: 12,
       position: "relative", overflow: "hidden",
     }}>
@@ -610,9 +610,9 @@ function MiniTile({ icone, label, valor, hint, warn, tagDelta }: any) {
           color: C.muted, fontWeight: 700,
         }}>{label}</div>
         <div style={{
-          fontSize: 20, fontWeight: 700, letterSpacing: "-0.02em",
+          fontSize: 20, fontWeight: 600, letterSpacing: "-0.025em",
           color: warn ? C.yellow : C.white, marginTop: 2,
-          fontVariantNumeric: "tabular-nums",
+          fontFamily: FONT_MONO, fontVariantNumeric: "tabular-nums",
         }}>{valor}</div>
       </div>
       <div style={{ marginLeft: "auto", textAlign: "right", position: "relative" }}>
@@ -636,7 +636,8 @@ function Card({ children, padding = 18, style }: any) {
   return (
     <article style={{
       background: `linear-gradient(180deg, ${C.card}, ${C.surface})`,
-      border: `1px solid ${C.border}`, borderRadius: 14,
+      border: "1px solid var(--hairline-soft)", borderRadius: 14,
+      boxShadow: "var(--shadow-card)",
       padding, position: "relative", overflow: "hidden", ...style,
     }}>
       <div style={{
@@ -1184,7 +1185,8 @@ function PainelFinanceiro({ tipo, titulo, icone, dados }: any) {
 
   return (
     <article style={{
-      background: fundo, border: `1px solid ${C.border}`, borderRadius: 14,
+      background: fundo, border: "1px solid var(--hairline-soft)", borderRadius: 14,
+      boxShadow: "var(--shadow-card)",
       padding: 18, position: "relative", overflow: "hidden",
     }}>
       <div style={{

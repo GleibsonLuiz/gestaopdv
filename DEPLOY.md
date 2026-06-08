@@ -5,7 +5,7 @@ Guia para colocar o GestãoPRO no ar com **zero custo** (plano Hobby da Vercel +
 ## Arquitetura
 
 ```
-Frontend (Vite)   →  https://gestao-pdv.vercel.app           ← projeto Vercel #1
+Frontend (Vite)   →  https://gestaopdv.vercel.app           ← projeto Vercel #1
 Backend (Express) →  https://gestao-pdv-api.vercel.app       ← projeto Vercel #2
 Banco             →  Neon Postgres (já existente)
 Uploads           →  Vercel Blob (auto-conectado ao backend)
@@ -67,7 +67,7 @@ Acesse `URL/health` para ver `{ "status": "ok", "timestamp": "..." }`. Funcionan
 1. Volte em https://vercel.com/new
 2. Importe **o mesmo repositório** `gestaopdv` outra vez.
 3. Configure:
-   - **Project Name:** `gestao-pdv` (esse vira o subdomínio: `gestao-pdv.vercel.app`)
+   - **Project Name:** `gestaopdv` (esse vira o subdomínio: `gestaopdv.vercel.app`)
    - **Framework Preset:** `Vite` (a Vercel detecta sozinha)
    - **Root Directory:** deixar `.` (raiz)
 4. Em **Environment Variables**:
@@ -77,7 +77,7 @@ Acesse `URL/health` para ver `{ "status": "ok", "timestamp": "..." }`. Funcionan
    | `VITE_API_URL` | a URL do backend do Passo 1 (ex: `https://gestao-pdv-api.vercel.app`) — **sem barra no final** |
 
 5. Clique em **Deploy**. Aguarde ficar verde.
-6. Anote a URL do frontend (ex: `https://gestao-pdv.vercel.app`).
+6. Anote a URL do frontend (ex: `https://gestaopdv.vercel.app`).
 
 ---
 
@@ -86,7 +86,7 @@ Acesse `URL/health` para ver `{ "status": "ok", "timestamp": "..." }`. Funcionan
 Volta no projeto do backend (`gestao-pdv-api`):
 
 1. Aba **Settings** → **Environment Variables**
-2. Edita a variável `FRONTEND_URL` — troca o `*` pela URL do frontend (ex: `https://gestao-pdv.vercel.app`).
+2. Edita a variável `FRONTEND_URL` — troca o `*` pela URL do frontend (ex: `https://gestaopdv.vercel.app`).
 3. Aba **Deployments** → último deploy → `...` → **Redeploy**.
 
 Pronto. Só o frontend pode chamar o backend agora.
@@ -95,7 +95,7 @@ Pronto. Só o frontend pode chamar o backend agora.
 
 ## Pronto para usar 🎉
 
-Acesse `https://gestao-pdv.vercel.app` (sua URL do frontend).
+Acesse `https://gestaopdv.vercel.app` (sua URL do frontend).
 
 - Login: `admin@gestaopro.local` / `admin123` (seed inicial — **troque essa senha!**)
 - Refaça o upload do logotipo da empresa em **Empresa**

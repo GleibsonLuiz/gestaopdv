@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef, lazy, Suspense, type CSSProperties } from "react";
+import { useState, useEffect, useRef, useMemo, lazy, Suspense, type CSSProperties } from "react";
 import { C, hidratarAparenciaDoUser } from "./lib/theme";
 import Alertas from "./Alertas";
 import { getUser, getToken, clearSession, setEmpresa, api } from "./lib/api";
 import { podeAcessar, moduloNoPlano } from "./lib/permissoes";
 import { TELA_AJUDA } from "./Ajuda";
+import CommandPalette, { type ItemPaleta } from "./components/CommandPalette";
 
 // Todas as telas sao lazy — cada uma vira um chunk separado e so e baixada
 // quando o usuario navegar para ela. Login fica lazy tambem (so carrega
@@ -109,6 +110,8 @@ const ESTILO_RESPONSIVO = `
   .gp-overlay.open { opacity: 1; pointer-events: auto; }
   .gp-mobile-bar { display: flex; }
   .gp-toggle-desktop { display: none !important; }
+  /* No mobile o disparador da busca vira so o icone (a topbar fica apertada) */
+  .gp-busca-label, .gp-busca-kbd { display: none !important; }
 }
 `;
 
@@ -166,6 +169,70 @@ function TelaCarregando({ alturaMin = "100vh" }: { alturaMin?: string }) {
   );
 }
 
+// Registry da busca rapida (Command Palette). Cada item aponta para um id de
+// `tela` (navegacao via navegar) ou um id sintetico "@acao" tratado no handler.
+// `keywords` carrega sinonimos/termos relacionados para o match — buscar por
+// "pagar" acha Financeiro/Despesas, "fiado" acha Crediario, etc. A visibilidade
+// e aplicada em runtime por podeVer() + gates de role, entao itens fora do
+// plano/permissao do usuario nunca aparecem aqui.
+const MODULOS_PALETA: ItemPaleta[] = [
+  // Início
+  { id: "pdv",            label: "PDV",                 icone: "🛒", secao: "Início",    keywords: "venda vender frente de caixa pos ponto de venda balcao" },
+  { id: "dashboard",      label: "Dashboard",           icone: "📊", secao: "Início",    keywords: "painel inicio visao geral metricas indicadores resumo" },
+  { id: "dashboardcrm",   label: "Dashboard CRM",       icone: "🎯", secao: "Início",    keywords: "crm relacionamento clientes painel funil visao" },
+  // Cadastros
+  { id: "clientes",       label: "Clientes",            icone: "👥", secao: "Cadastros", keywords: "cliente consumidor cadastro contato" },
+  { id: "segmentos",      label: "Segmentos",           icone: "📊", secao: "Cadastros", keywords: "segmentacao grupos publico rfm classificacao clientes" },
+  { id: "reativacao",     label: "Aniversários",        icone: "🎂", secao: "Cadastros", keywords: "aniversario niver reativacao datas resgate inativos" },
+  { id: "tarefas",        label: "Tarefas",             icone: "✅", secao: "Cadastros", keywords: "tarefa follow up lembrete afazeres pendencia todo agenda" },
+  { id: "fidelidade",     label: "Fidelidade",          icone: "⭐", secao: "Cadastros", keywords: "pontos programa recompensa cashback premio" },
+  { id: "fornecedores",   label: "Fornecedores",        icone: "🏭", secao: "Cadastros", keywords: "fornecedor suprimento distribuidor representante" },
+  { id: "produtos",       label: "Produtos",            icone: "📦", secao: "Cadastros", keywords: "produto item mercadoria sku cadastro preco" },
+  { id: "etiquetas",      label: "Etiquetas",           icone: "🏷️", secao: "Cadastros", keywords: "etiqueta preco gondola impressao codigo de barras" },
+  // Operação
+  { id: "caixa",          label: "Caixa",               icone: "💵", secao: "Operação",  keywords: "abertura fechamento sangria suprimento dinheiro gaveta" },
+  { id: "estoque",        label: "Estoque",             icone: "🗃️", secao: "Operação",  keywords: "estoque movimentacao entrada saida ajuste saldo" },
+  { id: "inventario",     label: "Inventário",          icone: "📋", secao: "Operação",  keywords: "inventario contagem balanco conferencia cega" },
+  { id: "compras",        label: "Compras",             icone: "🛍️", secao: "Operação",  keywords: "compra pedido entrada mercadoria fornecedor reposicao" },
+  { id: "sugestoes",      label: "Sugestões de Compra", icone: "🧮", secao: "Operação",  keywords: "reposicao sugestao estoque minimo repor pedido automatico" },
+  { id: "orcamentos",     label: "Orçamentos",          icone: "📝", secao: "Operação",  keywords: "orcamento proposta cotacao pre-venda" },
+  { id: "funil",          label: "Funil de Vendas",     icone: "🎯", secao: "Operação",  keywords: "oportunidade pipeline negociacao lead prospecto kanban vendas" },
+  { id: "automacoes",     label: "Automações",          icone: "⚡", secao: "Operação",  keywords: "automacao fluxo gatilho workflow regra disparo" },
+  { id: "nps",            label: "NPS",                 icone: "⭐", secao: "Operação",  keywords: "nps satisfacao pesquisa pos-venda avaliacao feedback" },
+  { id: "financeiro",     label: "Financeiro",          icone: "💰", secao: "Operação",  keywords: "financeiro contas a pagar contas a receber pagar receber boleto fluxo de caixa banco titulo" },
+  { id: "despesas",       label: "Despesas",            icone: "🧾", secao: "Operação",  keywords: "despesa gasto custo conta a pagar pagamento operacional" },
+  { id: "contabilidade",  label: "Contabilidade",       icone: "📚", secao: "Operação",  keywords: "contador plano de contas fechamento contabil dre balancete" },
+  { id: "crediario",      label: "Crediário",           icone: "📒", secao: "Operação",  keywords: "fiado caderneta credito limite recebimento parcelado a prazo" },
+  { id: "ordemservico",   label: "Ordem de Serviço",    icone: "🔧", secao: "Operação",  keywords: "os oficina assistencia tecnica conserto reparo servico" },
+  { id: "relatorios",     label: "Relatórios",          icone: "📑", secao: "Operação",  keywords: "relatorio analise pdf exportar grafico vendas" },
+  { id: "notasfiscais",   label: "Notas Fiscais",       icone: "🧾", secao: "Operação",  keywords: "nfce nota fiscal cupom danfe emitir cancelar xml" },
+  { id: "entradanfe",     label: "Entrada NF-e",        icone: "📥", secao: "Operação",  keywords: "importar nfe xml nota de entrada compra fornecedor" },
+  { id: "fiscalavancado", label: "NF-e / NFS-e",        icone: "📄", secao: "Operação",  keywords: "nfe nfse nota de servico fiscal avancado b2b produto" },
+  { id: "comissoes",      label: "Comissões",           icone: "🏆", secao: "Operação",  keywords: "comissao vendedor remuneracao meta premiacao" },
+  { id: "painelcomandas", label: "Central de Comandas", icone: "🍽️", secao: "Operação",  keywords: "comanda kanban pedido mesa cozinha bar garcom" },
+  { id: "whatsapp",       label: "Atendimento WhatsApp",icone: "💬", secao: "Operação",  keywords: "whatsapp zap chat ia atendimento bot conversa" },
+  // Sistema
+  { id: "funcionarios",   label: "Funcionários",        icone: "🧑‍💼", secao: "Sistema",  keywords: "funcionario usuario equipe acesso permissao vendedor login" },
+  { id: "empresa",        label: "Empresa",             icone: "🏢", secao: "Sistema",   keywords: "empresa dados fiscais identidade logo logotipo cnpj endereco" },
+  { id: "impressora",     label: "Impressora",          icone: "🖨️", secao: "Sistema",   keywords: "impressora impressao cupom recibo termica" },
+  { id: "@formas-pagamento", label: "Formas de pagamento", icone: "💳", secao: "Sistema", keywords: "forma de pagamento pix cartao credito debito dinheiro maquininha" },
+  { id: "@pdv-volante",   label: "PDV Volante (mobile)",icone: "📱", secao: "Sistema",   keywords: "pdv volante mobile celular garcom pwa pedido mesa" },
+  { id: "aparencia",      label: "Aparência",           icone: "🎨", secao: "Sistema",   keywords: "tema cores dark mode aparencia personalizar fonte densidade" },
+  { id: "ajuda",          label: "Ajuda",               icone: "❓", secao: "Sistema",   keywords: "ajuda manual suporte duvida help tutorial" },
+  { id: "projeto",        label: "Projeto",             icone: "📋", secao: "Sistema",   keywords: "projeto roadmap etapas rastreador progresso" },
+  { id: "logs",           label: "Logs",                icone: "📜", secao: "Sistema",   keywords: "log auditoria historico acesso eventos" },
+  { id: "backup",         label: "Backup",              icone: "💾", secao: "Sistema",   keywords: "backup restauracao exportar dados json salvar" },
+  { id: "sistema",        label: "Sistema",             icone: "🛡", secao: "Sistema",   keywords: "sistema reset zona de perigo administrativo apagar" },
+];
+
+// Rotulo do atalho conforme a plataforma (⌘K no Mac, Ctrl+K no resto).
+const ATALHO_BUSCA = (() => {
+  try {
+    const mac = /mac|iphone|ipad|ipod/i.test(navigator.platform || navigator.userAgent || "");
+    return mac ? "⌘K" : "Ctrl+K";
+  } catch { return "Ctrl+K"; }
+})();
+
 export default function App() {
   // Bypass de auth para pesquisa publica de NPS. Calculado uma vez via
   // useState para nao re-renderizar a cada update.
@@ -197,6 +264,7 @@ export default function App() {
   const [sidebarAberta, setSidebarAberta] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => lerPreferenciaSidebar());
   const [gerenciarFormasAberto, setGerenciarFormasAberto] = useState(false);
+  const [paletaAberta, setPaletaAberta] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   function alternarColapso() {
@@ -238,6 +306,24 @@ export default function App() {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") setSidebarAberta(false); }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Atalho global da busca rapida: Ctrl/Cmd+K alterna o palette; Alt+S abre
+  // (atalho que o usuario pediu). Funciona em qualquer tela — inclusive no PDV
+  // em modo focado, onde nao ha sidebar.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const k = e.key.toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && k === "k") {
+        e.preventDefault();
+        setPaletaAberta((v) => !v);
+      } else if (e.altKey && k === "s") {
+        e.preventDefault();
+        setPaletaAberta(true);
+      }
+    }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, []);
@@ -361,6 +447,30 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, tela]);
 
+  // Itens visiveis da busca rapida: filtra o registry pela visibilidade real do
+  // usuario. podeVer() ja resolve permissao + plano + role para cada tela; as
+  // acoes sinteticas (@formas-pagamento, @pdv-volante) tem gate proprio.
+  const itensPaleta = useMemo<ItemPaleta[]>(() => {
+    if (!user) return [];
+    return MODULOS_PALETA.filter((m) => {
+      if (m.id === "@formas-pagamento") return user.role === "ADMIN" || user.role === "GERENTE";
+      if (m.id === "@pdv-volante") return podeAcessar(user, "PDV");
+      return podeVer(m.id);
+    });
+    // podeVer depende de user/plano; recomputar quando user muda basta.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  // Executa a escolha do palette: acoes sinteticas viram modal/aba; o resto e
+  // navegacao normal por tela.
+  function selecionarPaleta(item: ItemPaleta) {
+    setPaletaAberta(false);
+    if (item.id === "@formas-pagamento") { setGerenciarFormasAberto(true); return; }
+    if (item.id === "@pdv-volante") { window.open("?mobile=pdv-volante", "_blank"); return; }
+    if (item.id === "ajuda") { setAjudaTopico(null); navegar("ajuda"); return; }
+    navegar(item.id);
+  }
+
   // Pesquisa publica NPS: cliente externo acessa sem login.
   if (npsToken) return (
     <Suspense fallback={<TelaCarregando />}>
@@ -443,6 +553,14 @@ export default function App() {
             onContextoConsumido={() => setPdvContexto(null)}
           />
         </Suspense>
+        {/* Busca rapida tambem no PDV focado, onde nao ha sidebar */}
+        <CommandPalette
+          aberta={paletaAberta}
+          itens={itensPaleta}
+          telaAtual={tela}
+          onFechar={() => setPaletaAberta(false)}
+          onSelecionar={selecionarPaleta}
+        />
       </div>
     );
   }
@@ -803,6 +921,32 @@ export default function App() {
               Gestão<span style={{ fontWeight: 600 }}>Pro</span><span className="gp-brand-max">Max</span>
             </span>
           </div>
+          {/* Disparador discreto da busca rapida — descoberta sem poluir a
+              sidebar (que permanece visualmente intacta). O atalho real e o
+              Ctrl/Cmd+K (ou Alt+S). */}
+          <button
+            onClick={() => setPaletaAberta(true)}
+            title="Buscar módulo (Ctrl+K / Alt+S)"
+            aria-label="Buscar módulo"
+            className="gp-busca-trigger"
+            style={{
+              background: C.card, border: `1px solid ${C.border}`, color: C.muted,
+              borderRadius: 8, padding: "6px 10px", fontSize: 13, cursor: "pointer",
+              display: "flex", alignItems: "center", gap: 8,
+              transition: "background 0.15s ease, color 0.15s ease, border-color 0.15s ease",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = C.accent + "14"; e.currentTarget.style.color = C.text; e.currentTarget.style.borderColor = C.accent + "55"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = C.card; e.currentTarget.style.color = C.muted; e.currentTarget.style.borderColor = C.border; }}
+          >
+            <span>🔍</span>
+            <span className="gp-busca-label" style={{ fontSize: 12 }}>Buscar</span>
+            <kbd className="gp-busca-kbd" style={{
+              fontFamily: "ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace",
+              fontSize: 10, lineHeight: 1, color: C.muted,
+              background: C.surface, border: `1px solid ${C.border}`,
+              borderRadius: 5, padding: "3px 6px",
+            }}>{ATALHO_BUSCA}</kbd>
+          </button>
           <button
             onClick={() => {
               const topico = TELA_AJUDA[tela] || null;
@@ -1065,6 +1209,13 @@ export default function App() {
           />
         </Suspense>
       )}
+      <CommandPalette
+        aberta={paletaAberta}
+        itens={itensPaleta}
+        telaAtual={tela}
+        onFechar={() => setPaletaAberta(false)}
+        onSelecionar={selecionarPaleta}
+      />
     </div>
   );
 }

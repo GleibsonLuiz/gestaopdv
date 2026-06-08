@@ -1677,11 +1677,11 @@
 
 /* Cadastros densos (produto/cliente): aperto fino de espacamentos p/ caber sem
    rolagem em telas baixas (~667px de altura) no modo compacto. */
-.produto-modal .lux-body, .cliente-modal .lux-body { padding-top: 8px; padding-bottom: 8px; gap: 8px; }
-.produto-modal .lux-fieldset, .cliente-modal .lux-fieldset { gap: 5px; }
-.produto-modal .lux-legend, .cliente-modal .lux-legend { margin-bottom: 0; }
-.produto-modal .lux-row, .cliente-modal .lux-row { gap: 6px; }
-.produto-modal .lux-head, .cliente-modal .lux-head { padding-top: 10px; }
+.produto-modal .lux-body, .cliente-modal .lux-body, .fornecedor-modal .lux-body { padding-top: 8px; padding-bottom: 8px; gap: 8px; }
+.produto-modal .lux-fieldset, .cliente-modal .lux-fieldset, .fornecedor-modal .lux-fieldset { gap: 5px; }
+.produto-modal .lux-legend, .cliente-modal .lux-legend, .fornecedor-modal .lux-legend { margin-bottom: 0; }
+.produto-modal .lux-row, .cliente-modal .lux-row, .fornecedor-modal .lux-row { gap: 6px; }
+.produto-modal .lux-head, .cliente-modal .lux-head, .fornecedor-modal .lux-head { padding-top: 10px; }
 
 /* Seletor de status do funil (cadastro de cliente): chips coloridos no lugar
    do <select>. Cada chip usa a cor do proprio status (LEAD/ATIVO/etc.). */

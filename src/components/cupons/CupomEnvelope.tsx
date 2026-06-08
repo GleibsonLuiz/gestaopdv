@@ -36,12 +36,6 @@ export default function CupomEnvelope({ cfg, children, preview = false }: Props)
     ? "position: relative; left: 0; top: 0; box-shadow: 0 4px 16px rgba(0,0,0,.18); border: 1px solid #ddd;"
     : "position: absolute; left: -9999px; top: -9999px;";
 
-  // O preview (coluna da tela de configuracao) compartilha o visual do cupom,
-  // mas NAO pode entrar na impressao — senao sai uma copia duplicada junto do
-  // cupom real montado no portal. Marcamos com .cupom-preview e o ocultamos no
-  // @media print.
-  const classe = preview ? "cupom-imprimivel cupom-preview" : "cupom-imprimivel";
-
   return (
     <>
       <style>{`
@@ -52,13 +46,22 @@ export default function CupomEnvelope({ cfg, children, preview = false }: Props)
              do .cupom-imprimivel — preservando o recuo configurado em
              ConfiguracaoImpressora.margemMm. */
           @page { size: ${paginaCss}; margin: 0; }
-          body * { visibility: hidden !important; }
-          /* Revela apenas o cupom real; o preview fica de fora (display:none
-             abaixo) para nao sair uma 2a copia. */
-          .cupom-imprimivel:not(.cupom-preview),
-          .cupom-imprimivel:not(.cupom-preview) * { visibility: visible !important; }
-          .cupom-preview { display: none !important; }
-          .cupom-imprimivel:not(.cupom-preview) {
+
+          /* Isolamento da impressao por DISPLAY (nao visibility): esconder
+             com visibility deixa o conteudo no fluxo e o navegador pagina a
+             altura/largura inteira do app -> dezenas de paginas em branco.
+             Com display:none o app sai do layout e so o cupom gera paginas.
+
+             Todos os cupons reais sao renderizados em portais no <body>
+             (fora do #root): imprimirDocumento() cria <div data-cupom-portal>
+             e o PDV usa createPortal(..., document.body). O preview da tela
+             de configuracao vive dentro do #root, entao some na impressao —
+             era a origem da 2a copia. */
+          body > * { display: none !important; }
+          body > .cupom-imprimivel,
+          body > [data-cupom-portal] { display: block !important; }
+
+          .cupom-imprimivel {
             position: absolute !important;
             left: 0 !important; top: 0 !important;
             /* Largura FIXA da bobina (ex.: 80mm), nao 100%. Em impressao para
@@ -102,7 +105,7 @@ export default function CupomEnvelope({ cfg, children, preview = false }: Props)
         .cupom-imprimivel .cupom-mini { font-size: ${Math.max(8, fonte - 2)}px; }
       `}</style>
 
-      <div className={classe} aria-hidden="true">
+      <div className="cupom-imprimivel" aria-hidden="true">
         {children}
       </div>
     </>

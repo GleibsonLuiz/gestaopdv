@@ -4,6 +4,7 @@
 // — manter @ts-nocheck e refinar em etapa propria, ja com o sistema
 // inteiro em TS pra apoiar o type narrowing.
 import { useEffect, useMemo, useRef, useState, useCallback, useReducer } from "react";
+import { createPortal } from "react-dom";
 import { C } from "./lib/theme";
 import { api, BASE_URL } from "./lib/api";
 import { useRascunho } from "./lib/useRascunho";
@@ -3695,8 +3696,11 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpr
         </div>
       </div>
 
-      {/* Cupom oculto, visivel apenas na impressao — quando habilitado */}
-      {cfgImp && devePrintar("VENDA", cfgImp) && (
+      {/* Cupom oculto, visivel apenas na impressao — quando habilitado.
+          Renderizado num portal no body (fora do #root) para que o
+          @media print possa esconder o app inteiro com #root{display:none}
+          sem matar o cupom — evitando paginas em branco. */}
+      {cfgImp && devePrintar("VENDA", cfgImp) && createPortal(
         <CupomEnvelope cfg={cfgImp}>
           <CupomVenda
             venda={venda}
@@ -3706,7 +3710,8 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpr
             troco={troco}
             modoReimpressao={modoReimpressao}
           />
-        </CupomEnvelope>
+        </CupomEnvelope>,
+        document.body,
       )}
     </>
   );

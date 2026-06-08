@@ -102,6 +102,7 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 ```
 
 - **Sidebar fixa à esquerda** (240px) com 7 seções: Operação, Cadastros, Estoque, Vendas, Financeiro, Atendimento, Sistema.
+- **Busca rápida de módulos (`Ctrl + K`)**: abre uma janela de busca no centro da tela para pular para qualquer módulo digitando o nome. Aceita sinônimos — buscar por *“pagar”* acha Financeiro/Despesas, *“fiado”* acha Crediário, *“nota”* acha Notas Fiscais. Navegue com `↑ ↓` e confirme com `Enter`. Atalhos: `Ctrl + K` (ou `⌘ K` no Mac) e `Alt + S`; também há o botão **🔍 Buscar** no header. Funciona em qualquer tela, inclusive no PDV em tela cheia e no celular. A busca só mostra os módulos que o seu perfil tem permissão de acessar.
 - **Botão retrátil**: clique no logo para encolher a sidebar para 72px (só ícones). A preferência fica salva por usuário.
 - **Mobile (≤900px)**: sidebar vira off-canvas; botão `☰` no topo abre/fecha.
 - **Sino 🔔** no header abre o painel de **Alertas** (estoque baixo, contas a vencer).

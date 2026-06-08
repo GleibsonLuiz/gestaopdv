@@ -41,8 +41,8 @@ const css = `
 
   /* ---------- CAPA ---------- */
   .cover {
-    height: 247mm; display: flex; flex-direction: column; justify-content: space-between;
-    padding: 28mm 22mm; color: #fff; break-after: page;
+    height: 250mm; display: flex; flex-direction: column; justify-content: space-between;
+    padding: 26mm 22mm; color: #fff; break-after: page; break-inside: avoid;
     background: linear-gradient(150deg, #312e81 0%, #4f46e5 48%, #7c3aed 100%);
     border-radius: 4px;
   }
@@ -57,7 +57,6 @@ const css = `
   .intro { break-after: page; }
   .intro > h2:first-of-type {
     font-size: 25px; color: #312e81; border: 0; margin: 0 0 4px;
-    break-before: avoid;
   }
   .intro h3 { color: #4f46e5; font-size: 15px; margin-top: 22px; }
   .intro p { font-size: 12.5px; }
@@ -65,12 +64,15 @@ const css = `
   .intro ul li { margin: 5px 0; }
 
   /* ---------- CORPO ---------- */
-  h1 { font-size: 26px; color: #312e81; margin: 0 0 6px; break-before: page; break-after: avoid; }
+  h1 { font-size: 26px; color: #312e81; margin: 0 0 6px; break-after: avoid; }
   h2 {
     font-size: 19px; color: #312e81; margin: 26px 0 10px; padding-bottom: 6px;
-    border-bottom: 2px solid #e6e8ef; break-before: page; break-after: avoid;
+    border-bottom: 2px solid #e6e8ef; break-after: avoid;
   }
-  .intro + * h2:first-child, h1 + h2 { break-before: auto; }
+  /* quebras de pagina SO no corpo do manual — nunca na capa/intro */
+  main h1, main h2 { break-before: page; }
+  main h1 + h2 { break-before: avoid; }
+  .cover .title, .intro h2 { break-before: avoid; }
   h3 { font-size: 15px; color: #4f46e5; margin: 20px 0 6px; break-after: avoid; }
   h4 { font-size: 13.5px; color: #1f2430; margin: 16px 0 6px; break-after: avoid; }
   p { margin: 7px 0; }

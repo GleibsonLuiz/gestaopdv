@@ -130,18 +130,22 @@ export function BtnPrimario({
   onClick?: () => void;
   tone?: "iris" | "emerald" | "coral";
 }) {
+  // tone padrão ("iris") = ação primária → segue o accent do tema (ouro no
+  // modo claro, azul no escuro). emerald/coral permanecem semânticos
+  // (Receber/Pagar) — chips saturados com tinta escura, iguais em qualquer tema.
   const grad = tone === "emerald"
     ? "linear-gradient(180deg, oklch(0.80 0.13 158), oklch(0.55 0.14 158))"
     : tone === "coral"
     ? "linear-gradient(180deg, oklch(0.74 0.14 22), oklch(0.55 0.16 22))"
-    : "linear-gradient(180deg, oklch(0.78 0.13 286), oklch(0.62 0.16 286))";
+    : "linear-gradient(135deg, var(--accent), var(--purple))";
+  const ink = tone === "iris" ? "var(--accent-ink)" : "oklch(0.12 0.02 286)";
   return (
     <button
       type={type}
       disabled={disabled}
       onClick={onClick}
-      className="h-10 px-5 inline-flex items-center gap-2 rounded-[9px] font-semibold text-[13px] transition hover:brightness-110 disabled:opacity-50"
-      style={{ background: grad, color: "oklch(0.12 0.02 286)" }}
+      className="h-10 px-5 inline-flex items-center gap-2 rounded-[9px] font-semibold text-[13px] transition hover:brightness-105 disabled:opacity-50"
+      style={{ background: grad, color: ink }}
     >
       {children}
     </button>

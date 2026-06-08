@@ -131,10 +131,21 @@ export const TEMAS: Tema[] = [
       // puro), superficies brancas para os cards "saltarem", texto grafite
       // (nao preto puro). Cores de status recalibradas para contraste AA sobre
       // fundo claro.
-      bg: "#f5f6f8", surface: "#ffffff", card: "#ffffff",
-      border: "#e3e6ea", accent: "#2563eb", purple: "#7c3aed",
+      // Identidade de marca no modo claro: o "lilás" (accent azul + roxo) dá
+      // lugar ao OURO do logo GestãoProMax. Dois tons p/ um metal sofisticado,
+      // não um bloco pesado: accent = DarkGoldenrod (#B8860B) para detalhes
+      // legíveis (foco, bordas, título destaque, texto-accent — passa AA em
+      // texto grande/negrito); purple = Metallic Gold (#D4AF37) como par do
+      // gradiente e realces "iris". Como --white é escuro nos temas claros, o
+      // texto sobre os botões de ouro fica grafite (folha de ouro + tinta
+      // escura), de alto contraste e elegante.
+      // yellow (status "Pendente"/amber) fica num laranja-âmbar distinto do
+      // accent dourado — senão pendente e marca virariam a mesma cor e a
+      // semântica de status (§1) se perderia.
+      bg: "#f7f7f5", surface: "#ffffff", card: "#ffffff",
+      border: "#e6e3da", accent: "#B8860B", purple: "#D4AF37",
       green: "#16a34a", red: "#dc2626", yellow: "#c2740a",
-      text: "#1f2937", muted: "#667085", white: "#0f1422",
+      text: "#26231c", muted: "#6b6657", white: "#1c1709",
     },
   },
   {
@@ -162,6 +173,23 @@ export const TEMAS: Tema[] = [
       border: "#34343a", accent: "#fafafa", purple: "#d4d4d4",
       green: "#22c55e", red: "#ef4444", yellow: "#f59e0b",
       text: "#fafafa", muted: "#a3a3a3", white: "#ffffff",
+    },
+  },
+  {
+    id: "escuro-ouro",
+    nome: "Escuro Ouro",
+    descricao: "Preto & ouro — a identidade da marca no escuro",
+    claro: false,
+    cores: {
+      // Contraparte escura do tema Claro: fundo quente quase-preto (sem preto
+      // absoluto) + acento OURO metálico do logo. Em fundo escuro o ouro brilha
+      // (não precisa ser escurecido como no claro), então usamos o ouro vivo
+      // #D4AF37 / #E8C766. A tinta dos botões sai escura via inkDoAccent (o tom
+      // claro do gradiente manda), dando folha-de-ouro + texto grafite.
+      bg: "#141210", surface: "#1e1b16", card: "#27231c",
+      border: "#3a3326", accent: "#D4AF37", purple: "#E8C766",
+      green: "#22c55e", red: "#ef4444", yellow: "#f59e0b",
+      text: "#f3ede0", muted: "#9b927e", white: "#ffffff",
     },
   },
 ];
@@ -227,6 +255,16 @@ function corDeContraste(hex: string): string {
   return luma(hex) > 0.55 ? "#06291e" : "#ffffff";
 }
 
+// Tinta do texto sobre os botoes primarios. Eles usam um gradiente
+// accent -> purple, entao o ponto mais CLARO do gradiente e quem decide a
+// legibilidade: calculamos o contraste a partir do tom mais claro dos dois.
+// Isso conserta casos como Grafite (accent #fafafa quase branco) e os temas
+// ouro (gradiente dourado claro), onde tinta branca ficava ilegivel.
+function inkDoAccent(accent: string, purple: string): string {
+  const base = luma(purple) > luma(accent) ? purple : accent;
+  return corDeContraste(base);
+}
+
 // Aplica o tema escrevendo as variaveis CSS no :root. O browser repinta
 // automaticamente todos os componentes que usam var(--*).
 export function aplicarTema(id: string): void {
@@ -235,7 +273,7 @@ export function aplicarTema(id: string): void {
   for (const [chave, valor] of Object.entries(tema.cores)) {
     root.style.setProperty(`--${chave}`, valor);
   }
-  root.style.setProperty("--accent-ink", corDeContraste(tema.cores.accent));
+  root.style.setProperty("--accent-ink", inkDoAccent(tema.cores.accent, tema.cores.purple));
   root.dataset.tema = tema.id;
   root.dataset.brilho = tema.claro ? "claro" : "escuro";
 }
@@ -254,7 +292,7 @@ export function aplicarAcento(temaId: string, acento: string | null): void {
     const tema = getTema(temaId);
     root.style.setProperty("--accent", tema.cores.accent);
     root.style.setProperty("--purple", tema.cores.purple);
-    root.style.setProperty("--accent-ink", corDeContraste(tema.cores.accent));
+    root.style.setProperty("--accent-ink", inkDoAccent(tema.cores.accent, tema.cores.purple));
   }
 }
 

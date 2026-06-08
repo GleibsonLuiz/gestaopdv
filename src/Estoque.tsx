@@ -191,15 +191,15 @@ export default function Estoque({ user }: EstoqueProps) {
 
       <div
         className="bg-gp-card rounded-xl overflow-hidden"
-        style={{ border: `1px solid ${C.border}` }}
+        style={{ border: "1px solid var(--hairline-soft)", boxShadow: "var(--shadow-card)" }}
       >
         <div
-          className="grid bg-gp-surface text-gp-muted text-xs font-bold uppercase"
+          className="grid text-gp-muted text-[10.5px] font-medium uppercase"
           style={{
             gridTemplateColumns: "150px 100px 1.5fr 100px 160px 1fr 130px",
-            padding: "12px 16px",
-            borderBottom: `1px solid ${C.border}`,
-            letterSpacing: 0.5,
+            padding: "11px 16px",
+            borderBottom: "1px solid var(--hairline)",
+            letterSpacing: "0.12em",
           }}
         >
           <div>Quando</div>

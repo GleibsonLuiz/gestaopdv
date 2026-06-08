@@ -308,6 +308,25 @@ function pagamentosReducer(state, action) {
       return state.map(p => p.id === action.id ? { ...p, ...action.patch } : p);
     case "reset":
       return [];
+    case "reconcileTotal": {
+      // Total mudou DEPOIS de semear/digitar os pagamentos (caso classico:
+      // operador aplica um desconto com o modal de pagamento ja aberto). Se a
+      // soma dos `valor` passou a exceder o novo total, apara o excedente do
+      // ultimo pagamento para o primeiro. Em DINHEIRO o `valorEntregue` e
+      // preservado de proposito: o excesso vira TROCO em vez de bloquear o
+      // botao "Confirmar pagamento".
+      const totalAlvo = Math.max(0, Number(action.total) || 0);
+      const soma = state.reduce((acc, p) => acc + (Number(p.valor) || 0), 0);
+      let excedente = Math.round((soma - totalAlvo) * 100) / 100;
+      if (excedente <= 0.001) return state;
+      const next = state.map(p => ({ ...p }));
+      for (let i = next.length - 1; i >= 0 && excedente > 0.001; i--) {
+        const reduz = Math.min(Number(next[i].valor) || 0, excedente);
+        next[i].valor = Math.round(((Number(next[i].valor) || 0) - reduz) * 100) / 100;
+        excedente = Math.round((excedente - reduz) * 100) / 100;
+      }
+      return next;
+    }
     default:
       return state;
   }
@@ -319,14 +338,16 @@ const novoId = () =>
     : `p${Date.now()}${Math.random().toString(36).slice(2, 8)}`;
 
 function criarPagamento(forma, valor, opts = {}) {
-  const ehDinheiro = forma === "DINHEIRO";
   return {
     id: novoId(),
     forma,
     formaCustomId: opts.formaCustomId || null,
     formaCustomNome: opts.formaCustomNome || null,
     valor: Math.max(0, Number(valor) || 0),
-    valorEntregue: ehDinheiro ? Math.max(0, Number(valor) || 0) : undefined,
+    // "Recebi" comeca VAZIO (undefined), nao espelhando o valor. So e
+    // preenchido quando o cliente entrega mais que o devido — ai vira troco.
+    // Vazio = pagamento exato (sem troco). Evita o "0" confuso no campo.
+    valorEntregue: undefined,
   };
 }
 
@@ -996,6 +1017,17 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
     return Math.round(t * 100) / 100;
   }, [pagamentos]);
   const podeFinalizar = total > 0 && Math.abs(pago - total) < 0.01;
+
+  // Reconcilia os pagamentos quando o total muda com o modal aberto (ex.:
+  // desconto aplicado depois de semear o DINHEIRO). Sem isto, o `valor`
+  // semeado com o total antigo passa a exceder o novo total e trava o botao
+  // "Confirmar pagamento". Reage so a mudanca de `total` — nao reaperta o
+  // valor enquanto o operador digita um split manualmente.
+  useEffect(() => {
+    if (!pagamentoAberto) return;
+    dispatchPagamentos({ type: "reconcileTotal", total });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [total]);
 
   // Helper: adiciona um pagamento padrao (com valor preenchido = restante).
   // Bloqueia se ja nao ha o que receber. Foca o input apos adicionar para
@@ -2233,7 +2265,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
               >×</button>
             </div>
 
-            <div className="pdv-modal-body pdv-modal-body--compact" style={{ display: "flex", flexDirection: "column", gap: 10, paddingBottom: 12 }}>
+            <div className="pdv-modal-body pdv-modal-body--compact" style={{ display: "flex", flexDirection: "column", gap: 8, paddingBottom: 10 }}>
               <div className="pdv-modal-amount" style={{ margin: 0 }}>
                 <div>
                   <div className="pdv-modal-amount-lbl">Total a receber</div>
@@ -2427,9 +2459,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
                               const v = parseFloat(e.target.value.replace(",", ".")) || 0;
                               dispatchPagamentos({
                                 type: "update", id: p.id,
-                                patch: ehDinheiro
-                                  ? { valor: v, valorEntregue: Math.max(v, Number(p.valorEntregue) || 0) }
-                                  : { valor: v },
+                                patch: { valor: v },
                               });
                             }}
                             className="pdv-field-input"
@@ -2446,12 +2476,18 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
                             <input
                               ref={ehPrimeiroDinheiro ? dinheiroInputRef : null}
                               type="number" step="0.01" min={0}
-                              value={p.valorEntregue ?? p.valor}
+                              // Vazio quando nao informado (em vez de "0"). Placeholder
+                              // mostra o valor devido como dica: deixar vazio = exato.
+                              value={p.valorEntregue ? p.valorEntregue : ""}
+                              placeholder={String(p.valor)}
                               onChange={e => {
-                                const v = parseFloat(e.target.value.replace(",", ".")) || 0;
+                                const raw = e.target.value.trim();
+                                const v = parseFloat(raw.replace(",", "."));
                                 dispatchPagamentos({
                                   type: "update", id: p.id,
-                                  patch: { valorEntregue: v },
+                                  // Campo vazio/invalido => undefined (pagamento exato,
+                                  // sem troco) em vez de gravar um "0".
+                                  patch: { valorEntregue: raw === "" || !Number.isFinite(v) ? undefined : v },
                                 });
                               }}
                               className="pdv-field-input"
@@ -2476,9 +2512,9 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
               )}
 
               <div style={{
-                display: "grid", gap: 6,
+                display: "grid", gap: 4,
                 gridTemplateColumns: "1fr 1fr",
-                padding: "10px 12px", borderRadius: 10,
+                padding: "8px 12px", borderRadius: 10,
                 background: restante > 0
                   ? "rgba(245,158,11,.08)"
                   : "color-mix(in oklab, var(--pdv-accent) 14%, var(--pdv-surf-2))",
@@ -3539,9 +3575,9 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpr
       `}</style>
 
       <div onClick={onFechar} className="pdv-modal-bg">
-        <div onClick={e => e.stopPropagation()} className="pdv-modal" style={{ width: "min(500px, calc(100vw - 32px))" }}>
+        <div onClick={e => e.stopPropagation()} className="pdv-modal" style={{ width: "min(500px, calc(100vw - 32px))", maxHeight: "calc(100vh - 24px)" }}>
           {!modoReimpressao ? (
-            <div className="pdv-success" style={{ paddingBottom: 16 }}>
+            <div className="pdv-success" style={{ paddingBottom: 12 }}>
               <div className="pdv-success-mark">✓</div>
               <div className="pdv-success-title">Venda concluída</div>
               <div className="pdv-success-sub">
@@ -3562,15 +3598,15 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpr
             </div>
           )}
 
-          <div className="pdv-modal-body" style={{ paddingBottom: 8 }}>
+          <div className="pdv-modal-body" style={{ paddingBottom: 6 }}>
             <div style={{
               background: "var(--pdv-surf-2)", border: "1px solid var(--pdv-line)",
-              borderRadius: 12, padding: 14, marginBottom: 12,
+              borderRadius: 12, padding: 12, marginBottom: 10,
             }}>
-              <div style={{ color: "var(--pdv-t3)", fontSize: 10.5, fontWeight: 500, letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 8 }}>Itens</div>
+              <div style={{ color: "var(--pdv-t3)", fontSize: 10.5, fontWeight: 500, letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 6 }}>Itens</div>
               {venda.itens?.map((it, i) => (
                 <div key={it.id} style={{
-                  display: "flex", justifyContent: "space-between", padding: "8px 0",
+                  display: "flex", justifyContent: "space-between", padding: "6px 0",
                   borderTop: i === 0 ? "none" : "1px solid var(--pdv-line)", fontSize: 13,
                 }}>
                   <div>
@@ -3586,7 +3622,7 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpr
 
             <div style={{
               background: "var(--pdv-surf-2)", border: "1px solid var(--pdv-line)",
-              borderRadius: 12, padding: 14, marginBottom: 16,
+              borderRadius: 12, padding: 12, marginBottom: 0,
             }}>
               {Array.isArray(venda.pagamentos) && venda.pagamentos.length > 1 ? (
                 <div style={{ marginBottom: 8 }}>

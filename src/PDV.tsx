@@ -2021,7 +2021,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
           <div
             onClick={e => e.stopPropagation()}
             className="pdv-modal"
-            style={{ width: "min(460px, calc(100vw - 32px))" }}
+            style={{ width: `min(${ehUnidadePeso(qtdModalProduto.unidade) ? 500 : 420}px, calc(100vw - 32px))` }}
           >
             <div className="pdv-modal-hd">
               <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
@@ -2063,48 +2063,78 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
                   return s.replace(/^0+(?=\d)/, "");
                 });
                 const tecla = {
-                  padding: "13px 0", borderRadius: 10, border: "1px solid var(--pdv-line)",
-                  color: "var(--pdv-t1)", fontSize: 19, fontWeight: 600, cursor: "pointer",
-                  fontVariantNumeric: "tabular-nums",
+                  padding: "10px 0", borderRadius: 9, border: "1px solid var(--pdv-line)",
+                  color: "var(--pdv-t1)", fontSize: 18, fontWeight: 600, cursor: "pointer",
+                  fontVariantNumeric: "tabular-nums", lineHeight: 1, fontFamily: "inherit",
                 };
                 return (
-                  <>
-                    <label className="pdv-field-label">Peso (gramas)</label>
-                    <input
-                      ref={qtdInputRef}
-                      type="text"
-                      inputMode="numeric"
-                      value={qtdModalValor}
-                      onChange={e => setQtdModalValor(e.target.value.replace(/[^0-9.,]/g, ""))}
-                      placeholder="0"
-                      className="pdv-qty-input"
-                      style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}
-                    />
+                  // Layout em duas colunas: à esquerda display + atalhos + total;
+                  // à direita o teclado numérico (estilo balança). Mantém tudo
+                  // acima da dobra em notebooks (sem rolagem). A digitação física
+                  // (numpad) cai direto no input focado; Enter confirma (useModalKeys).
+                  <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1.05fr)", gap: 12, alignItems: "stretch" }}>
+                    {/* COLUNA ESQUERDA */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
+                      <div>
+                        <label className="pdv-field-label" style={{ marginBottom: 4 }}>Peso (gramas)</label>
+                        <input
+                          ref={qtdInputRef}
+                          type="text"
+                          inputMode="numeric"
+                          value={qtdModalValor}
+                          onChange={e => setQtdModalValor(e.target.value.replace(/[^0-9.,]/g, ""))}
+                          placeholder="0"
+                          className="pdv-qty-input"
+                          style={{ padding: "10px 14px", fontSize: 26, borderRadius: 10, textAlign: "right", fontVariantNumeric: "tabular-nums" }}
+                        />
+                      </div>
 
-                    {/* Atalhos de peso */}
-                    <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                      {PRESETS_PESO_G.map(g => (
-                        <button
-                          key={g}
-                          type="button"
-                          onClick={() => setQtdModalValor(String(g))}
-                          style={{
-                            flex: 1, padding: "8px 0", borderRadius: 8,
-                            border: "1px solid var(--pdv-line)", background: "var(--pdv-surf-2)",
-                            color: "var(--pdv-t2)", fontSize: 12.5, cursor: "pointer",
-                          }}
-                        >
-                          {g >= 1000 ? `${g / 1000}kg` : `${g}g`}
-                        </button>
-                      ))}
+                      {/* Atalhos de peso (grade 2×2, discretos) */}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                        {PRESETS_PESO_G.map(g => {
+                          const ativo = gramas === g;
+                          return (
+                            <button
+                              key={g}
+                              type="button"
+                              onMouseDown={e => e.preventDefault()}
+                              onClick={() => setQtdModalValor(String(g))}
+                              style={{
+                                padding: "7px 0", borderRadius: 8,
+                                border: `1px solid ${ativo ? "var(--pdv-accent)" : "var(--pdv-line)"}`,
+                                background: ativo ? "var(--pdv-accent-glow)" : "var(--pdv-surf-2)",
+                                color: ativo ? "var(--pdv-accent)" : "var(--pdv-t2)",
+                                fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                                fontVariantNumeric: "tabular-nums", fontFamily: "inherit",
+                              }}
+                            >
+                              {g >= 1000 ? `${g / 1000}kg` : `${g}g`}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Total (empurrado para a base, alinhado ao teclado) */}
+                      <div
+                        className="pdv-modal-amount"
+                        style={{ margin: "auto 0 0", padding: "12px 14px", flexDirection: "column", alignItems: "stretch", gap: 6 }}
+                      >
+                        <div className="pdv-modal-amount-lbl">
+                          {gramas > 0 ? `${fmtQtd(qtdEstoque)} ${un} × ${fmtBRL(qtdModalProduto.precoVenda)}` : `R$ ${fmtBRL(qtdModalProduto.precoVenda)} / ${un}`}
+                        </div>
+                        <div className="pdv-modal-amount-num" style={{ fontSize: 26 }}>
+                          {(() => { const { int, dec } = fmtPartes(sub); return <><span className="cur">R$</span>{int}<span className="cents">,{dec}</span></>; })()}
+                        </div>
+                      </div>
                     </div>
 
-                    {/* Teclado numérico (estilo balança) */}
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, marginTop: 8 }}>
+                    {/* COLUNA DIREITA — teclado numérico compacto */}
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gridAutoRows: "1fr", gap: 6 }}>
                       {["7", "8", "9", "4", "5", "6", "1", "2", "3", ",", "0", "⌫"].map(k => (
                         <button
                           key={k}
                           type="button"
+                          onMouseDown={e => e.preventDefault()}
                           onClick={() => {
                             if (k === "⌫") setQtdModalValor(v => String(v || "").slice(0, -1));
                             else if (k === ",") setQtdModalValor(v => {
@@ -2113,27 +2143,13 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
                             });
                             else append(k);
                           }}
-                          style={{ ...tecla, background: k === "⌫" ? "var(--pdv-surf-1)" : "var(--pdv-surf-2)" }}
+                          style={{ ...tecla, background: k === "⌫" ? "var(--pdv-surf-1)" : "var(--pdv-surf-2)", color: k === "⌫" ? "var(--pdv-t3)" : "var(--pdv-t1)" }}
                         >
                           {k}
                         </button>
                       ))}
                     </div>
-
-                    <div className="pdv-modal-amount" style={{ margin: "12px 0 0" }}>
-                      <div>
-                        <div className="pdv-modal-amount-lbl">
-                          {gramas > 0 ? `${fmtQtd(qtdEstoque)} ${un} × ${fmtBRL(qtdModalProduto.precoVenda)}` : "Informe o peso"}
-                        </div>
-                        <div className="pdv-modal-amount-sub">
-                          {gramas > 0 ? `${fmtQtd(gramas)} g` : `R$ ${fmtBRL(qtdModalProduto.precoVenda)} por ${un}`}
-                        </div>
-                      </div>
-                      <div className="pdv-modal-amount-num">
-                        {(() => { const { int, dec } = fmtPartes(sub); return <><span className="cur">R$</span>{int}<span className="cents">,{dec}</span></>; })()}
-                      </div>
-                    </div>
-                  </>
+                  </div>
                 );
               })() : (
                 <>

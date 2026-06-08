@@ -246,6 +246,6 @@ function alerta(cor: string): CSSProperties {
 }
 const inputBase: CSSProperties = { width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "7px 10px", color: C.text, fontSize: 13, outline: "none", boxSizing: "border-box" };
 const btnGhost: CSSProperties = { background: C.surface, border: `1px solid ${C.border}`, color: C.text, borderRadius: 8, padding: "7px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" };
-const btnPrimario: CSSProperties = { background: C.accent, border: `1px solid ${C.accent}`, color: "#0b0f17", borderRadius: 8, padding: "7px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" };
+const btnPrimario: CSSProperties = { background: C.accent, border: `1px solid ${C.accent}`, color: "var(--accent-ink)", borderRadius: 8, padding: "7px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" };
 const modalBg: CSSProperties = { position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 };
 const modalBox: CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20, width: "min(560px, calc(100vw - 32px))", maxHeight: "calc(100vh - 32px)", overflowY: "auto" };

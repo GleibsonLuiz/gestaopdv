@@ -1391,7 +1391,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
             onClick={recuperarRascunho}
             style={{
               background: C.accent,
-              color: "#fff",
+              color: "var(--accent-ink)",
               border: "none",
               borderRadius: 6,
               padding: "8px 14px",

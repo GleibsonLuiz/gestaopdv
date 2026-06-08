@@ -633,9 +633,10 @@ function ModalGerenciarTagsCliente({ cliente, tags, onToggleTag, onFechar, onNov
                   <button
                     type="button"
                     onClick={onNovaTag}
-                    className="text-gp-white border-none rounded-md cursor-pointer text-xs"
+                    className="border-none rounded-md cursor-pointer text-xs"
                     style={{
                       background: C.accent,
+                      color: "var(--accent-ink)",
                       padding: "6px 14px",
                     }}
                   >
@@ -704,9 +705,10 @@ function ModalGerenciarTagsCliente({ cliente, tags, onToggleTag, onFechar, onNov
           <button
             type="button"
             onClick={onFechar}
-            className="text-gp-white border-none rounded-md cursor-pointer text-[13px] font-bold"
+            className="border-none rounded-md cursor-pointer text-[13px] font-bold"
             style={{
               background: C.accent,
+              color: "var(--accent-ink)",
               padding: "8px 22px",
             }}
           >
@@ -861,9 +863,10 @@ function ModalGerirTags({ tags, onFechar, onMudou, podeEditar, podeExcluir }: Mo
                   type="button"
                   onClick={salvar}
                   disabled={salvando || !editando.nome.trim()}
-                  className="text-gp-white border-none rounded-md cursor-pointer text-xs font-bold"
+                  className="border-none rounded-md cursor-pointer text-xs font-bold"
                   style={{
                     background: C.accent,
+                    color: "var(--accent-ink)",
                     padding: "7px 14px",
                   }}
                 >

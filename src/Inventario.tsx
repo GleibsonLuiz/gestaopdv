@@ -228,7 +228,7 @@ export default function Inventario({ user }: InventarioProps) {
             type="button"
             onClick={() => setQrAberto(true)}
             className="text-xs font-bold"
-            style={{ color: C.white, background: C.accent, padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer" }}
+            style={{ color: "var(--accent-ink)", background: C.accent, padding: "6px 12px", borderRadius: 6, border: "none", cursor: "pointer" }}
           >📱 QR Code</button>
           <a
             href="?mobile=inventario"

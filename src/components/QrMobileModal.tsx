@@ -151,7 +151,7 @@ export default function QrMobileModal({ aberto, onFechar, inventarioId, inventar
             type="button"
             onClick={onFechar}
             className="flex-1 py-2.5 rounded-lg text-[13px] font-bold"
-            style={{ background: C.accent, color: "#ffffff" }}
+            style={{ background: C.accent, color: "var(--accent-ink)" }}
           >
             Fechar
           </button>

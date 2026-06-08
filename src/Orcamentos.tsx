@@ -868,8 +868,8 @@ function FormularioOrcamentoModal({
           <button
             type="button"
             onClick={adicionarItem}
-            className="text-gp-white border-none rounded-md text-xs font-semibold cursor-pointer"
-            style={{ background: C.accent, padding: "6px 14px" }}
+            className="border-none rounded-md text-xs font-semibold cursor-pointer"
+            style={{ background: C.accent, color: "var(--accent-ink)", padding: "6px 14px" }}
           >
             + Adicionar item
           </button>

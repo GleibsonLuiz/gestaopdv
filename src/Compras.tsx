@@ -315,8 +315,8 @@ export default function Compras({ user }: ComprasProps) {
                   <button
                     type="button"
                     onClick={() => { setRascunhoEditando(r); setNovoAberto(true); }}
-                    className="rounded-md text-xs font-semibold cursor-pointer text-gp-white border-none"
-                    style={{ background: C.accent, padding: "6px 12px" }}
+                    className="rounded-md text-xs font-semibold cursor-pointer border-none"
+                    style={{ background: C.accent, color: "var(--accent-ink)", padding: "6px 12px" }}
                   >
                     Retomar
                   </button>
@@ -669,8 +669,8 @@ export function NovaCompraModal({ fornecedores, produtos, rascunhoInicial, onCan
           <button
             type="button"
             onClick={adicionarItem}
-            className="text-gp-white border-none rounded-md text-xs font-semibold cursor-pointer"
-            style={{ background: C.accent, padding: "6px 14px" }}
+            className="border-none rounded-md text-xs font-semibold cursor-pointer"
+            style={{ background: C.accent, color: "var(--accent-ink)", padding: "6px 14px" }}
           >
             + Adicionar item
           </button>

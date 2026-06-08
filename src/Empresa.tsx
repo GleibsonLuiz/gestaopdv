@@ -827,7 +827,7 @@ function BlocoCardapio({ podeEditar }: { podeEditar: boolean }) {
               <button onClick={copiar} className="bg-gp-surface border border-gp-border rounded-lg px-3 py-[6px] text-xs font-bold cursor-pointer text-gp-text">
                 {copiado ? "✓ Copiado" : "📋 Copiar link"}
               </button>
-              <a href={url} target="_blank" rel="noopener noreferrer" className="rounded-lg px-3 py-[6px] text-xs font-bold no-underline text-gp-white" style={{ background: C.accent }}>
+              <a href={url} target="_blank" rel="noopener noreferrer" className="rounded-lg px-3 py-[6px] text-xs font-bold no-underline" style={{ background: C.accent, color: "var(--accent-ink)" }}>
                 Abrir cardápio →
               </a>
             </div>

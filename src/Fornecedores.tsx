@@ -574,15 +574,18 @@ export default function Fornecedores({ user }: FornecedoresProps) {
         textoSalvar="Criar fornecedor"
         editando={!!editando}
         erro={erroForm}
-        larguraMax={860}
+        larguraMax={880}
+        compacto
+        className="fornecedor-modal"
       >
         {/* SEÇÃO 1: Identificação */}
         <Secao legenda="Dados básicos">
-          <Linha cols={1}>
+          {/* Identificação: Razão Social + Nome Fantasia lado a lado */}
+          <Linha cols={2}>
             <Campo
               label="Razão Social / Nome"
               obrigatorio
-              hint="Nome juridico que aparece no contrato/CNPJ. E o que vai na NF-e."
+              hint="Nome juridico que vai na NF-e."
               erro={nomeInvalido ? "Informe o nome do fornecedor." : undefined}
             >
               <input
@@ -597,8 +600,6 @@ export default function Fornecedores({ user }: FornecedoresProps) {
                 aria-invalid={nomeInvalido ? "true" : undefined}
               />
             </Campo>
-          </Linha>
-          <Linha cols={2}>
             <Campo label="Nome Fantasia" hint="Como o fornecedor e conhecido no mercado.">
               <input
                 className="lux-input"
@@ -607,10 +608,15 @@ export default function Fornecedores({ user }: FornecedoresProps) {
                 placeholder="Ex.: Papel & Cia"
               />
             </Campo>
+          </Linha>
+          {/* Documentos / Contato: Tipo + CNPJ/CPF + Telefone + E-mail na mesma linha.
+              Tipo fica colado no documento pois define a máscara aplicada. */}
+          <Linha style={{ gridTemplateColumns: "150px 175px 150px 1fr" }}>
             <Campo label="Tipo de pessoa">
               <select
                 className="lux-select"
                 value={form.tipoPessoa}
+                aria-label="Tipo de pessoa"
                 onChange={(e) => {
                   const novoTipo = e.target.value as TipoPessoa;
                   setCnpjErro("");
@@ -621,20 +627,18 @@ export default function Fornecedores({ user }: FornecedoresProps) {
                   }));
                 }}
               >
-                <option value="PJ">Pessoa Jurídica (CNPJ)</option>
-                <option value="PF">Pessoa Física (CPF)</option>
+                <option value="PJ">Pessoa Jurídica</option>
+                <option value="PF">Pessoa Física</option>
               </select>
             </Campo>
-          </Linha>
-          <Linha style={{ gridTemplateColumns: "185px 160px 1fr" }}>
             <Campo
               label={form.tipoPessoa === "PF" ? "CPF" : "CNPJ"}
               hint={
                 form.tipoPessoa !== "PJ"
                   ? undefined
                   : buscandoCnpj
-                    ? "Buscando dados na Receita…"
-                    : "Preenche nome e endereço automaticamente."
+                    ? "Buscando na Receita…"
+                    : "Preenche nome e endereço."
               }
               erro={cnpjErro || undefined}
             >
@@ -675,14 +679,17 @@ export default function Fornecedores({ user }: FornecedoresProps) {
 
         {/* SEÇÃO 2: Dados Fiscais */}
         <Secao legenda="Dados fiscais / tributários">
-          <Linha cols={2}>
+          {/* Indicador IE + Regime + IE + IM lado a lado. Selects ganham mais
+              espaço (1.3fr) pois carregam rótulos longos do SEFAZ. */}
+          <Linha style={{ gridTemplateColumns: "1.3fr 1.3fr 1fr 1fr" }}>
             <Campo
-              label="Indicador da IE (indIEDest)"
-              hint="Define como o fornecedor aparece na NF-e como destinatario."
+              label="Indicador da IE"
+              hint="Como aparece na NF-e."
             >
               <select
                 className="lux-select"
                 value={form.indIEDest}
+                aria-label="Indicador da Inscrição Estadual do destinatário"
                 onChange={(e) => {
                   const valor = e.target.value === "" ? "" : Number(e.target.value) as IndIEDest;
                   setForm((prev) => ({
@@ -703,6 +710,7 @@ export default function Fornecedores({ user }: FornecedoresProps) {
               <select
                 className="lux-select"
                 value={form.crt}
+                aria-label="Regime Tributário (CRT)"
                 onChange={(e) => setForm({ ...form, crt: e.target.value === "" ? "" : Number(e.target.value) as CRT })}
               >
                 <option value="">Selecione…</option>
@@ -711,12 +719,10 @@ export default function Fornecedores({ user }: FornecedoresProps) {
                 ))}
               </select>
             </Campo>
-          </Linha>
-          <Linha cols={2}>
             <Campo
               label="Inscrição Estadual"
               obrigatorio={form.indIEDest === 1}
-              hint={form.ieIsenta ? "Isento — campo desabilitado." : undefined}
+              hint={form.ieIsenta ? "Isento." : undefined}
             >
               <input
                 className="lux-input"
@@ -729,7 +735,7 @@ export default function Fornecedores({ user }: FornecedoresProps) {
                 style={form.ieIsenta ? { opacity: 0.55 } : undefined}
               />
               <label
-                className="flex items-center gap-2 mt-2 text-xs text-gp-muted cursor-pointer"
+                className="flex items-center gap-1.5 mt-1.5 text-[11px] text-gp-muted cursor-pointer"
               >
                 <input
                   type="checkbox"
@@ -737,7 +743,7 @@ export default function Fornecedores({ user }: FornecedoresProps) {
                   onChange={(e) => alternarIsento(e.target.checked)}
                   style={{ accentColor: C.accent }}
                 />
-                Isento de Inscrição Estadual
+                Isento de IE
               </label>
             </Campo>
             <Campo label="Inscrição Municipal">
@@ -745,7 +751,7 @@ export default function Fornecedores({ user }: FornecedoresProps) {
                 className="lux-input"
                 value={form.im}
                 onChange={(e) => setForm({ ...form, im: e.target.value.replace(/\D/g, "") })}
-                placeholder="Apenas dígitos (NFS-e)"
+                placeholder="Dígitos (NFS-e)"
                 inputMode="numeric"
                 maxLength={15}
               />
@@ -769,7 +775,8 @@ export default function Fornecedores({ user }: FornecedoresProps) {
 
         {/* SEÇÃO 3: Endereço */}
         <Secao legenda="Endereço">
-          <Linha variant="addr-tilt">
+          {/* Endereço básico: CEP + UF + Cidade + Número na mesma linha */}
+          <Linha style={{ gridTemplateColumns: "120px 80px 1fr 90px" }}>
             <Campo
               label="CEP"
               hint={
@@ -777,7 +784,7 @@ export default function Fornecedores({ user }: FornecedoresProps) {
                   ? "Buscando…"
                   : cepNaoEncontrado
                     ? "CEP não encontrado"
-                    : "ViaCEP preenche logradouro, bairro, cidade, UF e código IBGE."
+                    : "ViaCEP autopreenche."
               }
             >
               <input
@@ -791,10 +798,11 @@ export default function Fornecedores({ user }: FornecedoresProps) {
                 autoComplete="postal-code"
               />
             </Campo>
-            <Campo label="Estado">
+            <Campo label="UF">
               <select
                 className="lux-select"
                 value={form.estado}
+                aria-label="Estado (UF)"
                 onChange={(e) => setEstado(e.target.value)}
                 autoComplete="address-level1"
               >
@@ -813,17 +821,6 @@ export default function Fornecedores({ user }: FornecedoresProps) {
                 autoComplete="address-level2"
               />
             </Campo>
-          </Linha>
-          <Linha style={{ gridTemplateColumns: "1fr 120px" }}>
-            <Campo label="Logradouro">
-              <input
-                className="lux-input"
-                value={form.endereco}
-                onChange={(e) => setForm({ ...form, endereco: e.target.value })}
-                placeholder="Rua, avenida, travessa…"
-                autoComplete="street-address"
-              />
-            </Campo>
             <Campo label="Número">
               <input
                 className="lux-input"
@@ -835,7 +832,17 @@ export default function Fornecedores({ user }: FornecedoresProps) {
               />
             </Campo>
           </Linha>
-          <Linha cols={2}>
+          {/* Detalhes do endereço: Logradouro + Bairro + Complemento */}
+          <Linha style={{ gridTemplateColumns: "1.5fr 1fr 1fr" }}>
+            <Campo label="Logradouro">
+              <input
+                className="lux-input"
+                value={form.endereco}
+                onChange={(e) => setForm({ ...form, endereco: e.target.value })}
+                placeholder="Rua, avenida, travessa…"
+                autoComplete="street-address"
+              />
+            </Campo>
             <Campo label="Bairro">
               <input
                 className="lux-input"
@@ -853,9 +860,10 @@ export default function Fornecedores({ user }: FornecedoresProps) {
               />
             </Campo>
           </Linha>
+          {/* Códigos fiscais: campos curtos, agrupados bem enxutos na última linha */}
           <Linha style={{ gridTemplateColumns: "1fr 1fr 1fr 1fr" }}>
             <Campo
-              label="Código IBGE Município"
+              label="Cód. IBGE Município"
               hint="Auto pelo ViaCEP."
             >
               <input
@@ -867,7 +875,7 @@ export default function Fornecedores({ user }: FornecedoresProps) {
                 maxLength={7}
               />
             </Campo>
-            <Campo label="Código IBGE UF">
+            <Campo label="Cód. IBGE UF">
               <input
                 className="lux-input"
                 value={form.codUFIBGE}
@@ -876,7 +884,7 @@ export default function Fornecedores({ user }: FornecedoresProps) {
                 style={{ opacity: 0.7 }}
               />
             </Campo>
-            <Campo label="Código País">
+            <Campo label="Cód. País">
               <input
                 className="lux-input"
                 value={form.codPais}

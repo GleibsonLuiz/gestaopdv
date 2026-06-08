@@ -38,3 +38,8 @@ docs/img/_*.png
 senha.rtf
 *.rtf
 secrets.txt
+
+# Manual em PDF — artefato gerado (regerar com: node scripts/gerar-manual-pdf.mjs)
+docs/Manual-GestaoProMax.pdf
+docs/_manual-build.html
+docs/_val.html

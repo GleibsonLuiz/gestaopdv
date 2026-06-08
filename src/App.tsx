@@ -315,6 +315,7 @@ export default function App() {
   // em modo focado, onde nao ha sidebar.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if (!e.key) return; // alguns eventos (autofill/IME) nao tem e.key
       const k = e.key.toLowerCase();
       if ((e.ctrlKey || e.metaKey) && k === "k") {
         e.preventDefault();

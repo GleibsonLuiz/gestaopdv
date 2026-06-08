@@ -1303,7 +1303,7 @@ export function GerenciarFormasModal({ podeExcluir, onFechar }: any) {
 
         {/* LISTA */}
         <div style={{
-          background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10,
+          background: C.surface, border: "1px solid var(--hairline-soft)", borderRadius: 10,
           padding: 8, marginBottom: 14, maxHeight: 220, overflowY: "auto",
         }}>
           {carregando ? (
@@ -1428,7 +1428,8 @@ const modalOverlay: CSSProperties = {
 };
 
 const modalCard: CSSProperties = {
-  background: C.card, border: `1px solid ${C.border}`, borderRadius: 14,
+  background: C.card, border: "1px solid var(--hairline)", borderRadius: 14,
+  boxShadow: "0 1px 0 0 color-mix(in srgb, #fff 5%, transparent) inset, 0 24px 60px -20px rgba(0,0,0,.6)",
   width: "100%", maxWidth: 480, maxHeight: "92vh", overflowY: "auto", padding: 24,
 };
 

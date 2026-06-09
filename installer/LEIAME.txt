@@ -1,0 +1,55 @@
+============================================================
+  GestaoProMax - Instalador de Impressao Direta
+============================================================
+
+O QUE ESTE INSTALADOR FAZ (uma vez, por computador):
+
+  1. Instala o QZ Tray (agente que imprime na termica sem
+     abrir caixa de dialogo).
+  2. Registra o certificado do GestaoProMax como confiavel,
+     para a impressao sair SILENCIOSA (sem pedir "permitir").
+  3. Cria o atalho "PDV (impressao direta)" na Area de
+     Trabalho.
+
+------------------------------------------------------------
+COMO USAR
+------------------------------------------------------------
+
+  1. Instale a sua impressora termica no Windows (driver do
+     fabricante) ANTES de rodar este instalador.
+  2. De dois cliques em  INSTALAR.bat
+  3. Clique "Sim" no aviso de permissao (administrador).
+  4. Aguarde a mensagem "Instalacao concluida!".
+
+------------------------------------------------------------
+DEPOIS DA INSTALACAO (dentro do sistema)
+------------------------------------------------------------
+
+  1. Abra o atalho "PDV (impressao direta)" e faca login.
+  2. Configuracoes > Impressora > card "Impressao direta
+     via agente (QZ Tray)":
+        - Detectar agente / listar impressoras
+        - Escolher a sua impressora termica
+        - Ligar "Usar o agente para imprimir o cupom da venda"
+  3. Imprima um cupom de teste. Deve sair direto na bobina.
+
+------------------------------------------------------------
+OBSERVACOES
+------------------------------------------------------------
+
+  - Precisa de Windows 10/11 e Google Chrome.
+  - O QZ Tray fica na bandeja (perto do relogio). Deixe-o
+    iniciar com o Windows: clique direito no icone >
+    "Start automatically".
+  - Se a impressao sair fraca/falhada, ajuste a DENSIDADE
+    na propria impressora (utilitario do fabricante ou
+    autoteste) - nao e no sistema.
+  - Sem o QZ, o sistema ainda imprime pelo navegador
+    (com caixa de dialogo). O agente so deixa silencioso.
+
+Arquivos desta pasta:
+  INSTALAR.bat              -> de dois cliques para instalar
+  instalar-gestaopromax.ps1 -> o instalador (chamado pelo .bat)
+  GestaoProMax.crt          -> certificado de confianca
+  pdv.ico                   -> icone do atalho
+============================================================

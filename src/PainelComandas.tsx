@@ -470,7 +470,7 @@ export default function PainelComandas({ user }: Props) {
           observacoes: completa.observacoes,
         },
         {
-          nome: empresa?.nome,
+          nome: (empresa?.nomeFantasia || empresa?.razaoSocial) as string | undefined,
           cnpj: empresa?.cnpj,
           telefone: typeof empresa?.telefone === "string" ? empresa.telefone : undefined,
         },

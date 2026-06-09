@@ -531,7 +531,7 @@ export default function PdvVolante() {
           agora: new Date(),
         },
         {
-          nome: empresa?.nome,
+          nome: (empresa?.nomeFantasia || empresa?.razaoSocial) as string | undefined,
           cnpj: empresa?.cnpj,
           telefone: typeof empresa?.telefone === "string" ? empresa.telefone : undefined,
         },

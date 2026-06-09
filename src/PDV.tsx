@@ -3499,7 +3499,7 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpr
         formaPagamentoLabel: formaLabel,
       },
       {
-        nome: empresa?.nome,
+        nome: empresa?.nomeFantasia || empresa?.razaoSocial,
         cnpj: empresa?.cnpj,
         endereco: empresa ? formatarEndereco(empresa) : null,
         telefone: empresa?.telefone,

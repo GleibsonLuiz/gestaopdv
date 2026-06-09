@@ -288,7 +288,7 @@ export default function ConfiguracoesImpressora({ user }: Props) {
           </div>
         </Card>
 
-        <CardQzTray empresaNome={(empresa?.nome as string) || ""} podeEditar={podeEditar} />
+        <CardQzTray empresaNome={((empresa?.nomeFantasia || empresa?.razaoSocial) as string) || ""} podeEditar={podeEditar} />
 
         {podeEditar && (
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>

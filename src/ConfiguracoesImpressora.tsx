@@ -8,6 +8,13 @@ import {
   imprimirDocumento,
 } from "./lib/impressora";
 import type { ConfigImpressora, LarguraImpressao } from "./lib/impressora";
+import {
+  qzConfig,
+  salvarQzConfig,
+  listarImpressorasQz,
+  imprimirRawQz,
+  comandosTesteQz,
+} from "./lib/qztray";
 import { useConfiguracaoEmpresa } from "./HeaderRelatorio";
 import CupomEnvelope from "./components/cupons/CupomEnvelope";
 import CupomTeste from "./components/cupons/CupomTeste";
@@ -281,6 +288,8 @@ export default function ConfiguracoesImpressora({ user }: Props) {
           </div>
         </Card>
 
+        <CardQzTray empresaNome={(empresa?.nome as string) || ""} podeEditar={podeEditar} />
+
         {podeEditar && (
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
             <button
@@ -461,3 +470,149 @@ const textareaStyle: CSSProperties = {
   resize: "vertical",
   minHeight: 64,
 };
+
+// ===== Card: impressão direta via agente QZ Tray =====
+// Config por máquina (localStorage). Permite imprimir o cupom direto numa
+// impressora escolhida pelo nome, sem depender da padrão do Windows e sem
+// caixa de diálogo. Tudo OFF por padrão — só liga quem instalar o agente.
+type CardQzProps = { empresaNome?: string | null; podeEditar: boolean };
+
+function CardQzTray({ empresaNome, podeEditar }: CardQzProps) {
+  const inicial = qzConfig();
+  const [ativo, setAtivo] = useState(inicial.ativo);
+  const [impressora, setImpressora] = useState(inicial.impressora);
+  const [impressoras, setImpressoras] = useState<string[]>(
+    inicial.impressora ? [inicial.impressora] : [],
+  );
+  const [status, setStatus] = useState<"idle" | "buscando" | "ok" | "ausente">("idle");
+  const [erro, setErro] = useState("");
+  const [msg, setMsg] = useState("");
+
+  function flash(t: string) {
+    setMsg(t);
+    setTimeout(() => setMsg(""), 2500);
+  }
+
+  async function detectar() {
+    setErro("");
+    setStatus("buscando");
+    try {
+      const lista = await listarImpressorasQz();
+      setImpressoras(lista);
+      setStatus("ok");
+      if (!impressora && lista.length) {
+        // Pré-seleciona uma POS80/térmica se houver, senão a primeira.
+        const palpite = lista.find(n => /pos|80|term|thermal|cupom/i.test(n)) || lista[0];
+        setImpressora(palpite);
+        salvarQzConfig({ impressora: palpite });
+      }
+    } catch (err) {
+      setStatus("ausente");
+      setErro((err as Error).message || "Agente não encontrado.");
+    }
+  }
+
+  function alterarAtivo(v: boolean) {
+    setAtivo(v);
+    salvarQzConfig({ ativo: v });
+  }
+  function alterarImpressora(v: string) {
+    setImpressora(v);
+    salvarQzConfig({ impressora: v });
+  }
+
+  async function imprimirTeste() {
+    setErro("");
+    try {
+      await imprimirRawQz(comandosTesteQz(empresaNome || "ESTABELECIMENTO"), impressora || undefined);
+      flash("Teste enviado ao agente.");
+    } catch (err) {
+      setErro((err as Error).message);
+    }
+  }
+
+  const badge =
+    status === "ok" ? { txt: "Agente conectado", cor: C.green } :
+    status === "buscando" ? { txt: "Procurando…", cor: C.muted } :
+    status === "ausente" ? { txt: "Agente não encontrado", cor: C.red } :
+    { txt: "Não verificado", cor: C.muted };
+
+  return (
+    <Card titulo="Impressão direta via agente (QZ Tray)">
+      <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 12 }}>
+        Imprime o cupom direto numa impressora escolhida pelo nome — <b>sem caixa de diálogo</b> e
+        sem depender da impressora padrão do Windows (ideal quando o mesmo PC usa outras impressoras).
+        Requer o app gratuito <b>QZ Tray</b> instalado e aberto neste computador
+        (<a href="https://qz.io/download" target="_blank" rel="noreferrer noopener" style={{ color: C.accent }}>qz.io/download</a>).
+        Esta configuração é só deste PC.
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <span style={{
+          fontSize: 11, fontWeight: 700, color: badge.cor,
+          background: `${badge.cor}1a`, border: `1px solid ${badge.cor}55`,
+          padding: "3px 10px", borderRadius: 999,
+        }}>● {badge.txt}</span>
+        <button
+          type="button"
+          onClick={detectar}
+          disabled={status === "buscando"}
+          style={{
+            background: C.bg, border: `1px solid ${C.border}`, color: C.text,
+            padding: "6px 12px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 600,
+          }}
+        >
+          {status === "buscando" ? "Procurando…" : "Detectar agente / listar impressoras"}
+        </button>
+      </div>
+
+      {erro && <Alerta tipo="erro">{erro}</Alerta>}
+      {msg && <Alerta tipo="sucesso">{msg}</Alerta>}
+
+      {impressoras.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <Label>Impressora deste PC</Label>
+          <select
+            value={impressora}
+            onChange={e => alterarImpressora(e.target.value)}
+            disabled={!podeEditar}
+            title="Impressora deste PC"
+            aria-label="Impressora deste PC"
+            style={inputStyle}
+          >
+            <option value="">— selecione —</option>
+            {impressoras.map(nome => (
+              <option key={nome} value={nome}>{nome}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+        <Switch
+          label="Usar o agente para imprimir o cupom da venda"
+          descricao="Quando ligado, o cupom sai direto na impressora escolhida acima. Se o agente falhar, cai automaticamente na impressão do navegador."
+          checked={ativo}
+          onChange={alterarAtivo}
+          disabled={!podeEditar || !impressora}
+        />
+      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <button
+          type="button"
+          onClick={imprimirTeste}
+          disabled={!impressora}
+          style={{
+            background: C.surface, border: `1px solid ${C.border}`,
+            color: impressora ? C.text : C.muted,
+            padding: "8px 14px", borderRadius: 8, cursor: impressora ? "pointer" : "not-allowed",
+            fontSize: 13, fontWeight: 600,
+          }}
+        >
+          🖨️ Imprimir teste via agente
+        </button>
+      </div>
+    </Card>
+  );
+}

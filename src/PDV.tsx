@@ -23,6 +23,9 @@ import PixQrCodeModal from "./components/PixQrCodeModal";
 // ETAPA#8a: impressao termica direta via Web Bluetooth (alternativa ao window.print()).
 import { gerarComandosPedido } from "./lib/escposPedido";
 import { imprimirViaBluetooth, bluetoothDisponivel } from "./lib/webBluetoothPrint";
+// Agente QZ Tray: imprime o cupom direto numa impressora escolhida pelo
+// nome, sem caixa de dialogo. Fallback automatico para window.print().
+import { qzAtivoEConfigurado, imprimirRawQz } from "./lib/qztray";
 import { getEmpresa } from "./lib/api";
 import { gerarLink } from "./lib/templates";
 import { ehUnidadePeso, pesoGramasParaEstoque, resolverEtiquetaBalanca, PRESETS_PESO_G } from "./lib/unidades";
@@ -3457,8 +3460,8 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpr
     printDispatchedRef.current = true;
     const vias = Math.max(1, Number(cfgImp.viasVenda) || 1);
     let i = 0;
-    const disparar = () => {
-      window.print();
+    const disparar = async () => {
+      await imprimirUmaVia();
       i += 1;
       if (i < vias) setTimeout(disparar, 500);
     };
@@ -3476,8 +3479,56 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpr
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []);
 
-  function imprimir() {
+  // Monta o cupom da venda em comandos ESC/POS — compartilhado entre o
+  // agente QZ Tray e a impressao via Bluetooth (mesmo layout/bytes).
+  function construirComandosVenda(): Uint8Array {
+    const segmento = (getEmpresa()?.segmento) || "GERAL";
+    const formaLabel = Array.isArray(venda.pagamentos) && venda.pagamentos.length === 1
+      ? (venda.pagamentos[0].formaCustomNome || FORMA_LABEL[venda.pagamentos[0].forma] || venda.pagamentos[0].forma)
+      : null;
+    return gerarComandosPedido(
+      {
+        numero: venda.numero,
+        createdAt: venda.createdAt,
+        total: venda.total,
+        desconto: venda.desconto,
+        cliente: venda.cliente,
+        user: venda.user,
+        itens: venda.itens,
+        observacoes: venda.observacoes,
+        formaPagamentoLabel: formaLabel,
+      },
+      {
+        nome: empresa?.nome,
+        cnpj: empresa?.cnpj,
+        endereco: empresa ? formatarEndereco(empresa) : null,
+        telefone: empresa?.telefone,
+      },
+      {
+        larguraMm: cfgImp?.largura === "MM_58" ? 58 : 80,
+        abrirGavetaDinheiro: cfgImp?.abrirGavetaDinheiro && (venda.formaPagamento === "DINHEIRO"),
+        segmento: segmento as any,
+        cortarPapel: true,
+      },
+    );
+  }
+
+  // Imprime UMA via do cupom: tenta o agente QZ Tray (se ligado neste PC) e,
+  // em qualquer falha, cai no window.print() do navegador. Nunca lanca.
+  async function imprimirUmaVia(): Promise<void> {
+    if (qzAtivoEConfigurado()) {
+      try {
+        await imprimirRawQz(construirComandosVenda());
+        return;
+      } catch (err) {
+        console.warn("[QZ] falhou, usando impressao do navegador:", err);
+      }
+    }
     window.print();
+  }
+
+  function imprimir() {
+    imprimirUmaVia();
   }
 
   // ETAPA#8a: impressao termica via Web Bluetooth (impressora portatil
@@ -3488,36 +3539,7 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpr
     if (imprimindoBT) return;
     setImprimindoBT(true);
     try {
-      const segmento = (getEmpresa()?.segmento) || "GERAL";
-      const formaLabel = Array.isArray(venda.pagamentos) && venda.pagamentos.length === 1
-        ? (venda.pagamentos[0].formaCustomNome || FORMA_LABEL[venda.pagamentos[0].forma] || venda.pagamentos[0].forma)
-        : null;
-      const cmds = gerarComandosPedido(
-        {
-          numero: venda.numero,
-          createdAt: venda.createdAt,
-          total: venda.total,
-          desconto: venda.desconto,
-          cliente: venda.cliente,
-          user: venda.user,
-          itens: venda.itens,
-          observacoes: venda.observacoes,
-          formaPagamentoLabel: formaLabel,
-        },
-        {
-          nome: empresa?.nome,
-          cnpj: empresa?.cnpj,
-          endereco: empresa ? formatarEndereco(empresa) : null,
-          telefone: empresa?.telefone,
-        },
-        {
-          larguraMm: cfgImp?.largura === "MM_58" ? 58 : 80,
-          abrirGavetaDinheiro: cfgImp?.abrirGavetaDinheiro && (venda.formaPagamento === "DINHEIRO"),
-          segmento: segmento as any,
-          cortarPapel: true,
-        },
-      );
-      await imprimirViaBluetooth(cmds);
+      await imprimirViaBluetooth(construirComandosVenda());
     } catch (err) {
       alert("Falha na impressao Bluetooth:\n" + (err as Error).message);
     } finally {

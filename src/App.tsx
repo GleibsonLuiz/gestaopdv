@@ -832,7 +832,7 @@ export default function App() {
             <div style={{
               width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
               background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-              color: C.white, display: "flex", alignItems: "center", justifyContent: "center",
+              color: "var(--accent-ink)", display: "flex", alignItems: "center", justifyContent: "center",
               fontSize: 13, fontWeight: 800,
             }}>
               {(user.nome || "?").charAt(0).toUpperCase()}

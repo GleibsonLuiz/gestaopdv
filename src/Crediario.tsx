@@ -293,7 +293,7 @@ function CadernetaModal({ clienteId, user, onFechar, onMudou }: { clienteId: str
                   <label style={lbl}>Vencimento</label>
                   <input type="date" value={vencimento} onChange={e => setVencimento(e.target.value)} style={{ ...inputStyle, padding: "7px 10px", fontSize: 13 }} />
                 </div>
-                <button onClick={lancar} disabled={acao} style={{ background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`, color: C.white, border: "none", borderRadius: 8, padding: "9px 16px", fontWeight: 700, fontSize: 12, cursor: "pointer", opacity: acao ? 0.6 : 1 }}>
+                <button onClick={lancar} disabled={acao} style={{ background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`, color: "var(--accent-ink)", border: "none", borderRadius: 8, padding: "9px 16px", fontWeight: 700, fontSize: 12, cursor: "pointer", opacity: acao ? 0.6 : 1 }}>
                   + Lançar
                 </button>
               </div>

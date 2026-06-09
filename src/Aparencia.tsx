@@ -675,7 +675,7 @@ function contraste(hex: string | null | undefined): string {
 
 const btnPrimario: CSSProperties = {
   background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-  color: C.white,
+  color: "var(--accent-ink)",
   border: "none",
   borderRadius: 8,
   padding: "8px 14px",

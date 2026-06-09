@@ -130,7 +130,7 @@ export default function QrMobileModal({ aberto, onFechar, inventarioId, inventar
             className="px-3 py-2 rounded-lg text-[12px] font-bold"
             style={{
               background: copiado ? C.green : C.accent,
-              color: "#ffffff",
+              color: "var(--accent-ink)",
             }}
           >
             {copiado ? "✓ Copiado" : "Copiar"}

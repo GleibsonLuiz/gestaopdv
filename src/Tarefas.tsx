@@ -305,7 +305,7 @@ function TarefaModal({ tarefa, onFechar, onSalvo }: TarefaModalProps) {
             <button
               type="submit"
               disabled={salvando}
-              className="px-[22px] py-2 rounded-lg text-[13px] font-bold cursor-pointer text-gp-white border-none"
+              className="px-[22px] py-2 rounded-lg text-[13px] font-bold cursor-pointer text-gp-accent-ink border-none"
               style={{
                 background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
                 opacity: salvando ? 0.7 : 1,
@@ -611,7 +611,7 @@ export default function Tarefas({ user }: TarefasProps) {
         <button
           type="button"
           onClick={() => { setEditando(null); setModalAberto(true); }}
-          className="rounded-lg text-sm cursor-pointer px-[18px] py-2 font-bold text-gp-white border-none"
+          className="rounded-lg text-sm cursor-pointer px-[18px] py-2 font-bold text-gp-accent-ink border-none"
           style={{ background: `linear-gradient(135deg, ${C.accent}, ${C.purple})` }}
         >
           + Nova Tarefa

@@ -457,7 +457,7 @@ export default function Configuracoes({ user }: ConfiguracoesProps) {
                 <button
                   type="submit"
                   disabled={salvando}
-                  className="text-gp-white border-none rounded-lg px-5 py-2 font-bold text-sm"
+                  className="text-gp-accent-ink border-none rounded-lg px-5 py-2 font-bold text-sm"
                   style={{
                     background: salvando ? C.muted : `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
                     cursor: salvando ? "default" : "pointer",
@@ -1550,7 +1550,9 @@ function mpAlert(cor: string): CSSProperties {
 }
 
 const mpBtnPrimario: CSSProperties = {
-  color: "#fff",
+  // Tinta legivel sobre o gradiente accent->purple em qualquer tema (ouro
+  // claro, Grafite quase-branco etc.) — antes era "#fff", invisivel no claro.
+  color: "var(--accent-ink)",
   border: "none",
   borderRadius: 8,
   padding: "10px 20px",

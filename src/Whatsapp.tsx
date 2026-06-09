@@ -222,7 +222,7 @@ export default function Whatsapp() {
         <button type="button" onClick={salvar} disabled={salvando} style={{
           padding: "10px 22px", borderRadius: 8,
           background: `linear-gradient(135deg, ${C.green}, ${C.accent})`,
-          border: "none", color: "white", fontWeight: 800, fontSize: 13,
+          border: "none", color: "var(--accent-ink)", fontWeight: 800, fontSize: 13,
           cursor: salvando ? "wait" : "pointer",
         }}>
           {salvando ? "Salvando..." : "💾 Salvar Configurações"}

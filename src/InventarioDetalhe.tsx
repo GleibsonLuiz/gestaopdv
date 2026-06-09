@@ -660,7 +660,7 @@ const inputCompactoStyle: CSSProperties = {
 
 const btnPrimarioStyle: CSSProperties = {
   background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-  color: C.white,
+  color: "var(--accent-ink)",
   border: "none",
   borderRadius: 8,
   padding: "10px 18px",

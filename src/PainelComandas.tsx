@@ -1620,7 +1620,7 @@ function ModalAdicionarItem({ comanda, onCancelar, onSucesso, onErro }: {
           <button type="button" onClick={confirmar} disabled={salvando || !selecionado}
             style={{ flex: 2, padding: "10px 14px", borderRadius: 8,
               background: !selecionado ? C.border : `linear-gradient(135deg, ${C.green}, ${C.accent})`,
-              border: "none", color: "white", fontWeight: 800, cursor: salvando ? "wait" : (!selecionado ? "not-allowed" : "pointer"),
+              border: "none", color: "var(--accent-ink)", fontWeight: 800, cursor: salvando ? "wait" : (!selecionado ? "not-allowed" : "pointer"),
               opacity: !selecionado ? 0.6 : 1,
             }}>
             {salvando ? "Adicionando..." : "✓ Adicionar"}
@@ -1718,7 +1718,7 @@ function ModalCheckoutComanda({ comanda, onCancelar, onConcluido }: {
             Cancelar
           </button>
           <button type="button" onClick={confirmar} disabled={salvando}
-            style={{ flex: 2, padding: "10px 14px", borderRadius: 8, background: `linear-gradient(135deg, ${C.green}, ${C.accent})`, border: "none", color: "white", fontWeight: 800, cursor: salvando ? "wait" : "pointer" }}>
+            style={{ flex: 2, padding: "10px 14px", borderRadius: 8, background: `linear-gradient(135deg, ${C.green}, ${C.accent})`, border: "none", color: "var(--accent-ink)", fontWeight: 800, cursor: salvando ? "wait" : "pointer" }}>
             {salvando ? "Confirmando..." : "✓ Confirmar e finalizar"}
           </button>
         </div>

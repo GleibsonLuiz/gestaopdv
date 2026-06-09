@@ -508,7 +508,7 @@ const estilos: Record<string, CSSProperties> = {
     right: 24,
     bottom: 24,
     background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-    color: C.white,
+    color: "var(--accent-ink)",
     border: "none",
     borderRadius: 24,
     padding: "10px 18px",

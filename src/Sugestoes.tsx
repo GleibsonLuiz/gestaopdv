@@ -338,7 +338,7 @@ export default function Sugestoes({ user }: SugestoesProps) {
             type="button"
             onClick={adicionarManual}
             disabled={!podeEditar || !addProdutoId || adicionando}
-            className="text-gp-white border-none rounded-lg text-sm font-bold cursor-pointer"
+            className="text-gp-accent-ink border-none rounded-lg text-sm font-bold cursor-pointer"
             style={{
               background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
               padding: "10px 18px",
@@ -541,7 +541,7 @@ export default function Sugestoes({ user }: SugestoesProps) {
               type="button"
               onClick={gerarPedido}
               title="Registra a compra no sistema (atualiza estoque e conta a pagar)."
-              className="text-gp-white border-none rounded-lg text-sm font-bold cursor-pointer"
+              className="text-gp-accent-ink border-none rounded-lg text-sm font-bold cursor-pointer"
               style={{ background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`, padding: "10px 20px" }}
             >
               🛍️ Gerar Pedido de Compra

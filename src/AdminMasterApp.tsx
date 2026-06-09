@@ -148,7 +148,7 @@ function Login({ onSuccess }: any) {
           <button type="submit" disabled={carregando} style={{
             marginTop: 18, width: "100%",
             background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-            color: C.white, border: "none", borderRadius: 8,
+            color: "var(--accent-ink)", border: "none", borderRadius: 8,
             padding: "11px 20px", fontWeight: 800, fontSize: 13,
             cursor: carregando ? "default" : "pointer",
             opacity: carregando ? 0.6 : 1,
@@ -568,7 +568,7 @@ function AbaEmpresas({ onMudou }: any) {
             </button>
             <button onClick={() => setModalCriar(true)} style={{
               background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-              color: C.white, border: "none", borderRadius: 8,
+              color: "var(--accent-ink)", border: "none", borderRadius: 8,
               padding: "8px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer",
             }}>+ Nova empresa</button>
           </div>
@@ -1289,7 +1289,7 @@ function AbaLogs() {
         </div>
         <button onClick={carregar} disabled={carregando} style={{
           background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-          color: C.white, border: "none", borderRadius: 8,
+          color: "var(--accent-ink)", border: "none", borderRadius: 8,
           padding: "8px 16px", fontWeight: 700, fontSize: 12, cursor: "pointer",
         }}>🔍 {carregando ? "..." : "Filtrar"}</button>
       </div>
@@ -1463,7 +1463,7 @@ function AbaNotificacoes() {
             </button>
             <button onClick={() => setModalCriar(true)} style={{
               background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-              color: C.white, border: "none", borderRadius: 8,
+              color: "var(--accent-ink)", border: "none", borderRadius: 8,
               padding: "8px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer",
             }}>+ Nova notificação</button>
           </div>
@@ -1656,7 +1656,7 @@ function ModalCriarNotificacao({ onCancelar, onCriada }: any) {
           <button type="submit" disabled={salvando} style={{
             flex: 1,
             background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-            color: C.white, border: "none", borderRadius: 8,
+            color: "var(--accent-ink)", border: "none", borderRadius: 8,
             padding: "9px 18px", fontWeight: 800, fontSize: 12,
             cursor: salvando ? "default" : "pointer",
             opacity: salvando ? 0.6 : 1,
@@ -1863,7 +1863,7 @@ function ModalPlano({ empresa, onCancelar, onSalva }: any) {
           <button type="submit" disabled={salvando} style={{
             flex: 1,
             background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-            color: C.white, border: "none", borderRadius: 8,
+            color: "var(--accent-ink)", border: "none", borderRadius: 8,
             padding: "9px 18px", fontWeight: 800, fontSize: 12,
             cursor: salvando ? "default" : "pointer",
             opacity: salvando ? 0.6 : 1,
@@ -2498,7 +2498,7 @@ function ModalCriarEmpresa({ onCancelar, onCriada }: any) {
           <button type="submit" disabled={salvando} style={{
             flex: 1,
             background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-            color: C.white, border: "none", borderRadius: 8,
+            color: "var(--accent-ink)", border: "none", borderRadius: 8,
             padding: "9px 18px", fontWeight: 800, fontSize: 12,
             cursor: salvando ? "default" : "pointer",
             opacity: salvando ? 0.6 : 1,

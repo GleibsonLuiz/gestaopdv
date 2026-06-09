@@ -155,7 +155,7 @@ export default function Funcionarios({ user }: any) {
         <button onClick={() => setNovoAberto(true)} style={{
           marginLeft: "auto",
           background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-          color: C.white, border: "none", borderRadius: 8,
+          color: "var(--accent-ink)", border: "none", borderRadius: 8,
           padding: "10px 18px", fontWeight: 700, fontSize: 14, cursor: "pointer",
         }}>
           + Novo Funcionário
@@ -563,7 +563,7 @@ const btnSecundario: CSSProperties = {
 
 const btnPrimario: CSSProperties = {
   background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-  color: C.white, border: "none", borderRadius: 8,
+  color: "var(--accent-ink)", border: "none", borderRadius: 8,
   padding: "10px 22px", fontWeight: 700, fontSize: 13, cursor: "pointer",
 };
 

@@ -243,7 +243,7 @@ function AbaInteracoes({ clienteId, user, onContadorChange }: { clienteId: strin
             disabled={salvando}
             style={{
               background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-              color: C.white, border: "none", borderRadius: 8,
+              color: "var(--accent-ink)", border: "none", borderRadius: 8,
               padding: "7px 18px", fontWeight: 700, fontSize: 13, cursor: "pointer",
               opacity: salvando ? 0.7 : 1,
             }}
@@ -469,7 +469,7 @@ function AbaContatos({ clienteId, user, onContadorChange }: { clienteId: string;
                 type="submit"
                 style={{
                   background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-                  color: C.white, border: "none", padding: "6px 18px",
+                  color: "var(--accent-ink)", border: "none", padding: "6px 18px",
                   borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 700,
                 }}
               >{editando.id ? "Salvar" : "Adicionar"}</button>

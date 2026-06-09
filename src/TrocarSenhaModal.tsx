@@ -140,7 +140,7 @@ export default function TrocarSenhaModal({ onFechar }: TrocarSenhaModalProps) {
               <button
                 type="submit"
                 disabled={salvando}
-                className="text-gp-white border-none rounded-lg px-[22px] py-[10px] font-bold text-[13px] cursor-pointer"
+                className="text-gp-accent-ink border-none rounded-lg px-[22px] py-[10px] font-bold text-[13px] cursor-pointer"
                 style={{ background: `linear-gradient(135deg, ${C.accent}, ${C.purple})` }}
               >
                 {salvando ? "Salvando..." : "Trocar senha"}

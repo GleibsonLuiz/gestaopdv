@@ -299,7 +299,7 @@ export default function ConfiguracoesImpressora({ user }: Props) {
               disabled={salvando}
               style={{
                 background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-                border: "none", color: C.white,
+                border: "none", color: "var(--accent-ink)",
                 padding: "10px 18px", borderRadius: 8, cursor: salvando ? "wait" : "pointer",
                 fontSize: 13, fontWeight: 700, opacity: salvando ? 0.7 : 1,
               }}

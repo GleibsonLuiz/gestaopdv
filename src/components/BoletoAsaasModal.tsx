@@ -345,7 +345,7 @@ const qrWrap: CSSProperties = {
 };
 const btnPrimario: CSSProperties = {
   background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-  color: C.white, border: "none", borderRadius: 8, padding: "11px 16px",
+  color: "var(--accent-ink)", border: "none", borderRadius: 8, padding: "11px 16px",
   fontWeight: 700, fontSize: 13, cursor: "pointer", boxShadow: `0 2px 10px ${C.accent}55`,
 };
 const btnSecundario: CSSProperties = {

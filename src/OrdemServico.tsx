@@ -66,7 +66,7 @@ export default function OrdemServico({ user }: { user: SessionUser }) {
               <option value="">Todos status</option>
               {Object.entries(STATUS_INFO).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
             </select>
-            <button onClick={() => setEditando("nova")} style={{ background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`, color: C.white, border: "none", borderRadius: 8, padding: "7px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>+ Nova OS</button>
+            <button onClick={() => setEditando("nova")} style={{ background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`, color: "var(--accent-ink)", border: "none", borderRadius: 8, padding: "7px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>+ Nova OS</button>
           </div>
         </div>
 

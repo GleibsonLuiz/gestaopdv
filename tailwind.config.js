@@ -23,6 +23,12 @@ export default {
         'gp-text':    'var(--text)',
         'gp-muted':   'var(--muted)',
         'gp-white':   'var(--white)',
+        // Tinta de texto sobre botoes primarios (gradiente accent->purple).
+        // Calculada pelo tom MAIS CLARO do gradiente (inkDoAccent em theme.ts),
+        // entao continua legivel em temas de accent claro (ouro, Grafite,
+        // Alto Contraste) onde --white seria branco-no-branco. Use em botoes
+        // de accent; --white/gp-white permanece para titulos/texto.
+        'gp-accent-ink': 'var(--accent-ink)',
         ink: {
           950: '#0a0c14',
           900: '#0f1220',

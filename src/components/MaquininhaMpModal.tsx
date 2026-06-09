@@ -243,7 +243,7 @@ function SelecionarTipo({ valor, onMudar, onConfirmar, enviando }: SelecionarTip
           background: !valor || enviando
             ? C.muted
             : `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-          color: C.white, border: "none", borderRadius: 8,
+          color: "var(--accent-ink)", border: "none", borderRadius: 8,
           fontWeight: 700, fontSize: 14,
           cursor: !valor || enviando ? "default" : "pointer",
           boxShadow: !valor || enviando ? "none" : `0 2px 10px ${C.accent}55`,
@@ -409,7 +409,7 @@ const btnFechar: CSSProperties = {
 
 const btnPrimario: CSSProperties = {
   background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-  color: C.white,
+  color: "var(--accent-ink)",
   border: "none",
   borderRadius: 8,
   padding: "10px 16px",

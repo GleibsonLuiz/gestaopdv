@@ -28,33 +28,40 @@ export function concat(parts: Uint8Array[]): Uint8Array {
   return out;
 }
 
-// CP850 (Latin-1 western) cobre acentuacao PT-BR razoavelmente bem em
-// impressoras comuns. Algumas marcas (Bematech) usam CP1252; mas a
-// maioria aceita CP850 como default. Como a Web nao oferece encoder
-// para CP850 nativamente, fazemos um mapeamento manual dos acentos
-// mais comuns. Caracter nao mapeado vira ASCII proximo (a->a, etc).
-const MAPA_LATINO: Record<string, number> = {
-  "À": 0xB7, "Á": 0xB5, "Â": 0xB6, "Ã": 0xC7, "Ä": 0x8E,
-  "à": 0x85, "á": 0xA0, "â": 0x83, "ã": 0xC6, "ä": 0x84,
-  "É": 0x90, "Ê": 0xD2, "Ë": 0xD3, "é": 0x82, "ê": 0x88, "ë": 0x89,
-  "Í": 0xD6, "Î": 0xD7, "Ï": 0xD8, "í": 0xA1, "î": 0x8C, "ï": 0x8B,
-  "Ó": 0xE0, "Ô": 0xE2, "Õ": 0xE5, "Ö": 0x99, "ó": 0xA2, "ô": 0x93, "õ": 0xE4, "ö": 0x94,
-  "Ú": 0xE9, "Û": 0xEA, "Ü": 0x9A, "ú": 0xA3, "û": 0x96, "ü": 0x81,
-  "Ç": 0x80, "ç": 0x87,
-  "ñ": 0xA4, "Ñ": 0xA5,
-  "º": 0xA7, "ª": 0xA6,
-  "€": 0xD5, "£": 0x9C, "¥": 0xBE,
+// As POS80 genericas (ESC/POS) usam CP1252 (Windows-1252) como tabela
+// padrao apos ESC @ — confirmado em campo na SMX-FJ80H (byte 0x80 saiu
+// como "€" e 0xC7 como "Ç", assinatura inequivoca do CP1252).
+//
+// No CP1252 a faixa 0xA0-0xFF e IDENTICA ao Latin-1/Unicode, entao todo
+// caractere com codePoint <= 0xFF (incluindo os acentos PT-BR) sai como
+// o proprio byte. So precisamos tratar:
+//   - a faixa especial 0x80-0x9F do CP1252 (€, aspas curvas, travessao…)
+//   - os varios "espacos" Unicode — em especial o NBSP (U+00A0) e o
+//     narrow no-break space (U+202F) que o Intl.NumberFormat insere
+//     entre "R$" e o valor — que viravam "?" e quebravam o "R$ 25,00".
+const ESPACOS_UNICODE = new Set<number>([
+  0x00A0, 0x2002, 0x2003, 0x2007, 0x2009, 0x200A, 0x202F,
+]);
+
+const CP1252_ESPECIAIS: Record<string, number> = {
+  "€": 0x80, "‚": 0x82, "ƒ": 0x83, "„": 0x84, "…": 0x85,
+  "†": 0x86, "‡": 0x87, "ˆ": 0x88, "‰": 0x89, "Š": 0x8A,
+  "‹": 0x8B, "Œ": 0x8C, "Ž": 0x8E, "‘": 0x91, "’": 0x92,
+  "“": 0x93, "”": 0x94, "•": 0x95, "–": 0x96, "—": 0x97,
+  "˜": 0x98, "™": 0x99, "š": 0x9A, "›": 0x9B, "œ": 0x9C,
+  "ž": 0x9E, "Ÿ": 0x9F,
 };
 
 export function codificarTexto(s: string): Uint8Array {
   const out: number[] = [];
   for (const ch of s) {
     const cp = ch.codePointAt(0)!;
-    if (cp < 128) { out.push(cp); continue; }
-    const mapped = MAPA_LATINO[ch];
-    if (mapped !== undefined) { out.push(mapped); continue; }
-    // Fallback: caracter desconhecido -> "?"
-    out.push(0x3F);
+    if (cp < 0x80) { out.push(cp); continue; }                 // ASCII puro
+    if (ESPACOS_UNICODE.has(cp)) { out.push(0x20); continue; } // espacos -> ' '
+    const esp = CP1252_ESPECIAIS[ch];
+    if (esp !== undefined) { out.push(esp); continue; }        // 0x80-0x9F do CP1252
+    if (cp <= 0xFF) { out.push(cp); continue; }                // Latin-1 == CP1252 (acentos)
+    out.push(0x3F);                                            // desconhecido -> "?"
   }
   return new Uint8Array(out);
 }

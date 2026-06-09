@@ -51,6 +51,29 @@ async function carregarImagemDataUrl(url: string): Promise<string> {
   });
 }
 
+// Ajusta um texto para caber numa largura: primeiro reduz a fonte (ate um
+// minimo), e so trunca com reticencias se ainda nao couber. Deixa a fonte ja
+// aplicada no doc e devolve o texto final (eventualmente truncado), pra evitar
+// as sobreposicoes do cabecalho (nome de empresa x titulo, fornecedor x CNPJ).
+function ajustarTextoLargura(
+  doc: jsPDF,
+  texto: string,
+  larguraMax: number,
+  fontMax: number,
+  fontMin: number,
+): string {
+  let fs = fontMax;
+  doc.setFontSize(fs);
+  while (fs > fontMin && doc.getTextWidth(texto) > larguraMax) {
+    fs -= 0.5;
+    doc.setFontSize(fs);
+  }
+  if (doc.getTextWidth(texto) <= larguraMax) return texto;
+  let t = texto;
+  while (t.length > 1 && doc.getTextWidth(`${t}…`) > larguraMax) t = t.slice(0, -1);
+  return `${t}…`;
+}
+
 interface GrupoFornecedor {
   chave: string;
   nome: string;
@@ -120,22 +143,31 @@ export async function gerarPedidoCompraPdf(
         xTexto = marginX + w + 5;
       } catch { /* ignora */ }
     }
+    // Bloco direito (titulo + emissao) desenhado primeiro, pra sabermos onde
+    // o titulo comeca e impedir que o nome da empresa avance por cima dele.
     doc.setFont("helvetica", "bold");
     doc.setFontSize(13);
+    const titulo = "PEDIDO DE COMPRA";
+    const larguraTitulo = doc.getTextWidth(titulo);
     doc.setTextColor(0, 0, 0);
-    doc.text(empresa?.nomeFantasia || empresa?.razaoSocial || "Empresa", xTexto, 15);
-    doc.setFont("helvetica", "normal");
+    doc.text(titulo, pageWidth - marginX, 15, { align: "right" });
     doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
     doc.setTextColor(100, 100, 100);
-    if (empresa?.cnpj) doc.text(`CNPJ ${empresa.cnpj}`, xTexto, 20);
+    doc.text(`Emissão: ${dataEmissao}`, pageWidth - marginX, 20, { align: "right" });
 
-    doc.setFontSize(15);
+    // Nome da empresa limitado ao espaco antes do titulo (auto-encolhe a fonte
+    // e, em ultimo caso, trunca) — evita a sobreposicao com "PEDIDO DE COMPRA".
+    const limiteNomeEmpresa = pageWidth - marginX - larguraTitulo - 6 - xTexto;
     doc.setFont("helvetica", "bold");
     doc.setTextColor(0, 0, 0);
-    doc.text("PEDIDO DE COMPRA", pageWidth - marginX, 15, { align: "right" });
-    doc.setFontSize(9);
+    const nomeEmpresa = empresa?.nomeFantasia || empresa?.razaoSocial || "Empresa";
+    const nomeEmpresaFit = ajustarTextoLargura(doc, nomeEmpresa, limiteNomeEmpresa, 12, 8);
+    doc.text(nomeEmpresaFit, xTexto, 15);
     doc.setFont("helvetica", "normal");
-    doc.text(`Emissão: ${dataEmissao}`, pageWidth - marginX, 20, { align: "right" });
+    doc.setFontSize(8.5);
+    doc.setTextColor(100, 100, 100);
+    if (empresa?.cnpj) doc.text(`CNPJ ${empresa.cnpj}`, xTexto, 20);
 
     // Faixa do fornecedor
     const yBox = 26;
@@ -145,15 +177,25 @@ export async function gerarPedidoCompraPdf(
     doc.setFontSize(8);
     doc.setTextColor(120, 120, 120);
     doc.text("FORNECEDOR", marginX + 4, yBox + 5);
-    doc.setFontSize(11);
+
+    // Mede o CNPJ primeiro pra limitar o nome do fornecedor e nao sobrepor.
+    let larguraCnpjForn = 0;
+    const cnpjFornTexto = grupo.cnpj ? `CNPJ ${grupo.cnpj}` : "";
+    if (cnpjFornTexto) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      larguraCnpjForn = doc.getTextWidth(cnpjFornTexto) + 6; // folga
+    }
+    const limiteNomeForn = pageWidth - marginX * 2 - 8 - larguraCnpjForn;
     doc.setFont("helvetica", "bold");
     doc.setTextColor(0, 0, 0);
-    doc.text(grupo.nome, marginX + 4, yBox + 10.5);
-    if (grupo.cnpj) {
+    const nomeFornFit = ajustarTextoLargura(doc, grupo.nome, limiteNomeForn, 11, 8);
+    doc.text(nomeFornFit, marginX + 4, yBox + 10.5);
+    if (cnpjFornTexto) {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
       doc.setTextColor(90, 90, 90);
-      doc.text(`CNPJ ${grupo.cnpj}`, pageWidth - marginX - 4, yBox + 10.5, { align: "right" });
+      doc.text(cnpjFornTexto, pageWidth - marginX - 4, yBox + 10.5, { align: "right" });
     }
     doc.setTextColor(0, 0, 0);
     return yBox + 17;
@@ -179,8 +221,8 @@ export async function gerarPedidoCompraPdf(
         "",
       ]),
       theme: "grid",
-      headStyles: { fillColor: [60, 60, 80], textColor: [255, 255, 255], fontSize: 9, halign: "center" },
-      styles: { fontSize: 9, cellPadding: 2.5, lineColor: [205, 205, 205], lineWidth: 0.2, minCellHeight: 9 },
+      headStyles: { fillColor: [60, 60, 80], textColor: [255, 255, 255], fontSize: 7, halign: "center" },
+      styles: { fontSize: 7, cellPadding: 1.5, lineColor: [205, 205, 205], lineWidth: 0.2, minCellHeight: 6 },
       columnStyles: {
         0: { cellWidth: 8, halign: "right" },
         1: { cellWidth: 22 },
@@ -188,7 +230,7 @@ export async function gerarPedidoCompraPdf(
         3: { cellWidth: 16, halign: "right", textColor: [120, 120, 120] },
         4: { cellWidth: 16, halign: "right", fontStyle: "bold" },
         5: { cellWidth: 12, halign: "center" },
-        6: { cellWidth: 26, halign: "right", textColor: [150, 150, 150], fontSize: 7 },
+        6: { cellWidth: 26, halign: "right", textColor: [150, 150, 150], fontSize: 6 },
         7: { cellWidth: 26 },
       },
       didDrawPage: () => {

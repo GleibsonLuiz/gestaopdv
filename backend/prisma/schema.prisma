@@ -53,6 +53,18 @@ enum StatusConta {
   CANCELADA
 }
 
+// Estado de um boleto hibrido (boleto + PIX) emitido pelo lojista via Asaas
+// para cobrar o cliente final. Espelha o ciclo de vida do payment no Asaas
+// (mapeado em lib/asaasCobranca.js). NAO confundir com StatusCobranca, que e
+// da ASSINATURA do SaaS (plataforma -> tenant).
+enum StatusBoleto {
+  PENDENTE  // criado no Asaas, aguardando pagamento
+  PAGO      // RECEIVED / CONFIRMED / RECEIVED_IN_CASH
+  VENCIDO   // OVERDUE
+  CANCELADO // DELETED / REFUNDED / CHARGEBACK
+  ERRO      // falha ao criar a cobranca no Asaas (registro nao chegou a valer)
+}
+
 enum FormaPagamento {
   DINHEIRO
   CARTAO_CREDITO
@@ -529,6 +541,7 @@ model Empresa {
   planosContas           PlanoConta[]
   despesas               Despesa[]
   sugestoesCompra        SugestaoCompra[]
+  boletosAsaas           BoletoAsaas[]
 
   @@map("empresas")
 }
@@ -634,6 +647,7 @@ model User {
   ordensServico            OrdemServico[] @relation("OSResponsavel")
   despesas                 Despesa[]
   sugestoesCompra          SugestaoCompra[]
+  boletosAsaas             BoletoAsaas[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -707,6 +721,7 @@ model Cliente {
   comandas            Comanda[]
   vendasEspera        VendaEspera[]
   ordensServico       OrdemServico[]
+  boletosAsaas        BoletoAsaas[]
 
   @@unique([tenantId, cpfCnpj])
   @@index([tenantId])
@@ -979,6 +994,7 @@ model Venda {
   pesquisaNps         PesquisaNps?
   comandas            Comanda[]
   notasFiscais        NotaFiscal[]
+  boletosAsaas        BoletoAsaas[]
 
   @@unique([tenantId, numero])
   // Idempotencia do checkout: bloqueia 2a venda com a mesma chave no tenant.
@@ -1608,6 +1624,7 @@ model ContaReceber {
 
   anexos             Anexo[]
   movimentacoesCaixa MovimentacaoCaixa[]
+  boletosAsaas       BoletoAsaas[]
 
   @@index([grupoRecorrenciaId])
   @@index([vendaId])
@@ -1800,6 +1817,28 @@ model ConfiguracaoEmpresa {
   // (e vice-versa). Util para operar so com QR Code quando a Point esta
   // offline, ou so com maquininha quando o PIX nao e desejado.
   mpPixAtivo       Boolean @default(false)
+
+  // ============ ASAAS — BOLETO HIBRIDO (BOLETO + PIX) DO LOJISTA ============
+  // Credencial da conta Asaas DO PROPRIO LOJISTA (1 por tenant). O dinheiro
+  // cai na conta dele — este fluxo cobra CLIENTE FINAL, e e independente do
+  // billing da PLATAFORMA (lib/billing/asaas.js usa env vars da nossa conta).
+  //
+  // asaasApiKeyEnc: API Key do Asaas cifrada com AES-256-GCM (lib/cripto.js),
+  //   mesmo tratamento do mpAccessTokenEnc — NUNCA exposta decifrada em GETs.
+  // asaasWebhookSecret: segredo aleatorio (24 bytes) gerado pelo backend ao
+  //   salvar a credencial. Vai embutido na URL do webhook (?secret=...) e
+  //   ROTEIA a notificacao ao tenant dono sem varrer todos — igual mpWebhookSecret.
+  // asaasAmbiente: "producao" | "sandbox" (default sandbox p/ testar sem risco).
+  asaasApiKeyEnc     String?
+  asaasWebhookSecret String?
+  asaasAmbiente      String  @default("sandbox")
+  asaasAtivo         Boolean @default(false)
+  // Repasse da taxa do boleto ao consumidor final (surcharge). DESLIGADO por
+  // padrao — e decisao do lojista (zona cinzenta legal/contratual). Quando
+  // ligado, valorTaxaBoleto e somado ao valor da venda na emissao; o boleto
+  // guarda valorOriginal e valorCobrado separados para o financeiro reconciliar.
+  repassarTaxaBoleto Boolean  @default(false)
+  valorTaxaBoleto    Decimal? @db.Decimal(10, 2)
 
   // ============ EMISSAO FISCAL — DADOS DO EMITENTE (NFC-e / NF-e) ============
   // Campos do EMITENTE necessarios para a nota fiscal eletronica. Todos
@@ -2566,6 +2605,75 @@ model IntencaoPagamentoMP {
   @@index([tenantId, status])
   @@index([tenantId, createdAt])
   @@map("intencoes_pagamento_mp")
+}
+
+// ============ BOLETO HIBRIDO (BOLETO + PIX) VIA ASAAS ============
+//
+// Boleto emitido pelo LOJISTA para cobrar o CLIENTE FINAL, via a conta Asaas
+// do proprio lojista (credencial por-tenant em ConfiguracaoEmpresa.asaas*).
+// E um MEIO DE COBRANCA de uma ContaReceber — nao substitui o titulo
+// financeiro, aponta para ele. O webhook do Asaas (autenticado por secret na
+// URL) move o status PENDENTE -> PAGO e quita a ContaReceber vinculada.
+//
+// Espelha IntencaoPagamentoMP: status final via claim atomico (idempotencia
+// dos retries do Asaas), credencial cifrada, raw guardado p/ auditoria.
+model BoletoAsaas {
+  id              String       @id @default(uuid())
+  // id do payment no Asaas. Null enquanto a chamada nao retornou (status ERRO
+  // se falhou antes de valer). @unique = idempotencia do webhook.
+  asaasPaymentId  String?      @unique
+  // id do customer no Asaas. Reaproveitado entre boletos do mesmo cliente
+  // (salvo em Cliente via lookup por externalReference, nao aqui).
+  asaasCustomerId String?
+  status          StatusBoleto @default(PENDENTE)
+
+  // valorOriginal = valor do titulo/venda. valorCobrado = original + taxa
+  // repassada (quando repassarTaxaBoleto). taxa = diferenca (0 se nao repassa).
+  // Mantidos separados para o financeiro nao confundir surcharge com receita.
+  valorOriginal Decimal @db.Decimal(10, 2)
+  valorCobrado  Decimal @db.Decimal(10, 2)
+  taxa          Decimal @default(0) @db.Decimal(10, 2)
+
+  vencimento DateTime
+  pagoEm     DateTime?
+
+  // Dados de impressao/pagamento retornados pelo Asaas.
+  linhaDigitavel  String? // identificationField (linha digitavel do boleto)
+  codigoBarras    String? // barCode (numerico)
+  urlBoleto       String? // bankSlipUrl / invoiceUrl (PDF / pagina de pagamento)
+  pixCopiaECola   String? // payload EMV do PIX do boleto hibrido (copia e cola)
+  pixQrCodeBase64 String? // imagem PNG do QR Code (base64, sem prefixo data:)
+
+  // Mensagem livre: erro do Asaas, motivo de cancelamento. Exibida na UI.
+  detalhe  String?
+  // Snapshot do ultimo webhook/consulta do Asaas (auditoria/debug).
+  rawAsaas Json?
+
+  clienteId String
+  cliente   Cliente @relation(fields: [clienteId], references: [id])
+
+  // Titulo financeiro que este boleto cobra. SetNull: apagar a conta nao apaga
+  // o historico do boleto (auditoria do que foi cobrado).
+  contaReceberId String?
+  contaReceber   ContaReceber? @relation(fields: [contaReceberId], references: [id], onDelete: SetNull)
+
+  vendaId String?
+  venda   Venda?  @relation(fields: [vendaId], references: [id], onDelete: SetNull)
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdAt    DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+  @@index([clienteId])
+  @@index([contaReceberId])
+  @@map("boletos_asaas")
 }
 
 model NotificacaoLida {

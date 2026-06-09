@@ -126,6 +126,7 @@ const GRUPOS: Grupo[] = [
       { id: "configuracoes-de-impressora",              icone: "🖨️", label: "Impressora" },
       { id: "funcionarios-admin-only",                  icone: "🧑‍💼", label: "Funcionarios" },
       { id: "maquininha-mp-mercado-pago",               icone: "📲", label: "Maquininha MP" },
+      { id: "boleto-pix-asaas",                         icone: "🧾", label: "Boleto Asaas" },
       { id: "logs-de-auditoria-admin-only",             icone: "📜", label: "Logs" },
       { id: "backup-admin-only",                        icone: "💾", label: "Backup" },
       { id: "sistema-admin-only",                       icone: "🛡", label: "Sistema" },

@@ -8,6 +8,14 @@ import { VitePWA } from 'vite-plugin-pwa'
 //
 // https://vite.dev/config/
 export default defineConfig({
+  // Dual-stack: '::' faz o dev server escutar em IPv6 (::1) E IPv4 (127.0.0.1)
+  // ao mesmo tempo. No Windows, `localhost` resolve para ::1 primeiro — com host
+  // 127.0.0.1 (IPv4-only) o navegador batia no ::1 e dava "nao conecta". host:true
+  // sozinho ouve so 0.0.0.0 (IPv4) e nao resolveria o localhost.
+  server: {
+    host: '::',
+    port: 5173,
+  },
   plugins: [
     react(),
     VitePWA({

@@ -924,6 +924,37 @@ export const api = {
   cancelarMp: (id: string) =>
     request(`/pagamentos-mp/status/${id}/cancelar`, { method: "POST" }),
 
+  // ==================== BOLETO HIBRIDO (BOLETO + PIX) VIA ASAAS ====================
+  // Cobranca do LOJISTA ao CLIENTE FINAL pela conta Asaas do lojista (credencial
+  // por-tenant). GET config retorna a chave sempre mascarada; PUT e partial
+  // (passar "" em asaasApiKey limpa a credencial). O boleto e um meio de cobranca
+  // de uma ContaReceber — quando pago, o webhook quita o titulo.
+  obterConfigBoleto: () => request("/boletos/config"),
+  salvarConfigBoleto: (dados: {
+    asaasApiKey?: string | null;
+    asaasAmbiente?: "producao" | "sandbox";
+    asaasAtivo?: boolean;
+    repassarTaxaBoleto?: boolean;
+    valorTaxaBoleto?: number | null;
+  }) => request("/boletos/config", { method: "PUT", body: dados }),
+  listarBoletos: (filtro?: { contaReceberId?: string; clienteId?: string; status?: string }) => {
+    const qs = new URLSearchParams(
+      Object.entries(filtro || {}).filter(([, v]) => v) as [string, string][],
+    ).toString();
+    return request(`/boletos${qs ? `?${qs}` : ""}`);
+  },
+  criarBoleto: (dados: {
+    clienteId?: string;
+    contaReceberId?: string;
+    vendaId?: string;
+    valor?: number;
+    vencimento?: string;
+    descricao?: string;
+  }) => request("/boletos", { method: "POST", body: dados }),
+  statusBoleto: (id: string) => request(`/boletos/${id}`),
+  cancelarBoleto: (id: string) =>
+    request(`/boletos/${id}/cancelar`, { method: "POST" }),
+
   // ==================== FISCAL — NFC-e (modelo 65) ====================
   // Config do emitente. GET devolve o CSC sempre mascarado + prontidao
   // (lista de campos faltantes p/ ativar). PUT e partial: omitir mantem,

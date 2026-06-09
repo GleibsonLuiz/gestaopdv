@@ -62,6 +62,7 @@ interface BillsTableProps {
   onAttach?: (b: Bill) => void;
   onReabrir?: (b: Bill) => void;
   onCancelar?: (b: Bill) => void;
+  onGerarBoleto?: (b: Bill) => void;
 }
 
 export default function BillsTable({
@@ -79,6 +80,7 @@ export default function BillsTable({
   onAttach,
   onReabrir,
   onCancelar,
+  onGerarBoleto,
 }: BillsTableProps) {
   const labelEntidade = ehPagar ? "Fornecedor" : "Cliente";
   const tituloLista = ehPagar ? "Contas a pagar" : "Contas a receber";
@@ -163,6 +165,7 @@ export default function BillsTable({
           onAttach={onAttach}
           onReabrir={onReabrir}
           onCancelar={onCancelar}
+          onGerarBoleto={onGerarBoleto}
         />
       ))}
     </div>
@@ -185,12 +188,13 @@ interface BucketSectionProps {
   onAttach?: (b: Bill) => void;
   onReabrir?: (b: Bill) => void;
   onCancelar?: (b: Bill) => void;
+  onGerarBoleto?: (b: Bill) => void;
 }
 
 function BucketSection({
   meta, bills, total, ehPagar, podeEditar, paidLabel, labelEntidade,
   selecionadas, onSelecionarTodas, onToggleSelecionada,
-  onPay, onEdit, onAttach, onReabrir, onCancelar,
+  onPay, onEdit, onAttach, onReabrir, onCancelar, onGerarBoleto,
 }: BucketSectionProps) {
   const [colapsado, setColapsado] = useState<boolean>(meta.id === "concluidas");
   const temSelecao = !!(selecionadas && onToggleSelecionada);
@@ -273,6 +277,7 @@ function BucketSection({
                 onAttach={onAttach}
                 onReabrir={onReabrir}
                 onCancelar={onCancelar}
+                onGerarBoleto={onGerarBoleto}
               />
             ))}
           </tbody>
@@ -379,12 +384,13 @@ interface BillRowProps {
   onAttach?: (b: Bill) => void;
   onReabrir?: (b: Bill) => void;
   onCancelar?: (b: Bill) => void;
+  onGerarBoleto?: (b: Bill) => void;
 }
 
 function BillRow({
   bill, ehPagar, podeEditar, paidLabel,
   selecionavel, selecionada, onToggleSelecionada,
-  onPay, onEdit, onAttach, onReabrir, onCancelar,
+  onPay, onEdit, onAttach, onReabrir, onCancelar, onGerarBoleto,
 }: BillRowProps) {
   const isPaid = bill.status === "paid";
   const isCanceled = bill.status === "canceled";
@@ -457,6 +463,15 @@ function BillRow({
               color: "oklch(0.78 0.15 158)",
               onClick: () => onPay?.(bill),
               hidden: isFinal || !podeEditar,
+            },
+            {
+              // Boleto + PIX (Asaas) — so contas A RECEBER em aberto. O cliente
+              // e resolvido no backend a partir do id da conta (contaReceberId).
+              label: "Gerar boleto (Asaas)",
+              icon: "🧾",
+              color: "oklch(0.7 0.15 270)",
+              onClick: () => onGerarBoleto?.(bill),
+              hidden: ehPagar || isFinal || !podeEditar,
             },
             {
               label: (bill.attachments ?? 0) > 0 ? `Anexos (${bill.attachments})` : "Anexos",

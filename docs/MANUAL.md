@@ -734,6 +734,7 @@ Cada grupo tem header colapsável com contagem + subtotal.
 
 **Ações por linha:**
 - Pagar/Receber (parcial ou total — escolhe forma de pagamento; cria movimentação no Caixa se aberto)
+- **Gerar boleto (Asaas)** — só em **Contas a Receber** em aberto com cliente vinculado (ver abaixo)
 - Cancelar (com motivo)
 - Reabrir (se já paga)
 - Anexar PDF/imagem do boleto (até 5 MB)
@@ -746,6 +747,15 @@ Cada grupo tem header colapsável com contagem + subtotal.
 **Recorrência:** ao criar conta, marque **PARCELADA** (gera N contas mês a mês com `grupoRecorrenciaId` compartilhado) ou **RECORRENTE_MENSAL**.
 
 **Entrada + parcelado:** ao marcar **PARCELADA** (em contas a pagar **ou** a receber), informe opcionalmente uma **Entrada à vista** e a **forma de pagamento** dela (dinheiro, PIX, cartão, boleto). O sistema separa um lançamento já **quitado** com o valor da entrada — lançando a movimentação no caixa aberto, se houver (saída em contas a pagar; entrada em contas a receber) — e parcela apenas o **restante** nas N parcelas. Ex.: total R$ 200, entrada R$ 50, 3 parcelas → entrada de R$ 50 + 3× de R$ 50. A entrada aparece na lista marcada como **🅴 Entrada**.
+
+**Boleto + PIX (Asaas):** emita um **boleto híbrido** (boleto bancário **com PIX embutido**) para o cliente pagar uma conta a receber, direto pela sua conta **Asaas**. O dinheiro cai na **sua conta Asaas** (não passa pela plataforma).
+
+- **Pré-requisito:** configurar a credencial em **Configurações → 🧾 Boleto + PIX (Asaas)** (ver seção Sistema). Sem isso, a ação não aparece habilitada.
+- **Cliente válido:** o cliente da conta precisa ter **nome** e **CPF/CNPJ válido** cadastrados — o sistema valida antes de enviar e avisa exatamente o que corrigir.
+- **Como gerar:** na linha de uma conta a receber em aberto → menu de ações (⋯) → **"Gerar boleto (Asaas)"**. O modal mostra a **linha digitável**, o **PIX copia-e-cola + QR Code** e um botão para **abrir/imprimir o boleto** (PDF).
+- **Baixa automática:** quando o cliente paga (boleto ou PIX), o Asaas avisa o sistema (webhook) e a **conta a receber é quitada sozinha** (marcada como PAGA). Como o valor cai na conta bancária e não na gaveta, **não** gera movimentação no Caixa físico.
+- **Repassar a taxa:** opcionalmente (em Configurações) você pode somar a taxa do boleto ao valor cobrado do cliente — desligado por padrão.
+- **Observação:** o PIX só aparece no boleto se a sua conta Asaas tiver uma **chave PIX cadastrada**. Sem chave, sai boleto comum (sem o atalho PIX).
 
 #### 🧾 Despesas
 
@@ -1038,6 +1048,26 @@ Documentos fiscais além da NFC-e, na tela **NF-e / NFS-e**:
 A partir daí, o PDV mostra o botão **📲 Maquininha MP** no modal de finalizar. O cliente passa o cartão na maquininha física; o sistema aguarda aprovação via polling + webhook.
 
 **Token cifrado** (AES-256-GCM) no banco — não é exibido após salvar (mascarado).
+
+---
+
+#### 🧾 Boleto + PIX (Asaas)
+
+**Em Configurações:** bloco dedicado (**🧾 Boleto + PIX (Asaas)**). Permite emitir **boletos híbridos** (boleto com PIX embutido) para cobrar seus clientes pelas contas a receber. O dinheiro cai na **sua conta Asaas**.
+
+**Para configurar (1ª vez):**
+
+1. Crie uma conta no **Asaas** — para testar sem risco, use o ambiente de **sandbox** (`sandbox.asaas.com`).
+2. No painel Asaas: **Integrações → Chave de API** → gere e copie a chave (começa com `$aact_...`).
+3. Na tela Configurações, cole no campo **API Key**, escolha o **Ambiente** (Sandbox para teste / Produção para valer).
+4. Marque **"Emissão de boleto ativa"** e salve.
+5. Copie a **URL do webhook** que aparece e cole em **Asaas → Configurações → Webhooks** (eventos de cobrança/pagamento). É isso que dá a **baixa automática** da conta quando o cliente paga.
+
+A partir daí, o **Financeiro → Contas a Receber** mostra a ação **"Gerar boleto (Asaas)"** nas contas em aberto (ver seção Financeiro).
+
+**Repassar a taxa do boleto ao cliente:** opção que soma uma taxa fixa ao valor cobrado — **desligada por padrão** (é decisão sua; verifique as regras do seu contrato).
+
+**Chave cifrada** (AES-256-GCM) no banco — não é exibida após salvar (mascarada). A cobrança é feita pela **sua** conta Asaas (por empresa), separada da cobrança da assinatura do sistema.
 
 ---
 

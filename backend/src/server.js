@@ -47,6 +47,7 @@ import empresaRoutes from "./routes/empresa.js";
 import adminMasterRoutes from "./routes/admin-master.js";
 import notificacoesRoutes from "./routes/notificacoes.js";
 import pagamentosMpRoutes from "./routes/pagamentos-mp.js";
+import boletosRoutes from "./routes/boletos.js";
 import whatsappRoutes, { webhookRouter as whatsappWebhookRouter } from "./routes/whatsapp.js";
 import backupRoutes from "./routes/backup.js";
 import fiscalRoutes from "./routes/fiscal.js";
@@ -163,6 +164,7 @@ app.use("/comandas", comandasRoutes);
 app.use("/tarefas", tarefasRoutes);
 app.use("/fidelidade", fidelidadeRoutes);
 app.use("/pagamentos-mp", pagamentosMpRoutes);
+app.use("/boletos", boletosRoutes);
 // Webhooks publicos (sem auth — gateways externos chamam; validacao por
 // segredo dentro de cada handler).
 app.use("/webhooks", whatsappWebhookRouter);

@@ -11,6 +11,7 @@ import type { SessionUser } from "../../lib/api";
 import ContaModal from "./components/ContaModal";
 import PagarReceberModal from "./components/PagarReceberModal";
 import AnexosModal from "./components/AnexosModal";
+import BoletoAsaasModal from "../../components/BoletoAsaasModal";
 
 type TipoConta = "pagar" | "receber";
 type StatusConta = "PENDENTE" | "PAGA" | "ATRASADA" | "CANCELADA";
@@ -400,6 +401,7 @@ function ContasView({ tipo, podeEditar, onContas }: ContasViewProps) {
   const [editando, setEditando] = useState<Conta | null>(null);
   const [pagando, setPagando] = useState<Conta | null>(null);
   const [anexando, setAnexando] = useState<Conta | null>(null);
+  const [gerandoBoleto, setGerandoBoleto] = useState<Conta | null>(null);
   const [selecionadas, setSelecionadas] = useState<Set<string>>(() => new Set());
   const [processandoLote, setProcessandoLote] = useState(false);
 
@@ -649,6 +651,7 @@ function ContasView({ tipo, podeEditar, onContas }: ContasViewProps) {
         onAttach={(b) => setAnexando((b as Bill & { raw: Conta }).raw)}
         onReabrir={(b) => executarReabrir((b as Bill & { raw: Conta }).raw)}
         onCancelar={(b) => executarCancelar((b as Bill & { raw: Conta }).raw)}
+        onGerarBoleto={(b) => setGerandoBoleto((b as Bill & { raw: Conta }).raw)}
       />
 
       {selecionadas.size > 0 && (
@@ -670,6 +673,16 @@ function ContasView({ tipo, podeEditar, onContas }: ContasViewProps) {
           entidades={entidades}
           onCancelar={() => setEditando(null)}
           onSalvar={() => { setEditando(null); carregar(); }}
+        />
+      )}
+
+      {gerandoBoleto && (
+        <BoletoAsaasModal
+          contaReceberId={gerandoBoleto.id}
+          clienteNome={gerandoBoleto.cliente?.nome}
+          valorReais={Number(gerandoBoleto.valor)}
+          onFechar={() => setGerandoBoleto(null)}
+          onPago={() => { setGerandoBoleto(null); carregar(); }}
         />
       )}
 

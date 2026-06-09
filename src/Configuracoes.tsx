@@ -494,6 +494,11 @@ export default function Configuracoes({ user }: ConfiguracoesProps) {
           nao inflar este componente. */}
       <BlocoMaquininhaMP podeEditar={podeEditar} />
 
+      {/* BOLETO + PIX (ASAAS) — card separado com submit proprio
+          (PUT /boletos/config). A API Key vai cifrada; o GET devolve mascarada.
+          Cobra o CLIENTE FINAL pela conta Asaas do lojista. */}
+      <BlocoBoletoAsaas podeEditar={podeEditar} />
+
       {/* EMISSAO FISCAL NFC-e (modelo 65) — card separado com submit proprio
           (PUT /fiscal/config). O CSC vai cifrado pelo backend e o GET sempre
           devolve mascarado. fiscalAtivo so liga com a prontidao completa. */}
@@ -1265,6 +1270,251 @@ function BlocoMaquininhaMP({ podeEditar }: BlocoMaquininhaMPProps) {
             <li>No app Mercado Pago, vá em <b>Maquininhas</b> e ative o <b>Modo PDV / Integração</b> — anote o DEVICE_ID exibido.</li>
             <li>Cole os dois aqui, marque "Ativa" e salve.</li>
             <li>Configure o webhook em <b>MP &gt; Webhooks</b> apontando para <code>https://SEU-BACKEND/pagamentos-mp/webhook</code> (eventos: <i>payment</i>).</li>
+          </ol>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ BOLETO HIBRIDO (BOLETO + PIX) — ASAAS ============
+//
+// Credencial Asaas DO LOJISTA (por-tenant). Card separado com submit proprio
+// (PUT /boletos/config). A API Key vai cifrada pelo backend e o GET sempre
+// devolve mascarada. asaasAtivo so faz sentido com credencial salva. Mostra a
+// URL do webhook (com o secret) para o lojista colar no painel do Asaas.
+
+interface ConfigBoletoResposta {
+  configurada: boolean;
+  asaasAtivo: boolean;
+  asaasAmbiente: "sandbox" | "producao";
+  asaasApiKeyMascarada: string | null;
+  repassarTaxaBoleto: boolean;
+  valorTaxaBoleto: number | null;
+  webhookUrl: string | null;
+}
+
+function BlocoBoletoAsaas({ podeEditar }: { podeEditar: boolean }) {
+  const [carregando, setCarregando] = useState(true);
+  const [cfg, setCfg] = useState<ConfigBoletoResposta | null>(null);
+  const [keyInput, setKeyInput] = useState(""); // vazio = manter atual
+  const [ambiente, setAmbiente] = useState<"sandbox" | "producao">("sandbox");
+  const [ativo, setAtivo] = useState(false);
+  const [repassar, setRepassar] = useState(false);
+  const [valorTaxa, setValorTaxa] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+  const [msg, setMsg] = useState("");
+  const [copiado, setCopiado] = useState(false);
+
+  function carregar() {
+    setCarregando(true);
+    api.obterConfigBoleto()
+      .then((raw) => {
+        const c = raw as ConfigBoletoResposta;
+        setCfg(c);
+        setAmbiente(c?.asaasAmbiente === "producao" ? "producao" : "sandbox");
+        setAtivo(!!c?.asaasAtivo);
+        setRepassar(!!c?.repassarTaxaBoleto);
+        setValorTaxa(c?.valorTaxaBoleto != null ? String(c.valorTaxaBoleto) : "");
+      })
+      .catch((err: Error) => setErro(err.message))
+      .finally(() => setCarregando(false));
+  }
+
+  useEffect(() => { carregar(); }, []);
+
+  function flash(t: string) {
+    setMsg(t);
+    setTimeout(() => setMsg(""), 2500);
+  }
+
+  async function salvar() {
+    setErro("");
+    setSalvando(true);
+    try {
+      const body: Record<string, unknown> = {
+        asaasAmbiente: ambiente,
+        asaasAtivo: ativo,
+        repassarTaxaBoleto: repassar,
+        valorTaxaBoleto: repassar && valorTaxa.trim() ? Number(valorTaxa.replace(",", ".")) : null,
+      };
+      if (keyInput.trim()) body.asaasApiKey = keyInput.trim();
+      const resp = await api.salvarConfigBoleto(body) as ConfigBoletoResposta;
+      // Recarrega para obter a webhookUrl (gerada quando salva a 1a credencial).
+      setKeyInput("");
+      setCfg((prev) => ({ ...(prev as ConfigBoletoResposta), ...resp }));
+      setAtivo(resp.asaasAtivo);
+      flash("Configuração do boleto salva");
+      carregar();
+    } catch (err) {
+      setErro((err as Error).message);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function removerCredencial() {
+    if (!confirm("Remover a credencial do Asaas? O sistema deixará de emitir boletos.")) return;
+    setSalvando(true);
+    try {
+      const resp = await api.salvarConfigBoleto({ asaasApiKey: "", asaasAtivo: false }) as ConfigBoletoResposta;
+      setCfg(resp);
+      setKeyInput("");
+      setAtivo(false);
+      flash("Credencial removida");
+    } catch (err) {
+      setErro((err as Error).message);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function copiarWebhook() {
+    if (!cfg?.webhookUrl) return;
+    try {
+      await navigator.clipboard.writeText(cfg.webhookUrl);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
+    } catch {
+      setErro("Não foi possível copiar — selecione manualmente.");
+    }
+  }
+
+  if (carregando) {
+    return (
+      <div className="mt-4 p-5 rounded-xl border" style={{ background: C.card, borderColor: C.border }}>
+        <div className="text-gp-muted text-[12px]">Carregando configuração de boleto…</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 p-4 rounded-xl border" style={{ background: C.card, borderColor: C.border }}>
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-gp-white font-extrabold text-[15px] flex items-center gap-2">
+          🧾 BOLETO + PIX (ASAAS)
+          {cfg?.configurada && cfg?.asaasAtivo && (
+            <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 999, background: C.green + "22", color: C.green, border: `1px solid ${C.green}55` }}>ATIVO</span>
+          )}
+          {cfg?.configurada && !cfg?.asaasAtivo && (
+            <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 999, background: C.yellow + "22", color: C.yellow, border: `1px solid ${C.yellow}55` }}>CONFIGURADO · PAUSADO</span>
+          )}
+          {cfg?.asaasAmbiente === "sandbox" && cfg?.configurada && (
+            <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 999, background: C.accent + "22", color: C.accent, border: `1px solid ${C.accent}55` }}>SANDBOX</span>
+          )}
+        </div>
+      </div>
+
+      <div className="text-gp-muted text-[12px] mb-3 leading-[1.5]">
+        Emite boletos híbridos (boleto + PIX) pela sua conta Asaas para cobrar
+        seus clientes. O dinheiro cai direto na sua conta Asaas.
+      </div>
+
+      {msg && <div style={mpAlert(C.green)}>{msg}</div>}
+      {erro && <div style={mpAlert(C.red)}>{erro}</div>}
+
+      <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr" }}>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <label className="block text-gp-muted text-[11px] mb-1 font-semibold">API Key do Asaas</label>
+          <input
+            type="password"
+            value={keyInput}
+            onChange={(e) => setKeyInput(e.target.value)}
+            disabled={!podeEditar}
+            placeholder={cfg?.asaasApiKeyMascarada ? `Atual: ${cfg.asaasApiKeyMascarada}` : "$aact_..."}
+            style={mpInput(podeEditar)}
+          />
+          <div className="text-gp-muted text-[11px] mt-1 leading-[1.5]">
+            Obtida em <b>Asaas &gt; Configurações &gt; Integrações &gt; Chave de API</b>.
+            Deixe em branco para manter a atual.
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-gp-muted text-[11px] mb-1 font-semibold">Ambiente</label>
+          <select
+            value={ambiente}
+            onChange={(e) => setAmbiente(e.target.value as "sandbox" | "producao")}
+            disabled={!podeEditar}
+            aria-label="Ambiente Asaas"
+            style={mpInput(podeEditar)}
+          >
+            <option value="sandbox">Sandbox (teste)</option>
+            <option value="producao">Produção</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-col gap-2">
+        <label className="flex items-center gap-2" style={{ opacity: podeEditar ? 1 : 0.6, cursor: podeEditar ? "pointer" : "not-allowed" }}>
+          <input type="checkbox" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} disabled={!podeEditar} style={{ width: 18, height: 18 }} />
+          <span style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>Emissão de boleto ativa</span>
+          <span style={{ color: C.muted, fontSize: 11, marginLeft: 4 }}>(habilita o botão no Financeiro)</span>
+        </label>
+
+        <label className="flex items-center gap-2" style={{ opacity: podeEditar ? 1 : 0.6, cursor: podeEditar ? "pointer" : "not-allowed" }}>
+          <input type="checkbox" checked={repassar} onChange={(e) => setRepassar(e.target.checked)} disabled={!podeEditar} style={{ width: 18, height: 18 }} />
+          <span style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>Repassar a taxa do boleto ao cliente</span>
+          <span style={{ color: C.muted, fontSize: 11, marginLeft: 4 }}>(soma ao valor cobrado)</span>
+        </label>
+
+        {repassar && (
+          <div style={{ maxWidth: 220, marginLeft: 26 }}>
+            <label className="block text-gp-muted text-[11px] mb-1 font-semibold">Valor da taxa (R$)</label>
+            <input
+              type="number" min="0" step="0.01"
+              value={valorTaxa}
+              onChange={(e) => setValorTaxa(e.target.value)}
+              disabled={!podeEditar}
+              placeholder="2.49"
+              style={mpInput(podeEditar)}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* URL do webhook — o lojista cola no painel do Asaas para receber a
+          confirmação de pagamento (o secret embutido autentica e roteia). */}
+      {cfg?.webhookUrl && (
+        <div className="mt-4 p-3 rounded-[10px]" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+          <div className="text-gp-muted text-[11px] font-bold mb-1">URL DO WEBHOOK (cole no Asaas)</div>
+          <div style={{ fontFamily: "ui-monospace, Menlo, Consolas, monospace", fontSize: 11, color: C.text, wordBreak: "break-all", lineHeight: 1.5 }}>
+            {cfg.webhookUrl}
+          </div>
+          <button type="button" onClick={copiarWebhook} style={{ ...btnSecundario, marginTop: 8, ...(copiado ? { background: C.green, color: "#fff", borderColor: C.green } : {}) }}>
+            {copiado ? "✓ Copiada!" : "📋 Copiar URL"}
+          </button>
+        </div>
+      )}
+
+      {podeEditar && (
+        <div className="flex justify-end gap-2 mt-4">
+          {cfg?.configurada && (
+            <button type="button" onClick={removerCredencial} disabled={salvando} style={mpBtnPerigo}>
+              Remover credencial
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={salvar}
+            disabled={salvando}
+            style={{ ...mpBtnPrimario, background: salvando ? C.muted : `linear-gradient(135deg, ${C.accent}, ${C.purple})`, cursor: salvando ? "default" : "pointer" }}
+          >
+            {salvando ? "Salvando…" : "💾 Salvar boleto"}
+          </button>
+        </div>
+      )}
+
+      {!cfg?.configurada && (
+        <div className="mt-4 p-3 rounded-[10px]" style={{ background: C.accent + "11", border: `1px solid ${C.accent}33`, fontSize: 12, color: C.text, lineHeight: 1.5 }}>
+          <b style={{ color: C.accent }}>Como configurar pela primeira vez:</b>
+          <ol style={{ marginTop: 6, paddingLeft: 18 }}>
+            <li>Crie uma conta no <b>Asaas</b> (sandbox para testar: <code>sandbox.asaas.com</code>).</li>
+            <li>Em <b>Configurações &gt; Integrações &gt; Chave de API</b>, copie a chave (começa com <code>$aact_</code>).</li>
+            <li>Cole aqui, escolha o ambiente, marque "ativa" e salve.</li>
+            <li>Copie a <b>URL do webhook</b> que aparecerá e cole em <b>Asaas &gt; Configurações &gt; Webhooks</b> (eventos de <i>cobrança/pagamento</i>).</li>
+            <li>No Financeiro, abra uma conta a receber e use <b>Gerar boleto (Asaas)</b>.</li>
           </ol>
         </div>
       )}

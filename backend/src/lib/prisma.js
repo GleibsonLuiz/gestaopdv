@@ -58,6 +58,7 @@ const MODELOS_COM_TENANT = new Set([
   "OrdemServico", "ItemOrdemServico",
   "PlanoConta", "Despesa",
   "SugestaoCompra",
+  "BoletoAsaas",
 ]);
 
 function tenantAtual() {

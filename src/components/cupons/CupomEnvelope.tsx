@@ -86,6 +86,9 @@ export default function CupomEnvelope({ cfg, children, preview = false }: Props)
           color: black;
           font-family: 'Courier New', Courier, monospace;
           font-size: ${fonte}px;
+          /* Peso mais firme: impressoras termicas perdem dots no traco fino;
+             600 engrossa o stroke e imprime mais escuro sem borrar. */
+          font-weight: 600;
           line-height: 1.4;
           padding: 8px 6px;
         }

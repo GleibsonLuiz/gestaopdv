@@ -1013,9 +1013,34 @@ Documentos fiscais além da NFC-e, na tela **NF-e / NFS-e**:
 
 ![Configurações de Impressora](img/impressora.png)
 
-**O que faz:** configura impressora térmica (Bluetooth ou USB ESC/POS) usada para cupons e adendos.
+**O que faz:** define como os cupons (venda, orçamento, sangria, suprimento, fechamento e recibos) são impressos. Tela em duas colunas: **formulário** à esquerda e **preview do cupom em tempo real** à direita (botão **🖨️ Imprimir cupom de teste**).
 
-**Para que serve:** PDV imprimir cupom automático sem abrir caixa de diálogo do sistema operacional.
+**Principais ajustes:**
+
+- **Largura do papel:** 58 mm, **80 mm** (térmica padrão) ou A4.
+- **Fonte base** e **margem** — dica: aumente a fonte (ex.: 14) se a térmica imprimir fraco.
+- **Conteúdo:** ligar/desligar logo, CNPJ, vendedor e cliente; **cabeçalho** e **rodapé** extras (até 3 linhas).
+- **Comportamento:** vias por venda, linhas em branco no fim, **imprimir automaticamente ao concluir a venda** e **abrir gaveta** em vendas no dinheiro (requer agente ESC/POS).
+- **Quais documentos imprimem:** marque venda, orçamento, sangria, suprimento, fechamento e recibo financeiro.
+
+**Como o cupom é impresso — dois caminhos:**
+
+1. **Pelo navegador (padrão, sem instalar nada):** usa a janela de impressão do navegador. Imprime na **impressora padrão do Windows**. Para sair sem caixa de diálogo, use o atalho do Chrome em modo `--kiosk-printing`.
+2. **Pelo agente (QZ Tray) — impressão direta e silenciosa:** imprime o cupom **direto numa impressora escolhida pelo nome**, sem caixa de diálogo e **sem mexer na impressora padrão do Windows** (ideal quando o mesmo PC também imprime em outras impressoras).
+
+##### Impressão direta via agente (QZ Tray)
+
+> Card **"Impressão direta via agente (QZ Tray)"** na tela de Impressora. Configuração **por computador** (vale só naquele PC).
+
+1. Baixe e instale o app gratuito **QZ Tray** em [qz.io/download](https://qz.io/download) — deixe-o aberto (fica na bandeja, perto do relógio; marque **Start automatically** para subir com o Windows).
+2. No card, clique **Detectar agente / listar impressoras**.
+3. Escolha a sua impressora térmica na lista **Impressora deste PC**.
+4. Ligue o switch **Usar o agente para imprimir o cupom da venda**.
+5. Na **primeira** impressão, o QZ pede confirmação → marque **Remember this decision** + **Allow**. A partir daí, **silêncio total** naquele PC.
+
+**Boa notícia:** o sistema já vem com o **certificado de assinatura embutido**, então o QZ reconhece o GestãoProMax como confiável (não fica pedindo permissão a cada impressão). Se o agente estiver fechado ou falhar, o sistema **cai automaticamente na impressão pelo navegador** — nunca trava a venda.
+
+> 💡 Papel saiu fraco/falhado? É **densidade** da impressora (ajuste no utilitário ou no autoteste dela, não no sistema). Acentos errados ou corte no rodapé já são tratados automaticamente pelo sistema.
 
 ---
 

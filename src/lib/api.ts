@@ -904,6 +904,16 @@ export const api = {
   salvarConfiguracaoImpressora: (dados: unknown) =>
     request("/configuracao-impressora", { method: "PUT", body: dados }),
 
+  // Assina um payload do QZ Tray com a chave privada do backend (RSA-SHA512).
+  // Usado por lib/qztray.ts para impressao silenciosa (site confiavel no QZ).
+  assinarQz: async (toSign: string): Promise<string> => {
+    const r = await request<{ signature: string }>("/impressao-qz/sign", {
+      method: "POST",
+      body: { request: toSign },
+    });
+    return r.signature;
+  },
+
   // ==================== MERCADO PAGO POINT (MAQUININHA) ====================
   // GET retorna estado da config (token sempre mascarado). PUT permite
   // partial update: omitir um campo o preserva, passar "" em mpAccessToken

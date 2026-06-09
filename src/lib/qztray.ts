@@ -20,9 +20,55 @@
 // depois via qz.security.setCertificatePromise/setSignaturePromise.
 // =====================================================================
 import * as e from "./escpos";
+import { api } from "./api";
 
 const LS_ATIVO = "gestaopro_qz_ativo";
 const LS_IMPRESSORA = "gestaopro_qz_impressora";
+
+// Certificado PÚBLICO do GestãoProMax. Pode ficar no bundle — é público por
+// natureza. O par (chave privada) vive SÓ no backend (env QZ_PRIVATE_KEY_B64)
+// e assina cada pedido via POST /impressao-qz/sign. Com isso o QZ reconhece o
+// site como confiável: o aviso passa a permitir "Lembrar + Allow" (some de vez
+// após aprovar 1x por PC). Sem a env no backend, a assinatura falha e o QZ
+// cai no modo comunidade (aviso por sessão) — degradação graciosa.
+const QZ_CERT = `-----BEGIN CERTIFICATE-----
+MIIDVzCCAj+gAwIBAgIUX/4mzgL+RqqGAggI5peUNy71kNswDQYJKoZIhvcNAQEL
+BQAwOzEVMBMGA1UEAwwMR2VzdGFvUHJvTWF4MRUwEwYDVQQKDAxHZXN0YW9Qcm9N
+YXgxCzAJBgNVBAYTAkJSMB4XDTI2MDYwOTIwMDkyNloXDTM2MDYwNjIwMDkyNlow
+OzEVMBMGA1UEAwwMR2VzdGFvUHJvTWF4MRUwEwYDVQQKDAxHZXN0YW9Qcm9NYXgx
+CzAJBgNVBAYTAkJSMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvOL8
+thg7z9Tq2+P/Pq5umkHuExOiF3TZDD/FZeI8nKd5LjvvjUHwblPYv7wSwSTKIKH9
+QuiHEeKjo/6zcmDsHsP6Lh5lD9nnHAc32QLKGUmZU8NRPivzzeepdtv4em/sVgle
+cG51ZHU8ginit3nnXtO2zpc6f4AjL8GicFsFQOyFf7k2u0NobuugQIb/wPmohgnI
+tilTb7ssOvJb3+oiHBgvBXWkQlcmYl1irRbgefCbluvK/maiul7Us/pWE7D7SxuW
+u3oEdr3Bl15SPQHj491tbDCgSLWcUUjvkuXCIfYlEFPnwAvjoFflUrdxkrG3SmMX
+P0d2I+ew873nicS+pQIDAQABo1MwUTAdBgNVHQ4EFgQUnvHplSa7ka6HiC1l91H+
+DXKkHaowHwYDVR0jBBgwFoAUnvHplSa7ka6HiC1l91H+DXKkHaowDwYDVR0TAQH/
+BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAWB8X5hHYLHdO115jMLtkkKPc78zb
+V40LNq+R3yAy/obRDuIbGEpL4KxORhxEnZzYrzti830t62tI7bi+Gc1EBEnTvkXE
+LzZ6mvyYs5jpWF//PL8RI9pA/F8bMaOddEdLPgUqGwrbdWLKAeogGDRq7K3dDl2Y
+mdjvOBrJLhuGUT3tbKTGmaAul+EKs/Hxe0akvyqjadoBoNxecTg3RXjEesgygcUt
+JCXjEo1AYx9u5E3NIUCchae0gAF33t+5Ei6U75Sroax2sWqwxCgvzrifTXOsxC0Q
+jnQkCe07ovQWotgRZ2Z2UTii/n7b3c8Zhv/AuooidTN70qAV7J8g3MbyTQ==
+-----END CERTIFICATE-----`;
+
+// Configura a segurança do QZ uma única vez por sessão: apresenta o
+// certificado público e delega a assinatura ao backend (chave privada lá).
+let segurancaConfigurada = false;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function configurarSeguranca(qz: any): void {
+  if (segurancaConfigurada) return;
+  segurancaConfigurada = true;
+  qz.security.setCertificatePromise((resolve: (c: string) => void) => resolve(QZ_CERT));
+  qz.security.setSignatureAlgorithm("SHA512");
+  qz.security.setSignaturePromise((toSign: string) =>
+    (resolve: (s: string) => void, reject: (err: unknown) => void) => {
+      api.assinarQz(toSign)
+        .then((sig: string) => resolve(sig))
+        .catch((err: unknown) => reject(err));
+    },
+  );
+}
 
 // Carrega a lib oficial sob demanda (lazy) — fica fora do bundle principal
 // e só é baixada quando alguém realmente usa o QZ.
@@ -69,7 +115,8 @@ export function qzAtivoEConfigurado(): boolean {
 export async function conectarQz(): Promise<void> {
   const qz = await carregarQz();
   if (qz.websocket.isActive()) return;
-  // Sem certificado (modo comunidade): o QZ pede "permitir" uma vez por PC.
+  // Apresenta o certificado + delega assinatura ao backend ANTES de conectar.
+  configurarSeguranca(qz);
   await qz.websocket.connect({ retries: 1, delay: 1 });
 }
 

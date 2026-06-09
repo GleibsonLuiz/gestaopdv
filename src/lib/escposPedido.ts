@@ -166,7 +166,10 @@ export function gerarComandosPedido(
   // ============ RODAPE ============
   partes.push(e.align(1));
   partes.push(e.linha(opcoes.mensagemRodape || "OBRIGADO PELA PREFERENCIA!"));
-  partes.push(e.align(0), e.newLine(3));
+  // A guilhotina fica ~1-2cm acima da cabeca de impressao. Sem alimentar
+  // o suficiente, o corte sai DENTRO do rodape e o texto sobra no topo do
+  // proximo cupom. 6 linhas empurram o rodape para alem da lamina.
+  partes.push(e.align(0), e.newLine(6));
 
   // ============ GAVETA + CORTE ============
   if (opcoes.abrirGavetaDinheiro) partes.push(e.abrirGaveta());
@@ -258,7 +261,7 @@ export function gerarComandosAdendo(
   // ============ RODAPE ============
   partes.push(e.align(1));
   partes.push(e.linha(opcoes.mensagemRodape || "ADICIONAR A COMANDA EXISTENTE"));
-  partes.push(e.align(0), e.newLine(3));
+  partes.push(e.align(0), e.newLine(6));
 
   if (opcoes.cortarPapel !== false) partes.push(e.cut());
 

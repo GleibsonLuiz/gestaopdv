@@ -266,7 +266,9 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
      - 🔴 negativa = quebra
    - Logo abaixo, a tela mostra a **Composição do saldo esperado** (troco inicial + vendas em dinheiro + suprimentos − despesas em dinheiro − sangrias − pagamentos). Assim você enxerga exatamente o que formou o esperado — o mesmo detalhamento sai no **cupom de fechamento** e fica salvo no **Extrato** do caixa.
 
-> **⚠️ Sobra causada por despesas em dinheiro.** A causa mais comum de uma "sobra" alta é lançar **despesas pagas em dinheiro** que **não saíram fisicamente da gaveta** (ex.: a despesa foi paga por Pix ou do próprio bolso, mas registrada como dinheiro do caixa). Cada despesa em dinheiro **reduz** o saldo esperado; se o dinheiro continua na gaveta, a diferença vira sobra. Para evitar: ao lançar a despesa, escolha a **forma de pagamento correta** (Pix/cartão) **ou desmarque "registrar no caixa"** quando o dinheiro não sai do caixa; quando a despesa for paga com o dinheiro da gaveta, separe as cédulas na hora (ou use **Sangria**). Quando há sobra com despesas em dinheiro no dia, a tela de fechamento exibe um aviso explicando o valor.
+> **⚠️ Despesas e o caixa.** Só despesas em **DINHEIRO** movimentam o caixa (saem da gaveta física). Despesas pagas por **Pix, cartão, crediário ou boleto não passam pelo caixa** — elas saem do banco, então ficam apenas no módulo **Despesas/Contabilidade** e não aparecem no extrato do caixa. Por isso, ao lançar a despesa, escolha a **forma de pagamento que realmente foi usada**: a tela mostra "💵 Sai do dinheiro do caixa do dia" (Dinheiro) ou "Não movimenta o caixa" (demais formas).
+>
+> **Sobra causada por despesa em dinheiro.** A causa mais comum de uma "sobra" alta é lançar uma despesa como **Dinheiro** sem que o dinheiro tenha **saído fisicamente da gaveta** (ex.: foi paga por Pix mas registrada como Dinheiro). Cada despesa em dinheiro reduz o saldo esperado; se as cédulas continuam na gaveta, a diferença vira sobra. Quando isso acontece, a tela de fechamento exibe um aviso explicando o valor. Para evitar: registre a forma correta e, quando for dinheiro da gaveta, separe as cédulas na hora (ou use **Sangria**).
 
 **Abas:**
 - **Meu caixa** — KPIs e ações do caixa aberto
@@ -797,7 +799,7 @@ Cada grupo tem header colapsável com contagem + subtotal.
 
 1. **Valor em destaque** — digite o valor (Enter já lança).
 2. **Categoria** — use o **seletor pesquisável**: clique, digite parte do nome ou do código para filtrar e escolha. Se a categoria ainda **não existe**, digite o nome e toque em **➕ Criar categoria "…"** — ela é criada na hora (com código sugerido automaticamente) e já fica selecionada, sem sair do lançamento. Para o gasto do dia a dia, toque direto em um dos **chips de categorias recentes** (atalho de 1 toque). As categorias vêm do Plano de Contas.
-3. **Data** (padrão hoje) e **Forma de pagamento** (Dinheiro, Pix, Débito, Crédito, Boleto).
+3. **Data** (padrão hoje) e **Forma de pagamento** (Dinheiro, Pix, Débito, Crédito, Boleto). **Só "Dinheiro" movimenta o caixa** (sai da gaveta física); nas demais formas o dinheiro sai do banco, então a despesa fica apenas no registro de Despesas/Contabilidade e **não passa pelo caixa**. A própria tela indica embaixo do campo: *"💵 Sai do dinheiro do caixa do dia"* ou *"Não movimenta o caixa"*.
 4. **Descrição** e **📷 Comprovante** (foto ou PDF até 5 MB — no celular abre a câmera direto).
 5. **Lançar despesa.**
 

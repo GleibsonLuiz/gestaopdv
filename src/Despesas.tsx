@@ -473,6 +473,11 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro, onCategoriaCriada }:
           <select value={formaPagamento} onChange={e => setFormaPagamento(e.target.value)} style={input()}>
             {FORMAS.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
           </select>
+          <div style={{ fontSize: 10, marginTop: 4, color: formaPagamento === "DINHEIRO" ? C.green : C.muted }}>
+            {formaPagamento === "DINHEIRO"
+              ? "💵 Sai do dinheiro do caixa do dia"
+              : "Não movimenta o caixa (saída bancária)"}
+          </div>
         </Campo>
         <Campo label="Descrição *" style={{ gridColumn: "1 / -1" }}>
           <input value={descricao} onChange={e => setDescricao(e.target.value)}

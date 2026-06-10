@@ -58,8 +58,13 @@ export async function obter(req, res, next) {
 }
 
 // Cria uma despesa. Aceita multipart (campos + arquivo opcional "arquivo") OU
-// JSON puro. Regras de caixa (espelham contaPagarController.pagar):
-//   registrarCaixa !== "false" -> tenta baixar de um caixa aberto
+// JSON puro. Regras de caixa:
+//   forma === DINHEIRO  -> movimenta o caixa (sai da gaveta fisica)
+//   forma != DINHEIRO   -> NAO toca o caixa (Pix/cartao/crediario/boleto saem
+//                          do banco, nao da gaveta) — fica so no modulo
+//                          Despesas/Contabilidade, sem lancamento de impacto
+//                          zero poluindo o extrato
+//   registrarCaixa === "false" -> pula o caixa mesmo em DINHEIRO (via API)
 //   caixaId          -> baixa naquele caixa especifico (precisa estar ABERTO)
 //   sem caixa aberto -> a despesa e criada mesmo assim (so registro contabil)
 export async function criar(req, res, next) {
@@ -92,7 +97,13 @@ export async function criar(req, res, next) {
       return res.status(400).json({ erro: "Selecione uma categoria analitica (nao um grupo)" });
     }
 
-    const registrarCaixa = req.body.registrarCaixa !== "false" && req.body.registrarCaixa !== false;
+    // Apenas despesas em DINHEIRO movimentam o caixa (gaveta fisica). Formas
+    // bancarias (Pix/cartao/crediario/boleto) nao saem da gaveta, entao nao
+    // geram lancamento no caixa — ficam so no modulo Despesas/Contabilidade.
+    // registrarCaixa=false ainda permite pular o caixa via API mesmo em dinheiro.
+    const registrarCaixa =
+      req.body.registrarCaixa !== "false" && req.body.registrarCaixa !== false
+      && formaPagamento === "DINHEIRO";
     const caixaIdInformado = req.body.caixaId && String(req.body.caixaId).trim()
       ? String(req.body.caixaId).trim() : null;
 

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authRequired, requireRole, requirePermissao } from "../middlewares/auth.js";
+import { authRequired, requirePermissao } from "../middlewares/auth.js";
 import {
   listar, obter, criar, atualizar, excluir, anexar, excluirAnexo, ocr,
   previstoRealizado,
@@ -9,6 +9,10 @@ import { upload, tratarErroUpload } from "../controllers/anexoController.js";
 const router = Router();
 
 router.use(authRequired);
+// Quem tem o modulo DESPESAS liberado pode tudo nesta rota (listar, criar,
+// editar, excluir, anexar e OCR). Antes criar/editar/excluir exigiam tambem
+// cargo ADMIN/GERENTE; passamos a confiar so na permissao do modulo, para que
+// um VENDEDOR com Despesas liberado consiga lancar suas despesas.
 router.use(requirePermissao("DESPESAS"));
 
 router.get("/", listar);
@@ -20,7 +24,6 @@ router.get("/previsto-realizado", previstoRealizado);
 // OCR de comprovante (le e devolve campos sugeridos; nao cria despesa).
 router.post(
   "/ocr",
-  requireRole("ADMIN", "GERENTE"),
   (req, res, next) => upload.single("arquivo")(req, res, err => tratarErroUpload(err, req, res, next)),
   ocr,
 );
@@ -30,20 +33,18 @@ router.get("/:id", obter);
 // Criacao aceita multipart (comprovante opcional no campo "arquivo").
 router.post(
   "/",
-  requireRole("ADMIN", "GERENTE"),
   (req, res, next) => upload.single("arquivo")(req, res, err => tratarErroUpload(err, req, res, next)),
   criar,
 );
 
-router.put("/:id", requireRole("ADMIN", "GERENTE"), atualizar);
-router.delete("/:id", requireRole("ADMIN", "GERENTE"), excluir);
+router.put("/:id", atualizar);
+router.delete("/:id", excluir);
 
 router.post(
   "/:id/anexos",
-  requireRole("ADMIN", "GERENTE"),
   (req, res, next) => upload.single("arquivo")(req, res, err => tratarErroUpload(err, req, res, next)),
   anexar,
 );
-router.delete("/:id/anexos/:anexoId", requireRole("ADMIN", "GERENTE"), excluirAnexo);
+router.delete("/:id/anexos/:anexoId", excluirAnexo);
 
 export default router;

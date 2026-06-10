@@ -800,7 +800,7 @@ Cada grupo tem header colapsável com contagem + subtotal.
 
 **Comprovante:** clique no 📎 na lista para abrir/baixar o comprovante anexado.
 
-> Acesso: módulo **Despesas** (incluído no plano PRO). Lançar/editar/excluir exige Admin ou Gerente; vendedores com a permissão só visualizam.
+> Acesso: módulo **Despesas** (incluído no plano PRO). **Quem tem a permissão Despesas pode lançar, editar e excluir** — inclusive um vendedor a quem você liberou o módulo (útil para a equipe registrar os próprios gastos: abastecimento, recarga, etc.). Quem **não** tem o módulo não vê a tela. *(A criação/edição do Plano de Contas continua restrita a Admin/Gerente.)*
 
 #### 📚 Contabilidade
 

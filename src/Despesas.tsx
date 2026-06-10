@@ -104,7 +104,11 @@ export default function Despesas({ user }: { user: SessionUser }) {
   const [fFim, setFFim] = useState(hojeISO());
   const [fCategoria, setFCategoria] = useState("");
 
-  const podeEditar = user.role === "ADMIN" || user.role === "GERENTE";
+  // Quem tem o modulo DESPESAS liberado pode lancar/editar/excluir (nao so
+  // ADMIN/GERENTE). O acesso a esta tela ja exige a permissao DESPESAS, entao
+  // isto alinha o poder de edicao a permissao concedida pelo admin. (Mesma
+  // logica de podeAcessar: ADMIN sempre; demais checam a lista de permissoes.)
+  const podeEditar = user.role === "ADMIN" || (user.permissoes?.includes("DESPESAS") ?? false);
 
   const analiticas = useMemo(
     () => contas.filter(c => c.analitica && c.ativo && c.natureza === "DESPESA"),

@@ -1,6 +1,7 @@
 // URL do backend. Em producao (Vercel), VITE_API_URL e injetado pela
 // variavel de ambiente do projeto. Em dev, default para o backend local.
 import { setModulosHabilitados } from "./permissoes";
+import { getDeviceId, getDeviceNameHeader } from "./dispositivo";
 
 export const BASE_URL: string = import.meta.env.VITE_API_URL || "http://localhost:3333";
 
@@ -202,6 +203,10 @@ function sincronizarModulos(empresa: SessionEmpresa): void {
 async function request<T = unknown>(path: string, opts: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, auth = true, timeoutMs = TIMEOUT_PADRAO_MS } = opts;
   const headers: Record<string, string> = { "Content-Type": "application/json" };
+  // Licenca por maquina: identifica este navegador em TODA request (inclusive
+  // o login, que e auth:false) para o backend contar/validar dispositivos.
+  headers["X-Device-Id"] = getDeviceId();
+  headers["X-Device-Name"] = getDeviceNameHeader();
   if (auth) {
     const token = getToken();
     if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -273,6 +278,8 @@ async function request<T = unknown>(path: string, opts: RequestOptions = {}): Pr
 // boundary correto automaticamente quando recebe FormData.
 async function uploadForm<T = unknown>(path: string, formData: FormData): Promise<T> {
   const headers: Record<string, string> = {};
+  headers["X-Device-Id"] = getDeviceId();
+  headers["X-Device-Name"] = getDeviceNameHeader();
   const token = getToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
@@ -339,6 +346,12 @@ export const api = {
   login: (email: string, senha: string) =>
     request("/auth/login", { method: "POST", body: { email, senha }, auth: false }),
   me: () => request("/auth/me"),
+  // Licenca por maquina: auto-derrubada de um dispositivo a partir da tela de
+  // bloqueio (login recusado por limite). Re-valida email+senha no backend.
+  revogarDispositivoSelfService: (email: string, senha: string, dispositivoId: string) =>
+    request("/auth/dispositivos/revogar", {
+      method: "POST", body: { email, senha, dispositivoId }, auth: false,
+    }),
   // ETAPA 10: signup agora exige super-admin (auditado pelo backend).
   // Usado pela tela /admin-master.
   signup: (dados: unknown) => request("/tenants/signup", { method: "POST", body: dados }),
@@ -398,6 +411,12 @@ export const api = {
   // volta ao pacote padrao do plano.
   adminMasterAlterarModulos: (id: string, modulos: string[] | null) =>
     request(`/admin-master/empresas/${id}/modulos`, { method: "PATCH", body: { modulos } }),
+
+  // Licenca por maquina (super-admin): listar/revogar dispositivos de uma empresa.
+  adminMasterListarDispositivos: (id: string) =>
+    request(`/admin-master/empresas/${id}/dispositivos`),
+  adminMasterRevogarDispositivo: (id: string, dispId: string) =>
+    request(`/admin-master/empresas/${id}/dispositivos/${dispId}/revogar`, { method: "POST" }),
 
   // ETAPA 12
   adminMasterAlterarPlano: (id: string, dados: unknown) =>

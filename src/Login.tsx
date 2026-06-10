@@ -95,9 +95,40 @@ interface LoginResponse {
 
 type LoginStatus = "idle" | "loading" | "error" | "success";
 
+// Dispositivo retornado pelo backend na tela de bloqueio (licenca por maquina).
+interface DispositivoBloqueio {
+  id: string;
+  nome?: string | null;
+  ultimoAcessoEm?: string | null;
+  ultimoIp?: string | null;
+}
+
 interface LoginErrorData {
   motivoSuspensao?: string;
   planoExpirado?: boolean;
+  // Licenca por maquina: limite de dispositivos atingido.
+  dispositivoBloqueado?: boolean;
+  max?: number;
+  dispositivos?: DispositivoBloqueio[];
+}
+
+interface BloqueioState {
+  max: number;
+  dispositivos: DispositivoBloqueio[];
+}
+
+// "há 3 dias", "agora" — rotulo relativo amigavel para o ultimo acesso.
+function tempoRelativo(iso?: string | null): string {
+  if (!iso) return "—";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (Number.isNaN(ms)) return "—";
+  const min = Math.floor(ms / 60000);
+  if (min < 1) return "agora mesmo";
+  if (min < 60) return `há ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `há ${h} h`;
+  const d = Math.floor(h / 24);
+  return d === 1 ? "ontem" : `há ${d} dias`;
 }
 
 // ─── Página ────────────────────────────────────────────────────────────────
@@ -110,6 +141,10 @@ export default function Login({ onSuccess }: LoginProps) {
   const [status, setStatus]     = useState<LoginStatus>("idle");
   const [err, setErr]           = useState("");
   const [quoteIdx, setQuoteIdx] = useState(0);
+  // Licenca por maquina: quando o login e recusado por limite de dispositivos,
+  // guardamos a lista para o cliente derrubar uma maquina antiga (self-service).
+  const [bloqueio, setBloqueio]   = useState<BloqueioState | null>(null);
+  const [revogandoId, setRevogandoId] = useState<string | null>(null);
 
   // Silencia "unused" do setter — feature de "lembrar-me" virá depois.
   void setRemember;
@@ -125,25 +160,29 @@ export default function Login({ onSuccess }: LoginProps) {
     return () => clearInterval(id);
   }, []);
 
-  const submit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setTouched({ email: true, password: true });
-    if (!formValid) return;
+  // Tentativa de login reutilizavel (form + retry pos-revogacao de dispositivo).
+  const tentarLogin = async () => {
     setStatus("loading");
     setErr("");
-
     try {
       // Backend (ETAPA 2 multi-tenant) retorna { token, user, empresa }.
       // user.tenantId duplica empresa.id mas mantemos para conveniencia.
       const { token, user, empresa } = await api.login(email, password) as LoginResponse;
       setSession(token, user, empresa);
+      setBloqueio(null);
       setStatus("success");
       onSuccess?.(user);
     } catch (e2) {
       setStatus("error");
+      const data = (e2 instanceof ApiError ? e2.data : null) as LoginErrorData | null;
+      // Licenca por maquina: limite atingido — mostra a tela de bloqueio com
+      // as maquinas ativas para o cliente desconectar uma.
+      if (data?.dispositivoBloqueado) {
+        setBloqueio({ max: data.max || 0, dispositivos: data.dispositivos || [] });
+        return;
+      }
       // ETAPA 11: motivoSuspensao (empresa desativada).
       // ETAPA 12: planoExpirado (plano vencido).
-      const data = (e2 instanceof ApiError ? e2.data : null) as LoginErrorData | null;
       const motivo = data?.motivoSuspensao;
       if (motivo) {
         setErr(`⏸ Conta suspensa: ${motivo}`);
@@ -152,6 +191,29 @@ export default function Login({ onSuccess }: LoginProps) {
       } else {
         setErr((e2 as Error)?.message || "Nao conseguimos validar essas credenciais.");
       }
+    }
+  };
+
+  const submit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setTouched({ email: true, password: true });
+    if (!formValid) return;
+    await tentarLogin();
+  };
+
+  // Desconecta uma maquina antiga (re-valida email+senha no backend) e, em
+  // seguida, refaz o login automaticamente neste dispositivo.
+  const revogarERetentar = async (dispId: string) => {
+    setRevogandoId(dispId);
+    setErr("");
+    try {
+      await api.revogarDispositivoSelfService(email, password, dispId);
+      setBloqueio(null);
+      await tentarLogin();
+    } catch (e2) {
+      setErr((e2 as Error)?.message || "Nao foi possivel desconectar este dispositivo.");
+    } finally {
+      setRevogandoId(null);
     }
   };
 
@@ -229,6 +291,15 @@ export default function Login({ onSuccess }: LoginProps) {
 
 
         <div className="flex-1 flex items-center justify-center px-6 lg:px-12 py-8">
+          {bloqueio ? (
+            <BloqueioDispositivos
+              bloqueio={bloqueio}
+              revogandoId={revogandoId}
+              erro={err}
+              onRevogar={revogarERetentar}
+              onVoltar={() => { setBloqueio(null); setStatus("idle"); setErr(""); }}
+            />
+          ) : (
           <form onSubmit={submit} className="w-full max-w-[400px] animate-fade-up" style={{ animationDelay: ".15s" }}>
 
             <div className="mb-8">
@@ -310,6 +381,7 @@ export default function Login({ onSuccess }: LoginProps) {
               </a>
             </div>
           </form>
+          )}
         </div>
 
         <div className="lg:hidden px-6 pb-8 pt-2 text-center">
@@ -317,6 +389,93 @@ export default function Login({ onSuccess }: LoginProps) {
           <p className="mt-2 text-[12px] text-mist-400">— {QUOTES[quoteIdx].author}</p>
         </div>
       </main>
+    </div>
+  );
+}
+
+// ─── Tela de bloqueio por limite de maquinas (licenca por dispositivo) ──────
+const Monitor = ({ size = 20 }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8M12 16v4" />
+  </svg>
+);
+
+interface BloqueioProps {
+  bloqueio: BloqueioState;
+  revogandoId: string | null;
+  erro: string;
+  onRevogar: (id: string) => void;
+  onVoltar: () => void;
+}
+
+function BloqueioDispositivos({ bloqueio, revogandoId, erro, onRevogar, onVoltar }: BloqueioProps) {
+  return (
+    <div className="w-full max-w-[440px] animate-fade-up">
+      <div className="mb-6">
+        <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-amber-500/15 text-amber-300 mb-4">
+          <Lock size={22} />
+        </div>
+        <div className="text-[11px] font-mono tracking-[0.12em] uppercase text-mist-400 mb-2">
+          Limite de dispositivos
+        </div>
+        <h1 className="font-display text-[30px] leading-[1.1] tracking-tight m-0">
+          Esta conta já está em uso.
+        </h1>
+        <p className="mt-3 text-mist-300 text-[14px] leading-relaxed">
+          Seu plano permite <strong className="text-white">{bloqueio.max}</strong>{" "}
+          {bloqueio.max === 1 ? "máquina conectada" : "máquinas conectadas"} ao mesmo tempo.
+          Para entrar aqui, desconecte um dos dispositivos abaixo.
+        </p>
+      </div>
+
+      {erro && (
+        <div role="alert" className="mb-4 flex items-start gap-2.5 rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-[13px] text-red-300">
+          <span className="mt-0.5"><Alert size={14} /></span>
+          <span>{erro}</span>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-2.5">
+        {bloqueio.dispositivos.map((d) => {
+          const ocupado = revogandoId !== null;
+          const estaRevogando = revogandoId === d.id;
+          return (
+            <div
+              key={d.id}
+              className="flex items-center gap-3 rounded-xl border border-line bg-white/[0.02] px-3.5 py-3"
+            >
+              <span className="shrink-0 text-mist-300"><Monitor size={20} /></span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[14px] text-white truncate">{d.nome || "Dispositivo"}</div>
+                <div className="text-[12px] text-mist-400 truncate">
+                  Último acesso {tempoRelativo(d.ultimoAcessoEm)}
+                  {d.ultimoIp ? ` · ${d.ultimoIp}` : ""}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onRevogar(d.id)}
+                disabled={ocupado}
+                className="shrink-0 rounded-lg border border-red-500/40 text-red-300 hover:bg-red-500/10 disabled:opacity-50 px-3 py-1.5 text-[12px] font-medium transition-colors"
+              >
+                {estaRevogando ? "Desconectando…" : "Desconectar"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="mt-4 text-[12px] text-mist-500 leading-relaxed">
+        Ao desconectar, a outra máquina será deslogada e você entrará automaticamente neste dispositivo.
+      </p>
+
+      <button
+        type="button"
+        onClick={onVoltar}
+        className="mt-5 text-[13px] text-mist-400 hover:text-white transition-colors"
+      >
+        ← Voltar ao login
+      </button>
     </div>
   );
 }

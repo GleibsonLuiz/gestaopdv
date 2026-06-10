@@ -1682,6 +1682,10 @@ function ModalPlano({ empresa, onCancelar, onSalva }: any) {
   }
   const [observacoes, setObservacoes] = useState(empresa.observacoesPlano || "");
   const [statusAssinatura, setStatusAssinatura] = useState(empresa.statusAssinatura || "TRIAL");
+  // Licenca por maquina: limite de dispositivos. "" = ilimitado.
+  const [maxDispositivos, setMaxDispositivos] = useState(
+    empresa.maxDispositivos != null ? String(empresa.maxDispositivos) : ""
+  );
   // ETAPA#6: segmento de negocio (alterar requer endpoint proprio)
   const segmentoOriginal = empresa.segmento || "GERAL";
   const [segmento, setSegmento] = useState(segmentoOriginal);
@@ -1710,6 +1714,8 @@ function ModalPlano({ empresa, onCancelar, onSalva }: any) {
         expiraEm: expiraEm || null,
         observacoes: observacoes.trim() || null,
         statusAssinatura,
+        // "" -> null (ilimitado); senao inteiro.
+        maxDispositivos: maxDispositivos.trim() === "" ? null : Number(maxDispositivos),
       });
       if (segmento !== segmentoOriginal) {
         await api.adminMasterAlterarSegmento(empresa.id, segmento);
@@ -1797,6 +1803,15 @@ function ModalPlano({ empresa, onCancelar, onSalva }: any) {
           Define os campos extras no cadastro de produto do cliente.
         </div>
 
+        <label style={{ ...labelStyle, marginTop: 12 }}>🖥️ Limite de máquinas (dispositivos)</label>
+        <input type="number" min={1} max={1000} value={maxDispositivos}
+          onChange={e => setMaxDispositivos(e.target.value)} style={inputStyle}
+          placeholder="Vazio = ilimitado" title="Numero maximo de dispositivos simultaneos" />
+        <div style={{ color: C.muted, fontSize: 10, marginTop: 4 }}>
+          Quantos navegadores/computadores podem ter sessão ativa ao mesmo tempo.
+          Vazio = ilimitado. O cliente pode derrubar uma máquina antiga na tela de bloqueio.
+        </div>
+
         {/* ENTITLEMENTS: modulos liberados (modelo hibrido) */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, marginBottom: 2, gap: 8, flexWrap: "wrap" }}>
           <label style={{ ...labelStyle, marginTop: 0, marginBottom: 0 }}>Módulos liberados</label>
@@ -1882,6 +1897,9 @@ function ModalDetalhesEmpresa({ empresa, onCancelar, onAlterarPlano, onSuspender
   const [logs, setLogs] = useState(null);
   const [billing, setBilling] = useState(null); // { assinatura, cobrancas }
   const [acaoBilling, setAcaoBilling] = useState(false);
+  // Licenca por maquina: { maxDispositivos, ativos, dispositivos[] }.
+  const [dispositivos, setDispositivos] = useState<any>(null);
+  const [revogandoDisp, setRevogandoDisp] = useState<string | null>(null);
   const [erro, setErro] = useState("");
 
   async function carregarBilling() {
@@ -1891,25 +1909,48 @@ function ModalDetalhesEmpresa({ empresa, onCancelar, onAlterarPlano, onSuspender
     } catch { /* silencioso — secao some se falhar */ }
   }
 
+  async function carregarDispositivos() {
+    try {
+      const d = await api.adminMasterListarDispositivos(empresa.id);
+      setDispositivos(d);
+    } catch { /* silencioso — secao some se falhar */ }
+  }
+
   useEffect(() => {
     let cancelado = false;
     (async () => {
       try {
-        const [u, l, b] = await Promise.all([
+        const [u, l, b, d] = await Promise.all([
           api.adminMasterListarUsers(empresa.id),
           api.adminMasterLogs({ tenantId: empresa.id, limit: 20 }),
           api.adminMasterCobrancasEmpresa(empresa.id).catch(() => null),
+          api.adminMasterListarDispositivos(empresa.id).catch(() => null),
         ]);
         if (cancelado) return;
         setUsers(u.users || []);
         setLogs(l.logs || []);
         setBilling(b);
+        setDispositivos(d);
       } catch (err) {
         if (!cancelado) setErro(err.message);
       }
     })();
     return () => { cancelado = true; };
   }, [empresa.id]);
+
+  async function revogarDispositivo(dispId: string) {
+    if (!confirm("Desconectar esta máquina?\nO usuário será deslogado no próximo acesso e a vaga será liberada.")) return;
+    setRevogandoDisp(dispId);
+    try {
+      await api.adminMasterRevogarDispositivo(empresa.id, dispId);
+      await carregarDispositivos();
+      onMudou?.();
+    } catch (err) {
+      alert(`Erro: ${(err as Error).message}`);
+    } finally {
+      setRevogandoDisp(null);
+    }
+  }
 
   async function marcarPaga(cobrancaId: string) {
     if (!confirm("Marcar esta cobrança como PAGA?\nIsso reativa a assinatura e estende o acesso em +30 dias.")) return;
@@ -2144,6 +2185,56 @@ function ModalDetalhesEmpresa({ empresa, onCancelar, onAlterarPlano, onSuspender
             </div>
           );
         })()}
+
+        {/* Dispositivos (licenca por maquina) */}
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+            🖥️ Dispositivos ({dispositivos ? `${dispositivos.ativos} ativo(s)` : "..."}
+            {dispositivos && dispositivos.maxDispositivos != null ? ` de ${dispositivos.maxDispositivos}` : dispositivos ? " · ilimitado" : ""})
+          </div>
+          {dispositivos === null ? (
+            <div style={{ color: C.muted, fontSize: 12 }}>Carregando...</div>
+          ) : dispositivos.dispositivos.length === 0 ? (
+            <div style={{ color: C.muted, fontSize: 12 }}>Nenhum dispositivo registrado ainda.</div>
+          ) : (
+            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
+              {dispositivos.dispositivos.map((d: any) => (
+                <div key={d.id} style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8,
+                  padding: "6px 10px", borderBottom: `1px solid ${C.border}55`, fontSize: 12,
+                  opacity: d.ativo ? 1 : 0.5,
+                }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ color: C.text, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {d.nome || "Dispositivo"}
+                      {d.user?.nome ? <span style={{ color: C.muted, fontWeight: 400 }}> · {d.user.nome}</span> : null}
+                    </div>
+                    <div style={{ color: C.muted, fontSize: 10 }}>
+                      {d.ultimoAcessoEm ? `Último acesso ${fmtData(d.ultimoAcessoEm)}` : "—"}
+                      {d.ultimoIp ? ` · ${d.ultimoIp}` : ""}
+                    </div>
+                  </div>
+                  {d.ativo ? (
+                    <button
+                      onClick={() => revogarDispositivo(d.id)}
+                      disabled={revogandoDisp !== null}
+                      style={{
+                        background: C.red + "22", color: C.red, border: `1px solid ${C.red}55`,
+                        borderRadius: 6, padding: "4px 8px", fontWeight: 700, fontSize: 10,
+                        cursor: revogandoDisp !== null ? "default" : "pointer", whiteSpace: "nowrap",
+                      }}
+                    >{revogandoDisp === d.id ? "..." : "Desconectar"}</button>
+                  ) : (
+                    <span style={{
+                      padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700,
+                      background: C.muted + "22", color: C.muted, whiteSpace: "nowrap",
+                    }}>REVOGADO</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Users */}
         <div style={{ marginBottom: 18 }}>

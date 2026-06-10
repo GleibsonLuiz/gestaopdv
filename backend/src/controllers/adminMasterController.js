@@ -5,6 +5,7 @@ import { registrarEvento } from "../middlewares/auditoria.js";
 import { permissoesPadrao } from "../lib/permissoes.js";
 import { getProvedor } from "../lib/billing/provedor.js";
 import { modulosDaEmpresa, MODULOS_POR_PLANO, IDS_MODULOS_PLANO } from "../lib/modulosPlano.js";
+import { listarDispositivos, revogarDispositivo } from "../lib/dispositivos.js";
 
 // prismaRaw = sem extension (cross-tenant). Use SEMPRE que precisar buscar
 // ou alterar registros de outros tenants. O `prisma` normal e mantido
@@ -49,15 +50,18 @@ export async function listarEmpresas(req, res, next) {
         e."proximaCobrancaEm" AS proxima_cobranca_em,
         e."ultimoPagamentoEm" AS ultimo_pagamento_em,
         e."modulosHabilitados" AS modulos_habilitados,
+        e."maxDispositivos" AS max_dispositivos,
         e."createdAt" AS criada_em,
         e."updatedAt" AS atualizada_em,
         COALESCE(u.qtd, 0)::int AS qtd_users,
         COALESCE(c.qtd, 0)::int AS qtd_clientes,
         COALESCE(p.qtd, 0)::int AS qtd_produtos,
         COALESCE(v.qtd, 0)::int AS qtd_vendas,
-        COALESCE(v.total, 0)::float AS faturamento_total
+        COALESCE(v.total, 0)::float AS faturamento_total,
+        COALESCE(d.qtd, 0)::int AS qtd_dispositivos
       FROM empresas e
       LEFT JOIN (SELECT "tenantId", COUNT(*) AS qtd FROM users GROUP BY "tenantId") u ON u."tenantId" = e.id
+      LEFT JOIN (SELECT "tenantId", COUNT(*) AS qtd FROM dispositivos WHERE ativo = true GROUP BY "tenantId") d ON d."tenantId" = e.id
       LEFT JOIN (SELECT "tenantId", COUNT(*) AS qtd FROM clientes GROUP BY "tenantId") c ON c."tenantId" = e.id
       LEFT JOIN (SELECT "tenantId", COUNT(*) AS qtd FROM produtos GROUP BY "tenantId") p ON p."tenantId" = e.id
       LEFT JOIN (
@@ -84,6 +88,9 @@ export async function listarEmpresas(req, res, next) {
       // Lista explicita (null = usa pacote do plano) + conjunto efetivo.
       modulosHabilitados: Array.isArray(l.modulos_habilitados) ? l.modulos_habilitados : null,
       modulos: modulosDaEmpresa({ plano: l.plano, modulosHabilitados: l.modulos_habilitados }),
+      // Licenca por maquina: limite contratado (null = ilimitado) + ativos hoje.
+      maxDispositivos: l.max_dispositivos != null ? Number(l.max_dispositivos) : null,
+      dispositivosAtivos: l.qtd_dispositivos,
       criadaEm: l.criada_em,
       atualizadaEm: l.atualizada_em,
       estatisticas: {
@@ -645,11 +652,29 @@ const STATUS_ASSINATURA = new Set(["TRIAL", "ATIVA", "INADIMPLENTE", "CANCELADA"
 export async function alterarPlano(req, res, next) {
   try {
     const { id } = req.params;
-    const { plano, expiraEm, observacoes, statusAssinatura } = req.body || {};
+    const { plano, expiraEm, observacoes, statusAssinatura, maxDispositivos } = req.body || {};
     if (!plano || !PLANOS.has(String(plano).toUpperCase())) {
       return res.status(400).json({
         erro: `Plano invalido. Use: ${[...PLANOS].join(", ")}`,
       });
+    }
+    // Limite de dispositivos (licenca por maquina). null/"" = ilimitado.
+    // Inteiro >= 1 quando definido — 0 travaria todos os acessos.
+    let maxDisp = null;
+    let definiuMaxDisp = false;
+    if (maxDispositivos !== undefined) {
+      definiuMaxDisp = true;
+      if (maxDispositivos === null || maxDispositivos === "") {
+        maxDisp = null;
+      } else {
+        const n = Number(maxDispositivos);
+        if (!Number.isInteger(n) || n < 1 || n > 1000) {
+          return res.status(400).json({
+            erro: "maxDispositivos deve ser um inteiro entre 1 e 1000 (ou vazio para ilimitado)",
+          });
+        }
+        maxDisp = n;
+      }
     }
     let statusAssin = null;
     if (statusAssinatura !== undefined && statusAssinatura !== null && statusAssinatura !== "") {
@@ -675,6 +700,7 @@ export async function alterarPlano(req, res, next) {
       expiraEm: expira,
       observacoesPlano: obs,
     };
+    if (definiuMaxDisp) data.maxDispositivos = maxDisp;
     // Se o super-admin mudou o status manualmente, persiste. Marcar ATIVA por
     // fora do gateway registra a data de pagamento (baixa manual de contrato).
     if (statusAssin) {
@@ -710,8 +736,51 @@ export async function alterarPlano(req, res, next) {
         expiraEm: atualizada.expiraEm,
         observacoesPlano: atualizada.observacoesPlano,
         statusAssinatura: atualizada.statusAssinatura,
+        maxDispositivos: atualizada.maxDispositivos,
       },
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /admin-master/empresas/:id/dispositivos — lista as maquinas registradas
+// daquela empresa (ativas e revogadas), com o limite contratado.
+export async function listarDispositivosEmpresa(req, res, next) {
+  try {
+    const { id } = req.params;
+    const empresa = await prismaRaw.empresa.findUnique({
+      where: { id },
+      select: { id: true, maxDispositivos: true },
+    });
+    if (!empresa) return res.status(404).json({ erro: "Empresa nao encontrada" });
+    const dispositivos = await listarDispositivos(id);
+    res.json({
+      maxDispositivos: empresa.maxDispositivos,
+      ativos: dispositivos.filter(d => d.ativo).length,
+      dispositivos,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /admin-master/empresas/:id/dispositivos/:dispId/revogar — libera a vaga
+// de um dispositivo (o cliente trocou de computador). O usuario daquela maquina
+// e deslogado no proximo boot/refresh (/auth/me valida o claim `did`).
+export async function revogarDispositivoEmpresa(req, res, next) {
+  try {
+    const { id, dispId } = req.params;
+    const revogado = await revogarDispositivo({ tenantId: id, dispositivoId: dispId, por: "ADMIN" });
+    if (!revogado) return res.status(404).json({ erro: "Dispositivo nao encontrado" });
+    registrarEvento({
+      acao: "DISPOSITIVO_REVOGADO", modulo: "ADMIN_MASTER", sucesso: true,
+      usuarioId: req.user.sub, usuarioNome: req.user.nome,
+      tenantId: id,
+      mensagem: `Super-admin revogou o dispositivo ${dispId}`,
+      req,
+    });
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

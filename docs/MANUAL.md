@@ -66,6 +66,15 @@ O sistema é uma **PWA** (instalável no celular) com fallback offline limitado:
 
 Não há recuperação por e-mail pública. Peça a um **ADMIN** para resetar pela tela **Funcionários** → ações → **Trocar senha**.
 
+### Limite de máquinas (dispositivos)
+
+Cada plano permite um número de **máquinas conectadas ao mesmo tempo** (computadores/navegadores). Se você contratou 1 máquina, o sistema só abre em 1 navegador por vez.
+
+- Ao tentar entrar numa máquina **acima do limite**, aparece a tela **"Esta conta já está em uso"** listando os dispositivos ativos.
+- Para liberar o acesso na máquina nova, clique em **Desconectar** num dispositivo antigo (confirme seu e-mail/senha). A máquina antiga é deslogada e você entra automaticamente.
+- O identificador da máquina é guardado de forma redundante no navegador, então **limpar o histórico** normalmente **não** faz você perder a vaga. Trocar de computador, navegador ou usar uma aba anônima conta como uma máquina nova.
+- O suporte (super-admin) também pode liberar máquinas pelo painel administrativo (ver seção 10).
+
 ---
 
 ## 3. Perfis de acesso (papéis)
@@ -1290,6 +1299,16 @@ O sistema é **PWA** — pode ser instalado como app no celular pelo banner do n
 **O que acontece ao estourar:** o sistema retorna **402 Pagamento Necessário** ao tentar criar acima do limite e mostra mensagem amigável com o plano atual + uso atual. Demais operações (editar, ver, excluir) seguem funcionando.
 
 **Como ver o uso atual:** Empresa → Bloco "Plano" → barras de progresso.
+
+### Limite de máquinas (licença por dispositivo)
+
+Além dos limites de quantidade, cada empresa pode ter um **número máximo de máquinas conectadas simultaneamente** (computadores/navegadores). Serve para que um cliente que contratou, por exemplo, 1 máquina não use o sistema em vários computadores ao mesmo tempo.
+
+- **Onde se define:** Admin Master → empresa → 🎫 **Alterar plano** → **Limite de máquinas (dispositivos)**. Deixe **vazio** para *ilimitado*.
+- **Como funciona:** a cada login o sistema identifica o navegador. Se for uma máquina já conhecida, libera; se for nova e o limite já estiver cheio, o login é **recusado (403)** e o cliente vê a tela de bloqueio com as máquinas ativas.
+- **Cliente se vira sozinho:** na tela de bloqueio, o próprio cliente pode **desconectar** uma máquina antiga (reconfirmando e-mail/senha) e entrar na nova — sem precisar do suporte.
+- **Suporte libera vagas:** em Admin Master → empresa → seção **🖥️ Dispositivos**, o super-admin vê todas as máquinas (ativas e revogadas) e pode **Desconectar** qualquer uma. A máquina desconectada é deslogada no próximo acesso.
+- **Robustez:** o identificador é guardado de forma redundante (localStorage + cookie de longa duração), então limpar o histórico normalmente não consome uma vaga nova.
 
 ### Módulos liberados por plano
 

@@ -455,6 +455,12 @@ model Empresa {
   plano            Plano     @default(TRIAL)
   expiraEm         DateTime?
   observacoesPlano String?
+  // CONTROLE DE LICENCA POR MAQUINA: numero maximo de dispositivos (navegadores/
+  // computadores) que podem ter sessao ativa simultaneamente nesta empresa.
+  // null = ILIMITADO (sem enforcement) — default seguro para nao travar tenants
+  // existentes no deploy. Quando preenchido, o login bloqueia a partir do
+  // (maxDispositivos+1)-esimo dispositivo distinto. Ver lib/dispositivos.js.
+  maxDispositivos  Int?
   // ETAPA#6: segmento de negocio. So super-admin altera (via admin-master).
   segmento         Segmento  @default(GERAL)
   // ENTITLEMENTS: modulos liberados para esta empresa (modelo hibrido). Quando
@@ -542,6 +548,7 @@ model Empresa {
   despesas               Despesa[]
   sugestoesCompra        SugestaoCompra[]
   boletosAsaas           BoletoAsaas[]
+  dispositivos           Dispositivo[]
 
   @@map("empresas")
 }
@@ -648,10 +655,61 @@ model User {
   despesas                 Despesa[]
   sugestoesCompra          SugestaoCompra[]
   boletosAsaas             BoletoAsaas[]
+  dispositivos             Dispositivo[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
   @@map("users")
+}
+
+// ============ DISPOSITIVOS (CONTROLE DE LICENCA POR MAQUINA) ============
+//
+// Cada linha e um navegador/computador que acessou a conta. O frontend gera um
+// fingerprint (UUID persistido em localStorage + cookie redundante — ver
+// src/lib/dispositivo.ts) e o envia no header X-Device-Id de toda request.
+//
+// No login, lib/dispositivos.js procura o device por [tenantId, fingerprint]:
+//   - ja registrado e ativo  -> atualiza ultimoAcessoEm e libera;
+//   - novo (ou revogado)     -> conta os ativos; se < maxDispositivos da
+//                               empresa, registra/reativa e libera; senao
+//                               bloqueia (login 403 com a lista de devices
+//                               para o proprio cliente derrubar um antigo).
+//
+// NAO esta em MODELOS_COM_TENANT (lib/prisma.js): todo acesso e feito com
+// tenantId EXPLICITO via prismaRaw — no login nao ha contexto de tenant ainda,
+// e no admin-master a operacao e cross-tenant (super-admin).
+model Dispositivo {
+  id               String    @id @default(uuid())
+  // Identificador gerado no front (UUID v4). Unico por empresa.
+  fingerprint      String
+  // Nome amigavel ("Chrome em Windows") derivado do User-Agent, p/ exibir no
+  // painel. So rotulo — nunca usado para identificar/casar o device.
+  nome             String?
+  userAgent        String?
+  ultimoIp         String?
+  ativo            Boolean   @default(true)
+  // Quem revogou: "ADMIN" (super-admin no painel), "CLIENTE" (auto-derrubada
+  // na tela de bloqueio) ou null (nunca revogado).
+  revogadoPor      String?
+  revogadoEm       DateTime?
+  primeiroAcessoEm DateTime  @default(now())
+  ultimoAcessoEm   DateTime  @default(now())
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // Ultimo usuario que autenticou neste device (informativo). SetNull para nao
+  // bloquear a exclusao de um funcionario que tenha usado a maquina.
+  userId   String?
+  user     User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // Um fingerprint e unico dentro da empresa (o mesmo navegador em duas
+  // empresas diferentes gera duas linhas — correto, sao licencas distintas).
+  @@unique([tenantId, fingerprint])
+  // Filtro quente: contar/listar os ativos de um tenant no login.
+  @@index([tenantId, ativo])
+  @@map("dispositivos")
 }
 
 // ============ COMISSAO ============

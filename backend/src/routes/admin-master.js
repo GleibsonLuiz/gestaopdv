@@ -7,6 +7,7 @@ import {
   financeiroDashboard,
   listarCobrancasEmpresa, marcarCobrancaPaga, cancelarAssinaturaEmpresa,
   alterarModulos,
+  listarDispositivosEmpresa, revogarDispositivoEmpresa,
 } from "../controllers/adminMasterController.js";
 import {
   criar as criarNotificacao, listarTodas as listarTodasNotificacoes,
@@ -41,6 +42,10 @@ router.get("/empresas/:id/export", exportarEmpresa);
 router.patch("/empresas/:id/segmento", alterarSegmento);
 // Entitlements: modulos liberados por empresa (modelo hibrido)
 router.patch("/empresas/:id/modulos", alterarModulos);
+
+// CONTROLE DE LICENCA POR MAQUINA: listar/revogar dispositivos da empresa.
+router.get("/empresas/:id/dispositivos", listarDispositivosEmpresa);
+router.post("/empresas/:id/dispositivos/:dispId/revogar", revogarDispositivoEmpresa);
 router.get("/notificacoes", listarTodasNotificacoes);
 router.post("/notificacoes", criarNotificacao);
 router.patch("/notificacoes/:id", alterarAtivaNotificacao);

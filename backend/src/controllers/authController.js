@@ -4,6 +4,10 @@ import prisma from "../lib/prisma.js";
 import { registrarEvento } from "../middlewares/auditoria.js";
 import { registrarFalhaLogin, limparThrottleLogin } from "../middlewares/rateLimitLogin.js";
 import { modulosDaEmpresa } from "../lib/modulosPlano.js";
+import {
+  lerDispositivoDaRequest, validarLoginDispositivo, dispositivoSegueAtivo,
+  revogarDispositivo,
+} from "../lib/dispositivos.js";
 
 export async function login(req, res, next) {
   try {
@@ -100,15 +104,47 @@ export async function login(req, res, next) {
     // Login valido — zera o contador de tentativas (IP + email).
     await limparThrottleLogin(req);
 
+    // CONTROLE DE LICENCA POR MAQUINA: valida/registra o dispositivo (header
+    // X-Device-Id). Se a empresa tem limite (maxDispositivos) e este e um
+    // device novo que estouraria a cota, bloqueia com a lista de maquinas
+    // ativas para o proprio cliente derrubar uma antiga (self-service).
+    const infoDispositivo = lerDispositivoDaRequest(req);
+    const veredito = await validarLoginDispositivo({
+      tenantId: user.tenantId,
+      userId: user.id,
+      fingerprint: infoDispositivo.fingerprint,
+      nome: infoDispositivo.nome,
+      userAgent: infoDispositivo.userAgent,
+      ip: infoDispositivo.ip,
+    });
+    if (!veredito.liberado) {
+      registrarEvento({
+        acao: "LOGIN_FALHO", modulo: "AUTH", sucesso: false,
+        usuarioId: user.id, usuarioNome: user.nome, usuarioEmail: user.email,
+        mensagem: `Limite de dispositivos atingido (${veredito.max})`,
+        req, tenantId: user.tenantId,
+      });
+      return res.status(403).json({
+        erro: `Limite de ${veredito.max} dispositivo(s) atingido para esta conta. `
+          + "Desconecte uma maquina em uso para liberar o acesso neste dispositivo.",
+        dispositivoBloqueado: true,
+        max: veredito.max,
+        dispositivos: veredito.dispositivos,
+      });
+    }
+    const dispositivoId = veredito.dispositivo?.id || null;
+
     // JWT inclui `tid` (tenant id) que sera usado pelo middleware da
     // ETAPA 3 para injetar req.tenantId em toda request. `sa` (super
     // admin) e adicionado na ETAPA 10 para destravar o acesso a
-    // /admin-master.
+    // /admin-master. `did` (device id) permite invalidar a sessao no boot
+    // (/auth/me) quando o admin revoga o dispositivo.
     const token = jwt.sign(
       {
         sub: user.id, role: user.role, nome: user.nome,
         tid: user.tenantId,
         sa: user.superAdmin === true,
+        did: dispositivoId,
       },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
@@ -156,6 +192,21 @@ export async function me(req, res, next) {
       },
     });
     if (!user) return res.status(404).json({ erro: "Usuario nao encontrado" });
+
+    // CONTROLE DE LICENCA: se o dispositivo desta sessao (claim `did`) foi
+    // revogado (admin liberou a vaga, ou o cliente derrubou esta maquina de
+    // outro lugar), invalidamos a sessao com 401 — o front limpa e redireciona
+    // para o login. Tambem atualiza o ultimoAcessoEm (heartbeat do device).
+    const ip = (typeof req.headers["x-forwarded-for"] === "string"
+      && req.headers["x-forwarded-for"].split(",")[0].trim()) || req.ip || null;
+    const ativo = await dispositivoSegueAtivo(req.user.did, ip);
+    if (!ativo) {
+      return res.status(401).json({
+        erro: "Este dispositivo foi desconectado. Faca login novamente.",
+        dispositivoRevogado: true,
+      });
+    }
+
     const { tenant, ...rest } = user;
     res.json({
       ...rest,
@@ -212,6 +263,53 @@ export async function logout(req, res, next) {
       usuarioNome: req.user?.nome || null,
       req,
     });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /auth/dispositivos/revogar — auto-derrubada (self-service) a partir da
+// tela de bloqueio por limite de maquinas. O usuario AINDA NAO esta logado
+// (o login foi recusado), entao re-validamos email+senha aqui antes de liberar
+// a vaga. Rate-limitada como o login para evitar abuso/forca-bruta.
+export async function revogarDispositivoSelfService(req, res, next) {
+  try {
+    const { email, senha, dispositivoId } = req.body || {};
+    if (!email || !senha || !dispositivoId) {
+      return res.status(400).json({ erro: "Email, senha e dispositivo sao obrigatorios" });
+    }
+
+    const user = await prisma.user.findFirst({
+      where: { email },
+      select: { id: true, nome: true, email: true, senha: true, ativo: true, tenantId: true },
+    });
+    // Mensagem generica em qualquer falha de credencial (nao vaza existencia).
+    if (!user || !user.ativo || !user.tenantId) {
+      await registrarFalhaLogin(req);
+      return res.status(401).json({ erro: "Credenciais invalidas" });
+    }
+    const ok = await bcrypt.compare(senha, user.senha);
+    if (!ok) {
+      await registrarFalhaLogin(req);
+      return res.status(401).json({ erro: "Credenciais invalidas" });
+    }
+    await limparThrottleLogin(req);
+
+    const revogado = await revogarDispositivo({
+      tenantId: user.tenantId, dispositivoId, por: "CLIENTE",
+    });
+    if (!revogado) {
+      return res.status(404).json({ erro: "Dispositivo nao encontrado" });
+    }
+
+    registrarEvento({
+      acao: "DISPOSITIVO_REVOGADO", modulo: "AUTH", sucesso: true,
+      usuarioId: user.id, usuarioNome: user.nome, usuarioEmail: user.email,
+      mensagem: `Cliente desconectou o dispositivo ${dispositivoId}`,
+      req, tenantId: user.tenantId,
+    });
+
     res.json({ ok: true });
   } catch (err) {
     next(err);

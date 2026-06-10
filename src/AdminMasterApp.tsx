@@ -1742,14 +1742,17 @@ function ModalPlano({ empresa, onCancelar, onSalva }: any) {
       <form onClick={e => e.stopPropagation()} onSubmit={submit} style={{
         background: C.card, border: `1px solid ${C.border}`, borderRadius: 14,
         width: "100%", maxWidth: 460, padding: 26,
+        display: "flex", flexDirection: "column", maxHeight: "90vh",
       }}>
         <div style={{ color: C.white, fontSize: 18, fontWeight: 800, marginBottom: 6 }}>
           🎫 Alterar plano
         </div>
-        <div style={{ color: C.muted, fontSize: 12, marginBottom: 18 }}>
+        <div style={{ color: C.muted, fontSize: 12, marginBottom: 16 }}>
           Plano de <strong style={{ color: C.text }}>{empresa.nome}</strong>
         </div>
 
+        {/* Corpo rolavel: cabecalho e botoes ficam fixos; os campos rolam. */}
+        <div style={{ flex: 1, overflowY: "auto", marginRight: -10, paddingRight: 10 }}>
         <label style={labelStyle}>Plano</label>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 6, marginBottom: 12 }}>
           {Object.entries(PLANOS_INFO).map(([k, info]) => (
@@ -1863,6 +1866,8 @@ function ModalPlano({ empresa, onCancelar, onSalva }: any) {
           rows={3} maxLength={500}
           style={{ ...inputStyle, resize: "vertical", minHeight: 60 }}
           placeholder="Ex: Pagou anual com 10% desconto. Próxima cobrança 10/05/2027." />
+        </div>
+        {/* fim do corpo rolavel */}
 
         {erro && (
           <div style={{
@@ -1871,7 +1876,7 @@ function ModalPlano({ empresa, onCancelar, onSalva }: any) {
           }}>{erro}</div>
         )}
 
-        <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
+        <div style={{ display: "flex", gap: 8, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
           <button type="button" onClick={onCancelar} disabled={salvando} style={{ ...btnSecundario, flex: 1 }}>
             Cancelar
           </button>

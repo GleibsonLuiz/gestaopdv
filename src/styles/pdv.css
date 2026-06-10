@@ -1704,3 +1704,83 @@
 .cli-status-chip[data-ativo="true"] { color: var(--text); font-weight: 700; }
 .cli-status-chip[data-ativo="true"] .cli-status-chip__dot { box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 12%, transparent); }
 .lux-stage--compact .cli-status-chip { height: 30px; font-size: 12px; }
+
+/* ==================== MODO CLEAN / FOCADO (F7) ====================
+   Layout alternativo do PDV: bipagem + cestinha expandida na esquerda,
+   total gigante + F1-F6 na direita. Sem "Vendas de hoje", sem "Mais
+   vendidos", sem historico — so o fluxo bipar -> conferir -> fechar.
+   A alternancia NAO desmonta NovaVenda (mesma instancia), entao a
+   cestinha sobrevive a troca no meio da venda. */
+
+/* Wrapper da coluna esquerda (sempre presente nos dois layouts) —
+   substitui o .pdv-card como filho direto do grid .pdv-main. */
+.pdv-col-venda {
+  display: flex; flex-direction: column;
+  gap: clamp(12px, 1.2vw, 18px);
+  min-width: 0;
+}
+
+/* Coluna direita um pouco mais larga no clean: o total grande e os
+   botoes F1-F6 sao o segundo ponto focal. */
+.pdv-main--clean { grid-template-columns: minmax(0, 1fr) clamp(340px, 30vw, 460px); }
+
+/* Bipagem promovida a ponto focal: maior, mais alta, na linha do olhar. */
+.pdv-main--clean .pdv-scan.pdv-scan-side input { font-size: 20px; padding: 18px 0; }
+.pdv-main--clean .pdv-scan.pdv-scan-side .pdv-scan-icon { width: 46px; height: 46px; }
+.pdv-main--clean .pdv-scan.pdv-scan-side .pdv-scan-icon svg { width: 25px; height: 25px; }
+.pdv-main--clean .pdv-scan.pdv-scan-side .pdv-scan-sugg { max-height: 380px; }
+
+/* Total bem grande — legivel a 2 metros do balcao. */
+.pdv-main--clean .pdv-total-block.pdv-total-block-lg .pdv-total-num {
+  font-size: clamp(46px, 4.8vw, 68px);
+}
+.pdv-main--clean .pdv-total-block.pdv-total-block-lg .pdv-total-num .cents {
+  font-size: clamp(22px, 2.2vw, 30px);
+}
+.pdv-main--clean .pdv-total-lbl { font-size: 12px; }
+.pdv-main--clean .pdv-totals-card { padding: 22px 20px; }
+
+/* Estado vazio minimalista (substitui AcessoRapido no clean). */
+.pdv-clean-vazio {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; padding: 72px 24px; text-align: center;
+  color: var(--pdv-t3);
+  min-height: clamp(280px, 42vh, 460px);
+}
+.pdv-clean-vazio svg { opacity: .45; }
+.pdv-clean-vazio-tit { font-size: 16px; font-weight: 600; color: var(--pdv-t2); }
+.pdv-clean-vazio-sub { font-size: 13px; color: var(--pdv-t3); }
+
+/* Botao de alternancia no header (Focado <-> Completo). */
+.pdv-clean-toggle {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid var(--pdv-line); background: transparent;
+  color: var(--pdv-t2); border-radius: 7px; padding: 7px 12px;
+  font-size: 12.5px; font-weight: 500; font-family: inherit; cursor: pointer;
+  margin-right: 12px;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.pdv-clean-toggle:hover { color: var(--pdv-t1); background: var(--pdv-surf-3); }
+.pdv-clean-toggle.is-on {
+  color: var(--pdv-accent);
+  border-color: color-mix(in oklab, var(--pdv-accent) 38%, transparent);
+  background: color-mix(in oklab, var(--pdv-accent) 7%, transparent);
+}
+.pdv-clean-toggle .pdv-kbd { font-size: 9.5px; padding: 1px 5px; opacity: .75; }
+
+/* Celular: o rotulo do botao some, fica so o icone + F7. */
+@media (max-width: 720px) {
+  .pdv-clean-toggle { padding: 7px 9px; margin-right: 8px; }
+}
+
+/* Cupom com corpo maior no modo Clean: a cestinha expandida e a leitura
+   principal do operador — nome, calculo e total de cada item legiveis a um
+   braco de distancia. Controles +/- tambem crescem (alvo de toque). */
+.pdv-main--clean .pdv-cupom-nome { font-size: 15.5px; }
+.pdv-main--clean .pdv-cupom-idx { font-size: 12.5px; }
+.pdv-main--clean .pdv-cupom-calc-txt { font-size: 14px; }
+.pdv-main--clean .pdv-cupom-total-txt { font-size: 15.5px; }
+.pdv-main--clean .pdv-cupom-ctrl-qty { font-size: 14px; min-width: 24px; }
+.pdv-main--clean .pdv-cupom-ctrl-btn { width: 26px; height: 26px; font-size: 15px; }
+.pdv-main--clean .pdv-cupom-ft-total { font-size: 22px; }
+.pdv-main--clean .pdv-cupom-ft-row { font-size: 14px; }

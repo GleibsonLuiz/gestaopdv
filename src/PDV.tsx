@@ -184,16 +184,39 @@ export default function PDV({ user, onSair, sair, contextoInicial, onContextoCon
   // a aba "nova" — Historico nao faz sentido nesse fluxo. O contexto e
   // consumido pelo NovaVenda no primeiro render util.
   const [aba, setAba] = useState(contextoInicial ? "nova" : "nova");
+  // Modo Clean (F7): layout alternativo focado — busca + cestinha na
+  // esquerda, total grande + F1-F6 na direita, sem painel do dia nem "Mais
+  // vendidos". O estado vive AQUI (e nao em NovaVenda) por dois motivos:
+  // o botao de alternancia mora no header, e a troca de layout NUNCA pode
+  // desmontar NovaVenda — o carrinho e estado local de la, e remontar
+  // exigiria recuperacao via banner de rascunho.
+  // Chave por USUARIO (mesmo padrao do rascunho): operadores que revezam na
+  // mesma maquina mantem cada um sua preferencia de layout.
+  const chaveModoClean = `pdv:modoClean:${user?.id || "anon"}`;
+  const [modoClean, setModoClean] = useState(() => {
+    try { return localStorage.getItem(chaveModoClean) === "1"; } catch { return false; }
+  });
+  const alternarModoClean = useCallback(() => {
+    setModoClean(v => {
+      const nv = !v;
+      try { localStorage.setItem(chaveModoClean, nv ? "1" : "0"); } catch { /* modo privado */ }
+      return nv;
+    });
+  }, [chaveModoClean]);
   return (
     <div className="pdv-redesign" style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
       <PDVHeader
         user={user}
         aba={aba} setAba={setAba}
+        modoClean={modoClean} onAlternarClean={alternarModoClean}
         onSair={onSair} sairConta={sair}
       />
       <div className="pdv-app">
         {aba === "nova"
-          ? <NovaVenda user={user} contextoInicial={contextoInicial} onContextoConsumido={onContextoConsumido} />
+          ? <NovaVenda
+              user={user} contextoInicial={contextoInicial} onContextoConsumido={onContextoConsumido}
+              modoClean={modoClean} onAlternarClean={alternarModoClean}
+            />
           : <Historico user={user} />}
       </div>
     </div>
@@ -204,7 +227,7 @@ export default function PDV({ user, onSair, sair, contextoInicial, onContextoCon
 // Header proprio do PDV em modo focado: logo + tabs + avatar com dropdown
 // (Menu / Sair). Substitui sidebar e topbar globais quando o user esta no
 // PDV. "Menu" volta para a tela principal (dashboard); "Sair" desloga.
-function PDVHeader({ user, aba, setAba, onSair, sairConta }) {
+function PDVHeader({ user, aba, setAba, modoClean, onAlternarClean, onSair, sairConta }) {
   const [menuAberto, setMenuAberto] = useState(false);
   const menuRef = useRef(null);
 
@@ -250,6 +273,26 @@ function PDVHeader({ user, aba, setAba, onSair, sairConta }) {
       </nav>
 
       <div style={{ flex: 1 }} />
+
+      {/* Alternancia de layout (so faz sentido na aba Nova venda). Botao no
+          header — longe da area de bipagem/fechamento, mas sempre visivel —
+          com a tecla F7 estampada pra ensinar o atalho pelo proprio botao. */}
+      {aba === "nova" && (
+        <button
+          type="button"
+          onClick={onAlternarClean}
+          className={`pdv-clean-toggle ${modoClean ? "is-on" : ""}`}
+          title={modoClean ? "Voltar ao layout completo (F7)" : "Modo focado: só busca, cestinha e fechamento (F7)"}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            {modoClean
+              ? <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>
+              : <><circle cx="12" cy="12" r="3"/><path d="M3 12h3M18 12h3M12 3v3M12 18v3"/></>}
+          </svg>
+          {modoClean ? "Completo" : "Focado"}
+          <span className="pdv-kbd">F7</span>
+        </button>
+      )}
 
       <div ref={menuRef} style={{ position: "relative" }}>
         <button
@@ -356,7 +399,7 @@ function criarPagamento(forma, valor, opts = {}) {
 
 // ==================== NOVA VENDA ====================
 
-function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
+function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAlternarClean }) {
   const empresa = useConfiguracaoEmpresa();
   const [produtos, setProdutos] = useState([]);
   const [clientes, setClientes] = useState([]);
@@ -1063,6 +1106,11 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
   //   Esc     fecha modais auxiliares e refoca busca
   useEffect(() => {
     function onKeyDown(e) {
+      // Tecla SEGURADA repete o evento (F7 piscaria o layout, F8/F9
+      // reabririam modais). So o primeiro keydown de cada pressionada conta —
+      // nao afeta o scanner (bipa digitos em keydowns distintos) nem a
+      // digitacao na busca (input tem handler proprio).
+      if (e.repeat) return;
       // Alt+1..9 -> adiciona o N-esimo card de "Mais vendidos" quando o
       // carrinho esta vazio (estado em que AcessoRapido esta visivel).
       // Modifier Alt evita conflito com bipagem do scanner (que dispara
@@ -1100,6 +1148,14 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
           }
           abrirPagamentoRef.current?.(forma);
         }
+        return;
+      }
+      if (e.key === "F7") {
+        e.preventDefault();
+        // Troca de layout e inofensiva em qualquer estado (modal aberto
+        // inclusive): os modais sao overlays independentes do grid e todo o
+        // estado vive neste componente — nada desmonta, nada se perde.
+        onAlternarCleanRef.current?.();
         return;
       }
       if (e.key === "F8") {
@@ -1144,12 +1200,14 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
   const confirmarPagamentoRef = useRef(null);
   const adicionarPagamentoFormaRef = useRef(null);
   const salvarEmEsperaRef = useRef(null);
+  const onAlternarCleanRef = useRef(onAlternarClean);
   const topProdutosRef = useRef(painel.topProdutos);
   useEffect(() => { carrinhoRef.current = carrinho; }, [carrinho]);
   useEffect(() => { pagamentoAbertoRef.current = pagamentoAberto; }, [pagamentoAberto]);
   useEffect(() => { topProdutosRef.current = painel.topProdutos; }, [painel.topProdutos]);
   useEffect(() => { adicionarPagamentoFormaRef.current = adicionarPagamentoForma; });
   useEffect(() => { salvarEmEsperaRef.current = salvarEmEspera; });
+  useEffect(() => { onAlternarCleanRef.current = onAlternarClean; });
 
   function abrirPagamento(formaInicial = "DINHEIRO", seedOpts = {}) {
     setErro("");
@@ -1323,6 +1381,89 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
 
   const [scanFocused, setScanFocused] = useState(false);
 
+  // Barra de bipagem extraida pra variavel: o MESMO no de JSX e montado na
+  // coluna direita (layout completo) ou acima da cestinha (modo Clean).
+  // Fonte unica — autofocus, sugestoes e teclado nao se duplicam nunca.
+  const barraBipagem = (
+    <div className={`pdv-scan pdv-scan-side ${scanFocused ? "is-focused" : ""}`}>
+      <div className="pdv-scan-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 7V5a1 1 0 0 1 1-1h2"/>
+          <path d="M20 7V5a1 1 0 0 0-1-1h-2"/>
+          <path d="M4 17v2a1 1 0 0 0 1 1h2"/>
+          <path d="M20 17v2a1 1 0 0 1-1 1h-2"/>
+          <path d="M4 12h16"/>
+        </svg>
+      </div>
+      <input
+        ref={buscaRef}
+        placeholder="Bipe ou digite código/nome…"
+        value={busca}
+        onChange={e => { setBusca(e.target.value); setSugestaoIdx(0); }}
+        onFocus={() => setScanFocused(true)}
+        onKeyDown={e => {
+          if (e.key === "ArrowDown") {
+            if (sugestoes.length > 0) {
+              e.preventDefault();
+              setSugestaoIdx(i => (i + 1) % sugestoes.length);
+            }
+            return;
+          }
+          if (e.key === "ArrowUp") {
+            if (sugestoes.length > 0) {
+              e.preventDefault();
+              setSugestaoIdx(i => (i - 1 + sugestoes.length) % sugestoes.length);
+            }
+            return;
+          }
+          if (e.key === "Enter") { e.preventDefault(); biparOuConfirmar(); }
+          if (e.key === "Escape") { e.preventDefault(); setBusca(""); }
+        }}
+        onBlur={() => {
+          setScanFocused(false);
+          setTimeout(() => {
+            if (!algumaModalAberta && document.activeElement === document.body) {
+              buscaRef.current?.focus();
+            }
+          }, 120);
+        }}
+      />
+      <span className="pdv-scan-hint">
+        <span className="pdv-kbd is-accent">⏎</span>
+      </span>
+
+      {sugestoes.length > 0 && (
+        <div className="pdv-scan-sugg">
+          {sugestoes.map((p, idx) => {
+            const ativo = idx === sugestaoSelecionada;
+            return (
+              <div
+                key={p.id}
+                onMouseEnter={() => setSugestaoIdx(idx)}
+                onMouseDown={e => { e.preventDefault(); abrirQtdModal(p); }}
+                className={`pdv-scan-sugg-row ${ativo ? "is-active" : ""}`}
+              >
+                <FotoProduto url={p.imagem} nome={p.nome} tamanho={32} servico={p.tipoItem === "SERVICO"} />
+                <div className="pdv-scan-sugg-name">
+                  <div className="nm">
+                    {p.nome}
+                    {p.tipoItem === "SERVICO" && <span className="pdv-srv-tag">SVC</span>}
+                  </div>
+                  <div className="meta">
+                    {p.codigo}
+                    {" · "}{p.tipoItem === "SERVICO" ? "♾" : `${p.estoque} ${p.unidade}`}
+                  </div>
+                </div>
+                <div className="pdv-scan-sugg-price">{fmtBRL(p.precoVenda)}</div>
+                {ativo && <span className="pdv-kbd is-accent">↵</span>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {/* TOPO: alerta quando nao ha caixa aberto (full-width). Resumo de vendas
@@ -1420,7 +1561,10 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
         </div>
       )}
 
-      <div className="pdv-main">
+      <div className={`pdv-main${modoClean ? " pdv-main--clean" : ""}`}>
+        {/* COLUNA ESQUERDA — no modo Clean a bipagem sobe pra ca, acima da cestinha */}
+        <div className="pdv-col-venda">
+        {modoClean && barraBipagem}
         {/* CESTINHA — fotos, novos no topo */}
         <div className="pdv-card">
           <div
@@ -1527,7 +1671,9 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
             </div>
           </div>
 
-          {carrinho.length === 0 ? (
+          {carrinho.length === 0 ? (modoClean ? (
+            <CestinhaVaziaClean />
+          ) : (
             <AcessoRapido
               user={user}
               topProdutos={painel.topProdutos}
@@ -1546,7 +1692,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
                 } catch (err) { flashErro(err.message); }
               }}
             />
-          ) : (
+          )) : (
             <div className="pdv-cupom-outer">
               <div className="pdv-cupom-paper">
                 {/* === HEADER DO CUPOM === */}
@@ -1686,89 +1832,15 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
             </div>
           </div>
         </div>
+        </div>
 
-        {/* PAINEL DIREITO — bipagem, totais, finalizar, atalhos */}
+        {/* PAINEL DIREITO — bipagem (layout completo), totais, finalizar, atalhos */}
         <div className="pdv-side">
-          {/* BARRA DE BIPAGEM (movida do topo) — autofocus permanente */}
-          <div className={`pdv-scan pdv-scan-side ${scanFocused ? "is-focused" : ""}`}>
-            <div className="pdv-scan-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 7V5a1 1 0 0 1 1-1h2"/>
-                <path d="M20 7V5a1 1 0 0 0-1-1h-2"/>
-                <path d="M4 17v2a1 1 0 0 0 1 1h2"/>
-                <path d="M20 17v2a1 1 0 0 1-1 1h-2"/>
-                <path d="M4 12h16"/>
-              </svg>
-            </div>
-            <input
-              ref={buscaRef}
-              placeholder="Bipe ou digite código/nome…"
-              value={busca}
-              onChange={e => { setBusca(e.target.value); setSugestaoIdx(0); }}
-              onFocus={() => setScanFocused(true)}
-              onKeyDown={e => {
-                if (e.key === "ArrowDown") {
-                  if (sugestoes.length > 0) {
-                    e.preventDefault();
-                    setSugestaoIdx(i => (i + 1) % sugestoes.length);
-                  }
-                  return;
-                }
-                if (e.key === "ArrowUp") {
-                  if (sugestoes.length > 0) {
-                    e.preventDefault();
-                    setSugestaoIdx(i => (i - 1 + sugestoes.length) % sugestoes.length);
-                  }
-                  return;
-                }
-                if (e.key === "Enter") { e.preventDefault(); biparOuConfirmar(); }
-                if (e.key === "Escape") { e.preventDefault(); setBusca(""); }
-              }}
-              onBlur={() => {
-                setScanFocused(false);
-                setTimeout(() => {
-                  if (!algumaModalAberta && document.activeElement === document.body) {
-                    buscaRef.current?.focus();
-                  }
-                }, 120);
-              }}
-            />
-            <span className="pdv-scan-hint">
-              <span className="pdv-kbd is-accent">⏎</span>
-            </span>
+          {/* BARRA DE BIPAGEM — autofocus permanente. No modo Clean ela
+              renderiza na coluna esquerda, acima da cestinha. */}
+          {!modoClean && barraBipagem}
 
-            {sugestoes.length > 0 && (
-              <div className="pdv-scan-sugg">
-                {sugestoes.map((p, idx) => {
-                  const ativo = idx === sugestaoSelecionada;
-                  return (
-                    <div
-                      key={p.id}
-                      onMouseEnter={() => setSugestaoIdx(idx)}
-                      onMouseDown={e => { e.preventDefault(); abrirQtdModal(p); }}
-                      className={`pdv-scan-sugg-row ${ativo ? "is-active" : ""}`}
-                    >
-                      <FotoProduto url={p.imagem} nome={p.nome} tamanho={32} servico={p.tipoItem === "SERVICO"} />
-                      <div className="pdv-scan-sugg-name">
-                        <div className="nm">
-                          {p.nome}
-                          {p.tipoItem === "SERVICO" && <span className="pdv-srv-tag">SVC</span>}
-                        </div>
-                        <div className="meta">
-                          {p.codigo}
-                          {" · "}{p.tipoItem === "SERVICO" ? "♾" : `${p.estoque} ${p.unidade}`}
-                        </div>
-                      </div>
-                      <div className="pdv-scan-sugg-price">{fmtBRL(p.precoVenda)}</div>
-                      {ativo && <span className="pdv-kbd is-accent">↵</span>}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {carrinho.length > 0 && (
+          {(modoClean || carrinho.length > 0) && (
             <div className="pdv-totals-card">
               <div className="pdv-total-block pdv-total-block-lg">
                 <div className="pdv-total-lbl">Total a pagar</div>
@@ -1781,7 +1853,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
 
               <button
                 onClick={() => abrirPagamento()}
-                disabled={semCaixa}
+                disabled={semCaixa || carrinho.length === 0}
                 title={
                   semCaixa ? "Abra um caixa antes de finalizar"
                   : !podeFinalizarRede ? "Sem conexao — finalize quando a conexao voltar"
@@ -1796,8 +1868,9 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido }) {
             </div>
           )}
 
-          {/* VENDAS DE HOJE — entre o total e as formas de pagamento */}
-          {!caixaCarregando && !semCaixa && (
+          {/* VENDAS DE HOJE — entre o total e as formas de pagamento.
+              No modo Clean some: nada de numeros do dia na frente do operador. */}
+          {!modoClean && !caixaCarregando && !semCaixa && (
             <FormasPagamentoTopo resumo={painel.resumoDia} role={user.role} />
           )}
 
@@ -3242,6 +3315,28 @@ function FormasPagamentoTopo({ resumo, role }) {
             })}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ============== CESTINHA VAZIA — MODO CLEAN ==============
+// Substituto do AcessoRapido no modo focado: nada de "Mais vendidos" nem
+// historico — so a confirmacao visual de que o sistema esta pronto pra
+// bipar. Quem quer os cards alterna de volta com F7.
+function CestinhaVaziaClean() {
+  return (
+    <div className="pdv-clean-vazio">
+      <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 7V5a1 1 0 0 1 1-1h2"/>
+        <path d="M20 7V5a1 1 0 0 0-1-1h-2"/>
+        <path d="M4 17v2a1 1 0 0 0 1 1h2"/>
+        <path d="M20 17v2a1 1 0 0 1-1 1h-2"/>
+        <path d="M8 9v6M12 9v6M16 9v6"/>
+      </svg>
+      <div className="pdv-clean-vazio-tit">Pronto para bipar</div>
+      <div className="pdv-clean-vazio-sub">
+        Bipe ou digite o código/nome do produto e pressione <span className="pdv-kbd is-accent">⏎</span>
       </div>
     </div>
   );

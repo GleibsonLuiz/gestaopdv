@@ -150,11 +150,14 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 
 **Atalhos:**
 - **F1–F6** — formas de pagamento
+- **F7** — alterna entre layout completo e **modo focado** (Clean)
 - **F8** — modal "Cancelar item"
 - **F9** — salvar atendimento em espera
 - **F10** — abrir pagamento
 - **Esc** — limpa campo de busca ou fecha modal
 - **Setas ↑↓** — navega nas sugestões
+
+**Modo focado (Clean):** pressione **F7** (ou clique no botão **"Focado"** no topo da tela) para trocar para um layout minimalista: a **busca/bipagem fica grande na coluna esquerda**, logo acima da cestinha expandida, e a coluna direita mostra só o **total em destaque** e os botões **F1–F6** de pagamento. Somem os números do dia, os "Mais vendidos" e as últimas vendas — ideal para horário de pico ou para operadores que se distraem com informação demais. A troca é instantânea e **não mexe na cestinha**: pode alternar no meio da venda que os itens continuam lá. A preferência fica salva no computador (cada caixa pode usar o modo que preferir). Para voltar, **F7** de novo ou botão **"Completo"**.
 
 **Cupom impresso** traz: logo da empresa, razão social, CNPJ, endereço, itens, total, forma de pagamento, vendedor, data/hora e número da venda.
 
@@ -1215,7 +1218,9 @@ O sistema é projetado para **degradar com graça** quando a internet falha.
 | **F4** | Cartão Crédito |
 | **F5** | Boleto |
 | **F6** | Crediário |
+| **F7** | Alterna modo focado (Clean) ↔ layout completo |
 | **F8** | Modal "Cancelar item" |
+| **F9** | Salvar atendimento em espera |
 | **F10** | Abre modal de pagamento |
 
 ### Modais (geral)

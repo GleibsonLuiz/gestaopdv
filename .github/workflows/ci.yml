@@ -1,0 +1,43 @@
+# CI minimo: roda em todo push/PR na main. O deploy da Vercel e git-connected
+# e NAO espera este workflow — para o CI BLOQUEAR merge/deploy e preciso
+# ativar Branch Protection (Settings > Branches > require status checks)
+# no GitHub. Mesmo sem isso, o badge vermelho avisa que a main quebrou.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  frontend:
+    name: Frontend (typecheck + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+
+  backend:
+    name: Backend (testes)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      # postinstall roda `prisma generate` (so precisa do schema, nao do banco).
+      - run: npm ci
+      # 80 testes puros (fiscal, sugestoes de compra) — sem DATABASE_URL.
+      - run: npm test

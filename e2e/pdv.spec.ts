@@ -1,6 +1,7 @@
 import { test, expect } from "playwright/test";
 import {
   API_URL, apiLogin, authHeaders, contarVendas, garantirCaixaAberto, loginUI,
+  produtosVendaveis,
 } from "./fixtures";
 
 // ============ E2E — FLUXO DE VENDA NO PDV ============
@@ -71,6 +72,37 @@ test("API rejeita venda estruturalmente invalida com 400 (zod)", async ({ reques
     });
     expect(r.status(), `payload deveria dar 400: ${JSON.stringify(body)}`).toBe(400);
   }
+});
+
+test("venda com pagamento dividido (DINHEIRO + PIX) via API", async ({ request }) => {
+  const token = await apiLogin(request);
+  await garantirCaixaAberto(request, token);
+
+  const [p1, p2] = await produtosVendaveis(request, token);
+  expect(p2, "seed deveria ter >=2 produtos vendaveis").toBeTruthy();
+
+  const itens = [
+    { produtoId: p1.id, quantidade: 2, precoUnitario: Number(p1.precoVenda) },
+    { produtoId: p2.id, quantidade: 1, precoUnitario: Number(p2.precoVenda) },
+  ];
+  const total = Number(
+    (itens.reduce((a, it) => a + it.quantidade * it.precoUnitario, 0)).toFixed(2),
+  );
+  const parte = Number((total / 2).toFixed(2));
+
+  const r = await request.post(`${API_URL}/vendas`, {
+    headers: authHeaders(token),
+    data: {
+      itens,
+      pagamentos: [
+        { forma: "DINHEIRO", valor: parte },
+        { forma: "PIX", valor: Number((total - parte).toFixed(2)) },
+      ],
+    },
+  });
+  expect(r.status(), await r.text()).toBeLessThan(300);
+  const venda = await r.json();
+  expect(Number(venda.total ?? venda.venda?.total)).toBeCloseTo(total, 2);
 });
 
 test("API rejeita abertura de caixa com saldo invalido (400)", async ({ request }) => {

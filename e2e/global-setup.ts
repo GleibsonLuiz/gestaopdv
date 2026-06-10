@@ -1,4 +1,6 @@
 import { execSync } from "node:child_process";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { BACKEND_DIR, e2eDatabaseUrl } from "./env";
 
 // ============ SETUP GLOBAL (roda 1x por execucao da suite) ============
@@ -17,5 +19,10 @@ export default function globalSetup() {
     cwd: BACKEND_DIR, env, stdio: "inherit",
   });
   execSync("node prisma/seed.js", { cwd: BACKEND_DIR, env, stdio: "inherit" });
+  // Ajustes que so valem no banco de teste (ex.: dispositivos ilimitados).
+  const posSeed = join(dirname(fileURLToPath(import.meta.url)), "pos-seed.sql");
+  execSync(`npx prisma db execute --url "${dbUrl}" --file "${posSeed}"`, {
+    cwd: BACKEND_DIR, env, stdio: "inherit",
+  });
   console.log("[e2e] banco pronto.");
 }

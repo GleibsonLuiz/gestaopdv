@@ -3592,6 +3592,8 @@ function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpr
         itens: venda.itens,
         observacoes: venda.observacoes,
         formaPagamentoLabel: formaLabel,
+        valorRecebido,
+        troco,
       },
       {
         nome: empresa?.nomeFantasia || empresa?.razaoSocial,

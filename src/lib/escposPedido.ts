@@ -34,6 +34,8 @@ export interface PedidoImp {
   itens?: ItemPedidoImp[] | null;
   observacoes?: string | null;
   formaPagamentoLabel?: string | null; // ex: "DINHEIRO", "PAGO VIA MAQUININHA"
+  valorRecebido?: number | string | null; // dinheiro entregue pelo cliente
+  troco?: number | string | null;
 }
 
 export interface EmpresaImp {
@@ -139,6 +141,16 @@ export function gerarComandosPedido(
     partes.push(e.align(1), e.bold(true));
     partes.push(e.linha(pedido.formaPagamentoLabel));
     partes.push(e.bold(false), e.align(0));
+  }
+  // Recebido/troco — mesma regra do CupomVenda do navegador: so imprime
+  // quando o operador informou o valor entregue em dinheiro (> 0).
+  if (Number(pedido.valorRecebido) > 0) {
+    partes.push(e.linhaDireita("Valor recebido:", fmtBRL(pedido.valorRecebido || 0), largCh));
+    partes.push(e.bold(true));
+    partes.push(e.linhaDireita("TROCO:", fmtBRL(pedido.troco || 0), largCh));
+    partes.push(e.bold(false));
+  }
+  if (pedido.formaPagamentoLabel || Number(pedido.valorRecebido) > 0) {
     partes.push(e.divisor(largCh));
   }
 

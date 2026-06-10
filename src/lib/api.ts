@@ -343,8 +343,20 @@ function qsFrom(filtros: StringDict): string {
 }
 
 export const api = {
-  login: (email: string, senha: string) =>
-    request("/auth/login", { method: "POST", body: { email, senha }, auth: false }),
+  login: (email: string, senha: string, codigoTotp?: string) =>
+    request("/auth/login", {
+      method: "POST",
+      body: { email, senha, ...(codigoTotp ? { codigoTotp } : {}) },
+      auth: false,
+    }),
+  // 2FA TOTP (verificacao em duas etapas) — self-service do usuario logado.
+  totpSetup: () => request<{ secret: string; otpauth: string; qrSvg: string }>(
+    "/auth/totp/setup", { method: "POST" },
+  ),
+  totpAtivar: (codigo: string) =>
+    request("/auth/totp/ativar", { method: "POST", body: { codigo } }),
+  totpDesativar: (senha: string) =>
+    request("/auth/totp/desativar", { method: "POST", body: { senha } }),
   me: async () => {
     const r = await request<Record<string, unknown>>("/auth/me");
     // Renovacao silenciosa de sessao: o token agora dura 24h e o backend

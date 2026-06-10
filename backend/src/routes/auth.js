@@ -1,5 +1,8 @@
 import { Router } from "express";
-import { login, me, trocarSenha, logout, salvarPreferencias, revogarDispositivoSelfService } from "../controllers/authController.js";
+import {
+  login, me, trocarSenha, logout, salvarPreferencias, revogarDispositivoSelfService,
+  totpSetup, totpAtivar, totpDesativar,
+} from "../controllers/authController.js";
 import { authRequired } from "../middlewares/auth.js";
 import { rateLimitLogin } from "../middlewares/rateLimitLogin.js";
 
@@ -13,5 +16,9 @@ router.post("/logout", authRequired, logout);
 router.get("/me", authRequired, me);
 router.put("/senha", authRequired, trocarSenha);
 router.put("/preferencias", authRequired, salvarPreferencias);
+// 2FA TOTP (verificacao em duas etapas) — self-service do usuario logado.
+router.post("/totp/setup", authRequired, totpSetup);
+router.post("/totp/ativar", authRequired, totpAtivar);
+router.post("/totp/desativar", authRequired, totpDesativar);
 
 export default router;

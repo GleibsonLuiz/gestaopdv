@@ -66,6 +66,17 @@ O sistema é uma **PWA** (instalável no celular) com fallback offline limitado:
 
 Não há recuperação por e-mail pública. Peça a um **ADMIN** para resetar pela tela **Funcionários** → ações → **Trocar senha**.
 
+### Verificação em duas etapas (2FA)
+
+Proteção extra opcional: além da senha, o login passa a exigir um **código de 6 dígitos** gerado no seu celular (Google Authenticator, Authy, Microsoft Authenticator ou similar). Mesmo que alguém descubra sua senha, não consegue entrar.
+
+**Como ativar:** menu do avatar (canto superior) → **🛡️ Verificação em 2 etapas** → "Ativar — gerar QR code" → escaneie o QR com o app autenticador → digite o código de 6 dígitos que apareceu no app → **Confirmar e ativar**. A ativação só completa depois de você provar um código válido — não há risco de se trancar para fora por ter fechado a janela no meio.
+
+- **No próximo login:** após e-mail e senha, aparece o campo do código. Digite os 6 dígitos do app.
+- **Trocou de celular:** entre normalmente (com o celular antigo ou antes de formatar), desative o 2FA no mesmo menu (pede sua senha) e ative de novo no aparelho novo.
+- **Perdeu o celular e não está logado:** contate o suporte para liberar o acesso.
+- Cada usuário ativa o seu — recomendado fortemente para **ADMIN** e contas com acesso ao financeiro.
+
 ### Limite de máquinas (dispositivos)
 
 Cada plano permite um número de **máquinas conectadas ao mesmo tempo** (computadores/navegadores). Se você contratou 1 máquina, o sistema só abre em 1 navegador por vez.

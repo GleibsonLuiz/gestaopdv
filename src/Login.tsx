@@ -145,6 +145,11 @@ export default function Login({ onSuccess }: LoginProps) {
   // guardamos a lista para o cliente derrubar uma maquina antiga (self-service).
   const [bloqueio, setBloqueio]   = useState<BloqueioState | null>(null);
   const [revogandoId, setRevogandoId] = useState<string | null>(null);
+  // 2FA: senha conferiu mas o usuario tem verificacao em duas etapas — o
+  // backend respondeu { precisaTotp } e o form passa a pedir o codigo de
+  // 6 digitos do app autenticador antes de completar o login.
+  const [totpPedido, setTotpPedido] = useState(false);
+  const [codigoTotp, setCodigoTotp] = useState("");
 
   // Silencia "unused" do setter — feature de "lembrar-me" virá depois.
   void setRemember;
@@ -165,9 +170,18 @@ export default function Login({ onSuccess }: LoginProps) {
     setStatus("loading");
     setErr("");
     try {
-      // Backend (ETAPA 2 multi-tenant) retorna { token, user, empresa }.
-      // user.tenantId duplica empresa.id mas mantemos para conveniencia.
-      const { token, user, empresa } = await api.login(email, password) as LoginResponse;
+      // Backend (ETAPA 2 multi-tenant) retorna { token, user, empresa } — ou
+      // { precisaTotp } quando o user tem 2FA e o codigo ainda nao foi enviado.
+      const resp = await api.login(
+        email, password, totpPedido ? codigoTotp.trim() : undefined,
+      ) as LoginResponse & { precisaTotp?: boolean };
+      if (resp.precisaTotp) {
+        setTotpPedido(true);
+        setStatus("idle");
+        setTimeout(() => document.getElementById("codigoTotp")?.focus(), 50);
+        return;
+      }
+      const { token, user, empresa } = resp;
       setSession(token, user, empresa);
       setBloqueio(null);
       setStatus("success");
@@ -198,6 +212,11 @@ export default function Login({ onSuccess }: LoginProps) {
     e.preventDefault();
     setTouched({ email: true, password: true });
     if (!formValid) return;
+    if (totpPedido && !/^\d{6}$/.test(codigoTotp.trim())) {
+      setStatus("error");
+      setErr("Digite o código de 6 dígitos do app autenticador.");
+      return;
+    }
     await tentarLogin();
   };
 
@@ -358,7 +377,24 @@ export default function Login({ onSuccess }: LoginProps) {
               </div>
             )}
 
-
+            {totpPedido && (
+              <>
+                <div className="field mb-2 mt-2">
+                  <span className="lead"><Lock /></span>
+                  <input
+                    id="codigoTotp" type="text" placeholder=" "
+                    inputMode="numeric" autoComplete="one-time-code" maxLength={6}
+                    className="with-icon"
+                    value={codigoTotp}
+                    onChange={(e) => setCodigoTotp(e.target.value.replace(/\D/g, ""))}
+                  />
+                  <label htmlFor="codigoTotp">Código do app autenticador</label>
+                </div>
+                <div className="mb-3 text-[12px] text-mist-400">
+                  Verificação em duas etapas ativa — abra o app autenticador e digite o código de 6 dígitos.
+                </div>
+              </>
+            )}
 
             <button type="submit" className="btn-primary" disabled={status === "loading" || status === "success"}>
               {status === "loading" && (<><span className="spinner" /><span>Entrando...</span></>)}

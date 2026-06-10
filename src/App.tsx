@@ -39,6 +39,7 @@ const Backup = lazy(() => import("./Backup"));
 const ConfiguracoesImpressora = lazy(() => import("./ConfiguracoesImpressora"));
 const Empresa = lazy(() => import("./Empresa"));
 const TrocarSenhaModal = lazy(() => import("./TrocarSenhaModal"));
+const Verificacao2faModal = lazy(() => import("./Verificacao2faModal"));
 const Aparencia = lazy(() => import("./Aparencia"));
 const Tarefas = lazy(() => import("./Tarefas"));
 const Fidelidade = lazy(() => import("./Fidelidade"));
@@ -261,6 +262,7 @@ export default function App() {
   }>(null);
   const [menuUsuario, setMenuUsuario] = useState(false);
   const [trocarSenhaAberto, setTrocarSenhaAberto] = useState(false);
+  const [verificacao2faAberta, setVerificacao2faAberta] = useState(false);
   const [sidebarAberta, setSidebarAberta] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => lerPreferenciaSidebar());
   const [gerenciarFormasAberto, setGerenciarFormasAberto] = useState(false);
@@ -886,6 +888,9 @@ export default function App() {
               <button onClick={() => { setMenuUsuario(false); setTrocarSenhaAberto(true); }} style={menuItem}>
                 🔐 Trocar senha
               </button>
+              <button onClick={() => { setMenuUsuario(false); setVerificacao2faAberta(true); }} style={menuItem}>
+                🛡️ Verificação em 2 etapas
+              </button>
               {user.superAdmin && (
                 <a
                   href="/admin-master"
@@ -1213,6 +1218,11 @@ export default function App() {
       {trocarSenhaAberto && (
         <Suspense fallback={null}>
           <TrocarSenhaModal onFechar={() => setTrocarSenhaAberto(false)} />
+        </Suspense>
+      )}
+      {verificacao2faAberta && (
+        <Suspense fallback={null}>
+          <Verificacao2faModal onFechar={() => setVerificacao2faAberta(false)} />
         </Suspense>
       )}
       {gerenciarFormasAberto && (

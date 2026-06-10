@@ -621,6 +621,11 @@ model User {
   // { aparencia?: {...}, sidebarCollapsed?: boolean }. Mantida como Json
   // intencionalmente flexivel para evoluir sem migration por campo novo.
   preferencias Json?
+  // 2FA TOTP (opt-in por usuario). totpSecret existe DESDE o setup (QR
+  // exibido) mas o gate do login so vale quando totpAtivo=true — ativacao
+  // exige provar um codigo valido, evitando lockout por QR nao escaneado.
+  totpSecret String?
+  totpAtivo  Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

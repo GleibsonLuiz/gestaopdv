@@ -8,6 +8,9 @@ import {
   lerDispositivoDaRequest, validarLoginDispositivo, dispositivoSegueAtivo,
   revogarDispositivo,
 } from "../lib/dispositivos.js";
+import {
+  gerarSegredoTotp, cifrarSegredo, verificarCodigoTotp, urlOtpauth, qrCodeSvg,
+} from "../lib/totp.js";
 
 export async function login(req, res, next) {
   try {
@@ -99,6 +102,26 @@ export async function login(req, res, next) {
       });
       await registrarFalhaLogin(req);
       return res.status(401).json({ erro: "Credenciais invalidas" });
+    }
+
+    // 2FA TOTP: senha correta, mas o usuario ativou verificacao em duas
+    // etapas. Sem codigo no payload -> 200 com precisaTotp (o front mostra o
+    // campo e reenvia o login completo). Codigo errado -> 401 que CONTA no
+    // throttle de login — forca-bruta de 6 digitos e tao seria quanto de senha.
+    if (user.totpAtivo && user.totpSecret) {
+      const codigo = typeof req.body.codigoTotp === "string" ? req.body.codigoTotp.trim() : "";
+      if (!codigo) {
+        return res.json({ precisaTotp: true });
+      }
+      if (!verificarCodigoTotp(user.totpSecret, codigo)) {
+        registrarEvento({
+          acao: "LOGIN_FALHO", modulo: "AUTH", sucesso: false,
+          usuarioId: user.id, usuarioNome: user.nome, usuarioEmail: user.email,
+          mensagem: "Codigo 2FA invalido", req, tenantId: user.tenantId,
+        });
+        await registrarFalhaLogin(req);
+        return res.status(401).json({ erro: "Código de verificação inválido", totpInvalido: true });
+      }
     }
 
     // Login valido — zera o contador de tentativas (IP + email).
@@ -210,6 +233,7 @@ export async function me(req, res, next) {
         id: true, nome: true, email: true, role: true, ativo: true, permissoes: true,
         superAdmin: true,
         preferencias: true,
+        totpAtivo: true,
         tenantId: true,
         tenant: { select: { id: true, nome: true, cnpj: true, ativo: true, segmento: true, plano: true, modulosHabilitados: true } },
       },
@@ -400,6 +424,87 @@ export async function trocarSenha(req, res, next) {
       usuarioId: user.id, usuarioNome: user.nome, usuarioEmail: user.email, req,
     });
 
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ============ 2FA TOTP (verificacao em duas etapas) ============
+// Fluxo: setup (gera segredo + QR) -> ativar (prova um codigo valido) ->
+// gate no login. Desativar exige a SENHA (nao o codigo): e o caminho de
+// recuperacao de quem ainda esta logado; quem perdeu o celular E a sessao
+// precisa do suporte (admin-master zera totpAtivo no banco).
+
+export async function totpSetup(req, res, next) {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.sub },
+      select: { id: true, email: true, totpAtivo: true },
+    });
+    if (!user) return res.status(404).json({ erro: "Usuario nao encontrado" });
+    if (user.totpAtivo) {
+      return res.status(400).json({ erro: "2FA ja esta ativo. Desative antes de gerar um novo QR." });
+    }
+    const secret = gerarSegredoTotp();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { totpSecret: cifrarSegredo(secret), totpAtivo: false },
+    });
+    const otpauth = urlOtpauth(user.email, secret);
+    const qrSvg = await qrCodeSvg(otpauth);
+    // O secret em claro vai UMA vez na resposta (entrada manual no app);
+    // no banco fica apenas cifrado.
+    res.json({ secret, otpauth, qrSvg });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function totpAtivar(req, res, next) {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.sub },
+      select: { id: true, nome: true, email: true, tenantId: true, totpSecret: true, totpAtivo: true },
+    });
+    if (!user) return res.status(404).json({ erro: "Usuario nao encontrado" });
+    if (user.totpAtivo) return res.status(400).json({ erro: "2FA ja esta ativo." });
+    if (!user.totpSecret) return res.status(400).json({ erro: "Gere o QR code primeiro (setup)." });
+    if (!verificarCodigoTotp(user.totpSecret, req.body?.codigo)) {
+      return res.status(400).json({ erro: "Código inválido. Confira o app autenticador e tente de novo." });
+    }
+    await prisma.user.update({ where: { id: user.id }, data: { totpAtivo: true } });
+    registrarEvento({
+      acao: "ATIVAR_2FA", modulo: "AUTH", sucesso: true,
+      usuarioId: user.id, usuarioNome: user.nome, usuarioEmail: user.email,
+      req, tenantId: user.tenantId,
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function totpDesativar(req, res, next) {
+  try {
+    const { senha } = req.body || {};
+    if (!senha) return res.status(400).json({ erro: "Informe sua senha para desativar o 2FA" });
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.sub },
+      select: { id: true, nome: true, email: true, tenantId: true, senha: true, totpAtivo: true },
+    });
+    if (!user) return res.status(404).json({ erro: "Usuario nao encontrado" });
+    const ok = await bcrypt.compare(senha, user.senha);
+    if (!ok) return res.status(401).json({ erro: "Senha incorreta" });
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { totpAtivo: false, totpSecret: null },
+    });
+    registrarEvento({
+      acao: "DESATIVAR_2FA", modulo: "AUTH", sucesso: true,
+      usuarioId: user.id, usuarioNome: user.nome, usuarioEmail: user.email,
+      req, tenantId: user.tenantId,
+    });
     res.json({ ok: true });
   } catch (err) {
     next(err);

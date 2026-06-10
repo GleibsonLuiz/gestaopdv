@@ -14,11 +14,23 @@ type Totais = {
   totalSuprimentos?: number | string | null;
   totalVendasDinheiro?: number | string | null;
   totalReceberDinheiro?: number | string | null;
+  totalDespesasDinheiro?: number | string | null;
   totalSangrias?: number | string | null;
   totalPagarDinheiro?: number | string | null;
   totalVendasOutras?: number | string | null;
   porForma?: Array<{ forma: string; total: number | string }> | null;
 };
+
+const FORMA_LABEL_CUPOM: Record<string, string> = {
+  DINHEIRO: "Dinheiro",
+  CARTAO_CREDITO: "Cartao credito",
+  CARTAO_DEBITO: "Cartao debito",
+  PIX: "PIX",
+  BOLETO: "Boleto",
+  CREDIARIO: "Crediario",
+};
+
+const pos = (v: unknown) => Number(v) > 0.005;
 
 type Caixa = {
   numero?: number | null;
@@ -81,13 +93,14 @@ export default function CupomFechamentoCaixa({
       )}
       <hr className="cupom-divisor" />
 
-      <div className="cupom-bold">MOVIMENTO</div>
+      <div className="cupom-bold">COMPOSICAO DO ESPERADO (DINHEIRO)</div>
       <Linha label="Saldo inicial:" valor={fmtBRL(caixa?.saldoInicial)} />
-      {t.totalSuprimentos != null && <Linha label="(+) Suprimentos:" valor={fmtBRL(t.totalSuprimentos)} />}
-      {t.totalVendasDinheiro != null && <Linha label="(+) Vendas (dinheiro):" valor={fmtBRL(t.totalVendasDinheiro)} />}
-      {t.totalReceberDinheiro != null && <Linha label="(+) Recebimentos:" valor={fmtBRL(t.totalReceberDinheiro)} />}
-      {t.totalSangrias != null && <Linha label="(−) Sangrias:" valor={fmtBRL(t.totalSangrias)} />}
-      {t.totalPagarDinheiro != null && <Linha label="(−) Pagamentos:" valor={fmtBRL(t.totalPagarDinheiro)} />}
+      <Linha label="(+) Vendas (dinheiro):" valor={fmtBRL(t.totalVendasDinheiro ?? 0)} />
+      {pos(t.totalSuprimentos) && <Linha label="(+) Suprimentos:" valor={fmtBRL(t.totalSuprimentos)} />}
+      {pos(t.totalReceberDinheiro) && <Linha label="(+) Recebimentos:" valor={fmtBRL(t.totalReceberDinheiro)} />}
+      {pos(t.totalDespesasDinheiro) && <Linha label="(−) Despesas (dinheiro):" valor={fmtBRL(t.totalDespesasDinheiro)} />}
+      {pos(t.totalSangrias) && <Linha label="(−) Sangrias:" valor={fmtBRL(t.totalSangrias)} />}
+      {pos(t.totalPagarDinheiro) && <Linha label="(−) Pagamentos:" valor={fmtBRL(t.totalPagarDinheiro)} />}
       <hr className="cupom-divisor" />
 
       <div className="cupom-bold">CONFERENCIA</div>
@@ -114,11 +127,15 @@ export default function CupomFechamentoCaixa({
         </>
       )}
 
-      {t.totalVendasOutras != null && Number(t.totalVendasOutras) > 0 && (
+      {pos(t.totalVendasOutras) && t.porForma && t.porForma.length > 0 && (
         <>
           <div className="cupom-bold">VENDAS POR FORMA</div>
-          {t.porForma?.map(f => (
-            <Linha key={f.forma} label={f.forma + ":"} valor={fmtBRL(f.total)} />
+          {t.porForma.map(f => (
+            <Linha
+              key={f.forma}
+              label={(FORMA_LABEL_CUPOM[f.forma] || f.forma) + ":"}
+              valor={fmtBRL(f.total)}
+            />
           ))}
           <hr className="cupom-divisor" />
         </>

@@ -451,6 +451,14 @@ function AbaExtrato({ caixaId }: any) {
           </div>
         )}
       </div>
+
+      {/* Composição do esperado + aviso sobre despesas em dinheiro (caixa fechado) */}
+      {caixa.status === "FECHADO" && (
+        <div style={{ marginTop: 12 }}>
+          <NotaSobraDespesa diferenca={Number(caixa.diferenca || 0)} totais={totais} />
+          <ComposicaoEsperado totais={totais} esperado={caixa.saldoFinalEsperado} />
+        </div>
+      )}
     </div>
   );
 }
@@ -736,6 +744,8 @@ function ModalFechar({ caixa, user, onCancelar, onSucesso }: any) {
             valor={(dif > 0 ? "+" : "") + fmtBRL(dif)}
             cor={dif === 0 ? C.green : dif > 0 ? C.yellow : C.red} />
         </div>
+        <NotaSobraDespesa diferenca={dif} totais={caixaFechado?.totais} />
+        <ComposicaoEsperado totais={caixaFechado?.totais} esperado={revelado.esperado} />
         <RodapeModal>
           <button onClick={imprimirComprovante} style={btnCancelar}>
             🖨️ Imprimir comprovante
@@ -975,6 +985,69 @@ function RodapeBloco({ titulo, valor, cor, destaque }: any) {
         color: cor, fontWeight: 800,
         fontSize: destaque ? 22 : 16, fontFamily: "monospace", marginTop: 4,
       }}>{valor}</div>
+    </div>
+  );
+}
+
+function LinhaComp({ label, valor, sinal, cor, destaque }: any) {
+  return (
+    <div style={{
+      display: "flex", justifyContent: "space-between", alignItems: "center",
+      padding: "6px 0", borderBottom: `1px solid ${C.border}`,
+      fontSize: 13, fontWeight: destaque ? 800 : 500,
+    }}>
+      <span style={{ color: destaque ? C.white : C.muted }}>
+        {sinal ? <b style={{ color: cor || C.muted, marginRight: 6 }}>{sinal}</b> : null}
+        {label}
+      </span>
+      <span style={{
+        color: destaque ? C.white : (cor || C.text),
+        fontFamily: "monospace", fontWeight: destaque ? 800 : 700,
+      }}>{valor}</span>
+    </div>
+  );
+}
+
+// Detalha como o saldo esperado em dinheiro foi formado. Torna visível o
+// impacto de despesas/sangrias pagas em dinheiro — principal causa de "sobra"
+// quando o dinheiro foi lançado no caixa mas não saiu fisicamente da gaveta.
+export function ComposicaoEsperado({ totais, esperado, titulo = "COMPOSIÇÃO DO SALDO ESPERADO (DINHEIRO)" }: any) {
+  if (!totais) return null;
+  const n = (x: any) => Number(x || 0);
+  return (
+    <div style={{
+      background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10,
+      padding: "12px 14px", marginBottom: 14,
+    }}>
+      <div style={{ color: C.muted, fontSize: 10, fontWeight: 800, letterSpacing: 0.5, marginBottom: 6 }}>
+        {titulo}
+      </div>
+      <LinhaComp label="Troco inicial" valor={fmtBRL(totais.saldoInicial)} />
+      <LinhaComp label="Vendas em dinheiro" sinal="+" cor={C.green} valor={fmtBRL(totais.vendasDinheiro)} />
+      {n(totais.suprimentos) > 0 && <LinhaComp label="Suprimentos" sinal="+" cor={C.green} valor={fmtBRL(totais.suprimentos)} />}
+      {n(totais.receberDinheiro) > 0 && <LinhaComp label="Recebimentos" sinal="+" cor={C.green} valor={fmtBRL(totais.receberDinheiro)} />}
+      {n(totais.despesasDinheiro) > 0 && <LinhaComp label="Despesas em dinheiro" sinal="−" cor={C.red} valor={fmtBRL(totais.despesasDinheiro)} />}
+      {n(totais.sangrias) > 0 && <LinhaComp label="Sangrias" sinal="−" cor={C.red} valor={fmtBRL(totais.sangrias)} />}
+      {n(totais.pagarDinheiro) > 0 && <LinhaComp label="Pagamentos de contas" sinal="−" cor={C.red} valor={fmtBRL(totais.pagarDinheiro)} />}
+      <LinhaComp label="Saldo esperado" valor={fmtBRL(esperado ?? totais.saldoEsperadoDinheiro)} destaque />
+    </div>
+  );
+}
+
+// Aviso explicativo: quando há SOBRA e existem despesas pagas em dinheiro,
+// a sobra normalmente é o dinheiro das despesas que não saiu da gaveta.
+function NotaSobraDespesa({ diferenca, totais }: any) {
+  const despesas = Number(totais?.despesasDinheiro || 0);
+  if (!(Number(diferenca) > 0.005) || !(despesas > 0.005)) return null;
+  return (
+    <div style={{
+      marginBottom: 14, padding: "10px 14px", borderRadius: 8,
+      background: C.yellow + "18", border: `1px solid ${C.yellow}55`,
+      color: C.text, fontSize: 12, lineHeight: 1.5,
+    }}>
+      💡 Hoje foram lançadas <b>{fmtBRL(despesas)}</b> em despesas pagas em <b>dinheiro do caixa</b>,
+      o que reduziu o saldo esperado. Se esse dinheiro <b>não saiu fisicamente da gaveta</b>
+      {" "}(ex.: pago por Pix ou do próprio bolso), ele aparece aqui como sobra. Confira as despesas no Extrato.
     </div>
   );
 }

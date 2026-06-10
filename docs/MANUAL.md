@@ -264,6 +264,9 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
      - 🟢 zero = sem diferença
      - 🟡 positiva = sobra
      - 🔴 negativa = quebra
+   - Logo abaixo, a tela mostra a **Composição do saldo esperado** (troco inicial + vendas em dinheiro + suprimentos − despesas em dinheiro − sangrias − pagamentos). Assim você enxerga exatamente o que formou o esperado — o mesmo detalhamento sai no **cupom de fechamento** e fica salvo no **Extrato** do caixa.
+
+> **⚠️ Sobra causada por despesas em dinheiro.** A causa mais comum de uma "sobra" alta é lançar **despesas pagas em dinheiro** que **não saíram fisicamente da gaveta** (ex.: a despesa foi paga por Pix ou do próprio bolso, mas registrada como dinheiro do caixa). Cada despesa em dinheiro **reduz** o saldo esperado; se o dinheiro continua na gaveta, a diferença vira sobra. Para evitar: ao lançar a despesa, escolha a **forma de pagamento correta** (Pix/cartão) **ou desmarque "registrar no caixa"** quando o dinheiro não sai do caixa; quando a despesa for paga com o dinheiro da gaveta, separe as cédulas na hora (ou use **Sangria**). Quando há sobra com despesas em dinheiro no dia, a tela de fechamento exibe um aviso explicando o valor.
 
 **Abas:**
 - **Meu caixa** — KPIs e ações do caixa aberto

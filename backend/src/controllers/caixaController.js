@@ -437,6 +437,14 @@ export async function calcularTotaisCaixa(caixaId, saldoInicial, tx = prisma) {
   let entradasOutras = 0;
   let saidasOutras = 0;
   const porForma = {};
+  // Acumulador POR TIPO somente em dinheiro — base da "composicao do saldo
+  // esperado" (ex: quanto de despesa saiu fisicamente do caixa). So o que e
+  // dinheiro afeta o saldo, entao so dinheiro entra aqui.
+  const dinPorTipo = {};
+  // Vendas por forma (liquido de estorno) — para o cupom detalhar como as
+  // vendas foram recebidas. Mantido separado de porForma (que soma TODAS as
+  // movimentacoes por forma, usado na tela do caixa).
+  const vendasPorForma = {};
 
   for (const m of movs) {
     if (m.tipo === "ABERTURA" || m.tipo === "FECHAMENTO") continue;
@@ -447,10 +455,36 @@ export async function calcularTotaisCaixa(caixaId, saldoInicial, tx = prisma) {
     } else if (ehSaida(m.tipo)) {
       if (dinheiro) saidasDinheiro += v; else saidasOutras += v;
     }
+    if (dinheiro) dinPorTipo[m.tipo] = (dinPorTipo[m.tipo] || 0) + v;
+    if (m.tipo === "VENDA") vendasPorForma[m.formaPagamento] = (vendasPorForma[m.formaPagamento] || 0) + v;
+    else if (m.tipo === "ESTORNO_VENDA") vendasPorForma[m.formaPagamento] = (vendasPorForma[m.formaPagamento] || 0) - v;
     porForma[m.formaPagamento] = (porForma[m.formaPagamento] || 0) + v;
   }
 
   const saldoEsperadoDinheiro = saldoInicial + entradasDinheiro - saidasDinheiro;
+
+  // Categorias LIQUIDAS em dinheiro (entrada menos o estorno correspondente).
+  // Reconciliam com entradasDinheiro - saidasDinheiro, entao a composicao
+  // exibida sempre fecha com o saldo esperado:
+  //   esperado = saldoInicial + vendas + suprimentos + recebimentos
+  //              - despesas - sangrias - pagamentos
+  const din = (t) => dinPorTipo[t] || 0;
+  const vendasDinheiro = toDecimal(din("VENDA") - din("ESTORNO_VENDA"));
+  const suprimentos = toDecimal(din("SUPRIMENTO"));
+  const receberDinheiro = toDecimal(din("RECEBER_CONTA") - din("ESTORNO_RECEBER_CONTA"));
+  const despesasDinheiro = toDecimal(din("DESPESA") - din("ESTORNO_DESPESA"));
+  const sangrias = toDecimal(din("SANGRIA"));
+  const pagarDinheiro = toDecimal(din("PAGAR_CONTA") - din("ESTORNO_PAGAR_CONTA"));
+
+  // Vendas em formas que NAO afetam o caixa em dinheiro (cartao/pix/etc).
+  const vendasOutras = toDecimal(
+    Object.entries(vendasPorForma)
+      .filter(([forma]) => forma !== "DINHEIRO")
+      .reduce((s, [, val]) => s + val, 0)
+  );
+  const porFormaVendas = Object.entries(vendasPorForma)
+    .filter(([, val]) => Math.abs(val) > 0.005)
+    .map(([forma, total]) => ({ forma, total: toDecimal(total) }));
 
   return {
     saldoInicial,
@@ -462,6 +496,25 @@ export async function calcularTotaisCaixa(caixaId, saldoInicial, tx = prisma) {
     totalSaidas: saidasDinheiro + saidasOutras,
     saldoEsperadoDinheiro,
     porFormaPagamento: porForma,
+    // ---- Composicao do saldo esperado em dinheiro, por categoria ----
+    // (a chave do diagnostico: despesasDinheiro explica a "sobra" quando o
+    // dinheiro nao saiu fisicamente da gaveta)
+    vendasDinheiro,
+    suprimentos,
+    receberDinheiro,
+    despesasDinheiro,
+    sangrias,
+    pagarDinheiro,
+    vendasOutras,
+    // ---- Aliases consumidos pelo cupom de fechamento ----
+    totalVendasDinheiro: vendasDinheiro,
+    totalSuprimentos: suprimentos,
+    totalReceberDinheiro: receberDinheiro,
+    totalDespesasDinheiro: despesasDinheiro,
+    totalSangrias: sangrias,
+    totalPagarDinheiro: pagarDinheiro,
+    totalVendasOutras: vendasOutras,
+    porForma: porFormaVendas,
   };
 }
 

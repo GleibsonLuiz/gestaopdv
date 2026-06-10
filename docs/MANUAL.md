@@ -71,7 +71,7 @@ Não há recuperação por e-mail pública. Peça a um **ADMIN** para resetar pe
 Cada plano permite um número de **máquinas conectadas ao mesmo tempo** (computadores/navegadores). Se você contratou 1 máquina, o sistema só abre em 1 navegador por vez.
 
 - Ao tentar entrar numa máquina **acima do limite**, aparece a tela **"Esta conta já está em uso"** listando os dispositivos ativos.
-- Para liberar o acesso na máquina nova, clique em **Desconectar** num dispositivo antigo (confirme seu e-mail/senha). A máquina antiga é deslogada e você entra automaticamente.
+- Para liberar o acesso na máquina nova, clique em **Desconectar** num dispositivo antigo (confirme seu e-mail/senha). Você entra automaticamente na máquina nova, e a **máquina antiga é desconectada na hora** — assim que ela faz qualquer ação volta para o login (e mesmo parada, cai sozinha em até 30 segundos).
 - O identificador da máquina é guardado de forma redundante no navegador, então **limpar o histórico** normalmente **não** faz você perder a vaga. Trocar de computador, navegador ou usar uma aba anônima conta como uma máquina nova.
 - O suporte (super-admin) também pode liberar máquinas pelo painel administrativo (ver seção 10).
 
@@ -1307,7 +1307,8 @@ Além dos limites de quantidade, cada empresa pode ter um **número máximo de m
 - **Onde se define:** Admin Master → empresa → 🎫 **Alterar plano** → **Limite de máquinas (dispositivos)**. Deixe **vazio** para *ilimitado*.
 - **Como funciona:** a cada login o sistema identifica o navegador. Se for uma máquina já conhecida, libera; se for nova e o limite já estiver cheio, o login é **recusado (403)** e o cliente vê a tela de bloqueio com as máquinas ativas.
 - **Cliente se vira sozinho:** na tela de bloqueio, o próprio cliente pode **desconectar** uma máquina antiga (reconfirmando e-mail/senha) e entrar na nova — sem precisar do suporte.
-- **Suporte libera vagas:** em Admin Master → empresa → seção **🖥️ Dispositivos**, o super-admin vê todas as máquinas (ativas e revogadas) e pode **Desconectar** qualquer uma. A máquina desconectada é deslogada no próximo acesso.
+- **Suporte libera vagas:** em Admin Master → empresa → seção **🖥️ Dispositivos**, o super-admin vê todas as máquinas (ativas e revogadas) e pode **Desconectar** qualquer uma.
+- **A desconexão é imediata:** uma máquina desconectada (pelo cliente ou pelo suporte) cai para o login assim que faz qualquer ação; e mesmo que fique parada numa tela, é deslogada sozinha em até **30 segundos** (verificação periódica de sessão). Não é preciso esperar a pessoa fechar o navegador.
 - **Robustez:** o identificador é guardado de forma redundante (localStorage + cookie de longa duração), então limpar o histórico normalmente não consome uma vaga nova.
 
 ### Módulos liberados por plano

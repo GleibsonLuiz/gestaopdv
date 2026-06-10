@@ -3,7 +3,29 @@
     "allow": [
       "Bash(npx vite *)",
       "Bash(node -e \"import\\('./src/server.js'\\).then\\(\\(\\)=>{setTimeout\\(\\(\\)=>process.exit\\(0\\),1500\\)}\\).catch\\(e=>{console.error\\(e\\);process.exit\\(1\\)}\\)\")",
-      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(64\\).toString\\('hex'\\)\\)\")"
+      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(64\\).toString\\('hex'\\)\\)\")",
+      "Bash(git status *)",
+      "Bash(git log *)",
+      "Bash(git diff *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push origin main)",
+      "Bash(npm run *)",
+      "Bash(npx prisma *)",
+      "Bash(npx esbuild *)",
+      "Bash(npx tsc *)",
+      "Bash(node *)",
+      "PowerShell(git status *)",
+      "PowerShell(git log *)",
+      "PowerShell(git diff *)",
+      "PowerShell(git add *)",
+      "PowerShell(git commit *)",
+      "PowerShell(git push origin main)",
+      "PowerShell(npm run *)",
+      "PowerShell(npx prisma *)",
+      "PowerShell(npx esbuild *)",
+      "PowerShell(npx tsc *)",
+      "PowerShell(node *)"
     ]
   }
 }

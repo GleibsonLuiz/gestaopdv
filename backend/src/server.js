@@ -72,12 +72,16 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
 }));
 
-// CORS: libera o dominio do front (FRONTEND_URL), os deploys da Vercel
-// (*.vercel.app — cobre producao e previews) e localhost (dev). Requests
-// sem header Origin (curl, health checks, server-to-server) passam.
-// FRONTEND_URL="*" mantem o modo "libera geral" como escape de emergencia.
-// Antes refletia QUALQUER origem; agora so as confiaveis.
+// CORS: libera o dominio do front (FRONTEND_URL), os deploys do PROPRIO
+// projeto na Vercel e localhost (dev). Requests sem header Origin (curl,
+// health checks, server-to-server) passam. FRONTEND_URL="*" mantem o modo
+// "libera geral" como escape de emergencia.
+// Antes aceitava QUALQUER *.vercel.app — um app de terceiro hospedado na
+// Vercel podia chamar esta API do navegador de um usuario logado. Agora so
+// o dominio de producao do front e os previews do proprio projeto
+// (gestaopdv-<hash>-gleibsonluizs-projects.vercel.app / -git-<branch>-).
 const FRONTEND_URL = process.env.FRONTEND_URL;
+const PREVIEW_RE = /^gestaopdv(-[a-z0-9-]+)?-gleibsonluizs-projects\.vercel\.app$/;
 
 function origemPermitida(origin) {
   if (!origin) return true;               // sem Origin (curl, same-origin, SSR)
@@ -86,7 +90,8 @@ function origemPermitida(origin) {
   try {
     const host = new URL(origin).hostname;
     if (host === "localhost" || host === "127.0.0.1") return true;
-    if (host === "vercel.app" || host.endsWith(".vercel.app")) return true;
+    if (host === "gestaopdv.vercel.app") return true;
+    if (PREVIEW_RE.test(host)) return true;
   } catch { /* origin malformado — nega */ }
   return false;
 }

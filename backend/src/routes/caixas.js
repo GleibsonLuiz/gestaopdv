@@ -1,5 +1,8 @@
 import { Router } from "express";
 import { authRequired, requirePermissao } from "../middlewares/auth.js";
+import {
+  validarBody, abrirCaixaSchema, fecharCaixaSchema, movimentoCaixaSchema,
+} from "../middlewares/validarBody.js";
 import * as caixa from "../controllers/caixaController.js";
 
 const router = Router();
@@ -20,9 +23,9 @@ router.get("/", caixa.listar);
 router.get("/:id/extrato", caixa.extrato);
 
 // Operacoes.
-router.post("/abrir", caixa.abrir);
-router.post("/:id/fechar", caixa.fechar);
-router.post("/:id/sangria", caixa.sangria);
-router.post("/:id/suprimento", caixa.suprimento);
+router.post("/abrir", validarBody(abrirCaixaSchema), caixa.abrir);
+router.post("/:id/fechar", validarBody(fecharCaixaSchema), caixa.fechar);
+router.post("/:id/sangria", validarBody(movimentoCaixaSchema), caixa.sangria);
+router.post("/:id/suprimento", validarBody(movimentoCaixaSchema), caixa.suprimento);
 
 export default router;

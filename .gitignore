@@ -43,3 +43,7 @@ secrets.txt
 docs/Manual-GestaoProMax.pdf
 docs/_manual-build.html
 docs/_val.html
+
+# Playwright (E2E)
+playwright-report/
+test-results/

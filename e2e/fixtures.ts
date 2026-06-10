@@ -1,62 +1,58 @@
-import { test as base, expect } from "@playwright/test";
-import { exec } from "child_process";
-import { promisify } from "util";
+import type { APIRequestContext, Page } from "playwright/test";
+import { API_URL } from "./env";
 
-const execAsync = promisify(exec);
+// ============ HELPERS DOS TESTES E2E ============
+// Credenciais vem do seed (backend/prisma/seed.js), rodado no global-setup.
 
-// ============ FIXTURES E2E ============
-// Setup/teardown para testes isolados: cada teste começa com banco zerado
-// (ou reutiliza se reusable: true). DATABASE_URL aponta para demo_e2e local
-// ou via Neon TEST_DATABASE_URL em CI.
+export const ADMIN = { email: "admin@gestaopro.local", senha: "admin123" };
 
-type TestContext = {
-  dbUrl: string;
-};
+// Device estavel para chamadas de API: evita acumular um Dispositivo novo a
+// cada execucao da suite (a empresa do seed nao tem limite, mas manter 1
+// registro fixo deixa o banco de teste legivel).
+const DEVICE_HEADERS = { "X-Device-Id": "e2e-runner", "X-Device-Name": "Suite E2E" };
 
-export const test = base.extend<TestContext>({
-  dbUrl: async ({}, use) => {
-    const dbUrl = process.env.TEST_DATABASE_URL ||
-      "postgresql://test:test@localhost:5432/demo_e2e";
-
-    // Setup: reset database (drop + create + migrate + seed)
-    console.log(`Preparando banco para testes: ${dbUrl}`);
-    try {
-      // Drop e create schema (simples + rápido)
-      await execAsync(`
-        npx prisma migrate reset --force --schema backend/prisma/schema.prisma
-      `, { env: { ...process.env, DATABASE_URL: dbUrl } });
-      console.log("✓ Banco resetado e seed aplicado");
-    } catch (err) {
-      console.error("❌ Erro ao resetar banco:", err);
-      throw err;
-    }
-
-    await use(dbUrl);
-
-    // Teardown: deixar limpo (opcional — pode manter para inspeção)
-    // await execAsync(`dropdb ${dbUrl}`, { shell: '/bin/bash' });
-  },
-});
-
-export { expect };
-
-// ============ USUARIOS PADRAO DO SEED ============
-export const USUARIOS_TESTE = {
-  admin: { email: "admin@gestaopro.local", senha: "admin123" },
-  vendedor: { email: "julia.costa@gestaopro.local", senha: "func123" },
-};
-
-// ============ HELPERS ============
-export async function login(
-  page: typeof test,
-  usuario = USUARIOS_TESTE.admin,
-) {
-  await page.goto("/");
-  await page.waitForLoadState("load");
-  // Tela de login deve estar visível
-  await page.fill('input[type="email"]', usuario.email);
-  await page.fill('input[type="password"]', usuario.senha);
-  await page.click('button:has-text("Entrar")');
-  // Aguarda redirecionamento ou sucesso do login (presença de elementos pós-login)
-  await page.waitForURL(/^\/$/, { timeout: 10000 }).catch(() => {});
+function authHeaders(token: string) {
+  return { Authorization: `Bearer ${token}`, ...DEVICE_HEADERS };
 }
+
+export async function apiLogin(request: APIRequestContext, cred = ADMIN): Promise<string> {
+  const r = await request.post(`${API_URL}/auth/login`, {
+    data: { email: cred.email, senha: cred.senha },
+    headers: DEVICE_HEADERS,
+  });
+  const body = await r.json().catch(() => ({}));
+  if (!body.token) {
+    throw new Error(`login API falhou (${r.status()}): ${JSON.stringify(body).slice(0, 200)}`);
+  }
+  return body.token as string;
+}
+
+// Abre o caixa se nao houver um aberto. 400 = "ja existe caixa aberto" — serve.
+export async function garantirCaixaAberto(request: APIRequestContext, token: string) {
+  const r = await request.post(`${API_URL}/caixas/abrir`, {
+    headers: authHeaders(token),
+    data: { saldoInicial: 100 },
+  });
+  if (![200, 201, 400].includes(r.status())) {
+    const body = await r.text();
+    throw new Error(`abrir caixa: status ${r.status()} — ${body.slice(0, 200)}`);
+  }
+}
+
+// Lida com os dois shapes de listagem usados no backend (array puro ou
+// paginado em items/dados) — mesmo normalizador do gerar-vendas-demo.mjs.
+export async function contarVendas(request: APIRequestContext, token: string): Promise<number> {
+  const r = await request.get(`${API_URL}/vendas`, { headers: authHeaders(token) });
+  const body = await r.json().catch(() => []);
+  const lista = Array.isArray(body) ? body : body.items || body.dados || body.vendas || [];
+  return lista.length;
+}
+
+export async function loginUI(page: Page, cred = ADMIN) {
+  await page.goto("/");
+  await page.fill("#email", cred.email);
+  await page.fill("#password", cred.senha);
+  await page.click('button[type="submit"]');
+}
+
+export { API_URL, authHeaders };

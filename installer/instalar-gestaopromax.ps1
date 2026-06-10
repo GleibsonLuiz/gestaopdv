@@ -103,7 +103,10 @@ if ($chrome) {
   $desktop = [Environment]::GetFolderPath("Desktop")
   $lnk = Join-Path $desktop "PDV (impressao direta).lnk"
   $userData = "$env:LocalAppData\ChromePDV"
-  $args = "--user-data-dir=`"$userData`" --app=`"$AppUrl`""
+  # --lang/--accept-lang=pt-BR: o perfil dedicado (ChromePDV) nasce zerado e
+  # cairia no padrao en-US, fazendo o seletor de data nativo (<input type=date>)
+  # exibir MM/DD/AAAA. Forcamos portugues para mostrar DD/MM/AAAA como no Brasil.
+  $args = "--user-data-dir=`"$userData`" --lang=pt-BR --accept-lang=pt-BR,pt --app=`"$AppUrl`""
   $ws = New-Object -ComObject WScript.Shell
   $sc = $ws.CreateShortcut($lnk)
   $sc.TargetPath = $chrome

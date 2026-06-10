@@ -10,6 +10,7 @@
 // operacao e cross-tenant. Por isso Dispositivo NAO entra em MODELOS_COM_TENANT.
 
 import { prismaRaw } from "./prisma.js";
+import { limiteDispositivosEfetivo } from "./planoLimites.js";
 
 // Limites defensivos para nao gravar lixo vindo do header (que e controlado
 // pelo cliente). O fingerprint legitimo e um UUID (~36 chars); aceitamos uma
@@ -79,32 +80,33 @@ function publico(d) {
 //   - device novo OU revogado    -> conta ativos; se < max, registra/reativa e
 //                                   libera; senao bloqueia com a lista atual.
 export async function validarLoginDispositivo({ tenantId, userId, fingerprint, nome, userAgent, ip }) {
-  if (!fingerprint) return { liberado: true, dispositivo: null };
+  if (!fingerprint) return { liberado: true, dispositivo: null, novo: false };
 
+  // Limite EFETIVO: override da empresa (maxDispositivos) ou default do plano.
   const empresa = await prismaRaw.empresa.findUnique({
     where: { id: tenantId },
-    select: { maxDispositivos: true },
+    select: { plano: true, maxDispositivos: true },
   });
-  const max = empresa?.maxDispositivos ?? null;
+  const max = limiteDispositivosEfetivo(empresa);
 
   const existente = await prismaRaw.dispositivo.findUnique({
     where: { tenantId_fingerprint: { tenantId, fingerprint } },
   });
 
-  // Sem limite definido: apenas mantemos o inventario atualizado (registra o
+  // Sem limite (ilimitado): apenas mantemos o inventario atualizado (registra o
   // device, reativa se preciso) e liberamos.
   if (max == null) {
-    const dispositivo = await registrarOuAtualizar({ existente, tenantId, userId, fingerprint, nome, userAgent, ip });
-    return { liberado: true, dispositivo: publico(dispositivo) };
+    const { dispositivo, novo } = await registrarOuAtualizar({ existente, tenantId, userId, fingerprint, nome, userAgent, ip });
+    return { liberado: true, dispositivo: publico(dispositivo), novo };
   }
 
-  // Device ja conhecido e ativo: so um "touch".
+  // Device ja conhecido e ativo: so um "touch" (nao e novo acesso).
   if (existente && existente.ativo) {
     const dispositivo = await prismaRaw.dispositivo.update({
       where: { id: existente.id },
       data: { ultimoAcessoEm: new Date(), ultimoIp: ip, userId, nome: nome || existente.nome },
     });
-    return { liberado: true, dispositivo: publico(dispositivo) };
+    return { liberado: true, dispositivo: publico(dispositivo), novo: false };
   }
 
   // Device novo ou revogado: precisa de vaga.
@@ -117,15 +119,17 @@ export async function validarLoginDispositivo({ tenantId, userId, fingerprint, n
     return { liberado: false, max, dispositivos: dispositivos.map(publico) };
   }
 
-  const dispositivo = await registrarOuAtualizar({ existente, tenantId, userId, fingerprint, nome, userAgent, ip });
-  return { liberado: true, dispositivo: publico(dispositivo) };
+  const { dispositivo, novo } = await registrarOuAtualizar({ existente, tenantId, userId, fingerprint, nome, userAgent, ip });
+  return { liberado: true, dispositivo: publico(dispositivo), novo };
 }
 
 // Cria o device (ou reativa/atualiza um existente) marcando-o como ativo.
+// Retorna { dispositivo, novo } — `novo` = true so quando uma maquina inedita
+// (fingerprint nunca visto) e CRIADA, para disparar o alerta de novo acesso.
 async function registrarOuAtualizar({ existente, tenantId, userId, fingerprint, nome, userAgent, ip }) {
   const agora = new Date();
   if (existente) {
-    return prismaRaw.dispositivo.update({
+    const dispositivo = await prismaRaw.dispositivo.update({
       where: { id: existente.id },
       data: {
         ativo: true,
@@ -138,14 +142,16 @@ async function registrarOuAtualizar({ existente, tenantId, userId, fingerprint, 
         userAgent: userAgent || existente.userAgent,
       },
     });
+    return { dispositivo, novo: false };
   }
-  return prismaRaw.dispositivo.create({
+  const dispositivo = await prismaRaw.dispositivo.create({
     data: {
       tenantId, userId, fingerprint, nome, userAgent,
       ultimoIp: ip, ativo: true,
       primeiroAcessoEm: agora, ultimoAcessoEm: agora,
     },
   });
+  return { dispositivo, novo: true };
 }
 
 // Checagem REVOGADO somente-leitura, usada no middleware authRequired (roda em
@@ -197,7 +203,7 @@ export async function listarDispositivos(tenantId) {
   return linhas.map(d => ({ ...publico(d), revogadoEm: d.revogadoEm, revogadoPor: d.revogadoPor, user: d.user }));
 }
 
-// Revoga (libera a vaga) um dispositivo. `por` = "ADMIN" | "CLIENTE".
+// Revoga (libera a vaga) um dispositivo. `por` = "ADMIN" | "CLIENTE" | "SISTEMA".
 // Retorna o device revogado ou null se nao existir naquele tenant.
 export async function revogarDispositivo({ tenantId, dispositivoId, por }) {
   const d = await prismaRaw.dispositivo.findFirst({
@@ -209,4 +215,29 @@ export async function revogarDispositivo({ tenantId, dispositivoId, por }) {
     where: { id: d.id },
     data: { ativo: false, revogadoPor: por || "ADMIN", revogadoEm: new Date() },
   });
+}
+
+// Renomeia um dispositivo (apelido amigavel: "PC do balcao"). Escopo por tenant.
+// Retorna o device atualizado ou null se nao pertence ao tenant.
+export async function renomearDispositivo({ tenantId, dispositivoId, nome }) {
+  const limpo = String(nome || "").trim().slice(0, 80);
+  if (!limpo) return null;
+  const d = await prismaRaw.dispositivo.findFirst({
+    where: { id: dispositivoId, tenantId },
+    select: { id: true },
+  });
+  if (!d) return null;
+  return prismaRaw.dispositivo.update({ where: { id: d.id }, data: { nome: limpo } });
+}
+
+// Higiene (cron diario): revoga dispositivos ATIVOS sem acesso ha mais de
+// `dias` dias, liberando a vaga automaticamente (cliente trocou de maquina e
+// nunca derrubou a antiga). Cross-tenant. Retorna { revogados }.
+export async function expirarDispositivosOciosos(dias = 60) {
+  const corte = new Date(Date.now() - dias * 86400000);
+  const r = await prismaRaw.dispositivo.updateMany({
+    where: { ativo: true, ultimoAcessoEm: { lt: corte } },
+    data: { ativo: false, revogadoPor: "SISTEMA", revogadoEm: new Date() },
+  });
+  return { revogados: r.count };
 }

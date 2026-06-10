@@ -361,6 +361,13 @@ export const api = {
   obterEmpresa: () => request("/empresa"),
   atualizarEmpresa: (dados: unknown) => request("/empresa", { method: "PUT", body: dados }),
 
+  // Licenca por maquina — autogestao do lojista (ADMIN/GERENTE do tenant).
+  empresaListarDispositivos: () => request("/empresa/dispositivos"),
+  empresaRevogarDispositivo: (id: string) =>
+    request(`/empresa/dispositivos/${id}/revogar`, { method: "POST" }),
+  empresaRenomearDispositivo: (id: string, nome: string) =>
+    request(`/empresa/dispositivos/${id}`, { method: "PATCH", body: { nome } }),
+
   // ============ ASSINATURA (billing do SaaS) ============
   // Estado da assinatura da empresa logada, catalogo de planos e contratacao.
   billingPlanos: () => request("/billing/planos"),

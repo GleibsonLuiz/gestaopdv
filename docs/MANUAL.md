@@ -1302,13 +1302,25 @@ O sistema é **PWA** — pode ser instalado como app no celular pelo banner do n
 
 ### Limite de máquinas (licença por dispositivo)
 
-Além dos limites de quantidade, cada empresa pode ter um **número máximo de máquinas conectadas simultaneamente** (computadores/navegadores). Serve para que um cliente que contratou, por exemplo, 1 máquina não use o sistema em vários computadores ao mesmo tempo.
+Cada empresa tem um **número máximo de máquinas conectadas simultaneamente** (computadores/navegadores). Serve para que um cliente que contratou, por exemplo, 1 máquina não use o sistema em vários computadores ao mesmo tempo.
 
-- **Onde se define:** Admin Master → empresa → 🎫 **Alterar plano** → **Limite de máquinas (dispositivos)**. Deixe **vazio** para *ilimitado*.
+**Limite por plano (padrão):** quando nada é definido manualmente, o limite vem do plano:
+
+| Plano | Máquinas |
+|-------|----------|
+| **FREE** | 1 |
+| **TRIAL** | 2 |
+| **STARTER** | 2 |
+| **PRO** | 5 |
+| **Enterprise** | ilimitado |
+
+- **Override por empresa:** Admin Master → empresa → 🎫 **Alterar plano** → **Limite de máquinas**. Deixe **vazio** para *herdar o limite do plano*, **0** para *ilimitado*, ou um número fixo (ex.: 3).
 - **Como funciona:** a cada login o sistema identifica o navegador. Se for uma máquina já conhecida, libera; se for nova e o limite já estiver cheio, o login é **recusado (403)** e o cliente vê a tela de bloqueio com as máquinas ativas.
-- **Cliente se vira sozinho:** na tela de bloqueio, o próprio cliente pode **desconectar** uma máquina antiga (reconfirmando e-mail/senha) e entrar na nova — sem precisar do suporte.
+- **Cliente se vira sozinho (autogestão):** na tela de bloqueio o cliente pode **desconectar** uma máquina antiga (reconfirmando e-mail/senha) e entrar na nova. Além disso, em **Empresa → 🖥️ Dispositivos**, o ADMIN/GERENTE do cliente vê todas as máquinas conectadas, **renomeia** (apelido: "PC do balcão") e **desconecta** as que quiser — sem precisar do suporte. O aparelho em uso aparece marcado como **ESTE**.
+- **Alerta de novo acesso:** quando uma **máquina nova** entra na conta, é criada uma notificação no sino (🔔) avisando o aparelho, data/hora e IP — para o cliente perceber acesso indevido.
 - **Suporte libera vagas:** em Admin Master → empresa → seção **🖥️ Dispositivos**, o super-admin vê todas as máquinas (ativas e revogadas) e pode **Desconectar** qualquer uma.
-- **A desconexão é imediata:** uma máquina desconectada (pelo cliente ou pelo suporte) cai para o login assim que faz qualquer ação; e mesmo que fique parada numa tela, é deslogada sozinha em até **30 segundos** (verificação periódica de sessão). Não é preciso esperar a pessoa fechar o navegador.
+- **A desconexão é imediata:** uma máquina desconectada cai para o login assim que faz qualquer ação; e mesmo parada, é deslogada sozinha em até **30 segundos**. Não é preciso esperar a pessoa fechar o navegador.
+- **Limpeza automática:** máquinas sem acesso há mais de **60 dias** são desconectadas automaticamente (liberam a vaga sozinhas) — útil quando o cliente trocou de computador e nunca derrubou o antigo.
 - **Robustez:** o identificador é guardado de forma redundante (localStorage + cookie de longa duração), então limpar o histórico normalmente não consome uma vaga nova.
 
 ### Módulos liberados por plano

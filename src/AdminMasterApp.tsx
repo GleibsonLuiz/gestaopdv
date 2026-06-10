@@ -216,6 +216,13 @@ const LIMITES_PLANO_UI = {
   ENTERPRISE: { clientes: null, produtos: null,  usuarios: null },
 };
 
+// Default de dispositivos por plano (espelha backend lib/planoLimites.js).
+// So para exibir no campo "Limite de máquinas" quando o admin deixa vazio
+// (= herda do plano). "ilimitado" quando null.
+const DISPOSITIVOS_POR_PLANO: Record<string, number | "ilimitado"> = {
+  FREE: 1, TRIAL: 2, STARTER: 2, PRO: 5, ENTERPRISE: "ilimitado",
+};
+
 // Avalia se uma empresa esta a >=90% de algum recurso. Retorna { recurso, pct }
 // do recurso mais critico, ou null se nenhum.
 function recursoMaisCritico(empresa: any) {
@@ -1807,12 +1814,19 @@ function ModalPlano({ empresa, onCancelar, onSalva }: any) {
         </div>
 
         <label style={{ ...labelStyle, marginTop: 12 }}>🖥️ Limite de máquinas (dispositivos)</label>
-        <input type="number" min={1} max={1000} value={maxDispositivos}
+        <input type="number" min={0} max={1000} value={maxDispositivos}
           onChange={e => setMaxDispositivos(e.target.value)} style={inputStyle}
-          placeholder="Vazio = ilimitado" title="Numero maximo de dispositivos simultaneos" />
+          placeholder={`Vazio = herda do plano (${DISPOSITIVOS_POR_PLANO[plano] ?? "ilimitado"})`}
+          title="Numero maximo de dispositivos simultaneos" />
+        <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+          <button type="button" onClick={() => setMaxDispositivos("")} style={btnMini}>Herdar do plano</button>
+          <button type="button" onClick={() => setMaxDispositivos("0")} style={btnMini}>Ilimitado</button>
+        </div>
         <div style={{ color: C.muted, fontSize: 10, marginTop: 4 }}>
           Quantos navegadores/computadores podem ter sessão ativa ao mesmo tempo.
-          Vazio = ilimitado. O cliente pode derrubar uma máquina antiga na tela de bloqueio.
+          <strong> Vazio</strong> = herda do plano ({DISPOSITIVOS_POR_PLANO[plano] ?? "ilimitado"}) ·
+          <strong> 0</strong> = ilimitado · <strong>N</strong> = exatamente N.
+          O cliente pode derrubar uma máquina antiga na tela de bloqueio.
         </div>
 
         {/* ENTITLEMENTS: modulos liberados (modelo hibrido) */}

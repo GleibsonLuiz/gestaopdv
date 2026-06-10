@@ -30,6 +30,10 @@
     {
       "path": "/cron/contabilidade-fechamento",
       "schedule": "0 8 1 * *"
+    },
+    {
+      "path": "/cron/dispositivos-ociosos",
+      "schedule": "30 5 * * *"
     }
   ]
 }

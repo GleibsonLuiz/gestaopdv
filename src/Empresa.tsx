@@ -296,6 +296,9 @@ export default function Empresa({ user }: EmpresaProps) {
         <BlocoCardapio podeEditar={user.role === "ADMIN" || user.role === "GERENTE"} />
       )}
 
+      {/* ============ BLOCO 2d: DISPOSITIVOS / MAQUINAS CONECTADAS ============ */}
+      <BlocoDispositivos podeEditar={user.role === "ADMIN" || user.role === "GERENTE"} />
+
       {/* ETAPA#6: segmento (read-only) + preferencias locais — lado a lado */}
       <div
         className="grid gap-3 mb-3 items-stretch"
@@ -837,6 +840,136 @@ function BlocoCardapio({ podeEditar }: { podeEditar: boolean }) {
       ) : (
         <div className="text-gp-muted text-xs mt-2 px-3 py-2 bg-gp-bg rounded-lg">
           {ativo ? "Gerando link..." : "Cardápio desativado. Ative para gerar o link público de pedidos."}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ BLOCO DISPOSITIVOS / MAQUINAS CONECTADAS ============
+// Autogestao da licenca por maquina pelo proprio lojista (ADMIN/GERENTE):
+// ve as maquinas conectadas, renomeia (apelido) e desconecta as que quiser.
+// O dispositivo da sessao atual vem marcado com `atual` para avisar antes de
+// a pessoa se auto-desconectar.
+interface DispositivoItem {
+  id: string;
+  nome?: string | null;
+  ultimoAcessoEm?: string | null;
+  ultimoIp?: string | null;
+  ativo: boolean;
+  atual?: boolean;
+}
+interface DispositivosResp {
+  limite: number | null;        // null = ilimitado
+  ativos: number;
+  dispositivos: DispositivoItem[];
+}
+
+function BlocoDispositivos({ podeEditar }: { podeEditar: boolean }) {
+  const [dados, setDados] = useState<DispositivosResp | null>(null);
+  const [carregando, setCarregando] = useState(true);
+  const [acaoId, setAcaoId] = useState<string | null>(null);
+
+  async function carregar() {
+    try {
+      const r = await api.empresaListarDispositivos() as DispositivosResp;
+      setDados(r);
+    } catch { /* sem permissao — bloco fica discreto */ }
+    finally { setCarregando(false); }
+  }
+  useEffect(() => { carregar(); }, []);
+
+  async function revogar(d: DispositivoItem) {
+    const msg = d.atual
+      ? "Este é o dispositivo que você está usando agora. Ao desconectar, você será deslogado. Continuar?"
+      : "Desconectar esta máquina? Ela cairá para o login no próximo acesso.";
+    if (!confirm(msg)) return;
+    setAcaoId(d.id);
+    try {
+      await api.empresaRevogarDispositivo(d.id);
+      // Se derrubou a propria sessao, o heartbeat/proxima request desloga sozinho.
+      await carregar();
+    } catch (e) { alert((e as Error).message); }
+    finally { setAcaoId(null); }
+  }
+
+  async function renomear(d: DispositivoItem) {
+    const nome = prompt("Apelido da máquina (ex: PC do balcão, Notebook gerente):", d.nome || "");
+    if (nome == null || !nome.trim()) return;
+    setAcaoId(d.id);
+    try {
+      await api.empresaRenomearDispositivo(d.id, nome.trim());
+      await carregar();
+    } catch (e) { alert((e as Error).message); }
+    finally { setAcaoId(null); }
+  }
+
+  if (carregando || !dados) return null;
+
+  const ativos = dados.dispositivos.filter(d => d.ativo);
+  const limiteTxt = dados.limite == null ? "ilimitado" : `${dados.ativos} de ${dados.limite}`;
+  const noLimite = dados.limite != null && dados.ativos >= dados.limite;
+
+  return (
+    <div className="bg-gp-card border border-gp-border rounded-xl p-4 mb-3">
+      <div className="flex justify-between items-start gap-3 flex-wrap mb-3">
+        <div>
+          <div className="text-gp-muted text-[11px] font-bold uppercase tracking-[0.5px]">Máquinas conectadas</div>
+          <div className="text-gp-white text-sm font-bold mt-1">🖥️ Dispositivos com acesso</div>
+          <div className="text-gp-muted text-xs mt-[2px]">
+            Computadores/navegadores com sessão ativa nesta conta. Desconecte os que não usa mais para liberar vaga.
+          </div>
+        </div>
+        <span
+          className="rounded-lg px-3 py-1.5 text-xs font-bold"
+          style={{
+            background: (noLimite ? C.red : C.green) + "22",
+            color: noLimite ? C.red : C.green,
+            border: `1px solid ${(noLimite ? C.red : C.green)}55`,
+          }}
+        >
+          {limiteTxt}{noLimite ? " · no limite" : ""}
+        </span>
+      </div>
+
+      {ativos.length === 0 ? (
+        <div className="text-gp-muted text-xs">Nenhuma máquina ativa registrada.</div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {ativos.map((d) => (
+            <div key={d.id}
+              className="flex items-center gap-3 rounded-lg border border-gp-border p-2.5"
+              style={{ background: C.surface }}>
+              <span className="text-base">🖥️</span>
+              <div className="min-w-0 flex-1">
+                <div className="text-gp-white text-[13px] font-semibold truncate flex items-center gap-2">
+                  {d.nome || "Dispositivo"}
+                  {d.atual && (
+                    <span className="text-[9px] font-bold rounded px-1.5 py-[1px]"
+                      style={{ background: C.accent + "22", color: C.accent }}>ESTE</span>
+                  )}
+                </div>
+                <div className="text-gp-muted text-[11px] truncate">
+                  {d.ultimoAcessoEm ? `Último acesso ${fmtData(d.ultimoAcessoEm)}` : "—"}
+                  {d.ultimoIp ? ` · ${d.ultimoIp}` : ""}
+                </div>
+              </div>
+              {podeEditar && (
+                <div className="flex gap-1.5 shrink-0">
+                  <button type="button" onClick={() => renomear(d)} disabled={acaoId !== null}
+                    className="rounded-md px-2.5 py-1.5 text-[11px] font-bold cursor-pointer"
+                    style={{ background: C.surface, color: C.muted, border: `1px solid ${C.border}` }}>
+                    Renomear
+                  </button>
+                  <button type="button" onClick={() => revogar(d)} disabled={acaoId !== null}
+                    className="rounded-md px-2.5 py-1.5 text-[11px] font-bold cursor-pointer"
+                    style={{ background: C.red + "22", color: C.red, border: `1px solid ${C.red}55` }}>
+                    {acaoId === d.id ? "..." : "Desconectar"}
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>

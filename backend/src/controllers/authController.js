@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import prisma from "../lib/prisma.js";
+import prisma, { prismaRaw } from "../lib/prisma.js";
 import { registrarEvento } from "../middlewares/auditoria.js";
 import { registrarFalhaLogin, limparThrottleLogin } from "../middlewares/rateLimitLogin.js";
 import { modulosDaEmpresa } from "../lib/modulosPlano.js";
@@ -133,6 +133,26 @@ export async function login(req, res, next) {
       });
     }
     const dispositivoId = veredito.dispositivo?.id || null;
+
+    // ALERTA DE NOVO DISPOSITIVO: quando uma maquina inedita (fingerprint nunca
+    // visto) entra, avisamos o tenant pelo sino de notificacoes. Best-effort —
+    // nunca bloqueia o login. So para device REALMENTE novo (nao reativacao nem
+    // device ja conhecido), entao o volume e baixo (evento de seguranca).
+    if (veredito.novo && dispositivoId) {
+      const nomeDisp = veredito.dispositivo?.nome || infoDispositivo.nome || "Novo dispositivo";
+      const quando = new Date().toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+      prismaRaw.notificacao.create({
+        data: {
+          titulo: "🔐 Novo dispositivo conectado",
+          mensagem: `Um novo acesso foi registrado nesta conta: ${nomeDisp}, em ${quando}`
+            + `${infoDispositivo.ip ? ` (IP ${infoDispositivo.ip})` : ""}.`
+            + " Se nao reconhece, troque a senha e desconecte o dispositivo em Empresa > Dispositivos.",
+          tipo: "AVISO",
+          criadoPorId: user.id,
+          destinoTenantId: user.tenantId,
+        },
+      }).catch(() => { /* alerta e best-effort; nao trava o login */ });
+    }
 
     // JWT inclui `tid` (tenant id) que sera usado pelo middleware da
     // ETAPA 3 para injetar req.tenantId em toda request. `sa` (super

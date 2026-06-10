@@ -15,38 +15,64 @@ import { prismaRaw } from "./prisma.js";
 // com body { erro, recurso, atual, limite, plano } para o frontend
 // mostrar mensagem clara de upgrade.
 
+// `dispositivos` = nro de maquinas (navegadores/computadores) com sessao ativa
+// simultanea. null = ilimitado. E o DEFAULT do plano; a empresa pode sobrescrever
+// via Empresa.maxDispositivos (ver limiteDispositivosEfetivo).
 export const LIMITES_PLANO = {
   TRIAL: {
     clientes: 50,
     produtos: 100,
     usuarios: 3,
     vendasMes: 200,
+    dispositivos: 2,
   },
   FREE: {
     clientes: 30,
     produtos: 50,
     usuarios: 1,
     vendasMes: 50,
+    dispositivos: 1,
   },
   STARTER: {
     clientes: 500,
     produtos: 1000,
     usuarios: 5,
     vendasMes: 2000,
+    dispositivos: 2,
   },
   PRO: {
     clientes: 5000,
     produtos: 10000,
     usuarios: 20,
     vendasMes: null,
+    dispositivos: 5,
   },
   ENTERPRISE: {
     clientes: null,
     produtos: null,
     usuarios: null,
     vendasMes: null,
+    dispositivos: null,
   },
 };
+
+// CONTROLE DE LICENCA POR MAQUINA — limite efetivo de dispositivos da empresa.
+// Contrato do campo Empresa.maxDispositivos:
+//   null  -> HERDA o default do plano (LIMITES_PLANO[plano].dispositivos)
+//   0     -> ILIMITADO explicito (override do super-admin)
+//   N>0   -> exatamente N (override explicito)
+// Retorna null quando ilimitado (sem enforcement). Aceita o objeto empresa
+// (com plano + maxDispositivos) para nao refazer query.
+export function limiteDispositivosEfetivo(empresa) {
+  if (!empresa) return null;
+  const override = empresa.maxDispositivos;
+  if (override === 0) return null;            // ilimitado explicito
+  if (typeof override === "number" && override > 0) return override;
+  // null/undefined -> herda do plano
+  const plano = empresa.plano || "FREE";
+  const lim = (LIMITES_PLANO[plano] || LIMITES_PLANO.FREE).dispositivos;
+  return lim ?? null;
+}
 
 const RECURSOS = ["clientes", "produtos", "usuarios", "vendasMes"];
 
@@ -68,6 +94,8 @@ async function contarRecurso(tenantId, recurso) {
       return prismaRaw.venda.count({
         where: { tenantId, status: "CONCLUIDA", createdAt: { gte: inicioMes() } },
       });
+    case "dispositivos":
+      return prismaRaw.dispositivo.count({ where: { tenantId, ativo: true } });
     default:
       return 0;
   }
@@ -126,12 +154,15 @@ export async function aplicarLimite(req, res, recurso) {
 export async function obterUsoELimites(tenantId) {
   const empresa = await prismaRaw.empresa.findUnique({
     where: { id: tenantId },
-    select: { plano: true, expiraEm: true },
+    select: { plano: true, expiraEm: true, maxDispositivos: true },
   });
   const plano = empresa?.plano || "FREE";
-  const limites = LIMITES_PLANO[plano] || LIMITES_PLANO.FREE;
+  // Copia para nao mutar a constante LIMITES_PLANO: dispositivos usa o limite
+  // EFETIVO (considera o override Empresa.maxDispositivos), nao so o do plano.
+  const limites = { ...(LIMITES_PLANO[plano] || LIMITES_PLANO.FREE) };
+  limites.dispositivos = limiteDispositivosEfetivo(empresa);
   const uso = {};
-  for (const r of RECURSOS) {
+  for (const r of [...RECURSOS, "dispositivos"]) {
     uso[r] = await contarRecurso(tenantId, r);
   }
   return {
@@ -148,5 +179,6 @@ function rotuloRecurso(r) {
     produtos: "produtos",
     usuarios: "usuários",
     vendasMes: "vendas no mês",
+    dispositivos: "dispositivos",
   }[r] || r;
 }

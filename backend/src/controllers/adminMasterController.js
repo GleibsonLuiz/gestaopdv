@@ -658,8 +658,10 @@ export async function alterarPlano(req, res, next) {
         erro: `Plano invalido. Use: ${[...PLANOS].join(", ")}`,
       });
     }
-    // Limite de dispositivos (licenca por maquina). null/"" = ilimitado.
-    // Inteiro >= 1 quando definido — 0 travaria todos os acessos.
+    // Limite de dispositivos (licenca por maquina). Contrato:
+    //   null/"" -> herda o default do plano
+    //   0       -> ilimitado explicito
+    //   N (1..1000) -> exatamente N
     let maxDisp = null;
     let definiuMaxDisp = false;
     if (maxDispositivos !== undefined) {
@@ -668,9 +670,9 @@ export async function alterarPlano(req, res, next) {
         maxDisp = null;
       } else {
         const n = Number(maxDispositivos);
-        if (!Number.isInteger(n) || n < 1 || n > 1000) {
+        if (!Number.isInteger(n) || n < 0 || n > 1000) {
           return res.status(400).json({
-            erro: "maxDispositivos deve ser um inteiro entre 1 e 1000 (ou vazio para ilimitado)",
+            erro: "maxDispositivos deve ser um inteiro entre 0 e 1000 (0 = ilimitado, vazio = herda do plano)",
           });
         }
         maxDisp = n;

@@ -4,6 +4,7 @@ import { cronReconciliarAssinaturas } from "../controllers/billingController.js"
 import { cronReconsultarPendentes, cronVerificarCertificados } from "../controllers/fiscalCronController.js";
 import { cronDistribuirDFe } from "../controllers/dfeController.js";
 import { cronFechamentoMensal } from "../controllers/contabilidadeCronController.js";
+import { cronExpirarDispositivos } from "../controllers/dispositivoCronController.js";
 
 // Rotas de cron — propositalmente SEM authRequired/requirePermissao.
 // Cada handler valida internamente o header Authorization: Bearer ${CRON_SECRET}.
@@ -46,5 +47,10 @@ router.post("/fiscal-dfe", cronDistribuirDFe);
 // tenant e notifica que o pacote do contador esta pronto. Idempotente.
 router.get("/contabilidade-fechamento", cronFechamentoMensal);
 router.post("/contabilidade-fechamento", cronFechamentoMensal);
+
+// /cron/dispositivos-ociosos — diario: revoga maquinas ativas sem acesso ha
+// mais de N dias (default 60), liberando a vaga da licenca. Idempotente.
+router.get("/dispositivos-ociosos", cronExpirarDispositivos);
+router.post("/dispositivos-ociosos", cronExpirarDispositivos);
 
 export default router;

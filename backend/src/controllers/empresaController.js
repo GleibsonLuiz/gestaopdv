@@ -1,6 +1,8 @@
 import prisma from "../lib/prisma.js";
-import { obterUsoELimites } from "../lib/planoLimites.js";
+import { obterUsoELimites, limiteDispositivosEfetivo } from "../lib/planoLimites.js";
 import { modulosDaEmpresa } from "../lib/modulosPlano.js";
+import { listarDispositivos, revogarDispositivo, renomearDispositivo } from "../lib/dispositivos.js";
+import { registrarEvento } from "../middlewares/auditoria.js";
 
 // ============ EMPRESA (TENANT) DO USUARIO LOGADO ============
 //
@@ -116,6 +118,76 @@ export async function atualizar(req, res, next) {
     if (err.code === "P2025") {
       return res.status(404).json({ erro: "Empresa nao encontrada" });
     }
+    next(err);
+  }
+}
+
+// ============ AUTOGESTAO DE DISPOSITIVOS (LICENCA POR MAQUINA) ============
+//
+// O proprio lojista (ADMIN/GERENTE do tenant) gerencia as maquinas conectadas
+// — sem depender do super-admin. Escopo sempre no tenant logado (req.tenantId).
+// O dispositivo da sessao atual e marcado com `atual: true` (claim `did` do JWT)
+// para o front avisar antes de a pessoa se auto-desconectar.
+
+// GET /empresa/dispositivos
+export async function listarDispositivosEmpresa(req, res, next) {
+  try {
+    const empresa = await prisma.empresa.findUnique({
+      where: { id: req.tenantId },
+      select: { plano: true, maxDispositivos: true },
+    });
+    const dispositivos = await listarDispositivos(req.tenantId);
+    const atualId = req.user?.did || null;
+    res.json({
+      limite: limiteDispositivosEfetivo(empresa),         // null = ilimitado
+      ativos: dispositivos.filter(d => d.ativo).length,
+      dispositivoAtualId: atualId,
+      dispositivos: dispositivos.map(d => ({ ...d, atual: d.id === atualId })),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /empresa/dispositivos/:id/revogar — ADMIN/GERENTE derruba uma maquina.
+export async function revogarDispositivoEmpresa(req, res, next) {
+  try {
+    if (!["ADMIN", "GERENTE"].includes(req.user.role)) {
+      return res.status(403).json({ erro: "Apenas administradores ou gerentes" });
+    }
+    const revogado = await revogarDispositivo({
+      tenantId: req.tenantId, dispositivoId: req.params.id, por: "CLIENTE",
+    });
+    if (!revogado) return res.status(404).json({ erro: "Dispositivo nao encontrado" });
+    registrarEvento({
+      acao: "DISPOSITIVO_REVOGADO", modulo: "EMPRESA", sucesso: true,
+      usuarioId: req.user.sub, usuarioNome: req.user.nome,
+      tenantId: req.tenantId,
+      mensagem: `Lojista desconectou o dispositivo ${req.params.id}`,
+      req,
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// PATCH /empresa/dispositivos/:id — renomeia (apelido). ADMIN/GERENTE.
+export async function renomearDispositivoEmpresa(req, res, next) {
+  try {
+    if (!["ADMIN", "GERENTE"].includes(req.user.role)) {
+      return res.status(403).json({ erro: "Apenas administradores ou gerentes" });
+    }
+    const nome = req.body?.nome;
+    if (!nome || !String(nome).trim()) {
+      return res.status(400).json({ erro: "Nome e obrigatorio" });
+    }
+    const d = await renomearDispositivo({
+      tenantId: req.tenantId, dispositivoId: req.params.id, nome,
+    });
+    if (!d) return res.status(404).json({ erro: "Dispositivo nao encontrado" });
+    res.json({ ok: true, nome: d.nome });
+  } catch (err) {
     next(err);
   }
 }

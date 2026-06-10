@@ -167,7 +167,10 @@ export async function login(req, res, next) {
         did: dispositivoId,
       },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
+      // 24h (era 7d): um token vazado por XSS vale no maximo um dia. Quem usa
+      // o sistema nao percebe — o heartbeat de 30s renova via /auth/me antes
+      // de expirar (ver me() abaixo). Quem fica >24h sem abrir cai no login.
+      { expiresIn: process.env.JWT_EXPIRES_IN || "24h" }
     );
 
     registrarEvento({
@@ -227,9 +230,32 @@ export async function me(req, res, next) {
       });
     }
 
+    // RENOVACAO SILENCIOSA: o heartbeat do front bate aqui a cada 30s. Quando
+    // o token passa da METADE da vida, devolvemos um novo com claims frescos
+    // do banco (role pode ter mudado) — sessao "deslizante": quem usa nunca
+    // expira, quem abandona a aba por mais de 24h cai no login.
+    let tokenRenovado;
+    if (req.user.iat && req.user.exp) {
+      const agora = Math.floor(Date.now() / 1000);
+      const meiaVida = (req.user.exp - req.user.iat) / 2;
+      if (req.user.exp - agora < meiaVida) {
+        tokenRenovado = jwt.sign(
+          {
+            sub: user.id, role: user.role, nome: user.nome,
+            tid: user.tenantId,
+            sa: user.superAdmin === true,
+            did: req.user.did,
+          },
+          process.env.JWT_SECRET,
+          { expiresIn: process.env.JWT_EXPIRES_IN || "24h" }
+        );
+      }
+    }
+
     const { tenant, ...rest } = user;
     res.json({
       ...rest,
+      ...(tokenRenovado ? { tokenRenovado } : {}),
       empresa: tenant ? {
         id: tenant.id, nome: tenant.nome, cnpj: tenant.cnpj, segmento: tenant.segmento,
         modulos: modulosDaEmpresa(tenant),

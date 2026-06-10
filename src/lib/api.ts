@@ -345,7 +345,18 @@ function qsFrom(filtros: StringDict): string {
 export const api = {
   login: (email: string, senha: string) =>
     request("/auth/login", { method: "POST", body: { email, senha }, auth: false }),
-  me: () => request("/auth/me"),
+  me: async () => {
+    const r = await request<Record<string, unknown>>("/auth/me");
+    // Renovacao silenciosa de sessao: o token agora dura 24h e o backend
+    // devolve um novo em `tokenRenovado` quando o atual passa da metade da
+    // vida. O heartbeat de 30s (App.tsx) garante que isso acontece muito
+    // antes de expirar — ninguem e deslogado no meio do expediente.
+    if (r && typeof r.tokenRenovado === "string") {
+      localStorage.setItem(TOKEN_KEY, r.tokenRenovado);
+      delete r.tokenRenovado;
+    }
+    return r;
+  },
   // Licenca por maquina: auto-derrubada de um dispositivo a partir da tela de
   // bloqueio (login recusado por limite). Re-valida email+senha no backend.
   revogarDispositivoSelfService: (email: string, senha: string, dispositivoId: string) =>

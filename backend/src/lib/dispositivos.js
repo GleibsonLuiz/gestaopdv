@@ -148,9 +148,27 @@ async function registrarOuAtualizar({ existente, tenantId, userId, fingerprint, 
   });
 }
 
-// Verificacao leve no boot/refresh (/auth/me): o device do JWT (claim `did`)
-// ainda esta ativo? Se foi revogado pelo admin, devolvemos false para o
-// front deslogar. Tambem faz um "touch" do ultimoAcessoEm quando ativo.
+// Checagem REVOGADO somente-leitura, usada no middleware authRequired (roda em
+// TODA request autenticada). Sem write — apenas um SELECT por PK (barato), para
+// que o navegador derrubado caia no proximo clique, nao so no F5. O "touch" do
+// ultimoAcessoEm fica a cargo do /auth/me (heartbeat), evitando 1 write/request.
+//
+// Retorna true SOMENTE quando o device existe e esta inativo (revogado). Para
+// qualquer outro caso (sem `did`, device inexistente) retorna false — fail-open,
+// nao derruba ninguem por inconsistencia de dados.
+export async function dispositivoEstaRevogado(dispositivoId) {
+  if (!dispositivoId) return false;
+  const d = await prismaRaw.dispositivo.findUnique({
+    where: { id: dispositivoId },
+    select: { ativo: true },
+  });
+  if (!d) return false;
+  return d.ativo === false;
+}
+
+// Verificacao no boot/refresh e heartbeat (/auth/me): o device do JWT (claim
+// `did`) ainda esta ativo? Se foi revogado, devolvemos false para o front
+// deslogar. Tambem faz um "touch" do ultimoAcessoEm quando ativo.
 // Retorna true tambem quando nao ha `did` (tokens antigos) ou o device sumiu
 // do banco — fail-open para nao deslogar ninguem por inconsistencia de dados.
 export async function dispositivoSegueAtivo(dispositivoId, ip) {

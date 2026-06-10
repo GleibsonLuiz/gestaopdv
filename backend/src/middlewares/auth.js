@@ -1,8 +1,9 @@
 import jwt from "jsonwebtoken";
 import prisma, { tenantStorage } from "../lib/prisma.js";
 import { empresaTemModulo } from "../lib/modulosPlano.js";
+import { dispositivoEstaRevogado } from "../lib/dispositivos.js";
 
-export function authRequired(req, res, next) {
+export async function authRequired(req, res, next) {
   const header = req.headers.authorization;
   if (!header || !header.startsWith("Bearer ")) {
     return res.status(401).json({ erro: "Token nao fornecido" });
@@ -20,6 +21,21 @@ export function authRequired(req, res, next) {
     return res.status(401).json({ erro: "Token sem tenant. Faca login novamente." });
   }
   req.tenantId = decoded.tid;
+
+  // CONTROLE DE LICENCA: se o dispositivo desta sessao (claim `did`) foi
+  // revogado (admin liberou a vaga, ou o cliente derrubou esta maquina de
+  // outro lugar), encerramos a sessao com 401 em QUALQUER request — assim a
+  // maquina antiga cai no proximo clique, nao so no F5. Leitura por PK (barata)
+  // e fail-open: token sem `did` ou device inexistente nao derruba ninguem.
+  try {
+    if (decoded.did && await dispositivoEstaRevogado(decoded.did)) {
+      return res.status(401).json({
+        erro: "Este dispositivo foi desconectado. Faca login novamente.",
+        dispositivoRevogado: true,
+      });
+    }
+  } catch { /* erro de banco aqui nao deve travar a request — fail-open */ }
+
   // Encapsula o resto da request em um AsyncLocalStorage scope para que
   // o Prisma extension consiga ler o tenantId e filtrar as queries.
   tenantStorage.run({ tenantId: req.tenantId }, () => next());

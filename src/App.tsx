@@ -362,6 +362,19 @@ export default function App() {
     };
   }, []);
 
+  // CONTROLE DE LICENCA — heartbeat: enquanto logado, valida a sessao no backend
+  // a cada 30s. Se o dispositivo desta maquina foi revogado (admin liberou a
+  // vaga, ou o cliente derrubou esta maquina ao logar em outra), /auth/me
+  // responde 401 e o interceptor do api.ts limpa a sessao + dispara auth:logout.
+  // Cobre a aba PARADA/ociosa (que nao faz outras chamadas) — o middleware do
+  // backend ja derruba a aba ATIVA no proximo clique. Fire-and-forget: erro de
+  // rede nao desloga (so 401 o faz, dentro do request()).
+  useEffect(() => {
+    if (!user) return;
+    const id = setInterval(() => { api.me().catch(() => {}); }, 30_000);
+    return () => clearInterval(id);
+  }, [user]);
+
   function sair() {
     // Best-effort: avisa o backend para registrar o evento de logout no
     // log de auditoria; em seguida limpa sessao local independentemente.

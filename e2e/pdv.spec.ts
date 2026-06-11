@@ -39,6 +39,10 @@ test("venda completa: login → bipe 3 itens → F10 dinheiro → persistida", a
   await page.waitForTimeout(800);
   await page.keyboard.press("F10"); // confirma
 
+  // Recibo pos-venda monta (componente extraido no fatiamento — se o modal
+  // quebrar, a venda ainda grava; este assert pega regressao de UI).
+  await expect(page.getByText("Venda concluída").first()).toBeVisible({ timeout: 10_000 });
+
   // A venda existe no backend — fonte da verdade.
   await expect
     .poll(() => contarVendas(request, token), { timeout: 15_000 })

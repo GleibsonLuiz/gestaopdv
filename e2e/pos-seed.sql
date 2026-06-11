@@ -3,3 +3,11 @@
 -- de API; sem isso o limite do plano default (2 maquinas) bloqueia o login
 -- a partir da terceira execucao.
 UPDATE "empresas" SET "maxDispositivos" = 0;
+
+-- Repoe o estoque dos produtos usados pelos testes: o seed so cria compras
+-- na PRIMEIRA execucao (count>=20 pula) e cada run da suite vende unidades —
+-- PAP-0001 nasceu com 10 e esgotou apos ~10 execucoes (o PDV recusa bipar
+-- item zerado, corretamente). Top-up garante suite sustentavel para sempre.
+UPDATE "produtos" SET "estoque" = 1000
+ WHERE "codigo" IN ('PAP-0001','PAP-0002','PAP-0006','PAP-0007')
+   AND "estoque" < 100;

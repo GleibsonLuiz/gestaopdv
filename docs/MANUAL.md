@@ -955,7 +955,7 @@ Documentos fiscais além da NFC-e, na tela **NF-e / NFS-e**:
 - Vendas do dia (valor + qtd)
 - Gráfico de vendas semanal (barra por dia)
 - Top 5 produtos mais vendidos
-- Top 5 vendedores
+- Top 5 vendedores — com **progresso da meta mensal** de cada um: se o vendedor tem meta cadastrada em **Comissões** (campo "Meta mensal"), aparece a barra de progresso, o % atingido e o selo **🎯 Meta batida** (com o bônus configurado) quando passa de 100%. Sem meta cadastrada, a linha fica como antes.
 - Últimas vendas e últimas compras (lado a lado)
 - Resumo financeiro (a pagar / a receber / vencendo / atrasadas)
 

@@ -377,20 +377,35 @@ export async function resumo(req, res, next) {
       total: toNum(t._sum.subtotal),
     }));
 
-    // Hidrata top vendedores
+    // Hidrata top vendedores (+ meta mensal de comissao, quando configurada —
+    // alimenta a barra de progresso de meta no painel do Dashboard).
     const idsTopVendedores = topVendedoresRaw.map(t => t.userId);
-    const vendedores = idsTopVendedores.length
-      ? await prisma.user.findMany({
-          where: { id: { in: idsTopVendedores } },
-          select: { id: true, nome: true, role: true },
-        })
-      : [];
+    const [vendedores, metasVendedores] = idsTopVendedores.length
+      ? await Promise.all([
+          prisma.user.findMany({
+            where: { id: { in: idsTopVendedores } },
+            select: { id: true, nome: true, role: true },
+          }),
+          prisma.configuracaoComissao.findMany({
+            where: { userId: { in: idsTopVendedores }, ativo: true },
+            select: { userId: true, metaMensal: true, bonusPorMeta: true },
+          }),
+        ])
+      : [[], []];
     const mapaUsers = new Map(vendedores.map(u => [u.id, u]));
-    const topVendedores = topVendedoresRaw.map(t => ({
-      user: mapaUsers.get(t.userId) || null,
-      vendas: t._count._all,
-      total: toNum(t._sum.total),
-    }));
+    const mapaMetas = new Map(metasVendedores.map(m => [m.userId, m]));
+    const topVendedores = topVendedoresRaw.map(t => {
+      const meta = mapaMetas.get(t.userId);
+      const metaMensal = meta ? toNum(meta.metaMensal) : 0;
+      return {
+        user: mapaUsers.get(t.userId) || null,
+        vendas: t._count._all,
+        total: toNum(t._sum.total),
+        // metaMensal 0 = sem meta configurada (painel nao mostra barra).
+        metaMensal,
+        bonusPorMeta: meta ? toNum(meta.bonusPorMeta) : 0,
+      };
+    });
 
     // Normaliza vendas dos últimos 7 dias preenchendo dias vazios
     const mapaPorDia = new Map(

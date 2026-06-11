@@ -376,6 +376,41 @@ export function PainelTopVendedores({ itens, totalMes, qtdMes }: any) {
                 borderRadius: 999, background: barCores[idx4],
               }} />
             </div>
+
+            {/* Meta mensal do vendedor (ConfiguracaoComissao.metaMensal):
+                barra de progresso + badge quando bateu. Sem meta = sem barra. */}
+            {Number(t.metaMensal) > 0 && (() => {
+              const pctMeta = (Number(t.total) / Number(t.metaMensal)) * 100;
+              const bateu = pctMeta >= 100;
+              const corMeta = bateu ? C.green : pctMeta >= 70 ? C.accent : C.yellow;
+              return (
+                <div style={{ marginTop: 7 }}>
+                  <div style={{
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                    fontSize: 10.5, color: C.muted, marginBottom: 3,
+                  }}>
+                    <span>
+                      Meta {fmtBRL(t.metaMensal)}
+                      {bateu && Number(t.bonusPorMeta) > 0 && (
+                        <span style={{ color: C.green }}> · bônus +{Number(t.bonusPorMeta).toLocaleString("pt-BR")}%</span>
+                      )}
+                    </span>
+                    <span style={{ fontFamily: FONT_MONO, fontWeight: 600, color: corMeta }}>
+                      {bateu ? "🎯 Meta batida" : `${pctMeta.toFixed(0)}% da meta`}
+                    </span>
+                  </div>
+                  <div style={{
+                    height: 4, borderRadius: 999, background: "rgba(255,255,255,0.05)", overflow: "hidden",
+                  }}>
+                    <div style={{
+                      width: `${Math.max(2, Math.min(100, pctMeta))}%`, height: "100%",
+                      borderRadius: 999, background: corMeta,
+                      boxShadow: bateu ? `0 0 8px ${C.green}88` : "none",
+                    }} />
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         );
       })}

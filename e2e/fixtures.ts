@@ -58,13 +58,17 @@ export async function produtosVendaveis(request: APIRequestContext, token: strin
   );
 }
 
-// Lida com os dois shapes de listagem usados no backend (array puro ou
-// paginado em items/dados) — mesmo normalizador do gerar-vendas-demo.mjs.
+// Sinal de "venda nova chegou ao servidor": o MAIOR numero de venda.
+// NAO usar o tamanho da lista — GET /vendas e limitado (~100) e o banco de
+// teste acumula vendas entre execucoes; quando a lista satura, a contagem
+// trava e o poll por "+1" nunca resolve (mordeu na ~10a execucao da suite).
+// O numero e sequencial por tenant: estritamente crescente, imune ao cap.
+// Mantem o nome contarVendas pelos call sites — semantica: monotonico.
 export async function contarVendas(request: APIRequestContext, token: string): Promise<number> {
   const r = await request.get(`${API_URL}/vendas`, { headers: authHeaders(token) });
   const body = await r.json().catch(() => []);
   const lista = Array.isArray(body) ? body : body.items || body.dados || body.vendas || [];
-  return lista.length;
+  return lista.reduce((max: number, v: any) => Math.max(max, Number(v.numero) || 0), 0);
 }
 
 // UUID fixo do "navegador" da suite: sem ele, cada execucao cria um

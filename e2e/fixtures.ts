@@ -1,4 +1,4 @@
-import type { APIRequestContext, Page } from "playwright/test";
+import { expect, type APIRequestContext, type Page } from "playwright/test";
 import { API_URL } from "./env";
 
 // ============ HELPERS DOS TESTES E2E ============
@@ -76,12 +76,59 @@ export const E2E_DEVICE_UUID = "e2ee2ee2-0000-4000-8000-00000000e2e0";
 
 export async function loginUI(page: Page, cred = ADMIN) {
   await page.addInitScript((id) => {
-    try { localStorage.setItem("gestao_device_id", id); } catch { /* indiferente */ }
+    try {
+      localStorage.setItem("gestao_device_id", id);
+      // Sidebar expandida: navegacao por texto exato (.gp-sidebar) precisa
+      // dos rotulos visiveis — mesmo truque dos scripts de video/screenshot.
+      localStorage.setItem("gestao_sidebar_collapsed", "0");
+    } catch { /* indiferente */ }
   }, E2E_DEVICE_UUID);
   await page.goto("/");
   await page.fill("#email", cred.email);
   await page.fill("#password", cred.senha);
   await page.click('button[type="submit"]');
+}
+
+// Bipa um item no PDV. A busca e DEBOUNCED: fill + Enter imediato chega
+// antes de existir candidato e o Enter nao adiciona nada (falha silenciosa —
+// foi exatamente assim que a venda de 3 itens saiu com 2). Espera o hint
+// "Enter Adicionar bipado" aparecer e usa o input limpo como prova de que o
+// item entrou no carrinho.
+export async function bipar(page: Page, codigo: string) {
+  const busca = page.locator('input[placeholder*="Bipe"]').first();
+  await busca.click();
+  await busca.fill(codigo);
+  await page.getByRole("button", { name: /Adicionar bipado/i })
+    .waitFor({ timeout: 5_000 }).catch(() => { /* hint pode nao existir em todo layout */ });
+  await page.waitForTimeout(250);
+  await page.keyboard.press("Enter");
+  await expect(busca, `item ${codigo} nao entrou no carrinho`).toHaveValue("", { timeout: 5_000 });
+}
+
+// O app loga direto no PDV em tela cheia; para telas da sidebar e preciso
+// sair pelo chip do usuario → "Menu principal".
+export async function sairDoPDV(page: Page) {
+  const chip = page.locator(".pdv-user-chip");
+  await chip.waitFor({ timeout: 20_000 });
+  await chip.click();
+  await page.getByText("Menu principal", { exact: true }).click();
+}
+
+// Banner flutuante de alertas/notificacoes ("✓ OK" / Marcar como lida) cobre
+// a sidebar e intercepta cliques de navegacao ate ser dispensado — eventos
+// como fechamento de caixa e estoque baixo disparam um. Fecha o que houver.
+export async function dispensarAlertas(page: Page) {
+  const ok = page.locator('button[title="Marcar como lida"]');
+  for (let i = 0; i < 5 && (await ok.count()) > 0; i++) {
+    const sumiu = await ok.first().click({ timeout: 2_000 }).then(() => true, () => false);
+    if (!sumiu) break;
+    await page.waitForTimeout(200);
+  }
+}
+
+export async function irParaTela(page: Page, label: string) {
+  await dispensarAlertas(page);
+  await page.locator(".gp-sidebar").getByText(label, { exact: true }).first().click();
 }
 
 export { API_URL, authHeaders };

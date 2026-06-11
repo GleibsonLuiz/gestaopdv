@@ -39,5 +39,48 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       # postinstall roda `prisma generate` (so precisa do schema, nao do banco).
       - run: npm ci
-      # 80 testes puros (fiscal, sugestoes de compra) — sem DATABASE_URL.
+      # 80+ testes puros (fiscal, sugestoes, zod, totp) — sem DATABASE_URL.
       - run: npm test
+
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    # Banco demo_e2e e UM so (Neon): dois runs simultaneos se atropelariam no
+    # db push/seed. Serializa por branch; run novo cancela o anterior.
+    concurrency:
+      group: e2e-demo-db
+      cancel-in-progress: true
+    # Informativo por enquanto: NAO esta nos required checks da branch
+    # protection — falha aqui avisa, nao bloqueia. Sem o secret
+    # TEST_DATABASE_URL o job vira no-op verde (nao quebra fork/PR externo).
+    env:
+      E2E_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+      # Ambiente de teste — nao e o segredo de producao.
+      JWT_SECRET: e2e-ci-jwt-nao-e-producao
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Aviso quando nao ha banco de teste
+        if: env.E2E_DATABASE_URL == ''
+        run: echo "Secret TEST_DATABASE_URL ausente — E2E pulado."
+      - uses: actions/setup-node@v4
+        if: env.E2E_DATABASE_URL != ''
+        with:
+          node-version: 22
+          cache: npm
+      - if: env.E2E_DATABASE_URL != ''
+        run: npm ci
+      - if: env.E2E_DATABASE_URL != ''
+        run: npm --prefix backend ci
+      - if: env.E2E_DATABASE_URL != ''
+        run: npx playwright install chromium --with-deps
+      # global-setup prepara o demo_e2e (db push + seed) e o proprio
+      # Playwright sobe backend (3335) e vite (5175).
+      - if: env.E2E_DATABASE_URL != ''
+        run: npm run e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

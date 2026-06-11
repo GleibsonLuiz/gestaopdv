@@ -1,7 +1,7 @@
 import { test, expect } from "playwright/test";
 import {
-  API_URL, apiLogin, authHeaders, contarVendas, garantirCaixaAberto, loginUI,
-  produtosVendaveis,
+  API_URL, apiLogin, authHeaders, bipar, contarVendas, garantirCaixaAberto,
+  loginUI, produtosVendaveis,
 } from "./fixtures";
 
 // ============ E2E — FLUXO DE VENDA NO PDV ============
@@ -30,18 +30,40 @@ test("venda completa: login → bipe 3 itens → F10 dinheiro → persistida", a
   await busca.waitFor({ timeout: 20_000 });
 
   for (const item of ITENS) {
-    await busca.click();
-    await busca.fill(item.codigo);
-    await page.keyboard.press("Enter");
-    // Item entra no carrinho — espera o nome aparecer antes do proximo bipe.
-    await expect(page.getByText(item.nome).first()).toBeVisible();
+    await bipar(page, item.codigo);
   }
+  // Com os 3 itens no carrinho, o finalizar habilita.
+  await expect(page.getByRole("button", { name: /F10 Finalizar/i })).toBeEnabled();
 
   await page.keyboard.press("F10"); // abre pagamento (DINHEIRO valor cheio)
   await page.waitForTimeout(800);
   await page.keyboard.press("F10"); // confirma
 
   // A venda existe no backend — fonte da verdade.
+  await expect
+    .poll(() => contarVendas(request, token), { timeout: 15_000 })
+    .toBeGreaterThan(vendasAntes);
+});
+
+test("venda PIX pela UI: bipe 1 item → card PIX → F10 confirma", async ({ page, request }) => {
+  const token = await apiLogin(request);
+  await garantirCaixaAberto(request, token);
+  const vendasAntes = await contarVendas(request, token);
+
+  await loginUI(page);
+  const busca = page.locator('input[placeholder*="Bipe"]').first();
+  await busca.waitFor({ timeout: 20_000 });
+
+  await bipar(page, "PAP-0002");
+  await expect(page.getByRole("button", { name: /F10 Finalizar/i })).toBeEnabled();
+
+  // Os atalhos F1-F6 sao DINAMICOS (reordenados por frequencia de uso) —
+  // clica no card pelo rotulo, que e estavel. O clique abre o modal de
+  // pagamento ja semeado com PIX no valor cheio; F10 confirma.
+  await page.locator(".pdv-pay-btn", { has: page.locator(".pay-lbl", { hasText: "PIX" }) }).click();
+  await page.waitForTimeout(800);
+  await page.keyboard.press("F10");
+
   await expect
     .poll(() => contarVendas(request, token), { timeout: 15_000 })
     .toBeGreaterThan(vendasAntes);

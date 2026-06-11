@@ -62,6 +62,17 @@ export const fmtData = (iso: string | null | undefined): string => {
   return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 };
 
+// Quebra "1234.56" em { int: "1.234", dec: "56" } pra renderizar o R$ com
+// rítmo tipográfico (símbolo + inteiros grandes + centavos menores).
+export const fmtPartes = (v: unknown): { int: string; dec: string } => {
+  const n = Math.max(0, Number(v) || 0);
+  const [int, dec] = n.toFixed(2).split(".");
+  return {
+    int: int.replace(/\B(?=(\d{3})+(?!\d))/g, "."),
+    dec,
+  };
+};
+
 export const STATUS_INFO: Record<string, { label: string; cor: string }> = {
   CONCLUIDA: { label: "Concluída", cor: C.green },
   CANCELADA: { label: "Cancelada", cor: C.red },

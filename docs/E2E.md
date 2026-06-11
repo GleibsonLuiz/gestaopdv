@@ -37,17 +37,34 @@ e2e/
 └── pdv.spec.ts        # os testes
 ```
 
-## O que está coberto (4 testes)
+## O que está coberto (10 testes)
 
-| Teste | Valida |
-|---|---|
-| Venda completa no PDV | login UI → bipe 3 itens (código + Enter) → F10 (pagamento DINHEIRO) → F10 (confirma) → **venda persistida na API** |
-| Senha errada | mensagem de erro e permanência na tela de login |
-| Borda zod de /vendas | 6 payloads malformados → todos 400 |
-| Borda zod de /caixas/abrir | saldo não numérico → 400 |
+| Spec | Teste | Valida |
+|---|---|---|
+| caixa-ui | Fechar e reabrir pela tela Caixa | conferência cega → comprovante "Concluir" → reabertura com saldo novo |
+| caixa | Ciclo via API | abrir → sangria → suprimento → extrato confere → fechar → atual null |
+| caixa | Borda zod sangria | valor 0/negativo/não numérico → 400 |
+| pdv | Venda completa DINHEIRO | login → bipe 3 itens → F10/F10 → **venda persistida na API** |
+| pdv | Venda PIX pela UI | clique no card PIX (atalhos F1-F6 são dinâmicos!) → F10 |
+| pdv | Modo Clean (F7) | venda completa no layout focado |
+| pdv | Senha errada | erro visível, permanece no login |
+| pdv | Borda zod /vendas | 6 payloads malformados → 400 |
+| pdv | Multi-pagamento via API | DINHEIRO+PIX divididos, total conferido |
+| pdv | Borda zod /caixas/abrir | saldo não numérico → 400 |
 
-A asserção final da venda é **contra a API** (contagem de vendas), não contra
-a UI — imune a mudança de layout.
+Asserções de venda/caixa são **contra a API**, não contra a UI — imunes a
+mudança de layout.
+
+## CI
+
+O job **E2E (Playwright)** roda a suite em todo push/PR usando o secret
+`TEST_DATABASE_URL` (aponta para o demo_e2e no Neon). Sem o secret (fork/PR
+externo) o job vira no-op verde. Um `concurrency group` serializa execuções —
+o banco de teste é um só. O job é informativo (fora dos required checks).
+Em falha, o relatório HTML sobe como artifact `playwright-report`.
+
+**Atenção:** rodar `npm run e2e` local **enquanto o job de CI executa** pode
+interferir (mesmo banco). Espere o CI ou use `E2E_DATABASE_URL` próprio.
 
 ## Detalhes do PDV que os testes dependem
 
@@ -69,9 +86,7 @@ a UI — imune a mudança de layout.
   (DATABASE_URL/CRIPTO_SECRET) e se a porta 3335 está livre.
 - **Banco recusado no setup** → o nome do database precisa conter "e2e".
 
-## Próximos testes (backlog Fase 2)
+## Próximos testes (backlog)
 
-1. Formas de pagamento além de DINHEIRO (PIX, crédito, múltiplas formas + troco)
-2. Caixa: fechar com conferência, sangria e suprimento via UI
-3. Venda por peso (KG) e etiqueta de balança
-4. Modo Clean (F7) — venda completa no layout focado
+1. Venda por peso (KG) e etiqueta de balança (exige produto unidade KG no seed)
+2. Formas a prazo pela UI (crédito/crediário pedem vencimento/parcelas no modal)

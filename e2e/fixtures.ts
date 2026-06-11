@@ -89,20 +89,25 @@ export async function loginUI(page: Page, cred = ADMIN) {
   await page.click('button[type="submit"]');
 }
 
-// Bipa um item no PDV. A busca e DEBOUNCED: fill + Enter imediato chega
-// antes de existir candidato e o Enter nao adiciona nada (falha silenciosa —
-// foi exatamente assim que a venda de 3 itens saiu com 2). Espera o hint
-// "Enter Adicionar bipado" aparecer e usa o input limpo como prova de que o
-// item entrou no carrinho.
+// Bipa um item no PDV. A busca e DEBOUNCED + assincrona: Enter so adiciona
+// quando o resultado ja chegou, e nao ha sinal visivel confiavel de "pronto"
+// (o hint "Enter Adicionar bipado" e ESTATICO — esperar por ele nao prova
+// nada; espera fixa quebrou no CI, onde o runner nos EUA fala com o Neon em
+// sa-east-1). Estrategia: re-tenta Enter ate o input limpar — limpar e a
+// prova de que o item entrou no carrinho. Enter sem candidato e no-op,
+// entao re-tentar nao duplica item.
 export async function bipar(page: Page, codigo: string) {
   const busca = page.locator('input[placeholder*="Bipe"]').first();
   await busca.click();
   await busca.fill(codigo);
-  await page.getByRole("button", { name: /Adicionar bipado/i })
-    .waitFor({ timeout: 5_000 }).catch(() => { /* hint pode nao existir em todo layout */ });
-  await page.waitForTimeout(250);
-  await page.keyboard.press("Enter");
-  await expect(busca, `item ${codigo} nao entrou no carrinho`).toHaveValue("", { timeout: 5_000 });
+  for (let tentativa = 0; tentativa < 5; tentativa++) {
+    await page.waitForTimeout(tentativa === 0 ? 400 : 700);
+    await page.keyboard.press("Enter");
+    const limpou = await expect(busca).toHaveValue("", { timeout: 1_500 })
+      .then(() => true, () => false);
+    if (limpou) return;
+  }
+  throw new Error(`item ${codigo} nao entrou no carrinho (busca nunca resolveu)`);
 }
 
 // O app loga direto no PDV em tela cheia; para telas da sidebar e preciso

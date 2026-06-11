@@ -69,6 +69,29 @@ test("venda PIX pela UI: bipe 1 item → card PIX → F10 confirma", async ({ pa
     .toBeGreaterThan(vendasAntes);
 });
 
+test("modo Clean (F7): venda completa no layout focado", async ({ page, request }) => {
+  const token = await apiLogin(request);
+  await garantirCaixaAberto(request, token);
+  const vendasAntes = await contarVendas(request, token);
+
+  await loginUI(page);
+  await page.locator('input[placeholder*="Bipe"]').first().waitFor({ timeout: 20_000 });
+
+  // F7 alterna para o layout focado (mesma instancia de NovaVenda — o
+  // carrinho sobrevive a alternancia). O botao do header marca is-on.
+  await page.keyboard.press("F7");
+  await expect(page.locator(".pdv-clean-toggle.is-on")).toBeVisible();
+
+  await bipar(page, "PAP-0006");
+  await page.keyboard.press("F10");
+  await page.waitForTimeout(800);
+  await page.keyboard.press("F10");
+
+  await expect
+    .poll(() => contarVendas(request, token), { timeout: 15_000 })
+    .toBeGreaterThan(vendasAntes);
+});
+
 test("login com senha errada mostra erro e nao entra", async ({ page }) => {
   await loginUI(page, { email: "admin@gestaopro.local", senha: "senha-errada-123" });
   await expect(page.getByText(/credenciais/i).first()).toBeVisible();

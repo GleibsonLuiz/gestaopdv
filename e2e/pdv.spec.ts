@@ -47,6 +47,13 @@ test("venda completa: login → bipe 3 itens → F10 dinheiro → persistida", a
   await expect
     .poll(() => contarVendas(request, token), { timeout: 15_000 })
     .toBeGreaterThan(vendasAntes);
+
+  // Aba Historico (tambem extraida no fatiamento) monta e carrega: fecha o
+  // recibo (Enter = Nova venda) e confere os cards de estatisticas.
+  await page.keyboard.press("Enter");
+  await page.getByRole("button", { name: "Histórico" }).click();
+  await expect(page.getByText("Faturamento").first()).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText("Concluídas").first()).toBeVisible();
 });
 
 test("venda PIX pela UI: bipe 1 item → card PIX → F10 confirma", async ({ page, request }) => {

@@ -1,3 +1,5 @@
+import { C } from "../lib/theme";
+
 // ============ CONSTANTES E FORMATADORES COMPARTILHADOS DO PDV ============
 // Extraidos de PDV.tsx no fatiamento (Fase 5): usados por NovaVenda,
 // ReciboModal, Historico e modais. Sem estado — apenas dados e funcoes puras.
@@ -59,3 +61,21 @@ export const fmtData = (iso: string | null | undefined): string => {
   if (!iso) return "—";
   return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 };
+
+export const STATUS_INFO: Record<string, { label: string; cor: string }> = {
+  CONCLUIDA: { label: "Concluída", cor: C.green },
+  CANCELADA: { label: "Cancelada", cor: C.red },
+  PENDENTE:  { label: "Pendente",  cor: C.yellow },
+  EM_EDICAO: { label: "Em edição", cor: C.yellow },
+};
+
+// Hoje + N dias no formato YYYY-MM-DD usando o fuso LOCAL (toISOString usa
+// UTC e pode voltar um dia em fusos negativos como BRT).
+export function dataDaqui(diasAFrente: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + diasAFrente);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dia = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dia}`;
+}

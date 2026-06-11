@@ -1,4 +1,4 @@
-# CI minimo: roda em todo push/PR na main. O deploy da Vercel e git-connected
+﻿# CI minimo: roda em todo push/PR na main. O deploy da Vercel e git-connected
 # e NAO espera este workflow — para o CI BLOQUEAR merge/deploy e preciso
 # ativar Branch Protection (Settings > Branches > require status checks)
 # no GitHub. Mesmo sem isso, o badge vermelho avisa que a main quebrou.
@@ -15,8 +15,8 @@ jobs:
     name: Frontend (typecheck + build)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -31,8 +31,8 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -59,11 +59,11 @@ jobs:
       JWT_SECRET: e2e-ci-jwt-nao-e-producao
       CI: "true"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Aviso quando nao ha banco de teste
         if: env.E2E_DATABASE_URL == ''
         run: echo "Secret TEST_DATABASE_URL ausente — E2E pulado."
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         if: env.E2E_DATABASE_URL != ''
         with:
           node-version: 22
@@ -78,7 +78,7 @@ jobs:
       # Playwright sobe backend (3335) e vite (5175).
       - if: env.E2E_DATABASE_URL != ''
         run: npm run e2e
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: failure()
         with:
           name: playwright-report

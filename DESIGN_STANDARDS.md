@@ -372,6 +372,16 @@ Ordem acordada com o cliente (executar em fases, validando cada uma):
 >
 > _Follow-up amplo opcional:_ varredura executiva completa do Dashboard (gráficos
 > e listas além dos KPIs) e das demais telas operacionais.
+>
+> **Auditoria de hex hardcoded (2026-06-11):** varredura completa de `src/`.
+> Corrigidos: `Relatorios.tsx` (19→0 — cores de série/aba agora `C.purple`/
+> `C.green`/`C.yellow`, theme-aware nos temas ouro), `IndicadorRede.tsx`
+> (tarja com tokens de status; toasts com receita `color-mix` derivada do tema
+> — antes eram pretos fixos mesmo no tema Claro) e banner offline do PDV.
+> Restante é intencional/baixo impacto: `lib/theme.ts` (a própria paleta),
+> `CardapioPublico`/`AdminMasterApp`/`Login`/`Signup` (superfícies standalone
+> com identidade própria), `Aparencia` (swatches literais dos temas) e caudas
+> de ≤10 ocorrências em telas operacionais (follow-up opcional).
 
 > Conforme cada fase é concluída, atualizar este arquivo (tokens reais, novos
 > componentes compartilhados, decisões tomadas) para que ele permaneça a fonte

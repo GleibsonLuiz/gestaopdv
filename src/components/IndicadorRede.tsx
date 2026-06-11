@@ -35,7 +35,9 @@ function TarjaRede() {
   if (!avisosAtivos) return null;
   if (online && apiSaudavel) return null;
 
-  const fundo = !online ? "#dc2626" : "#f59e0b";
+  // Cor de status SOLIDA de proposito: a tarja precisa gritar (bloqueia
+  // operacoes). Tokens da paleta — acompanham o tema (incl. alto contraste).
+  const fundo = !online ? C.red : C.yellow;
   const icone = !online ? "📡" : "⚠️";
   const titulo = !online
     ? "Sem conexao com a internet"
@@ -55,7 +57,9 @@ function TarjaRede() {
         right: 0,
         zIndex: 100,
         background: fundo,
-        color: "#ffffff",
+        // var(--white) e adaptativo: branco nos temas escuros, grafite no
+        // claro — sobre amber/red saturados, o grafite ate contrasta melhor.
+        color: "var(--white)",
         padding: "8px 16px",
         display: "flex",
         alignItems: "center",
@@ -197,14 +201,27 @@ function ContainerToasts() {
   );
 }
 
+// Paleta derivada dos tokens via color-mix — antes era hex fixo calibrado so
+// para tema escuro (toast preto mesmo no tema Claro). Agora o fundo tinge o
+// bg do tema com a cor de status e o texto puxa a cor de status na direcao
+// do texto do tema: escuro fica como era, claro ganha toast claro legivel.
+function tomToast(cor: string) {
+  return {
+    fundo: `color-mix(in srgb, ${cor} 14%, ${C.bg})`,
+    borda: cor + "66",
+    texto: `color-mix(in srgb, ${cor} 70%, ${C.text})`,
+    botao: cor + "33",
+  };
+}
+
 function paletaToast(tipo: ToastPayload["tipo"]) {
   switch (tipo) {
     case "erro":
-      return { fundo: "#1f0d10", borda: "#7f1d1d", texto: "#fecaca", botao: "#7f1d1d", icone: "⛔" };
+      return { ...tomToast(C.red), icone: "⛔" };
     case "aviso":
-      return { fundo: "#1f1709", borda: "#a16207", texto: "#fde68a", botao: "#a16207", icone: "⚠️" };
+      return { ...tomToast(C.yellow), icone: "⚠️" };
     case "sucesso":
-      return { fundo: "#062018", borda: "#15803d", texto: "#bbf7d0", botao: "#15803d", icone: "✅" };
+      return { ...tomToast(C.green), icone: "✅" };
     default:
       return { fundo: C.card, borda: C.border, texto: C.text, botao: C.accent, icone: "ℹ️" };
   }

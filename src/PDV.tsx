@@ -1617,7 +1617,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
           data-testid="banner-vendas-offline"
           style={{
             background: C.card,
-            border: `1px solid ${pendenciaOfflineComErro ? C.red : "#f59e0b"}`,
+            border: `1px solid ${pendenciaOfflineComErro ? C.red : C.yellow}`,
             borderRadius: 8,
             padding: "10px 14px",
             display: "flex",

@@ -125,7 +125,7 @@ const ABAS = [
   { id: "sazonalidade", label: "🗓️ Sazonalidade", cor: C.yellow },
   { id: "aging", label: "⏳ Aging Receber", cor: C.red },
   { id: "comissoes", label: "🏆 Comissões", cor: C.purple },
-  { id: "crm", label: "🎯 CRM", cor: "#7c3aed" },
+  { id: "crm", label: "🎯 CRM", cor: C.purple },
 ];
 
 const ORIGENS_FUNIL = [
@@ -145,7 +145,7 @@ const ROTULO_ETAPA = {
 const COR_ETAPA = {
   LEAD: C.muted,
   QUALIFICADO: C.accent,
-  PROPOSTA: "#7c3aed",
+  PROPOSTA: C.purple,
   NEGOCIACAO: C.yellow,
   GANHO: C.green,
   PERDIDO: C.red,
@@ -194,11 +194,11 @@ export default function Relatorios() {
 // ============ HUB CRM (SUB-ABAS) ============
 function RelatoriosCrm() {
   const SUB_ABAS = [
-    { id: "funil", label: "📊 Funil de Vendas", cor: "#7c3aed" },
+    { id: "funil", label: "📊 Funil de Vendas", cor: C.purple },
     { id: "performance", label: "🏅 Performance Comercial", cor: C.accent },
     { id: "carteira", label: "👥 Carteira de Clientes (RFM)", cor: C.green },
     { id: "nps", label: "😊 NPS & Satisfação", cor: C.yellow },
-    { id: "atividades", label: "📞 Atividades & Cadência", cor: "#7c3aed" },
+    { id: "atividades", label: "📞 Atividades & Cadência", cor: C.purple },
     { id: "forecast", label: "🔮 Forecast", cor: C.accent },
     { id: "perdas", label: "💔 Motivos de Perda", cor: C.red },
   ];
@@ -2193,7 +2193,7 @@ function RelatorioFunilCrm() {
 
   return (
     <BlocoRelatorio
-      titulo="Relatório de Funil de Vendas (CRM)" cor="#7c3aed"
+      titulo="Relatório de Funil de Vendas (CRM)" cor={C.purple}
       filtros={
         <>
           <CampoData label="Criadas de" value={dataInicio} onChange={setDataInicio} />
@@ -2211,7 +2211,7 @@ function RelatorioFunilCrm() {
       {dados && (
         <>
           <Resumo cards={[
-            { rotulo: "Oportunidades", valor: fmtNum(dados.resumo.totalOportunidades), cor: "#7c3aed" },
+            { rotulo: "Oportunidades", valor: fmtNum(dados.resumo.totalOportunidades), cor: C.purple },
             { rotulo: "Abertas", valor: fmtNum(dados.resumo.abertas), cor: C.accent },
             { rotulo: "Ganhas", valor: fmtNum(dados.resumo.ganhas), cor: C.green },
             { rotulo: "Perdidas", valor: fmtNum(dados.resumo.perdidas), cor: C.red },
@@ -2482,7 +2482,7 @@ function RelatorioPerformanceCrm() {
             { rotulo: "Conversão", valor: `${dados.resumo.conversaoGeral.toFixed(1)}%`, cor: dados.resumo.conversaoGeral >= 30 ? C.green : C.yellow },
             { rotulo: "Ciclo médio", valor: `${dados.resumo.cicloMedioGeral.toFixed(1)}d`, cor: C.yellow },
             { rotulo: "Interações", valor: fmtNum(dados.resumo.totalInteracoes), cor: C.purple },
-            { rotulo: "Tarefas conc.", valor: fmtNum(dados.resumo.totalTarefasConcluidas), cor: "#7c3aed" },
+            { rotulo: "Tarefas conc.", valor: fmtNum(dados.resumo.totalTarefasConcluidas), cor: C.purple },
           ]} />
 
           {/* Pódio de Top performers */}
@@ -2495,7 +2495,7 @@ function RelatorioPerformanceCrm() {
               valor: fmtBRL(v.faturamento),
               detalhe: `${fmtNum(v.vendasQtd)} venda${v.vendasQtd === 1 ? "" : "s"}`,
             }))} vazioTexto="Sem vendas no período" />
-            <CardPodio titulo="🎯 Top Conversão" cor="#7c3aed" itens={dados.topConversao.map(v => ({
+            <CardPodio titulo="🎯 Top Conversão" cor={C.purple} itens={dados.topConversao.map(v => ({
               nome: v.nome,
               valor: `${v.taxaConversao.toFixed(1)}%`,
               detalhe: `${v.oppGanhas}/${v.oppGanhas + v.oppPerdidas} fechadas`,
@@ -3084,7 +3084,7 @@ function RelatorioForecastCrm() {
             { rotulo: "Valor estimado", valor: fmtBRL(dados.resumo.totalValorEstimado), cor: C.purple },
             { rotulo: "Previsão realista", valor: fmtBRL(dados.resumo.totalValorPonderado), cor: C.green },
             { rotulo: "Já ganhas", valor: fmtNum(dados.resumo.totalGanhoQtd), cor: C.green },
-            { rotulo: "Valor ganho", valor: fmtBRL(dados.resumo.totalValorGanho), cor: "#22c55e" },
+            { rotulo: "Valor ganho", valor: fmtBRL(dados.resumo.totalValorGanho), cor: C.green },
             { rotulo: "Sem data prevista", valor: fmtNum(dados.resumo.semDataPrevistaQtd), cor: dados.resumo.semDataPrevistaQtd > 0 ? C.yellow : C.muted },
           ]} />
 
@@ -3108,7 +3108,7 @@ function RelatorioForecastCrm() {
                         {fmtMes(m.ym)} <span style={{ color: C.muted, fontWeight: 500 }}>· {fmtNum(m.previstoQtd)} prev.</span>
                       </div>
                       <div style={{ color: C.muted, fontSize: 11 }}>
-                        Pond: <strong style={{ color: C.green }}>{fmtBRL(m.valorPonderado)}</strong> · Est: {fmtBRL(m.valorEstimado)} · Ganho: <strong style={{ color: "#22c55e" }}>{fmtBRL(m.valorGanho)}</strong>
+                        Pond: <strong style={{ color: C.green }}>{fmtBRL(m.valorPonderado)}</strong> · Est: {fmtBRL(m.valorEstimado)} · Ganho: <strong style={{ color: C.green }}>{fmtBRL(m.valorGanho)}</strong>
                       </div>
                     </div>
                     <div style={{ position: "relative", height: 18, background: C.surface, borderRadius: 4, overflow: "hidden" }}>
@@ -3125,7 +3125,7 @@ function RelatorioForecastCrm() {
                       <div style={{
                         position: "absolute", left: 0, top: 0,
                         width: `${pctGanho}%`, height: "100%",
-                        background: "#22c55e",
+                        background: C.green,
                       }} />
                     </div>
                   </div>
@@ -3135,7 +3135,7 @@ function RelatorioForecastCrm() {
             <div style={{ display: "flex", gap: 14, marginTop: 12, fontSize: 11, color: C.muted, flexWrap: "wrap" }}>
               <span><span style={{ display: "inline-block", width: 10, height: 10, background: C.purple, opacity: 0.3, marginRight: 4, verticalAlign: "middle" }} /> Estimado</span>
               <span><span style={{ display: "inline-block", width: 10, height: 10, background: C.green, opacity: 0.6, marginRight: 4, verticalAlign: "middle" }} /> Ponderado (× probabilidade)</span>
-              <span><span style={{ display: "inline-block", width: 10, height: 10, background: "#22c55e", marginRight: 4, verticalAlign: "middle" }} /> Já ganho</span>
+              <span><span style={{ display: "inline-block", width: 10, height: 10, background: C.green, marginRight: 4, verticalAlign: "middle" }} /> Já ganho</span>
             </div>
           </div>
 
@@ -3365,7 +3365,7 @@ function RelatorioAtividadesCrm() {
 
   return (
     <BlocoRelatorio
-      titulo="Relatório de Atividades & Cadência (CRM)" cor="#7c3aed"
+      titulo="Relatório de Atividades & Cadência (CRM)" cor={C.purple}
       filtros={
         <>
           <CampoData label="De" value={dataInicio} onChange={setDataInicio} />
@@ -3385,7 +3385,7 @@ function RelatorioAtividadesCrm() {
       {dados && (
         <>
           <Resumo cards={[
-            { rotulo: "Interações", valor: fmtNum(dados.resumo.totalInteracoes), cor: "#7c3aed" },
+            { rotulo: "Interações", valor: fmtNum(dados.resumo.totalInteracoes), cor: C.purple },
             { rotulo: "Média/dia útil", valor: dados.resumo.mediaPorDiaUtil.toFixed(1), cor: C.accent },
             { rotulo: "Clientes únicos", valor: fmtNum(dados.resumo.clientesContactados), cor: C.green },
             { rotulo: "Cobertura", valor: `${dados.resumo.cobertura.toFixed(1)}%`, cor: dados.resumo.cobertura >= 50 ? C.green : C.yellow },
@@ -3415,7 +3415,7 @@ function RelatorioAtividadesCrm() {
                       <div style={{ flex: 1, position: "relative", height: 22, background: C.surface, borderRadius: 6, overflow: "hidden" }}>
                         <div style={{
                           width: `${pct}%`, height: "100%",
-                          background: "#7c3aed", opacity: 0.7,
+                          background: C.purple, opacity: 0.7,
                         }} />
                         <div style={{
                           position: "absolute", inset: 0,
@@ -3544,7 +3544,7 @@ const FAIXA_NPS_INFO = {
 
 function corNps(score) {
   if (score >= 75) return C.green;
-  if (score >= 50) return "#22c55e";
+  if (score >= 50) return C.green;
   if (score >= 0) return C.yellow;
   return C.red;
 }
@@ -3858,12 +3858,12 @@ function RelatorioNpsCrm() {
 
 // ============ RELATÓRIO DE CARTEIRA DE CLIENTES (RFM) ============
 const SEGMENTOS_INFO = {
-  VIP: { label: "VIP", cor: "#f59e0b", icone: "👑" },
+  VIP: { label: "VIP", cor: C.yellow, icone: "👑" },
   RECORRENTE: { label: "Recorrente", cor: C.green, icone: "🔄" },
   NOVO: { label: "Novo", cor: C.accent, icone: "🌟" },
   EM_RISCO: { label: "Em risco", cor: C.yellow, icone: "⚠️" },
   INATIVO: { label: "Inativo", cor: C.muted, icone: "💤" },
-  PROSPECT: { label: "Prospect", cor: "#7c3aed", icone: "🌱" },
+  PROSPECT: { label: "Prospect", cor: C.purple, icone: "🌱" },
 };
 
 const STATUS_FUNIL_INFO = {
@@ -4009,7 +4009,7 @@ function RelatorioCarteiraCrm() {
             { rotulo: "Com compra", valor: fmtNum(dados.resumo.clientesComCompra), cor: C.green },
             { rotulo: "Retenção", valor: `${dados.resumo.taxaRetencao.toFixed(1)}%`, cor: dados.resumo.taxaRetencao >= 50 ? C.green : C.yellow },
             { rotulo: "Churn", valor: `${dados.resumo.churnRate.toFixed(1)}%`, cor: dados.resumo.churnRate <= 20 ? C.green : C.red },
-            { rotulo: "LTV médio", valor: fmtBRL(dados.resumo.ltvMedio), cor: "#f59e0b" },
+            { rotulo: "LTV médio", valor: fmtBRL(dados.resumo.ltvMedio), cor: C.yellow },
             { rotulo: "Ticket médio", valor: fmtBRL(dados.resumo.ticketMedio), cor: C.purple },
             { rotulo: "Frequência média", valor: dados.resumo.frequenciaMedia.toFixed(1), cor: C.accent },
             { rotulo: "Faturamento", valor: fmtBRL(dados.resumo.faturamentoTotal), cor: C.green },

@@ -143,7 +143,7 @@ export default function PixQrCodeModal({
 
   return (
     <div style={backdrop} onClick={() => podeFechar && onFechar()}>
-      <div style={modal} onClick={(e) => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" style={modal} onClick={(e) => e.stopPropagation()}>
         <header style={cabecalho}>
           <div style={{ fontSize: 28 }}>⚡</div>
           <div style={{ flex: 1 }}>

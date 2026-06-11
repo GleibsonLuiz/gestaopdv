@@ -183,7 +183,7 @@ export default function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFec
       `}</style>
 
       <div onClick={onFechar} className="pdv-modal-bg">
-        <div onClick={e => e.stopPropagation()} className="pdv-modal" style={{ width: "min(500px, calc(100vw - 32px))", maxHeight: "calc(100vh - 24px)" }}>
+        <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" className="pdv-modal" style={{ width: "min(500px, calc(100vw - 32px))", maxHeight: "calc(100vh - 24px)" }}>
           {!modoReimpressao ? (
             <div className="pdv-success" style={{ paddingBottom: 12 }}>
               <div className="pdv-success-mark">✓</div>
@@ -202,7 +202,7 @@ export default function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFec
                 <div className="pdv-modal-title">Reimpressão de cupom</div>
                 <div className="pdv-modal-sub">Venda #{venda.numero} · {fmtData(venda.createdAt)}</div>
               </div>
-              <button type="button" onClick={onFechar} className="pdv-modal-x">×</button>
+              <button type="button" onClick={onFechar} aria-label="Fechar" className="pdv-modal-x">×</button>
             </div>
           )}
 

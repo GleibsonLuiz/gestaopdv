@@ -37,13 +37,13 @@ export default function ModalAbrirCaixaPDV({ onCancelar, onSucesso }) {
 
   return (
     <div className="pdv-modal-bg" onClick={() => !salvando && onCancelar()}>
-      <div className="pdv-modal" style={{ width: "min(440px, calc(100vw - 32px))" }} onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" className="pdv-modal" style={{ width: "min(440px, calc(100vw - 32px))" }} onClick={e => e.stopPropagation()}>
         <div className="pdv-modal-hd">
           <div>
             <div className="pdv-modal-title">🟢 Abrir Caixa</div>
             <div className="pdv-modal-sub">Informe o saldo inicial em dinheiro (troco)</div>
           </div>
-          <button type="button" onClick={onCancelar} disabled={salvando} className="pdv-modal-x">×</button>
+          <button type="button" onClick={onCancelar} disabled={salvando} aria-label="Fechar" className="pdv-modal-x">×</button>
         </div>
 
         <form onSubmit={salvar}>

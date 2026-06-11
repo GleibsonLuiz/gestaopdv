@@ -1108,7 +1108,7 @@ function ModalShell({ titulo, children, onFechar }: any) {
       display: "flex", alignItems: "center", justifyContent: "center",
       padding: 20, zIndex: 100,
     }}>
-      <div onClick={e => e.stopPropagation()} style={{
+      <div role="dialog" aria-modal="true" onClick={e => e.stopPropagation()} style={{
         background: C.card, border: `1px solid ${C.border}`, borderRadius: 14,
         width: "100%", maxWidth: 520, maxHeight: "92vh", overflowY: "auto", padding: 22,
       }}>

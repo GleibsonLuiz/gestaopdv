@@ -158,7 +158,7 @@ export default function OrcamentoRapidoModal({
 
   return (
     <div onClick={() => !salvando && onFechar()} className="pdv-modal-bg">
-      <div onClick={e => e.stopPropagation()} className="pdv-modal" style={{ width: "min(540px, calc(100vw - 32px))" }}>
+      <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" className="pdv-modal" style={{ width: "min(540px, calc(100vw - 32px))" }}>
         <div className="pdv-modal-hd">
           <div>
             <div className="pdv-modal-title">Orçamento rápido</div>
@@ -166,7 +166,7 @@ export default function OrcamentoRapidoModal({
               {carrinho.length} {carrinho.length === 1 ? "item" : "itens"} · {fmtBRL(total)} — envie por WhatsApp ou e-mail
             </div>
           </div>
-          <button type="button" onClick={() => !salvando && onFechar()} className="pdv-modal-x">×</button>
+          <button type="button" onClick={() => !salvando && onFechar()} aria-label="Fechar" className="pdv-modal-x">×</button>
         </div>
 
         <div className="pdv-modal-body" style={{ display: "flex", flexDirection: "column", gap: 12, paddingBottom: 12 }}>

@@ -373,7 +373,7 @@ function DetalheVendaModal({ venda, onFechar, onCancelar, onReimprimir, onReabri
   const st = STATUS_INFO[venda.status] || STATUS_INFO.CONCLUIDA;
   return (
     <div onClick={onFechar} className="pdv-modal-bg">
-      <div onClick={e => e.stopPropagation()} className="pdv-modal" style={{ width: "min(720px, calc(100vw - 32px))" }}>
+      <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" className="pdv-modal" style={{ width: "min(720px, calc(100vw - 32px))" }}>
         <div className="pdv-modal-hd">
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -387,7 +387,7 @@ function DetalheVendaModal({ venda, onFechar, onCancelar, onReimprimir, onReabri
             </div>
             <div className="pdv-modal-sub">{fmtData(venda.createdAt)}</div>
           </div>
-          <button type="button" onClick={onFechar} className="pdv-modal-x">×</button>
+          <button type="button" onClick={onFechar} aria-label="Fechar" className="pdv-modal-x">×</button>
         </div>
 
         <div className="pdv-modal-body" style={{ paddingBottom: 14 }}>
@@ -594,7 +594,7 @@ function RefinalizarVendaModal({ venda, onFechar, onAplicar }) {
 
   return (
     <div onClick={onFechar} className="pdv-modal-bg">
-      <div onClick={e => e.stopPropagation()} className="pdv-modal" style={{ width: "min(620px, calc(100vw - 32px))" }}>
+      <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" className="pdv-modal" style={{ width: "min(620px, calc(100vw - 32px))" }}>
         <div className="pdv-modal-hd">
           <div>
             <div className="pdv-modal-title">Refinalizar venda #{venda.numero}</div>
@@ -602,7 +602,7 @@ function RefinalizarVendaModal({ venda, onFechar, onAplicar }) {
               Total {fmtBRL(venda.total)} · forma original: {FORMA_LABEL[venda.formaPagamento]}
             </div>
           </div>
-          <button type="button" onClick={onFechar} className="pdv-modal-x">×</button>
+          <button type="button" onClick={onFechar} aria-label="Fechar" className="pdv-modal-x">×</button>
         </div>
 
         <div className="pdv-modal-body" style={{ paddingBottom: 14, display: "flex", flexDirection: "column", gap: 12 }}>
@@ -771,7 +771,7 @@ function AutorizacaoGerencialModal({ venda, acao, onCancelar, onConfirmar }) {
 
   return (
     <div onClick={onCancelar} className="pdv-modal-bg">
-      <div onClick={e => e.stopPropagation()} className="pdv-modal" style={{ width: "min(460px, calc(100vw - 32px))" }}>
+      <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" className="pdv-modal" style={{ width: "min(460px, calc(100vw - 32px))" }}>
         <div className="pdv-modal-hd">
           <div>
             <div className="pdv-modal-title">🔐 Autorização gerencial</div>
@@ -779,7 +779,7 @@ function AutorizacaoGerencialModal({ venda, acao, onCancelar, onConfirmar }) {
               Venda #{venda?.numero} · {acao}
             </div>
           </div>
-          <button type="button" onClick={onCancelar} className="pdv-modal-x">×</button>
+          <button type="button" onClick={onCancelar} aria-label="Fechar" className="pdv-modal-x">×</button>
         </div>
 
         <form onSubmit={submeter}>

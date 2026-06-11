@@ -1313,6 +1313,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
       </div>
       <input
         ref={buscaRef}
+        aria-label="Buscar ou bipar produto por código ou nome"
         placeholder="Bipe ou digite código/nome…"
         value={busca}
         onChange={e => { setBusca(e.target.value); setSugestaoIdx(0); }}
@@ -1915,7 +1916,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
         >
           <div
             onClick={e => e.stopPropagation()}
-            className="pdv-modal"
+            role="dialog" aria-modal="true" className="pdv-modal"
             style={{ width: "min(580px, calc(100vw - 32px))" }}
           >
             <div className="pdv-modal-hd">
@@ -1928,7 +1929,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
               <button
                 type="button"
                 onClick={() => { setEsperaAberta(false); setDescarteConfirmar(null); focarBusca(); }}
-                className="pdv-modal-x"
+                aria-label="Fechar" className="pdv-modal-x"
               >×</button>
             </div>
 
@@ -2034,7 +2035,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
         >
           <div
             onClick={e => e.stopPropagation()}
-            className="pdv-modal"
+            role="dialog" aria-modal="true" className="pdv-modal"
             style={{ width: "min(560px, calc(100vw - 32px))" }}
           >
             <div className="pdv-modal-hd">
@@ -2045,7 +2046,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
               <button
                 type="button"
                 onClick={() => { setCancelarAberto(false); focarBusca(); }}
-                className="pdv-modal-x"
+                aria-label="Fechar" className="pdv-modal-x"
               >×</button>
             </div>
 
@@ -2107,7 +2108,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
         >
           <div
             onClick={e => e.stopPropagation()}
-            className="pdv-modal"
+            role="dialog" aria-modal="true" className="pdv-modal"
             style={{ width: `min(${ehUnidadePeso(qtdModalProduto.unidade) ? 500 : 420}px, calc(100vw - 32px))` }}
           >
             <div className="pdv-modal-hd">
@@ -2133,7 +2134,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
                   </div>
                 </div>
               </div>
-              <button type="button" onClick={fecharQtdModal} className="pdv-modal-x">×</button>
+              <button type="button" onClick={fecharQtdModal} aria-label="Fechar" className="pdv-modal-x">×</button>
             </div>
 
             <div className="pdv-modal-body" style={{ paddingBottom: 12 }}>
@@ -2302,6 +2303,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
         >
           <div
             onClick={e => e.stopPropagation()}
+            role="dialog" aria-modal="true"
             className="pdv-modal pdv-modal--compact"
             style={{ width: "min(560px, calc(100vw - 32px))" }}
           >
@@ -2315,7 +2317,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
               <button
                 type="button"
                 onClick={() => { if (!salvando) { setPagamentoAberto(false); focarBusca(); } }}
-                className="pdv-modal-x"
+                aria-label="Fechar" className="pdv-modal-x"
               >×</button>
             </div>
 

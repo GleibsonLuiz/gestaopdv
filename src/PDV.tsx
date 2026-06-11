@@ -6,9 +6,15 @@
 import { useEffect, useMemo, useRef, useState, useCallback, useReducer } from "react";
 import { createPortal } from "react-dom";
 import { C } from "./lib/theme";
-import { api, BASE_URL } from "./lib/api";
+import { api, BASE_URL, ApiError } from "./lib/api";
 import { useRascunho } from "./lib/useRascunho";
 import { emitirToast } from "./lib/toast";
+// Fase 3 — PDV offline-first: vendas finalizadas sem conexao entram numa
+// fila em IndexedDB e sao enviadas (com idempotencia) quando a rede volta.
+import {
+  enfileirarVenda, sincronizarVendasPendentes, listarPendentes,
+  descartarPendente, aoMudarFila,
+} from "./lib/filaVendasOffline";
 import { useNetworkStatus } from "./lib/useNetworkStatus";
 import { useConfiguracaoEmpresa, formatarEndereco } from "./HeaderRelatorio";
 import { obterConfigImpressora, devePrintar } from "./lib/impressora";
@@ -496,6 +502,46 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
   // + ContaReceber). Tentar offline corromperia o estado local.
   const { online, apiSaudavel } = useNetworkStatus();
   const podeFinalizarRede = online && apiSaudavel;
+
+  // ===== Fila offline (Fase 3) =====
+  // filaOffline alimenta o banner de pendencias; o sincronizador dispara
+  // quando a rede volta (podeFinalizarRede false->true) e a cada 60s.
+  const [filaOffline, setFilaOffline] = useState([]);
+  const pendenciaOfflineComErro = filaOffline.find(v => v.ultimoErro) || null;
+  useEffect(() => {
+    let ativo = true;
+    const carregar = () => listarPendentes()
+      .then(l => { if (ativo) setFilaOffline(l); })
+      .catch(() => {});
+    carregar();
+    const off = aoMudarFila(carregar);
+    return () => { ativo = false; off(); };
+  }, []);
+
+  async function sincronizarVendasOffline() {
+    const r = await sincronizarVendasPendentes().catch(() => null);
+    if (!r) return;
+    if (r.enviadas > 0) {
+      emitirToast({
+        tipo: "sucesso",
+        titulo: `${r.enviadas} venda${r.enviadas > 1 ? "s" : ""} offline enviada${r.enviadas > 1 ? "s" : ""} ✓`,
+        mensagem: r.pendentes > 0 ? `${r.pendentes} ainda na fila.` : "Caixa e relatorios atualizados.",
+        duracao: 6000,
+      });
+      recarregarCaixa();
+      recarregarPainel();
+    }
+  }
+  // Ref viva (padrao do arquivo): o intervalo enxerga sempre a versao atual
+  // sem re-bindar a cada render.
+  const sincronizarVendasOfflineRef = useRef(null);
+  useEffect(() => { sincronizarVendasOfflineRef.current = sincronizarVendasOffline; });
+  useEffect(() => {
+    if (!podeFinalizarRede) return;
+    sincronizarVendasOfflineRef.current?.();
+    const timer = setInterval(() => sincronizarVendasOfflineRef.current?.(), 60_000);
+    return () => clearInterval(timer);
+  }, [podeFinalizarRede]);
 
   // Banner de recuperacao: aparece uma vez no mount se houver rascunho salvo
   // E o carrinho atual estiver vazio. Usuario decide se restaura ou descarta.
@@ -1211,14 +1257,15 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
 
   function abrirPagamento(formaInicial = "DINHEIRO", seedOpts = {}) {
     setErro("");
+    // Offline NAO bloqueia mais a venda (Fase 3): o pagamento abre normal e
+    // o confirmar guarda a venda na fila local para envio automatico depois.
     if (!podeFinalizarRede) {
       emitirToast({
         tipo: "aviso",
-        titulo: "Sem conexao com o servidor",
-        mensagem: "Finalize a venda quando a conexao voltar — o carrinho ja esta salvo automaticamente.",
+        titulo: "Sem conexao — modo offline",
+        mensagem: "Pode vender normalmente: a venda fica guardada neste computador e sera enviada sozinha quando a conexao voltar.",
         duracao: 5000,
       });
-      return;
     }
     if (semCaixa) { flashErro("Abra um caixa antes de finalizar uma venda."); return; }
     if (carrinho.length === 0) { flashErro("Adicione ao menos um item"); return; }
@@ -1241,16 +1288,40 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
   // Mantém a ref atualizada para o listener global.
   useEffect(() => { abrirPagamentoRef.current = abrirPagamento; });
 
+  // Venda sem rede: o payload (que ja carrega a idempotencyKey) vai para a
+  // fila local em IndexedDB; o sincronizador envia quando a conexao voltar.
+  // Espelha o pos-venda online (baixa estoque local, fecha modal, limpa
+  // carrinho) — sem recibo: o cupom depende do numero que o servidor atribui
+  // no envio (fica no Historico depois da sincronizacao).
+  async function finalizarOffline(payload) {
+    await enfileirarVenda(payload, {
+      total,
+      itens: carrinho.length,
+      formas: pagamentos.map(p => p.forma),
+    });
+    idempotencyKeyRef.current = null;
+    setProdutos(prev => prev.map(p => {
+      const it = carrinho.find(c => c.produtoId === p.id);
+      if (!it) return p;
+      const novoEstoque = Math.round((Number(p.estoque) - Number(it.quantidade)) * 1000) / 1000;
+      return { ...p, estoque: novoEstoque };
+    }));
+    setPagamentoAberto(false);
+    emitirToast({
+      tipo: "aviso",
+      titulo: "Venda guardada offline 📡",
+      mensagem: "Sera enviada automaticamente quando a conexao voltar. O cupom fica disponivel no Historico apos o envio.",
+      duracao: 6500,
+    });
+    limparCarrinho({ refocar: true });
+  }
+
   async function confirmarPagamento() {
     // Trava sincrona: barra o 2o disparo no mesmo tick (F10 repetido, F10 +
     // clique, double-click) antes que `salvando` reflita no estado. Sem este
     // return imediato, dois disparos viravam duas vendas (#1046/#1047).
     if (enviandoVendaRef.current) return;
     setErro("");
-    if (!podeFinalizarRede) {
-      setErro("Sem conexao com o servidor. Aguarde a conexao voltar para finalizar.");
-      return;
-    }
     if (carrinho.length === 0) { setErro("Adicione ao menos um item"); return; }
     if (descontoNum > subtotal) { setErro("Desconto não pode ser maior que o subtotal"); return; }
     if (pagamentos.length === 0) { setErro("Adicione ao menos uma forma de pagamento"); return; }
@@ -1275,6 +1346,10 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
     // Gera a chave de idempotencia uma vez por checkout e reusa em retries.
     if (!idempotencyKeyRef.current) idempotencyKeyRef.current = novoId();
     setSalvando(true);
+    // Visivel no catch: se a rede cair NO MEIO do envio, o mesmo payload vai
+    // para a fila offline (a idempotencyKey impede duplicar caso o servidor
+    // tenha gravado antes da queda).
+    let payloadEnviado = null;
     try {
       const payload = {
         clienteId: clienteId || null,
@@ -1312,6 +1387,21 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
       if (oportunidadeConvertendo?.id) {
         payload.oportunidadeId = oportunidadeConvertendo.id;
       }
+      payloadEnviado = payload;
+
+      // SEM REDE: nem tenta o servidor — direto para a fila local. Pontos e
+      // conversao de oportunidade exigem validacao online no ato.
+      if (!podeFinalizarRede) {
+        if (payload.pontosResgatar) {
+          throw new Error("Resgate de pontos precisa de conexao. Remova os pontos para vender offline.");
+        }
+        if (payload.oportunidadeId) {
+          throw new Error("Conversao de oportunidade precisa de conexao. Tente quando a rede voltar.");
+        }
+        await finalizarOffline(payload);
+        return;
+      }
+
       const venda = await api.criarVenda(payload);
       // Venda gravada: rotaciona a chave para a PROXIMA venda nascer com chave
       // nova. (Em erro nao rotaciona — o retry reaproveita a chave e o backend
@@ -1343,6 +1433,17 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
       recarregarCaixa();
       recarregarPainel();
     } catch (err) {
+      // Conexao caiu NO MEIO do envio (fetch falhou ou estourou timeout):
+      // guarda offline em vez de mostrar erro. Se o servidor chegou a gravar
+      // antes da queda, o reenvio com a mesma idempotencyKey devolve a venda
+      // existente — zero duplicata.
+      const quedaDeRede = err instanceof ApiError && (err.kind === "NETWORK" || err.kind === "TIMEOUT");
+      if (quedaDeRede && payloadEnviado && !payloadEnviado.pontosResgatar && !payloadEnviado.oportunidadeId) {
+        try {
+          await finalizarOffline(payloadEnviado);
+          return; // finally libera a trava
+        } catch { /* IndexedDB indisponivel — cai no erro padrao abaixo */ }
+      }
       setErro(err.message);
       focarBusca();
     } finally {
@@ -1504,6 +1605,68 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
             className="pdv-conversao-cancelar"
             title="Cancelar a conversão (a venda nao sera vinculada a oportunidade)"
           >✕ Cancelar conversão</button>
+        </div>
+      )}
+
+      {/* Vendas feitas offline aguardando envio — some sozinho quando a fila
+          esvazia. Erro do servidor (estoque, caixa fechado) aparece aqui com
+          opcao de reenviar ou descartar. */}
+      {filaOffline.length > 0 && (
+        <div
+          role="status"
+          data-testid="banner-vendas-offline"
+          style={{
+            background: C.card,
+            border: `1px solid ${pendenciaOfflineComErro ? C.red : "#f59e0b"}`,
+            borderRadius: 8,
+            padding: "10px 14px",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            fontSize: 13,
+          }}
+        >
+          <span style={{ fontSize: 20 }}>📡</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, color: C.text }}>
+              {filaOffline.length} venda{filaOffline.length > 1 ? "s" : ""} aguardando envio (feita{filaOffline.length > 1 ? "s" : ""} offline)
+            </div>
+            <div style={{ fontSize: 12, color: pendenciaOfflineComErro ? C.red : C.muted, marginTop: 2 }}>
+              {pendenciaOfflineComErro
+                ? `Rejeitada pelo servidor: ${pendenciaOfflineComErro.ultimoErro}. Resolva e reenvie, ou descarte.`
+                : podeFinalizarRede
+                  ? "Enviando automaticamente…"
+                  : "Serao enviadas sozinhas assim que a conexao voltar."}
+            </div>
+          </div>
+          {podeFinalizarRede && (
+            <button
+              type="button"
+              onClick={() => sincronizarVendasOffline()}
+              style={{
+                background: C.accent, color: "var(--accent-ink)", border: "none",
+                borderRadius: 8, padding: "8px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer",
+              }}
+            >
+              Enviar agora
+            </button>
+          )}
+          {pendenciaOfflineComErro && (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm("Descartar esta venda offline? Ela NAO sera registrada no sistema.")) {
+                  descartarPendente(pendenciaOfflineComErro.chave);
+                }
+              }}
+              style={{
+                background: "transparent", color: C.red, border: `1px solid ${C.red}66`,
+                borderRadius: 8, padding: "8px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer",
+              }}
+            >
+              Descartar
+            </button>
+          )}
         </div>
       )}
 

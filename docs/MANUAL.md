@@ -43,7 +43,7 @@
 - **Multi-tenant**: cada empresa opera num espaço isolado, com plano, limites e expiração próprios;
 - **Multi-canal**: comandas (mesa/viagem/delivery), atendimento WhatsApp, PDV volante para garçom.
 
-O sistema é uma **PWA** (instalável no celular) com fallback offline limitado: o carrinho do PDV é persistido localmente; vendas exigem servidor online para finalizar.
+O sistema é uma **PWA** (instalável no celular) com suporte offline no PDV: o carrinho é persistido localmente e **vendas finalizadas sem conexão entram numa fila neste computador**, enviadas automaticamente (sem duplicar) quando a rede volta.
 
 ---
 
@@ -179,6 +179,13 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 - **Etiqueta de balança:** se você usa uma balança que imprime etiqueta com código de barras (padrão Toledo/Filizola — EAN-13 começando com `2`, com o código do produto e o peso embutidos), basta **bipar a etiqueta**: o item já entra na cestinha com o peso correto, sem digitar nada. O código interno da etiqueta é casado com o **código do produto** cadastrado.
 
 **Recuperação de rascunho:** se você fechar o navegador no meio de uma venda, ao reabrir o PDV aparece um banner azul "Você tinha N itens — Recuperar / Descartar". O carrinho é salvo a cada 600ms.
+
+**Vendas sem internet (modo offline):** se a conexão cair no meio do expediente, **o balcão não para**. Ao finalizar (F10) sem rede, aparece o aviso "Sem conexão — modo offline" e a venda é **guardada neste computador** (não se perde nem fechando o navegador). Um banner laranja "📡 N vendas aguardando envio" fica visível até tudo subir.
+
+- **Envio automático:** quando a internet volta, as vendas guardadas são enviadas sozinhas (na ordem em que foram feitas) e o caixa/relatórios atualizam. Sem duplicação: cada venda carrega uma chave única — mesmo que a conexão caia no meio do envio, o sistema nunca registra duas vezes.
+- **Cupom:** sai depois do envio (o número da venda é dado pelo servidor) — procure no **Histórico**.
+- **O que não dá offline:** resgate de pontos de fidelidade, maquininha Mercado Pago e Pix QR (todos precisam do servidor na hora). Dinheiro, PIX "por fora" e cartão na maquininha não integrada funcionam normalmente.
+- **Venda rejeitada no envio** (ex.: caixa foi fechado antes de sincronizar): o banner fica vermelho mostrando o motivo, com botões **Enviar agora** e **Descartar**. Dica: **só feche o caixa depois que o banner sumir**.
 
 **Atendimentos em espera (salvar para depois):** está atendendo um cliente que precisou sair (foi buscar outro produto, esqueceu o cartão no carro)? Clique em **"Salvar atendimento"** (ou **F9**) no topo da cestinha. O carrinho atual é congelado e a tela fica livre para o próximo cliente.
 
@@ -1303,7 +1310,7 @@ O sistema é **PWA** — pode ser instalado como app no celular pelo banner do n
 - Verifique permissão de **Bluetooth** se for usar impressora térmica.
 
 **Atualizações de versão:** quando uma versão nova é publicada, aparece um banner verde **"Nova versão disponível — Toque em Atualizar"** no rodapé. A atualização **não é automática** (pra não recarregar no meio de uma venda): toque em **Atualizar** quando estiver num momento seguro. O app também checa por versão nova sozinho a cada 30 min. Se o banner não aparecer e você suspeitar que está numa versão antiga, recarregue a página (no celular, feche e reabra o app).
-- Carrinho do PDV não roda offline — depende do servidor.
+- O PDV funciona offline para **finalizar vendas** (fila local com envio automático — ver seção do PDV). Buscar produtos exige que a lista já tenha carregado na sessão; demais telas dependem do servidor.
 
 ---
 

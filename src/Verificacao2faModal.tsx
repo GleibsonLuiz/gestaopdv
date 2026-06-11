@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { C } from "./lib/theme";
 import { api } from "./lib/api";
+import { useModalKeys } from "./lib/modalKeys";
 
 // ============ VERIFICACAO EM DUAS ETAPAS (2FA TOTP) ============
 // Self-service do usuario logado, acessivel no menu do avatar (ao lado de
@@ -25,6 +26,9 @@ export default function Verificacao2faModal({ onFechar }: Verificacao2faModalPro
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
+
+  // Esc fecha + focus-trap + restauracao de foco (a11y).
+  useModalKeys(true, { onClose: () => !ocupado && onFechar() });
 
   useEffect(() => {
     let ativo = true;
@@ -83,6 +87,7 @@ export default function Verificacao2faModal({ onFechar }: Verificacao2faModalPro
     >
       <div
         onClick={(e) => e.stopPropagation()}
+        role="dialog" aria-modal="true"
         className="bg-gp-card border border-gp-border rounded-[14px] w-full max-w-[440px] p-6 max-h-[90vh] overflow-y-auto"
       >
         <div className="flex justify-between items-start mb-[18px]">
@@ -164,7 +169,7 @@ export default function Verificacao2faModal({ onFechar }: Verificacao2faModalPro
             </p>
             <Campo label="Sua senha">
               <input
-                type="password" value={senha}
+                type="password" value={senha} aria-label="Sua senha"
                 onChange={(e) => setSenha(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") desativar(); }}
                 className="w-full bg-gp-surface border border-gp-border rounded-lg px-3 py-[10px] text-gp-text text-sm outline-none box-border"

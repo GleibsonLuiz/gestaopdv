@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { C } from "./lib/theme";
 import { api } from "./lib/api";
+import { useModalKeys } from "./lib/modalKeys";
 
 interface TrocarSenhaModalProps {
   onFechar: () => void;
@@ -13,6 +14,9 @@ export default function TrocarSenhaModal({ onFechar }: TrocarSenhaModalProps) {
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [sucesso, setSucesso] = useState(false);
+
+  // Esc fecha + focus-trap + restauracao de foco (a11y).
+  useModalKeys(true, { onClose: () => !salvando && onFechar() });
 
   async function salvar(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -54,6 +58,7 @@ export default function TrocarSenhaModal({ onFechar }: TrocarSenhaModalProps) {
       <form
         onSubmit={salvar}
         onClick={(e) => e.stopPropagation()}
+        role="dialog" aria-modal="true"
         className="bg-gp-card border border-gp-border rounded-[14px] w-full max-w-[420px] p-6"
       >
         <div className="flex justify-between items-start mb-[18px]">

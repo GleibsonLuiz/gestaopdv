@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import type { FormEvent } from "react";
 import { C } from "../lib/theme";
+import { useModalKeys } from "../lib/modalKeys";
 import { api } from "../lib/api";
 import BotoesContatoCliente from "./BotoesContatoCliente";
 import { CLASSIFICACOES_SCORE, corDoScore, type ClassificacaoScore } from "../lib/scoring";
@@ -1030,13 +1031,9 @@ export default function PerfilClienteModal({ clienteId, onFechar, user }: Perfil
       .catch(() => setTemplates([]));
   }, []);
 
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onFechar();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onFechar]);
+  // Esc fecha + focus-trap + restauracao de foco (a11y, Fase 7) — o hook
+  // universal substitui o listener manual de Escape que havia aqui.
+  useModalKeys(true, { onClose: onFechar });
 
   const [qtdInteracoes, setQtdInteracoes] = useState<number | null>(null);
   const [qtdContatos, setQtdContatos] = useState<number | null>(null);
@@ -1066,7 +1063,7 @@ export default function PerfilClienteModal({ clienteId, onFechar, user }: Perfil
         padding: 16,
       }}
     >
-      <div style={{
+      <div role="dialog" aria-modal="true" style={{
         background: C.surface,
         border: `1px solid ${C.border}`,
         borderRadius: 16,

@@ -1,4 +1,3 @@
-// @ts-nocheck — extraido verbatim de PDV.tsx no fatiamento (Fase 5).
 // Paineis e leafs da tela NovaVenda: grafico "Vendas de hoje" por forma,
 // estados de cestinha vazia (clean e completo), atalho clicavel e total
 // animado da sidebar do carrinho.

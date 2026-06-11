@@ -1,4 +1,3 @@
-// @ts-nocheck — extraido verbatim de PDV.tsx no fatiamento (Fase 5).
 // Abertura de caixa direto do PDV (sem sair para a tela Caixa), com
 // sugestao de troco baseada no ultimo fechamento.
 import { useEffect, useRef, useState } from "react";
@@ -9,15 +8,15 @@ import { fmtBRL } from "./comum";
 export default function ModalAbrirCaixaPDV({ onCancelar, onSucesso }) {
   const [saldoInicial, setSaldoInicial] = useState("");
   const [observacoes, setObservacoes] = useState("");
-  const [sugestao, setSugestao] = useState(null);
+  const [sugestao, setSugestao] = useState<any>(null);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
-  const saldoRef = useRef(null);
+  const saldoRef = useRef<HTMLInputElement>(null);
   useModalKeys(true, { onClose: () => !salvando && onCancelar() });
 
   useEffect(() => {
     api.sugerirTrocoCaixa()
-      .then(r => { setSugestao(r); setSaldoInicial(String(r.sugestao ?? 0)); })
+      .then((r: any) => { setSugestao(r); setSaldoInicial(String(r.sugestao ?? 0)); })
       .catch(() => setSaldoInicial("0"));
     setTimeout(() => saldoRef.current?.focus(), 80);
   }, []);
@@ -31,7 +30,7 @@ export default function ModalAbrirCaixaPDV({ onCancelar, onSucesso }) {
     try {
       await api.abrirCaixa({ saldoInicial: valor, observacoesAbertura: observacoes });
       onSucesso();
-    } catch (err) { setErro(err.message); }
+    } catch (err) { setErro((err as Error).message); }
     finally { setSalvando(false); }
   }
 

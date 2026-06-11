@@ -1,4 +1,4 @@
-// @ts-nocheck — extraido verbatim de Relatorios.tsx; tipagem fina em etapa propria.
+// @ts-nocheck — extraido verbatim de monolito; tipagem fina em etapa propria.
 // Abas analiticas (fatiamento Fase 5): Curva ABC, Giro & Capital,
 // Sazonalidade (heatmap) e Aging de Recebiveis — com badges/distribuicoes —
 // e o relatorio de Comissoes.

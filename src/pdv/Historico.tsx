@@ -1,4 +1,4 @@
-// @ts-nocheck — extraido verbatim de PDV.tsx no fatiamento (Fase 5).
+// @ts-nocheck — extraido verbatim de monolito; tipagem fina em etapa propria.
 // Aba Historico do PDV: lista de vendas com filtros, detalhe, reimpressao,
 // cancelamento e refinalizacao (alterar forma de pagamento) com autorizacao
 // gerencial para VENDEDOR. Tipagem fina fica para a etapa de tipagem.

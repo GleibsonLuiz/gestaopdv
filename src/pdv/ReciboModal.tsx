@@ -1,4 +1,3 @@
-// @ts-nocheck — extraido verbatim de PDV.tsx no fatiamento (Fase 5).
 // A tipagem fina do objeto `venda` fica para a etapa de tipagem do PDV.
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -20,8 +19,8 @@ import { FORMA_LABEL, FORMA_COR_VAR, fmtBRL, fmtQtd, fmtData } from "./comum";
 export default function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpressao = false }) {
   const mostrarRecebidoTroco = Number(valorRecebido) > 0;
   const empresa = useConfiguracaoEmpresa();
-  const novaVendaBtnRef = useRef(null);
-  const [cfgImp, setCfgImp] = useState(null);
+  const novaVendaBtnRef = useRef<HTMLButtonElement>(null);
+  const [cfgImp, setCfgImp] = useState<any>(null);
   const printDispatchedRef = useRef(false);
 
   // Carrega ConfiguracaoImpressora — usada para decidir auto-print, vias e

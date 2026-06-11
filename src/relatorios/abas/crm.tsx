@@ -1,4 +1,4 @@
-// @ts-nocheck — extraido verbatim de Relatorios.tsx; tipagem fina em etapa propria.
+// @ts-nocheck — extraido verbatim de monolito; tipagem fina em etapa propria.
 // Abas CRM (fatiamento Fase 5): Funil, Performance, Perdas, Forecast,
 // Atividades & Cadencia, NPS e Carteira — com graficos SVG, podios e
 // constantes de etapa/origem do funil.

@@ -1,4 +1,4 @@
-// @ts-nocheck — extraido verbatim de Relatorios.tsx; tipagem fina em etapa propria.
+// @ts-nocheck — extraido verbatim de monolito; tipagem fina em etapa propria.
 // Abas classicas dos Relatorios (extraidas verbatim de Relatorios.tsx,
 // fatiamento Fase 5): Vendas, Compras, Financeiro, Estoque, Fabricantes,
 // Caixas (DRE) e Lucratividade.

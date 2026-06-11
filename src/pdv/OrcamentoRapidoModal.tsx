@@ -1,4 +1,4 @@
-// @ts-nocheck — extraido verbatim de PDV.tsx no fatiamento (Fase 5).
+// @ts-nocheck — extraido verbatim de monolito; tipagem fina em etapa propria.
 // Converte o carrinho atual em um orcamento (status RASCUNHO) e gera o link
 // de envio por WhatsApp ou e-mail com o resumo do orcamento. A cestinha
 // continua intacta — e um passo pre-venda, nao substitui o fechamento.

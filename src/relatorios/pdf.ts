@@ -1,4 +1,3 @@
-// @ts-nocheck — extraido verbatim de Relatorios.tsx no fatiamento (Fase 5).
 // Infra unica de PDF dos relatorios (DESIGN_STANDARDS.md §5): cabecalho da
 // empresa, cor de header, densidade das tabelas e alinhamento mono das
 // colunas numericas. Ajustes aqui refletem em TODOS os ~80 blocos de tabela.
@@ -17,7 +16,7 @@ export const COR_HEADER_PDF = [30, 33, 45];
 // (numeros mono tabular). Deteccao por conteudo: moeda (R$...), percentual,
 // numero puro, ou numero com sufixo curto (d, x, un, kg, h). Datas (com "/") e
 // textos ficam alinhados a esquerda. Injetado em todas as chamadas autoTable.
-export function pdfAlinhaNumeros(data) {
+export function pdfAlinhaNumeros(data: any) {
   if (data.section !== "body") return;
   const raw = Array.isArray(data.cell.text) ? data.cell.text.join("") : String(data.cell.text ?? "");
   const t = raw.trim();
@@ -42,7 +41,7 @@ export function pdfAlinhaNumeros(data) {
 const TABELA_LISTRA = [246, 247, 249]; // zebra clara, quase imperceptivel
 const TABELA_FIO = [228, 230, 234];    // hairline horizontal entre as linhas
 
-export function tabelaPDF(doc, opts = {}) {
+export function tabelaPDF(doc: jsPDF, opts: any = {}) {
   const fonteCorpo =
     typeof opts.styles?.fontSize === "number"
       ? Math.max(7, opts.styles.fontSize - 1)
@@ -50,13 +49,13 @@ export function tabelaPDF(doc, opts = {}) {
 
   return autoTable(doc, {
     margin: { left: 14, right: 14 },
-    alternateRowStyles: { fillColor: TABELA_LISTRA },
+    alternateRowStyles: { fillColor: TABELA_LISTRA as [number, number, number] },
     ...opts,
     styles: {
       ...(opts.styles || {}),
       ...(fonteCorpo != null ? { fontSize: fonteCorpo } : {}),
       cellPadding: { top: 0.7, right: 1.8, bottom: 0.7, left: 1.8 },
-      lineColor: TABELA_FIO,
+      lineColor: TABELA_FIO as [number, number, number],
       lineWidth: { bottom: 0.1 },
     },
     headStyles: {
@@ -70,9 +69,9 @@ export function tabelaPDF(doc, opts = {}) {
 // criarPDF e async — carrega a config da empresa do cache e desenha um header
 // completo (logo + razao social + CNPJ + endereco + contato). Se a config nao
 // foi carregada ainda, cai no header simples "GestãoProMax".
-export async function criarPDF(titulo) {
+export async function criarPDF(titulo: string) {
   const doc = new jsPDF({ orientation: "p", unit: "mm", format: "a4" });
-  const empresa = await obterConfiguracaoCache();
+  const empresa: any = await obterConfiguracaoCache();
 
   let yCursor = 16;
 
@@ -144,35 +143,35 @@ export async function criarPDF(titulo) {
   doc.setTextColor(120, 120, 120);
   doc.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, 14, yCursor);
   doc.setTextColor(0, 0, 0);
-  doc.lastAutoTable = { finalY: yCursor + 2 };
+  (doc as any).lastAutoTable = { finalY: yCursor + 2 };
   return doc;
 }
 
-async function carregarImagemDataUrl(url) {
+async function carregarImagemDataUrl(url: string): Promise<string> {
   const resp = await fetch(url);
   if (!resp.ok) throw new Error("imagem nao acessivel");
   const blob = await resp.blob();
-  return new Promise((resolve, reject) => {
+  return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
+    reader.onload = () => resolve(reader.result as string);
     reader.onerror = reject;
     reader.readAsDataURL(blob);
   });
 }
 
-export function addPeriodo(doc, di, df) {
+export function addPeriodo(doc: jsPDF, di?: string, df?: string) {
   if (!di && !df) return;
-  const partes = [];
+  const partes: string[] = [];
   if (di) partes.push(`de ${new Date(di + "T00:00:00").toLocaleDateString("pt-BR")}`);
   if (df) partes.push(`até ${new Date(df + "T00:00:00").toLocaleDateString("pt-BR")}`);
   addLinha(doc, "Período: " + partes.join(" "));
 }
 
-export function addLinha(doc, texto) {
-  const y = (doc.lastAutoTable?.finalY || 30) + 4;
+export function addLinha(doc: jsPDF, texto: string) {
+  const y = ((doc as any).lastAutoTable?.finalY || 30) + 4;
   doc.setFontSize(9);
   doc.setTextColor(120, 120, 120);
   doc.text(texto, 14, y);
   doc.setTextColor(0, 0, 0);
-  doc.lastAutoTable = { finalY: y };
+  (doc as any).lastAutoTable = { finalY: y };
 }

@@ -16,9 +16,12 @@ import {
   RelatorioNpsCrm, RelatorioAtividadesCrm, RelatorioForecastCrm,
   RelatorioPerdasCrm,
 } from "./relatorios/abas/crm";
+import { RelatorioResumoDiario } from "./relatorios/abas/ResumoDiario";
 
 
 const ABAS = [
+  // Resumo do Dia primeiro e como default: e a visao que o dono abre todo dia.
+  { id: "resumo-diario", label: "📅 Resumo do Dia", cor: C.accent },
   { id: "vendas", label: "🛒 Vendas", cor: C.accent },
   { id: "compras", label: "🛍️ Compras", cor: C.yellow },
   { id: "financeiro", label: "💰 Financeiro", cor: C.green },
@@ -35,7 +38,7 @@ const ABAS = [
 ];
 
 export default function Relatorios() {
-  const [aba, setAba] = useState("vendas");
+  const [aba, setAba] = useState("resumo-diario");
 
   return (
     <div>
@@ -57,6 +60,7 @@ export default function Relatorios() {
         ))}
       </div>
 
+      {aba === "resumo-diario" && <RelatorioResumoDiario key="rd" />}
       {aba === "vendas" && <RelatorioVendas key="v" />}
       {aba === "compras" && <RelatorioCompras key="c" />}
       {aba === "financeiro" && <RelatorioFinanceiro key="f" />}

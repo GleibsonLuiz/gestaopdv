@@ -769,6 +769,9 @@ export const api = {
     request(`/relatorios/sazonalidade${qsFrom(filtros)}`),
   relatorioAgingReceber: (filtros: StringDict = {}) =>
     request(`/relatorios/aging-receber${qsFrom(filtros)}`),
+  // Fechamento do dia: vendas+formas+vendedores+caixas+financeiro em 1 chamada.
+  relatorioResumoDiario: (filtros: StringDict = {}) =>
+    request(`/relatorios/resumo-diario${qsFrom(filtros)}`),
   relatorioFunilCrm: (filtros: StringDict = {}) =>
     request(`/relatorios/crm/funil${qsFrom(filtros)}`),
   relatorioPerformanceCrm: (filtros: StringDict = {}) =>

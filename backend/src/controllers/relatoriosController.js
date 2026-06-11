@@ -1303,3 +1303,190 @@ export async function relatorioAgingReceber(req, res, next) {
     next(err);
   }
 }
+
+// ============ RESUMO DIARIO (fechamento do dia) ============
+//
+// Visao de dono em uma chamada: vendas do dia (com comparativos de ontem e
+// do mesmo dia na semana anterior), quebra por forma de pagamento e por
+// vendedor, top produtos, caixas do dia (sangrias/suprimentos/diferenca) e
+// o financeiro do dia (recebido/pago/a vencer). VENDEDOR ve apenas as
+// proprias vendas (mesma regra dos demais relatorios).
+
+export async function relatorioResumoDiario(req, res, next) {
+  try {
+    const dia = req.query.data && !isNaN(new Date(req.query.data).getTime())
+      ? new Date(req.query.data)
+      : new Date();
+    const di = inicioDoDia(dia);
+    const df = fimDoDia(dia);
+
+    const vendaWhereBase = { status: "CONCLUIDA" };
+    if (req.user.role === "VENDEDOR") vendaWhereBase.userId = req.user.sub;
+    const vendaWhereDia = { ...vendaWhereBase, createdAt: { gte: di, lte: df } };
+
+    // Janelas comparativas: ontem e o mesmo dia da semana passada.
+    const diaOntem = new Date(di); diaOntem.setDate(diaOntem.getDate() - 1);
+    const diaSemana = new Date(di); diaSemana.setDate(diaSemana.getDate() - 7);
+    const janela = (d) => ({ gte: inicioDoDia(d), lte: fimDoDia(d) });
+
+    const [vendasDia, aggOntem, aggSemana, canceladasDia] = await Promise.all([
+      prisma.venda.findMany({
+        where: vendaWhereDia,
+        select: {
+          total: true, desconto: true, createdAt: true,
+          user: { select: { id: true, nome: true } },
+          pagamentos: { select: { forma: true, formaCustomNome: true, valor: true } },
+          itens: {
+            select: {
+              quantidade: true, subtotal: true,
+              produto: { select: { nome: true, unidade: true } },
+            },
+          },
+        },
+      }),
+      prisma.venda.aggregate({
+        where: { ...vendaWhereBase, createdAt: janela(diaOntem) },
+        _sum: { total: true }, _count: true,
+      }),
+      prisma.venda.aggregate({
+        where: { ...vendaWhereBase, createdAt: janela(diaSemana) },
+        _sum: { total: true }, _count: true,
+      }),
+      prisma.venda.count({
+        where: { status: "CANCELADA", createdAt: { gte: di, lte: df } },
+      }),
+    ]);
+
+    const total = vendasDia.reduce((a, v) => a + toNum(v.total), 0);
+    const descontoTotal = vendasDia.reduce((a, v) => a + toNum(v.desconto), 0);
+    const quantidade = vendasDia.length;
+
+    const variacao = (atual, anterior) =>
+      anterior > 0 ? ((atual - anterior) / anterior) * 100 : null;
+    const totalOntem = toNum(aggOntem._sum.total);
+    const totalSemana = toNum(aggSemana._sum.total);
+
+    // Quebra por forma de pagamento (vendas multi-pagamento contam por parcela).
+    const porFormaMap = new Map();
+    for (const v of vendasDia) {
+      for (const p of v.pagamentos || []) {
+        const chave = p.formaCustomNome || p.forma;
+        const item = porFormaMap.get(chave) || { forma: p.forma, nome: chave, total: 0, quantidade: 0 };
+        item.total += toNum(p.valor);
+        item.quantidade += 1;
+        porFormaMap.set(chave, item);
+      }
+    }
+    const porForma = [...porFormaMap.values()].sort((a, b) => b.total - a.total);
+
+    // Quebra por vendedor.
+    const porVendedorMap = new Map();
+    for (const v of vendasDia) {
+      const id = v.user?.id || "?";
+      const item = porVendedorMap.get(id) || { nome: v.user?.nome || "—", total: 0, quantidade: 0 };
+      item.total += toNum(v.total);
+      item.quantidade += 1;
+      porVendedorMap.set(id, item);
+    }
+    const porVendedor = [...porVendedorMap.values()]
+      .map(v => ({ ...v, ticketMedio: v.quantidade > 0 ? v.total / v.quantidade : 0 }))
+      .sort((a, b) => b.total - a.total);
+
+    // Top produtos do dia (por receita).
+    const porProdutoMap = new Map();
+    for (const v of vendasDia) {
+      for (const it of v.itens || []) {
+        const nome = it.produto?.nome || "—";
+        const item = porProdutoMap.get(nome) || { nome, unidade: it.produto?.unidade || "UN", quantidade: 0, total: 0 };
+        item.quantidade += toNum(it.quantidade);
+        item.total += toNum(it.subtotal);
+        porProdutoMap.set(nome, item);
+      }
+    }
+    const topProdutos = [...porProdutoMap.values()]
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5);
+
+    // Caixas que participaram do dia (abertos OU fechados dentro da janela).
+    const caixasDia = await prisma.caixa.findMany({
+      where: {
+        OR: [
+          { abertoEm: { gte: di, lte: df } },
+          { fechadoEm: { gte: di, lte: df } },
+        ],
+      },
+      select: {
+        id: true, numero: true, status: true, abertoEm: true, fechadoEm: true,
+        saldoInicial: true, saldoFinalContado: true, diferenca: true,
+        user: { select: { nome: true } },
+      },
+      orderBy: { abertoEm: "asc" },
+    });
+    const movsCaixa = caixasDia.length > 0
+      ? await prisma.movimentacaoCaixa.groupBy({
+          by: ["caixaId", "tipo"],
+          where: { caixaId: { in: caixasDia.map(c => c.id) }, tipo: { in: ["SANGRIA", "SUPRIMENTO"] } },
+          _sum: { valor: true },
+        })
+      : [];
+    const caixas = caixasDia.map(c => {
+      const sangrias = toNum(movsCaixa.find(m => m.caixaId === c.id && m.tipo === "SANGRIA")?._sum.valor);
+      const suprimentos = toNum(movsCaixa.find(m => m.caixaId === c.id && m.tipo === "SUPRIMENTO")?._sum.valor);
+      return {
+        numero: c.numero, status: c.status, operador: c.user?.nome || "—",
+        abertoEm: c.abertoEm, fechadoEm: c.fechadoEm,
+        saldoInicial: toNum(c.saldoInicial),
+        saldoFinalContado: c.saldoFinalContado != null ? toNum(c.saldoFinalContado) : null,
+        diferenca: c.diferenca != null ? toNum(c.diferenca) : null,
+        sangrias, suprimentos,
+      };
+    });
+
+    // Financeiro do dia: o que ENTROU/SAIU hoje + o que VENCE hoje em aberto.
+    const [recebidoAgg, pagoAgg, aVencerReceberAgg, aVencerPagarAgg] = await Promise.all([
+      prisma.contaReceber.aggregate({
+        where: { status: "PAGA", recebimento: { gte: di, lte: df } },
+        _sum: { valor: true }, _count: true,
+      }),
+      prisma.contaPagar.aggregate({
+        where: { status: "PAGA", pagamento: { gte: di, lte: df } },
+        _sum: { valor: true }, _count: true,
+      }),
+      prisma.contaReceber.aggregate({
+        where: { status: { in: ["PENDENTE", "ATRASADA"] }, vencimento: { gte: di, lte: df } },
+        _sum: { valor: true }, _count: true,
+      }),
+      prisma.contaPagar.aggregate({
+        where: { status: { in: ["PENDENTE", "ATRASADA"] }, vencimento: { gte: di, lte: df } },
+        _sum: { valor: true }, _count: true,
+      }),
+    ]);
+
+    res.json({
+      data: di.toISOString().slice(0, 10),
+      resumo: {
+        quantidade,
+        total,
+        ticketMedio: quantidade > 0 ? total / quantidade : 0,
+        descontoTotal,
+        canceladas: canceladasDia,
+      },
+      comparativo: {
+        ontem: { total: totalOntem, quantidade: aggOntem._count, variacaoPct: variacao(total, totalOntem) },
+        semanaPassada: { total: totalSemana, quantidade: aggSemana._count, variacaoPct: variacao(total, totalSemana) },
+      },
+      porForma,
+      porVendedor,
+      topProdutos,
+      caixas,
+      financeiro: {
+        recebido: { total: toNum(recebidoAgg._sum.valor), quantidade: recebidoAgg._count },
+        pago: { total: toNum(pagoAgg._sum.valor), quantidade: pagoAgg._count },
+        aVencerReceber: { total: toNum(aVencerReceberAgg._sum.valor), quantidade: aVencerReceberAgg._count },
+        aVencerPagar: { total: toNum(aVencerPagarAgg._sum.valor), quantidade: aVencerPagarAgg._count },
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}

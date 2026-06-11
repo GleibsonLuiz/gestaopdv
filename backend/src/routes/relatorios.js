@@ -12,6 +12,7 @@ import {
   relatorioGiroEstoque,
   relatorioSazonalidade,
   relatorioAgingReceber,
+  relatorioResumoDiario,
 } from "../controllers/relatoriosController.js";
 import {
   relatorioFunilCrm,
@@ -39,6 +40,8 @@ router.get("/curva-abc", relatorioCurvaAbc);
 router.get("/giro-estoque", relatorioGiroEstoque);
 router.get("/sazonalidade", relatorioSazonalidade);
 router.get("/aging-receber", relatorioAgingReceber);
+// Fechamento do dia: vendas+formas+vendedores+caixas+financeiro em 1 chamada.
+router.get("/resumo-diario", relatorioResumoDiario);
 router.get("/crm/funil", relatorioFunilCrm);
 router.get("/crm/performance", relatorioPerformanceCrm);
 router.get("/crm/carteira", relatorioCarteiraCrm);

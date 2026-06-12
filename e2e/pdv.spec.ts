@@ -103,6 +103,45 @@ test("modo Clean (F7): venda completa no layout focado", async ({ page, request 
     .toBeGreaterThan(vendasAntes);
 });
 
+test("venda por peso (KG): teclado de balança converte gramas e finaliza", async ({ page, request }) => {
+  const token = await apiLogin(request);
+  await garantirCaixaAberto(request, token);
+  const vendasAntes = await contarVendas(request, token);
+
+  await loginUI(page);
+  const busca = page.locator('input[placeholder*="Bipe"]').first();
+  await busca.waitFor({ timeout: 20_000 });
+
+  // O teclado de balanca abre pelo fluxo de SUGESTAO (nome parcial → Enter
+  // na sugestao destacada). Codigo exato + Enter adiciona qtd=1 direto
+  // (caminho de scanner é a etiqueta de balanca EAN-13). Resiliencia do
+  // bipar(): re-tenta Enter ate o modal abrir (busca debounced).
+  await busca.click();
+  await busca.fill("APARAS");
+  const tecladoPeso = page.getByText("Peso (gramas)").first();
+  for (let tentativa = 0; tentativa < 5; tentativa++) {
+    await page.waitForTimeout(tentativa === 0 ? 400 : 700);
+    await page.keyboard.press("Enter");
+    if (await tecladoPeso.isVisible().catch(() => false)) break;
+  }
+  await expect(tecladoPeso).toBeVisible();
+
+  // 400 gramas → 0,4 KG × R$ 39,90 = R$ 15,96.
+  await page.locator(".pdv-qty-input").fill("400");
+  await page.keyboard.press("Enter"); // confirma (useModalKeys permitirEnter)
+  await expect(tecladoPeso).toBeHidden({ timeout: 5_000 });
+  await expect(page.getByText("15,96").first()).toBeVisible({ timeout: 5_000 });
+
+  await page.keyboard.press("F10");
+  await page.waitForTimeout(800);
+  await page.keyboard.press("F10");
+
+  await expect(page.getByText("Venda concluída").first()).toBeVisible({ timeout: 10_000 });
+  await expect
+    .poll(() => contarVendas(request, token), { timeout: 15_000 })
+    .toBeGreaterThan(vendasAntes);
+});
+
 test("login com senha errada mostra erro e nao entra", async ({ page }) => {
   await loginUI(page, { email: "admin@gestaopro.local", senha: "senha-errada-123" });
   await expect(page.getByText(/credenciais/i).first()).toBeVisible();

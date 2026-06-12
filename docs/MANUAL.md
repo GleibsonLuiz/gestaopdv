@@ -185,7 +185,7 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 - **Envio automático:** quando a internet volta, as vendas guardadas são enviadas sozinhas (na ordem em que foram feitas) e o caixa/relatórios atualizam. Sem duplicação: cada venda carrega uma chave única — mesmo que a conexão caia no meio do envio, o sistema nunca registra duas vezes.
 - **Cupom:** sai depois do envio (o número da venda é dado pelo servidor) — procure no **Histórico**.
 - **O que não dá offline:** resgate de pontos de fidelidade, maquininha Mercado Pago e Pix QR (todos precisam do servidor na hora). Dinheiro, PIX "por fora" e cartão na maquininha não integrada funcionam normalmente.
-- **Venda rejeitada no envio** (ex.: caixa foi fechado antes de sincronizar): o banner fica vermelho mostrando o motivo, com botões **Enviar agora** e **Descartar**. Dica: **só feche o caixa depois que o banner sumir**.
+- **Venda rejeitada no envio** (ex.: caixa foi fechado antes de sincronizar): o banner fica vermelho mostrando o motivo, com botões **Enviar agora** e **Descartar**. Dica: **só feche o caixa depois que o banner sumir** — e o próprio modal de **Fechar Caixa** agora exibe um alerta vermelho se ainda houver vendas offline aguardando envio.
 
 **Atendimentos em espera (salvar para depois):** está atendendo um cliente que precisou sair (foi buscar outro produto, esqueceu o cartão no carro)? Clique em **"Salvar atendimento"** (ou **F9**) no topo da cestinha. O carrinho atual é congelado e a tela fica livre para o próximo cliente.
 

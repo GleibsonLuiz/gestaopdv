@@ -4,6 +4,7 @@ import { api } from "./lib/api";
 import HeaderRelatorio, { useConfiguracaoEmpresa } from "./HeaderRelatorio";
 import { useModalKeys } from "./lib/modalKeys";
 import { obterConfigImpressora, devePrintar, imprimirDocumento } from "./lib/impressora";
+import { useVendasPendentes } from "./lib/filaVendasOffline";
 import CupomEnvelope from "./components/cupons/CupomEnvelope.jsx";
 import CupomSangriaSuprimento from "./components/cupons/CupomSangriaSuprimento.jsx";
 import CupomFechamentoCaixa from "./components/cupons/CupomFechamentoCaixa.jsx";
@@ -653,6 +654,9 @@ function ModalFechar({ caixa, user, onCancelar, onSucesso }: any) {
   const [erro, setErro] = useState("");
   const empresa = useConfiguracaoEmpresa();
   const exigeAutorizacao = user?.role === "VENDEDOR";
+  // Vendas feitas offline ainda nao enviadas: fechar o caixa AGORA faria o
+  // envio delas ser rejeitado (caixa fechado) — aviso forte antes do submit.
+  const vendasOffline = useVendasPendentes();
   useModalKeys(true, { onClose: () => !salvando && onCancelar() });
 
   async function imprimirComprovante() {
@@ -759,6 +763,17 @@ function ModalFechar({ caixa, user, onCancelar, onSucesso }: any) {
   return (
     <ModalShell titulo="🔒 Fechar Caixa" onFechar={salvando ? undefined : onCancelar}>
       <form onSubmit={salvar}>
+        {vendasOffline > 0 && (
+          <div role="alert" style={{
+            ...dicaStyle, background: C.red + "22", borderColor: C.red + "66", color: C.red,
+            fontWeight: 600,
+          }}>
+            📡 <b>{vendasOffline} venda{vendasOffline > 1 ? "s" : ""} offline aguardando envio.</b>{" "}
+            Se fechar o caixa agora, ela{vendasOffline > 1 ? "s" : ""} será{vendasOffline > 1 ? "ão" : ""} rejeitada{vendasOffline > 1 ? "s" : ""} no
+            envio (caixa fechado) e vai{vendasOffline > 1 ? "ão" : ""} exigir atenção manual no PDV.
+            Recomendado: volte ao PDV e aguarde o banner "aguardando envio" sumir antes de fechar.
+          </div>
+        )}
         <div style={{ ...dicaStyle, background: C.yellow + "22", borderColor: C.yellow + "55", color: C.yellow }}>
           🔍 <b>Conferência cega:</b> conte o dinheiro fisicamente no caixa e digite o valor.
           O sistema só revela o saldo esperado depois — assim você confirma sem viés.

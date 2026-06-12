@@ -1,4 +1,3 @@
-// @ts-nocheck — extraido verbatim de monolito; tipagem fina em etapa propria.
 // Aba Historico do PDV: lista de vendas com filtros, detalhe, reimpressao,
 // cancelamento e refinalizacao (alterar forma de pagamento) com autorizacao
 // gerencial para VENDEDOR. Tipagem fina fica para a etapa de tipagem.
@@ -15,18 +14,18 @@ import {
 import { pagamentosReducer, criarPagamento } from "./pagamentos";
 
 export default function Historico({ user }) {
-  const [vendas, setVendas] = useState([]);
+  const [vendas, setVendas] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
   const [filtroForma, setFiltroForma] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
-  const [detalhe, setDetalhe] = useState(null);
-  const [reimpressao, setReimpressao] = useState(null);
-  const [refinalizar, setRefinalizar] = useState(null);
-  const [autorizacaoPendente, setAutorizacaoPendente] = useState(null);
-  const [autorizacaoCreds, setAutorizacaoCreds] = useState(null);
+  const [detalhe, setDetalhe] = useState<any>(null);
+  const [reimpressao, setReimpressao] = useState<any>(null);
+  const [refinalizar, setRefinalizar] = useState<any>(null);
+  const [autorizacaoPendente, setAutorizacaoPendente] = useState<any>(null);
+  const [autorizacaoCreds, setAutorizacaoCreds] = useState<any>(null);
   const [mensagem, setMensagem] = useState("");
 
   const podeCancelar = user.role === "ADMIN" || user.role === "GERENTE";
@@ -51,9 +50,9 @@ export default function Historico({ user }) {
         dataFim,
         limite: "100",
       });
-      setVendas(data);
+      setVendas(data as any[]);
     } catch (err) {
-      setErro(err.message);
+      setErro((err as Error).message);
     } finally {
       setCarregando(false);
     }
@@ -71,7 +70,7 @@ export default function Historico({ user }) {
       const v = await api.obterVenda(id);
       setDetalhe(v);
     } catch (err) {
-      alert(err.message);
+      alert((err as Error).message);
     }
   }
 
@@ -80,7 +79,7 @@ export default function Historico({ user }) {
       const v = await api.obterVenda(id);
       setReimpressao(v);
     } catch (err) {
-      alert(err.message);
+      alert((err as Error).message);
     }
   }
 
@@ -92,7 +91,7 @@ export default function Historico({ user }) {
       setDetalhe(null);
       carregar();
     } catch (err) {
-      alert(err.message);
+      alert((err as Error).message);
     }
   }
 
@@ -130,7 +129,7 @@ export default function Historico({ user }) {
       setRefinalizar(reaberta);
       carregar();
     } catch (err) {
-      alert(err.message);
+      alert((err as Error).message);
       // Em caso de senha invalida, reabre a modal de autorizacao para
       // o vendedor tentar de novo sem perder o contexto.
       if (autorizacao) setAutorizacaoPendente({ tipo: "reabrir", venda: v });
@@ -144,7 +143,7 @@ export default function Historico({ user }) {
       setRefinalizar(completa);
       setDetalhe(null);
     } catch (err) {
-      alert(err.message);
+      alert((err as Error).message);
     }
   }
 
@@ -169,7 +168,7 @@ export default function Historico({ user }) {
       setAutorizacaoCreds(null);
       carregar();
     } catch (err) {
-      alert(err.message);
+      alert((err as Error).message);
     }
   }
 
@@ -534,7 +533,7 @@ function RefinalizarVendaModal({ venda, onFechar, onAplicar }) {
   );
   const [gerarConta, setGerarConta] = useState(false);
   const [vencimento, setVencimento] = useState(dataDaqui(30));
-  const [parcelas, setParcelas] = useState(1);
+  const [parcelas, setParcelas] = useState<any>(1);
   const [descricaoConta, setDescricaoConta] = useState("");
   const [observacoesConta, setObservacoesConta] = useState("");
   const [salvando, setSalvando] = useState(false);
@@ -570,7 +569,7 @@ function RefinalizarVendaModal({ venda, onFechar, onAplicar }) {
   async function aplicar() {
     if (!podeFinalizar) return;
     setSalvando(true);
-    const payload = {
+    const payload: any = {
       pagamentos: pagamentos.map(p => ({
         forma: p.forma,
         valor: Math.round((Number(p.valor) || 0) * 100) / 100,

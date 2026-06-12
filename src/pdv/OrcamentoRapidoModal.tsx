@@ -1,4 +1,3 @@
-// @ts-nocheck — extraido verbatim de monolito; tipagem fina em etapa propria.
 // Converte o carrinho atual em um orcamento (status RASCUNHO) e gera o link
 // de envio por WhatsApp ou e-mail com o resumo do orcamento. A cestinha
 // continua intacta — e um passo pre-venda, nao substitui o fechamento.
@@ -34,7 +33,7 @@ export default function OrcamentoRapidoModal({
   function montarMensagem(numero, canal) {
     const empresaNome = (empresa?.nomeFantasia || empresa?.razaoSocial || "GestãoProMax").trim();
     const sep = "━━━━━━━━━━━━━━━━━━";
-    const L = [];
+    const L: string[] = [];
 
     // Cabeçalho
     L.push(`🧾 *ORÇAMENTO Nº ${numero}*`);
@@ -116,7 +115,7 @@ export default function OrcamentoRapidoModal({
 
     setSalvando(true);
     try {
-      const orc = await api.criarOrcamento({
+      const orc: any = await api.criarOrcamento({
         tipo: "ORCAMENTO",
         tabelaPreco: "AV",
         clienteId: clienteId || null,
@@ -150,7 +149,7 @@ export default function OrcamentoRapidoModal({
         : "";
       onSucesso(`Orçamento #${orc.numero} (${fmtBRL(total)}) salvo${via}. Veja em Orçamentos.`);
     } catch (err) {
-      setErro(err.message || "Falha ao gerar o orçamento.");
+      setErro((err as Error).message || "Falha ao gerar o orçamento.");
     } finally {
       setSalvando(false);
     }

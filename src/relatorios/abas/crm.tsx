@@ -1,4 +1,3 @@
-// @ts-nocheck — extraido verbatim de monolito; tipagem fina em etapa propria.
 // Abas CRM (fatiamento Fase 5): Funil, Performance, Perdas, Forecast,
 // Atividades & Cadencia, NPS e Carteira — com graficos SVG, podios e
 // constantes de etapa/origem do funil.
@@ -42,13 +41,13 @@ export function RelatorioFunilCrm() {
   const [dataFim, setDataFim] = useState("");
   const [responsavelId, setResponsavelId] = useState("");
   const [origem, setOrigem] = useState("");
-  const [usuarios, setUsuarios] = useState([]);
-  const [dados, setDados] = useState(null);
+  const [usuarios, setUsuarios] = useState<any[]>([]);
+  const [dados, setDados] = useState<any>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
+    api.listarFuncionarios({ ativo: "true" }).then((d: any) => setUsuarios(d)).catch(() => {});
   }, []);
 
   const gerar = useCallback(async () => {
@@ -56,7 +55,7 @@ export function RelatorioFunilCrm() {
     try {
       const r = await api.relatorioFunilCrm({ dataInicio, dataFim, responsavelId, origem });
       setDados(r);
-    } catch (err) { setErro(err.message); }
+    } catch (err) { setErro((err as Error).message); }
     finally { setCarregando(false); }
   }, [dataInicio, dataFim, responsavelId, origem]);
 
@@ -66,7 +65,7 @@ export function RelatorioFunilCrm() {
     addPeriodo(doc, dataInicio, dataFim);
 
     tabelaPDF(doc, {
-      startY: doc.lastAutoTable.finalY + 4,
+      startY: (doc as any).lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
         ["Total de oportunidades", fmtNum(dados.resumo.totalOportunidades)],
@@ -85,7 +84,7 @@ export function RelatorioFunilCrm() {
     });
 
     tabelaPDF(doc, {
-      startY: doc.lastAutoTable.finalY + 6,
+      startY: (doc as any).lastAutoTable.finalY + 6,
       head: [["Etapa", "Qtd", "Valor estimado", "Valor ponderado"]],
       body: dados.porEtapa.map(e => [
         ROTULO_ETAPA[e.etapa] || e.etapa,
@@ -99,7 +98,7 @@ export function RelatorioFunilCrm() {
 
     if (dados.conversaoEtapaEtapa.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["De", "Para", "Qtd na etapa de origem", "Qtd avançou", "Taxa"]],
         body: dados.conversaoEtapaEtapa.map(c => [
           ROTULO_ETAPA[c.de] || c.de,
@@ -115,7 +114,7 @@ export function RelatorioFunilCrm() {
 
     if (dados.porResponsavel.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["#", "Vendedor", "Total", "Abertas", "Ganhas", "Perdidas", "Conv.", "Valor ganho"]],
         body: dados.porResponsavel.map((v, i) => [
           i + 1, v.nome,
@@ -131,7 +130,7 @@ export function RelatorioFunilCrm() {
 
     if (dados.porOrigem.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["Origem", "Qtd", "Ganhas", "Perdidas", "Conv.", "Valor ganho"]],
         body: dados.porOrigem.map(o => [
           o.origem, fmtNum(o.quantidade),
@@ -145,7 +144,7 @@ export function RelatorioFunilCrm() {
 
     if (dados.motivosPerda.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["Motivo de perda", "Qtd", "Valor perdido"]],
         body: dados.motivosPerda.map(m => [m.motivo, fmtNum(m.quantidade), fmtBRL(m.valorPerdido)]),
         theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
@@ -155,7 +154,7 @@ export function RelatorioFunilCrm() {
 
     if (dados.oportunidades.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["#", "Título", "Cliente", "Vendedor", "Etapa", "Prob.", "Valor", "Dias etapa"]],
         body: dados.oportunidades.map(o => [
           `#${o.numero}`, o.titulo, o.cliente || "—",
@@ -322,13 +321,13 @@ export function RelatorioPerformanceCrm() {
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
   const [responsavelId, setResponsavelId] = useState("");
-  const [usuarios, setUsuarios] = useState([]);
-  const [dados, setDados] = useState(null);
+  const [usuarios, setUsuarios] = useState<any[]>([]);
+  const [dados, setDados] = useState<any>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
+    api.listarFuncionarios({ ativo: "true" }).then((d: any) => setUsuarios(d)).catch(() => {});
   }, []);
 
   const gerar = useCallback(async () => {
@@ -336,7 +335,7 @@ export function RelatorioPerformanceCrm() {
     try {
       const r = await api.relatorioPerformanceCrm({ dataInicio, dataFim, responsavelId });
       setDados(r);
-    } catch (err) { setErro(err.message); }
+    } catch (err) { setErro((err as Error).message); }
     finally { setCarregando(false); }
   }, [dataInicio, dataFim, responsavelId]);
 
@@ -346,7 +345,7 @@ export function RelatorioPerformanceCrm() {
     addPeriodo(doc, dataInicio, dataFim);
 
     tabelaPDF(doc, {
-      startY: doc.lastAutoTable.finalY + 4,
+      startY: (doc as any).lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
         ["Vendedores no relatório", fmtNum(dados.resumo.totalVendedores)],
@@ -367,13 +366,13 @@ export function RelatorioPerformanceCrm() {
 
     if (dados.topFaturamento.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["🏆 Top faturamento", "", ""]],
         body: [],
         styles: { fontSize: 11, fontStyle: "bold" }, theme: "plain",
       });
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY,
+        startY: (doc as any).lastAutoTable.finalY,
         head: [["#", "Vendedor", "Faturamento", "Vendas"]],
         body: dados.topFaturamento.map((v, i) => [
           i + 1, v.nome, fmtBRL(v.faturamento), fmtNum(v.vendasQtd),
@@ -385,13 +384,13 @@ export function RelatorioPerformanceCrm() {
 
     if (dados.topConversao.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["🎯 Top conversão (min. 3 oportunidades fechadas)", "", ""]],
         body: [],
         styles: { fontSize: 11, fontStyle: "bold" }, theme: "plain",
       });
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY,
+        startY: (doc as any).lastAutoTable.finalY,
         head: [["#", "Vendedor", "Taxa", "Ganhas/Fechadas"]],
         body: dados.topConversao.map((v, i) => [
           i + 1, v.nome,
@@ -405,13 +404,13 @@ export function RelatorioPerformanceCrm() {
 
     if (dados.topAtividade.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["💬 Top atividade", "", ""]],
         body: [],
         styles: { fontSize: 11, fontStyle: "bold" }, theme: "plain",
       });
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY,
+        startY: (doc as any).lastAutoTable.finalY,
         head: [["#", "Vendedor", "Interações", "Tarefas conc."]],
         body: dados.topAtividade.map((v, i) => [
           i + 1, v.nome, fmtNum(v.interacoes), fmtNum(v.tarefasConcluidas),
@@ -423,7 +422,7 @@ export function RelatorioPerformanceCrm() {
 
     if (dados.porVendedor.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["Vendedor", "Role", "Vendas", "Faturamento", "Ticket", "Opp criadas", "Ganhas", "Conv.", "Pipeline", "Interações", "Tarefas (SLA)"]],
         body: dados.porVendedor.map(v => [
           v.nome, v.role,
@@ -538,13 +537,13 @@ export function RelatorioPerdasCrm() {
   const [responsavelId, setResponsavelId] = useState("");
   const [origem, setOrigem] = useState("");
   const [buscaMotivo, setBuscaMotivo] = useState("");
-  const [usuarios, setUsuarios] = useState([]);
-  const [dados, setDados] = useState(null);
+  const [usuarios, setUsuarios] = useState<any[]>([]);
+  const [dados, setDados] = useState<any>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
+    api.listarFuncionarios({ ativo: "true" }).then((d: any) => setUsuarios(d)).catch(() => {});
   }, []);
 
   const gerar = useCallback(async () => {
@@ -552,7 +551,7 @@ export function RelatorioPerdasCrm() {
     try {
       const r = await api.relatorioPerdasCrm({ dataInicio, dataFim, responsavelId, origem, buscaMotivo });
       setDados(r);
-    } catch (err) { setErro(err.message); }
+    } catch (err) { setErro((err as Error).message); }
     finally { setCarregando(false); }
   }, [dataInicio, dataFim, responsavelId, origem, buscaMotivo]);
 
@@ -562,7 +561,7 @@ export function RelatorioPerdasCrm() {
     addPeriodo(doc, dataInicio, dataFim);
 
     tabelaPDF(doc, {
-      startY: doc.lastAutoTable.finalY + 4,
+      startY: (doc as any).lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
         ["Oportunidades perdidas no período", fmtNum(dados.resumo.totalPerdidas)],
@@ -580,7 +579,7 @@ export function RelatorioPerdasCrm() {
 
     if (dados.porMotivo.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["#", "Motivo", "Qtd", "% perdas", "Valor perdido", "% valor"]],
         body: dados.porMotivo.map((m, i) => [
           i + 1, m.motivo,
@@ -596,7 +595,7 @@ export function RelatorioPerdasCrm() {
 
     if (dados.porResponsavel.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["#", "Vendedor", "Perdidas", "Valor perdido", "Ticket médio"]],
         body: dados.porResponsavel.map((v, i) => [
           i + 1, v.nome, fmtNum(v.quantidade), fmtBRL(v.valorPerdido), fmtBRL(v.ticketMedio),
@@ -608,7 +607,7 @@ export function RelatorioPerdasCrm() {
 
     if (dados.porOrigem.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["Origem", "Qtd perdidas", "Valor perdido"]],
         body: dados.porOrigem.map(o => [o.origem, fmtNum(o.quantidade), fmtBRL(o.valorPerdido)]),
         theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
@@ -618,7 +617,7 @@ export function RelatorioPerdasCrm() {
 
     if (dados.evolucaoMensal.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["Mês", "Perdidas", "Valor perdido"]],
         body: dados.evolucaoMensal.map(e => [fmtMes(e.mes), fmtNum(e.quantidade), fmtBRL(e.valorPerdido)]),
         theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
@@ -628,13 +627,13 @@ export function RelatorioPerdasCrm() {
 
     if (dados.topPerdas.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["💸 Top vazamentos (oportunidades de maior valor perdidas)", "", "", "", "", ""]],
         body: [],
         styles: { fontSize: 11, fontStyle: "bold" }, theme: "plain",
       });
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY,
+        startY: (doc as any).lastAutoTable.finalY,
         head: [["#", "Título", "Cliente", "Vendedor", "Motivo", "Valor"]],
         body: dados.topPerdas.map(o => [
           `#${o.numero}`, o.titulo, o.cliente || "—", o.responsavel || "—",
@@ -648,7 +647,7 @@ export function RelatorioPerdasCrm() {
 
     if (dados.oportunidades.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["#", "Título", "Cliente", "Vendedor", "Motivo", "Origem", "Valor", "Dias", "Perdida em"]],
         body: dados.oportunidades.map(o => [
           `#${o.numero}`, o.titulo, o.cliente || "—", o.responsavel || "—",
@@ -937,13 +936,13 @@ export function RelatorioForecastCrm() {
   const [mesesFuturos, setMesesFuturos] = useState("3");
   const [responsavelId, setResponsavelId] = useState("");
   const [origem, setOrigem] = useState("");
-  const [usuarios, setUsuarios] = useState([]);
-  const [dados, setDados] = useState(null);
+  const [usuarios, setUsuarios] = useState<any[]>([]);
+  const [dados, setDados] = useState<any>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
+    api.listarFuncionarios({ ativo: "true" }).then((d: any) => setUsuarios(d)).catch(() => {});
   }, []);
 
   const gerar = useCallback(async () => {
@@ -951,7 +950,7 @@ export function RelatorioForecastCrm() {
     try {
       const r = await api.relatorioForecastCrm({ mesesFuturos, responsavelId, origem });
       setDados(r);
-    } catch (err) { setErro(err.message); }
+    } catch (err) { setErro((err as Error).message); }
     finally { setCarregando(false); }
   }, [mesesFuturos, responsavelId, origem]);
 
@@ -961,7 +960,7 @@ export function RelatorioForecastCrm() {
     addLinha(doc, `Horizonte: próximos ${dados.resumo.horizonte} meses`);
 
     tabelaPDF(doc, {
-      startY: doc.lastAutoTable.finalY + 4,
+      startY: (doc as any).lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
         ["Oportunidades previstas no horizonte", fmtNum(dados.resumo.totalPrevistoQtd)],
@@ -977,7 +976,7 @@ export function RelatorioForecastCrm() {
     });
 
     tabelaPDF(doc, {
-      startY: doc.lastAutoTable.finalY + 6,
+      startY: (doc as any).lastAutoTable.finalY + 6,
       head: [["Mês", "Opp previstas", "Valor estimado", "Valor ponderado", "Ganhas", "Valor ganho"]],
       body: dados.porMes.map(m => [
         fmtMes(m.ym),
@@ -993,7 +992,7 @@ export function RelatorioForecastCrm() {
 
     if (dados.porVendedor.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["#", "Vendedor", "Opp", "Valor estimado", "Valor ponderado"]],
         body: dados.porVendedor.map((v, i) => [
           i + 1, v.nome, fmtNum(v.quantidade),
@@ -1006,7 +1005,7 @@ export function RelatorioForecastCrm() {
 
     if (dados.porOrigem.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["Origem", "Opp", "Valor estimado", "Valor ponderado"]],
         body: dados.porOrigem.map(o => [
           o.origem, fmtNum(o.quantidade),
@@ -1019,7 +1018,7 @@ export function RelatorioForecastCrm() {
 
     if (dados.oportunidades.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["#", "Título", "Cliente", "Vendedor", "Etapa", "Prob.", "Valor", "Ponderado", "Previsão"]],
         body: dados.oportunidades.map(o => [
           `#${o.numero}`, o.titulo, o.cliente || "—", o.responsavel || "—",
@@ -1240,13 +1239,13 @@ export function RelatorioAtividadesCrm() {
   const [dataFim, setDataFim] = useState("");
   const [userId, setUserId] = useState("");
   const [diasInativo, setDiasInativo] = useState("60");
-  const [usuarios, setUsuarios] = useState([]);
-  const [dados, setDados] = useState(null);
+  const [usuarios, setUsuarios] = useState<any[]>([]);
+  const [dados, setDados] = useState<any>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
+    api.listarFuncionarios({ ativo: "true" }).then((d: any) => setUsuarios(d)).catch(() => {});
   }, []);
 
   const gerar = useCallback(async () => {
@@ -1254,7 +1253,7 @@ export function RelatorioAtividadesCrm() {
     try {
       const r = await api.relatorioAtividadesCrm({ dataInicio, dataFim, userId, diasInativo });
       setDados(r);
-    } catch (err) { setErro(err.message); }
+    } catch (err) { setErro((err as Error).message); }
     finally { setCarregando(false); }
   }, [dataInicio, dataFim, userId, diasInativo]);
 
@@ -1264,7 +1263,7 @@ export function RelatorioAtividadesCrm() {
     addPeriodo(doc, dataInicio, dataFim);
 
     tabelaPDF(doc, {
-      startY: doc.lastAutoTable.finalY + 4,
+      startY: (doc as any).lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
         ["Total de interações", fmtNum(dados.resumo.totalInteracoes)],
@@ -1283,7 +1282,7 @@ export function RelatorioAtividadesCrm() {
     });
 
     tabelaPDF(doc, {
-      startY: doc.lastAutoTable.finalY + 6,
+      startY: (doc as any).lastAutoTable.finalY + 6,
       head: [["Tipo", "Quantidade"]],
       body: dados.porTipo.map(t => [
         ROTULO_TIPO_INTERACAO[t.tipo] || t.tipo,
@@ -1295,7 +1294,7 @@ export function RelatorioAtividadesCrm() {
 
     if (dados.porVendedor.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["#", "Vendedor", "Total", "Clientes únicos", "Ligação", "WhatsApp", "E-mail", "Visita", "Reunião", "Tarefas (SLA)"]],
         body: dados.porVendedor.map((v, i) => [
           i + 1, v.nome,
@@ -1312,13 +1311,13 @@ export function RelatorioAtividadesCrm() {
 
     if (dados.clientesSemContato.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["🔔 Clientes sem contato — agir agora", "", "", "", ""]],
         body: [],
         styles: { fontSize: 11, fontStyle: "bold" }, theme: "plain",
       });
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY,
+        startY: (doc as any).lastAutoTable.finalY,
         head: [["Cliente", "Cidade", "Telefone", "Última interação", "Dias sem contato"]],
         body: dados.clientesSemContato.map(c => [
           c.nome, c.cidade || "—", c.telefone || "—",
@@ -1332,7 +1331,7 @@ export function RelatorioAtividadesCrm() {
 
     if (dados.distribuicaoSemanal.some(d => d.quantidade > 0)) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["Dia da semana", "Interações"]],
         body: dados.distribuicaoSemanal.map(d => [d.dia, fmtNum(d.quantidade)]),
         theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
@@ -1551,13 +1550,13 @@ export function RelatorioNpsCrm() {
   const [dataFim, setDataFim] = useState("");
   const [userId, setUserId] = useState("");
   const [somenteRespondidas, setSomenteRespondidas] = useState("");
-  const [usuarios, setUsuarios] = useState([]);
-  const [dados, setDados] = useState(null);
+  const [usuarios, setUsuarios] = useState<any[]>([]);
+  const [dados, setDados] = useState<any>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
+    api.listarFuncionarios({ ativo: "true" }).then((d: any) => setUsuarios(d)).catch(() => {});
   }, []);
 
   const gerar = useCallback(async () => {
@@ -1565,7 +1564,7 @@ export function RelatorioNpsCrm() {
     try {
       const r = await api.relatorioNpsCrm({ dataInicio, dataFim, userId, somenteRespondidas });
       setDados(r);
-    } catch (err) { setErro(err.message); }
+    } catch (err) { setErro((err as Error).message); }
     finally { setCarregando(false); }
   }, [dataInicio, dataFim, userId, somenteRespondidas]);
 
@@ -1575,7 +1574,7 @@ export function RelatorioNpsCrm() {
     addPeriodo(doc, dataInicio, dataFim);
 
     tabelaPDF(doc, {
-      startY: doc.lastAutoTable.finalY + 4,
+      startY: (doc as any).lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
         ["NPS Score", `${dados.resumo.npsScore.toFixed(1)} (${classificacaoNps(dados.resumo.npsScore)})`],
@@ -1592,7 +1591,7 @@ export function RelatorioNpsCrm() {
     });
 
     tabelaPDF(doc, {
-      startY: doc.lastAutoTable.finalY + 6,
+      startY: (doc as any).lastAutoTable.finalY + 6,
       head: [["Faixa", "Quantidade", "%"]],
       body: dados.distribuicao.map(d => [
         d.label, fmtNum(d.quantidade), `${d.percentual.toFixed(1)}%`,
@@ -1603,7 +1602,7 @@ export function RelatorioNpsCrm() {
 
     if (dados.porVendedor.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["#", "Vendedor", "Enviadas", "Respondidas", "Taxa resp.", "Nota méd.", "NPS"]],
         body: dados.porVendedor.map((v, i) => [
           i + 1, v.nome,
@@ -1619,7 +1618,7 @@ export function RelatorioNpsCrm() {
 
     if (dados.evolucaoMensal.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["Mês", "Respondidas", "Nota média", "NPS"]],
         body: dados.evolucaoMensal.map(e => [
           fmtMes(e.mes), fmtNum(e.respondidas), e.notaMedia.toFixed(2), e.nps.toFixed(1),
@@ -1631,13 +1630,13 @@ export function RelatorioNpsCrm() {
 
     if (dados.detratoresRecentes.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["🚨 Detratores recentes (últimos 30 dias) — PRIORIDADE DE CONTATO", "", "", "", ""]],
         body: [],
         styles: { fontSize: 11, fontStyle: "bold" }, theme: "plain",
       });
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY,
+        startY: (doc as any).lastAutoTable.finalY,
         head: [["Data", "Cliente", "Venda", "Vendedor", "Nota", "Comentário"]],
         body: dados.detratoresRecentes.map(d => [
           fmtData(d.respondidaEm),
@@ -1861,13 +1860,13 @@ export function RelatorioCarteiraCrm() {
   const [segmento, setSegmento] = useState("");
   const [tagId, setTagId] = useState("");
   const [statusFunil, setStatusFunil] = useState("");
-  const [tags, setTags] = useState([]);
-  const [dados, setDados] = useState(null);
+  const [tags, setTags] = useState<any[]>([]);
+  const [dados, setDados] = useState<any>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarTags().then(setTags).catch(() => {});
+    api.listarTags().then((d: any) => setTags(d)).catch(() => {});
   }, []);
 
   const gerar = useCallback(async () => {
@@ -1875,7 +1874,7 @@ export function RelatorioCarteiraCrm() {
     try {
       const r = await api.relatorioCarteiraCrm({ janelaDias, segmento, tagId, statusFunil });
       setDados(r);
-    } catch (err) { setErro(err.message); }
+    } catch (err) { setErro((err as Error).message); }
     finally { setCarregando(false); }
   }, [janelaDias, segmento, tagId, statusFunil]);
 
@@ -1885,7 +1884,7 @@ export function RelatorioCarteiraCrm() {
     addLinha(doc, `Janela RFM: últimos ${dados.filtros.janelaDias} dias`);
 
     tabelaPDF(doc, {
-      startY: doc.lastAutoTable.finalY + 4,
+      startY: (doc as any).lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
         ["Total de clientes ativos", fmtNum(dados.resumo.totalClientes)],
@@ -1903,7 +1902,7 @@ export function RelatorioCarteiraCrm() {
     });
 
     tabelaPDF(doc, {
-      startY: doc.lastAutoTable.finalY + 6,
+      startY: (doc as any).lastAutoTable.finalY + 6,
       head: [["Segmento", "Clientes", "% base", "Faturamento", "% fat.", "Ticket médio"]],
       body: dados.porSegmento.map(s => [
         SEGMENTOS_INFO[s.segmento]?.label || s.segmento,
@@ -1919,7 +1918,7 @@ export function RelatorioCarteiraCrm() {
 
     if (dados.porCidade.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["#", "Cidade", "UF", "Clientes", "Faturamento"]],
         body: dados.porCidade.map((c, i) => [
           i + 1, c.cidade, c.estado, fmtNum(c.quantidade), fmtBRL(c.monetario),
@@ -1931,7 +1930,7 @@ export function RelatorioCarteiraCrm() {
 
     if (dados.porTag.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["Tag", "Clientes", "Faturamento"]],
         body: dados.porTag.map(t => [t.nome, fmtNum(t.quantidade), fmtBRL(t.monetario)]),
         theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
@@ -1941,7 +1940,7 @@ export function RelatorioCarteiraCrm() {
 
     if (dados.topLtv.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["#", "Cliente", "Cidade", "Compras", "Total gasto", "Ticket médio", "Última compra", "Segmento"]],
         body: dados.topLtv.map((c, i) => [
           i + 1, c.nome, c.cidade || "—",

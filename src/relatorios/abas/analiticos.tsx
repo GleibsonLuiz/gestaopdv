@@ -1,4 +1,3 @@
-// @ts-nocheck — extraido verbatim de monolito; tipagem fina em etapa propria.
 // Abas analiticas (fatiamento Fase 5): Curva ABC, Giro & Capital,
 // Sazonalidade (heatmap) e Aging de Recebiveis — com badges/distribuicoes —
 // e o relatorio de Comissoes.
@@ -26,13 +25,13 @@ export function RelatorioCurvaAbc() {
   const [dataFim, setDataFim] = useState("");
   const [categoriaId, setCategoriaId] = useState("");
   const [criterio, setCriterio] = useState("receita");
-  const [categorias, setCategorias] = useState([]);
-  const [dados, setDados] = useState(null);
+  const [categorias, setCategorias] = useState<any[]>([]);
+  const [dados, setDados] = useState<any>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarCategorias().then(setCategorias).catch(() => {});
+    api.listarCategorias().then((d: any) => setCategorias(d)).catch(() => {});
   }, []);
 
   // Formata o valor do criterio escolhido: moeda para receita/lucro, numero
@@ -44,7 +43,7 @@ export function RelatorioCurvaAbc() {
     try {
       const r = await api.relatorioCurvaAbc({ dataInicio, dataFim, categoriaId, criterio });
       setDados(r);
-    } catch (err) { setErro(err.message); }
+    } catch (err) { setErro((err as Error).message); }
     finally { setCarregando(false); }
   }, [dataInicio, dataFim, categoriaId, criterio]);
 
@@ -55,7 +54,7 @@ export function RelatorioCurvaAbc() {
     addPeriodo(doc, dataInicio, dataFim);
 
     tabelaPDF(doc, {
-      startY: doc.lastAutoTable.finalY + 4,
+      startY: (doc as any).lastAutoTable.finalY + 4,
       head: [["Classe", "Produtos", "% Produtos", critLabel, "% do Total"]],
       body: dados.resumo.classes.map(c => [
         `Classe ${c.classe}`,
@@ -70,7 +69,7 @@ export function RelatorioCurvaAbc() {
 
     if (dados.produtos.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["#", "Produto", "Código", "Categoria", "Qtd", critLabel, "% Indiv.", "% Acum.", "Classe"]],
         body: dados.produtos.map(p => [
           p.posicao, p.nome, p.codigo, p.categoria || "—",
@@ -224,15 +223,15 @@ export function RelatorioGiroEstoque() {
   const [dataFim, setDataFim] = useState("");
   const [categoriaId, setCategoriaId] = useState("");
   const [fornecedorId, setFornecedorId] = useState("");
-  const [categorias, setCategorias] = useState([]);
-  const [fornecedores, setFornecedores] = useState([]);
-  const [dados, setDados] = useState(null);
+  const [categorias, setCategorias] = useState<any[]>([]);
+  const [fornecedores, setFornecedores] = useState<any[]>([]);
+  const [dados, setDados] = useState<any>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarCategorias().then(setCategorias).catch(() => {});
-    api.listarFornecedores({ ativo: "true" }).then(setFornecedores).catch(() => {});
+    api.listarCategorias().then((d: any) => setCategorias(d)).catch(() => {});
+    api.listarFornecedores({ ativo: "true" }).then((d: any) => setFornecedores(d)).catch(() => {});
   }, []);
 
   const fmtGiro = (v) => (v == null ? "—" : `${v.toFixed(1)}×`);
@@ -247,7 +246,7 @@ export function RelatorioGiroEstoque() {
     try {
       const r = await api.relatorioGiroEstoque({ dataInicio, dataFim, categoriaId, fornecedorId });
       setDados(r);
-    } catch (err) { setErro(err.message); }
+    } catch (err) { setErro((err as Error).message); }
     finally { setCarregando(false); }
   }, [dataInicio, dataFim, categoriaId, fornecedorId]);
 
@@ -257,7 +256,7 @@ export function RelatorioGiroEstoque() {
     addPeriodo(doc, dados.filtros.dataInicio?.slice(0, 10), dados.filtros.dataFim?.slice(0, 10));
 
     tabelaPDF(doc, {
-      startY: doc.lastAutoTable.finalY + 4,
+      startY: (doc as any).lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
         ["Capital em estoque (custo)", fmtBRL(dados.resumo.capitalEstoqueTotal)],
@@ -273,7 +272,7 @@ export function RelatorioGiroEstoque() {
 
     if (dados.produtos.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["Produto", "Código", "Categoria", "Estoque", "Vendido", "Giro", "Cobertura", "Capital parado", "Classe"]],
         body: dados.produtos.map(p => [
           p.nome, p.codigo, p.categoria || "—",
@@ -362,7 +361,7 @@ export function RelatorioSazonalidade() {
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
   const [metrica, setMetrica] = useState("faturamento"); // faturamento | vendas
-  const [dados, setDados] = useState(null);
+  const [dados, setDados] = useState<any>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -374,7 +373,7 @@ export function RelatorioSazonalidade() {
     try {
       const r = await api.relatorioSazonalidade({ dataInicio, dataFim });
       setDados(r);
-    } catch (err) { setErro(err.message); }
+    } catch (err) { setErro((err as Error).message); }
     finally { setCarregando(false); }
   }, [dataInicio, dataFim]);
 
@@ -384,14 +383,14 @@ export function RelatorioSazonalidade() {
     addPeriodo(doc, dados.filtros.dataInicio?.slice(0, 10), dados.filtros.dataFim?.slice(0, 10));
 
     tabelaPDF(doc, {
-      startY: doc.lastAutoTable.finalY + 4,
+      startY: (doc as any).lastAutoTable.finalY + 4,
       head: [["Dia da semana", "Vendas", "Faturamento"]],
       body: dados.porDia.map((d, i) => [DIAS_SEMANA[i], fmtNum(d.vendas), fmtBRL(d.faturamento)]),
       theme: "striped", headStyles: { fillColor: COR_HEADER_PDF, textColor: 255, fontStyle: "bold" }, didParseCell: pdfAlinhaNumeros,
       styles: { fontSize: 10 },
     });
     tabelaPDF(doc, {
-      startY: doc.lastAutoTable.finalY + 6,
+      startY: (doc as any).lastAutoTable.finalY + 6,
       head: [["Hora", "Vendas", "Faturamento"]],
       body: dados.porHora
         .map((h, i) => [`${String(i).padStart(2, "0")}h`, fmtNum(h.vendas), fmtBRL(h.faturamento)])
@@ -522,13 +521,13 @@ const AGING_ORDEM = ["AVENCER", "D1_30", "D31_60", "D61_90", "D90MAIS"];
 
 export function RelatorioAgingReceber() {
   const [clienteId, setClienteId] = useState("");
-  const [clientes, setClientes] = useState([]);
-  const [dados, setDados] = useState(null);
+  const [clientes, setClientes] = useState<any[]>([]);
+  const [dados, setDados] = useState<any>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarClientes({ ativo: "true" }).then(setClientes).catch(() => {});
+    api.listarClientes({ ativo: "true" }).then((d: any) => setClientes(d)).catch(() => {});
   }, []);
 
   const gerar = useCallback(async () => {
@@ -536,7 +535,7 @@ export function RelatorioAgingReceber() {
     try {
       const r = await api.relatorioAgingReceber({ clienteId });
       setDados(r);
-    } catch (err) { setErro(err.message); }
+    } catch (err) { setErro((err as Error).message); }
     finally { setCarregando(false); }
   }, [clienteId]);
 
@@ -545,7 +544,7 @@ export function RelatorioAgingReceber() {
     const doc = await criarPDF("Aging de Recebíveis");
 
     tabelaPDF(doc, {
-      startY: doc.lastAutoTable.finalY + 4,
+      startY: (doc as any).lastAutoTable.finalY + 4,
       head: [["Faixa", "Contas", "Valor", "% do total"]],
       body: dados.resumo.faixas.map(f => [
         AGING_META[f.faixa]?.label || f.faixa,
@@ -559,7 +558,7 @@ export function RelatorioAgingReceber() {
 
     if (dados.clientes.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["Cliente", "Contas", "Total em aberto", "Vencido", "Maior atraso"]],
         body: dados.clientes.map(c => [
           c.cliente, fmtNum(c.qtd), fmtBRL(c.total), fmtBRL(c.vencido),
@@ -683,13 +682,13 @@ export function RelatorioComissoesLista() {
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
   const [userId, setUserId] = useState("");
-  const [usuarios, setUsuarios] = useState([]);
-  const [dados, setDados] = useState(null);
+  const [usuarios, setUsuarios] = useState<any[]>([]);
+  const [dados, setDados] = useState<any>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    api.listarFuncionarios({ ativo: "true" }).then(setUsuarios).catch(() => {});
+    api.listarFuncionarios({ ativo: "true" }).then((d: any) => setUsuarios(d)).catch(() => {});
   }, []);
 
   const gerar = useCallback(async () => {
@@ -697,7 +696,7 @@ export function RelatorioComissoesLista() {
     try {
       const r = await api.relatorioComissoes({ dataInicio, dataFim, userId });
       setDados(r);
-    } catch (err) { setErro(err.message); }
+    } catch (err) { setErro((err as Error).message); }
     finally { setCarregando(false); }
   }, [dataInicio, dataFim, userId]);
 
@@ -707,7 +706,7 @@ export function RelatorioComissoesLista() {
     addPeriodo(doc, dataInicio, dataFim);
 
     tabelaPDF(doc, {
-      startY: doc.lastAutoTable.finalY + 4,
+      startY: (doc as any).lastAutoTable.finalY + 4,
       head: [["Indicador", "Valor"]],
       body: [
         ["Faturamento", fmtBRL(dados.resumo.totalVendas)],
@@ -722,7 +721,7 @@ export function RelatorioComissoesLista() {
 
     if (dados.vendedores.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["#", "Vendedor", "Vendas", "Faturamento", "Ticket médio", "Comissão", "Meses ≥ meta"]],
         body: dados.vendedores.map((v, i) => [
           i + 1,
@@ -742,7 +741,7 @@ export function RelatorioComissoesLista() {
 
     if (dados.vendas.length) {
       tabelaPDF(doc, {
-        startY: doc.lastAutoTable.finalY + 6,
+        startY: (doc as any).lastAutoTable.finalY + 6,
         head: [["#", "Data", "Vendedor", "Cliente", "Pgto", "Total", "Comissão"]],
         body: dados.vendas.map(v => [
           v.numero,

@@ -4,6 +4,12 @@
 -- a partir da terceira execucao.
 UPDATE "empresas" SET "maxDispositivos" = 0;
 
+-- Plano ENTERPRISE (tudo ilimitado): o default TRIAL limita 200 vendas/MES
+-- e o banco de teste acumula vendas entre execucoes — ao cruzar 200, o
+-- backend passou a recusar TODA venda nova (billing funcionando certo, mas
+-- derrubando a suite inteira de uma vez).
+UPDATE "empresas" SET "plano" = 'ENTERPRISE';
+
 -- Repoe o estoque dos produtos usados pelos testes: o seed so cria compras
 -- na PRIMEIRA execucao (count>=20 pula) e cada run da suite vende unidades —
 -- PAP-0001 nasceu com 10 e esgotou apos ~10 execucoes (o PDV recusa bipar

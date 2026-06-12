@@ -103,7 +103,23 @@ export function useModalKeys(
         }
       }
     }
+    // Rede de seguranca do trap: alem da interceptacao do Tab nas bordas,
+    // QUALQUER foco que escape do modal (toast no body, extensao, rota de
+    // tabulacao inesperada) e puxado de volta para o primeiro focavel.
+    function onFocusIn(e: FocusEvent) {
+      const cont = containerModalAtivo();
+      if (!cont) return;
+      const alvo = e.target as HTMLElement | null;
+      if (alvo && !cont.contains(alvo)) {
+        const primeiro = cont.querySelector<HTMLElement>(FOCO_SELETOR);
+        primeiro?.focus();
+      }
+    }
     window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
+    document.addEventListener("focusin", onFocusIn);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("focusin", onFocusIn);
+    };
   }, [aberto, onClose, onConfirm, permitirEnter, permitirCtrlEnter]);
 }

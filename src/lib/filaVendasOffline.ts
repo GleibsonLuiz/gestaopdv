@@ -34,14 +34,21 @@ export interface VendaPendente {
 
 const DB_NOME = "gestao_pdv_offline";
 const STORE = "vendas_pendentes";
+// v2: store de snapshots (catalogo offline — produtos/clientes salvos para o
+// PDV conseguir abrir sem internet). Mesmo banco da fila de vendas.
+const STORE_SNAPSHOTS = "snapshots";
+const DB_VERSAO = 2;
 const EVENTO_MUDOU = "vendas-offline:mudou";
 
 function abrirDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NOME, 1);
+    const req = indexedDB.open(DB_NOME, DB_VERSAO);
     req.onupgradeneeded = () => {
       if (!req.result.objectStoreNames.contains(STORE)) {
         req.result.createObjectStore(STORE, { keyPath: "chave" });
+      }
+      if (!req.result.objectStoreNames.contains(STORE_SNAPSHOTS)) {
+        req.result.createObjectStore(STORE_SNAPSHOTS, { keyPath: "chave" });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -49,18 +56,57 @@ function abrirDb(): Promise<IDBDatabase> {
   });
 }
 
-function tx<T>(modo: IDBTransactionMode, fn: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+function tx<T>(
+  modo: IDBTransactionMode,
+  fn: (store: IDBObjectStore) => IDBRequest<T>,
+  store: string = STORE,
+): Promise<T> {
   return abrirDb().then(
     (db) =>
       new Promise<T>((resolve, reject) => {
-        const t = db.transaction(STORE, modo);
-        const req = fn(t.objectStore(STORE));
+        const t = db.transaction(store, modo);
+        const req = fn(t.objectStore(store));
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
         t.oncomplete = () => db.close();
         t.onabort = () => db.close();
       }),
   );
+}
+
+// ===== SNAPSHOTS (catalogo offline) =====
+
+interface Snapshot<T = unknown> {
+  chave: string;
+  dados: T;
+  salvoEm: number;
+}
+
+export async function salvarSnapshot<T>(chave: string, dados: T): Promise<void> {
+  await tx("readwrite", (s) => s.put({ chave, dados, salvoEm: Date.now() }), STORE_SNAPSHOTS);
+}
+
+export async function lerSnapshot<T>(chave: string): Promise<Snapshot<T> | null> {
+  const r = await tx<Snapshot<T> | undefined>("readonly", (s) => s.get(chave), STORE_SNAPSHOTS);
+  return r ?? null;
+}
+
+// Busca na rede e atualiza o snapshot; se a rede falhar, cai no snapshot
+// salvo da ultima visita (e assim o PDV abre offline com o catalogo da
+// sessao anterior). Retorna null quando nao ha rede NEM snapshot.
+export async function carregarComSnapshot<T>(
+  chave: string,
+  buscar: () => Promise<T>,
+): Promise<{ dados: T; origem: "rede" | "snapshot"; salvoEm: number | null } | null> {
+  try {
+    const dados = await buscar();
+    salvarSnapshot(chave, dados).catch(() => { /* quota/indisponivel — segue */ });
+    return { dados, origem: "rede", salvoEm: null };
+  } catch {
+    const snap = await lerSnapshot<T>(chave).catch(() => null);
+    if (!snap) return null;
+    return { dados: snap.dados, origem: "snapshot", salvoEm: snap.salvoEm };
+  }
 }
 
 function notificarMudanca() {

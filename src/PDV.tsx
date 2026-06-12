@@ -13,7 +13,7 @@ import { emitirToast } from "./lib/toast";
 // fila em IndexedDB e sao enviadas (com idempotencia) quando a rede volta.
 import {
   enfileirarVenda, sincronizarVendasPendentes, listarPendentes,
-  descartarPendente, aoMudarFila,
+  descartarPendente, aoMudarFila, carregarComSnapshot,
 } from "./lib/filaVendasOffline";
 import { useNetworkStatus } from "./lib/useNetworkStatus";
 import { useConfiguracaoEmpresa, formatarEndereco } from "./HeaderRelatorio";
@@ -474,8 +474,27 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
   }, []);
 
   useEffect(() => {
-    api.listarProdutos({ ativo: "true" }).then(setProdutos).catch(() => {});
-    api.listarClientes({ ativo: "true" }).then(setClientes).catch(() => {});
+    // Catalogo com fallback offline: a carga normal atualiza um snapshot em
+    // IndexedDB; se a rede falhar (PDV aberto sem internet), os produtos/
+    // clientes da ultima sessao entram no lugar — com aviso de defasagem.
+    carregarComSnapshot("catalogo:produtos", () => api.listarProdutos({ ativo: "true" }))
+      .then(r => {
+        if (!r) return;
+        setProdutos(r.dados);
+        if (r.origem === "snapshot") {
+          const quando = r.salvoEm
+            ? new Date(r.salvoEm).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
+            : "anteriormente";
+          emitirToast({
+            tipo: "aviso",
+            titulo: "Catálogo offline 📦",
+            mensagem: `Sem conexão — usando o catálogo salvo em ${quando}. Preços e estoques podem estar defasados; tudo sincroniza quando a internet voltar.`,
+            duracao: 8000,
+          });
+        }
+      });
+    carregarComSnapshot("catalogo:clientes", () => api.listarClientes({ ativo: "true" }))
+      .then(r => { if (r) setClientes(r.dados); });
     recarregarCaixa().finally(() => setCaixaCarregando(false));
     recarregarPainel();
     recarregarFormasCustom();

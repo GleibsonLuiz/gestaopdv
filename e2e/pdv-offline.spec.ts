@@ -43,3 +43,28 @@ test("venda offline entra na fila e sincroniza sozinha quando a rede volta", asy
   // Fila esvaziou — banner some.
   await expect(page.getByTestId("banner-vendas-offline")).toBeHidden({ timeout: 15_000 });
 });
+
+test("catálogo offline: PDV abre sem /produtos usando o snapshot da sessão anterior", async ({ page, request }) => {
+  const token = await apiLogin(request);
+  await garantirCaixaAberto(request, token);
+
+  // 1ª visita ONLINE: a carga normal salva o snapshot do catálogo em
+  // IndexedDB (persiste por origem, sobrevive ao reload).
+  await loginUI(page);
+  await page.locator('input[placeholder*="Bipe"]').first().waitFor({ timeout: 20_000 });
+  await bipar(page, "PAP-0006"); // prova que o catálogo carregou de verdade
+  await page.waitForTimeout(600); // folga para o salvarSnapshot assíncrono
+
+  // 2ª visita com /produtos DERRUBADO — simula abrir o app sem internet
+  // para os dados (o shell vem do service worker em produção).
+  await page.route("**/produtos*", route => route.abort());
+  await page.reload();
+  const busca = page.locator('input[placeholder*="Bipe"]').first();
+  await busca.waitFor({ timeout: 20_000 });
+
+  // Aviso de catálogo defasado aparece e o bipe segue funcionando com os
+  // produtos do snapshot.
+  await expect(page.getByText("Catálogo offline").first()).toBeVisible({ timeout: 10_000 });
+  await bipar(page, "PAP-0007");
+  await expect(page.getByRole("button", { name: /F10 Finalizar/i })).toBeEnabled();
+});

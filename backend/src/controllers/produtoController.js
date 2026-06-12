@@ -41,6 +41,8 @@ function sanitizarCamposSegmento(input) {
     "codigoOEM", "marcaPeca", "compatibilidade",
     // FARMACIA
     "lote", "validade", "registroAnvisa", "pmc",
+    // PADARIA / DELICATESSEN / LANCHONETE (kit alimentacao)
+    "validadeDias", "conservacao", "alergenicos",
   ]);
   const lim = (s, max = 120) => (typeof s === "string" ? s.trim().slice(0, max) : "");
   const out = {};
@@ -73,7 +75,64 @@ const INCLUDE_REL = {
   categoria: { select: { id: true, nome: true } },
   fornecedor: { select: { id: true, nome: true } },
   fabricante: { select: { id: true, nome: true } },
+  // Ficha tecnica (producao propria): receita com um mini-select do insumo —
+  // suficiente p/ o form de produto e p/ o modal Registrar Producao calcular
+  // consumo/custo sem nova chamada.
+  composicao: {
+    select: {
+      id: true,
+      insumoId: true,
+      quantidade: true,
+      insumo: {
+        select: {
+          id: true, codigo: true, nome: true, unidade: true,
+          precoCusto: true, estoque: true, controlarEstoque: true,
+        },
+      },
+    },
+  },
 };
+
+// Normaliza o array de composicao (ficha tecnica) vindo do front.
+// Retorna: undefined (campo ausente — nao mexer), [] (limpar receita),
+// lista normalizada, ou null quando o payload e invalido.
+function normalizarComposicao(input) {
+  if (input === undefined) return undefined;
+  if (input === null) return [];
+  if (!Array.isArray(input)) return null;
+  const vistos = new Set();
+  const out = [];
+  for (const item of input.slice(0, 60)) {
+    const insumoId = item && item.insumoId ? String(item.insumoId) : "";
+    const q = toNumber(item ? item.quantidade : null);
+    if (!insumoId || q === null || Number.isNaN(q) || q <= 0) return null;
+    if (vistos.has(insumoId)) continue; // dedupe silencioso
+    vistos.add(insumoId);
+    // Coeficiente com 4 casas (Decimal(12,4) no schema).
+    out.push({ insumoId, quantidade: Math.round(q * 10000) / 10000 });
+  }
+  return out;
+}
+
+// Confere que todos os insumos existem NO TENANT (findMany ja e filtrado pelo
+// wrapper multi-tenant), sao PRODUTO (servico nao e insumo) e nao referenciam
+// o proprio produto final. Retorna mensagem de erro ou null se ok.
+async function validarInsumosComposicao(composicao, produtoFinalId = null) {
+  if (!composicao || composicao.length === 0) return null;
+  if (produtoFinalId && composicao.some(c => c.insumoId === produtoFinalId)) {
+    return "Um produto nao pode ser insumo da propria receita";
+  }
+  const insumos = await prisma.produto.findMany({
+    where: { id: { in: composicao.map(c => c.insumoId) } },
+    select: { id: true, nome: true, tipoItem: true },
+  });
+  if (insumos.length !== composicao.length) {
+    return "Insumo da composicao nao encontrado";
+  }
+  const servico = insumos.find(i => i.tipoItem === "SERVICO");
+  if (servico) return `"${servico.nome}" e um servico — nao pode ser insumo de receita`;
+  return null;
+}
 
 // ============ CONSULTA DE NCM (BrasilAPI) ============
 //
@@ -430,6 +489,19 @@ export async function criar(req, res, next) {
     const cstCofins = validarCst2Digitos(req.body.cstCofins, "COFINS");
     if (!cstCofins.ok) return res.status(400).json({ erro: cstCofins.erro });
 
+    // Ficha tecnica (producao propria): valida e cria junto com o produto.
+    const composicao = normalizarComposicao(req.body.composicao);
+    if (composicao === null) {
+      return res.status(400).json({ erro: "Composicao invalida — cada insumo precisa de insumoId e quantidade > 0" });
+    }
+    if (composicao && composicao.length) {
+      if (tipoItem === "SERVICO") {
+        return res.status(400).json({ erro: "Servicos nao tem ficha tecnica" });
+      }
+      const erroInsumo = await validarInsumosComposicao(composicao);
+      if (erroInsumo) return res.status(400).json({ erro: erroInsumo });
+    }
+
     const produto = await prisma.produto.create({
       data: {
         codigo,
@@ -444,6 +516,8 @@ export async function criar(req, res, next) {
         estoque,
         estoqueMinimo,
         unidade: req.body.unidade ? String(req.body.unidade).trim().toUpperCase().slice(0, 6) : "UN",
+        // Producao propria: false = venda nunca bloqueia por falta de saldo.
+        controlarEstoque: req.body.controlarEstoque === undefined ? true : !!req.body.controlarEstoque,
         categoriaId: norm(req.body.categoriaId),
         fornecedorId: norm(req.body.fornecedorId),
         // Bloco fiscal NF-e
@@ -466,6 +540,11 @@ export async function criar(req, res, next) {
         pesoBruto: toNumber(req.body.pesoBruto),
         // ETAPA#6: campos extras por segmento (OEM/Lote/etc).
         camposSegmento: sanitizarCamposSegmento(req.body.camposSegmento),
+        // Ficha tecnica: nested create. tenantId explicito — o wrapper so
+        // propaga em create raiz; explicitar vale para qualquer caminho.
+        ...(composicao && composicao.length
+          ? { composicao: { create: composicao.map(c => ({ insumoId: c.insumoId, quantidade: c.quantidade, tenantId: req.tenantId })) } }
+          : {}),
       },
       include: INCLUDE_REL,
     });
@@ -545,6 +624,7 @@ export async function atualizar(req, res, next) {
     if (req.body.categoriaId !== undefined) data.categoriaId = norm(req.body.categoriaId);
     if (req.body.fornecedorId !== undefined) data.fornecedorId = norm(req.body.fornecedorId);
     if (req.body.ativo !== undefined) data.ativo = !!req.body.ativo;
+    if (req.body.controlarEstoque !== undefined) data.controlarEstoque = !!req.body.controlarEstoque;
 
     // ETAPA 14: bloco fiscal — todos opcionais, valida so quando enviado.
     if (req.body.codigoBarras !== undefined) {
@@ -626,6 +706,26 @@ export async function atualizar(req, res, next) {
     if (req.body.pesoBruto !== undefined) data.pesoBruto = toNumber(req.body.pesoBruto);
     if (req.body.camposSegmento !== undefined) {
       data.camposSegmento = sanitizarCamposSegmento(req.body.camposSegmento);
+    }
+
+    // Ficha tecnica: substituicao integral (deleteMany + create aninhados no
+    // proprio update — atomico e ja escopado ao produto do tenant pelo where).
+    // tenantId explicito no create: o hook de update do wrapper NAO propaga
+    // tenant em nested writes (so o de create raiz).
+    const composicao = normalizarComposicao(req.body.composicao);
+    if (composicao === null) {
+      return res.status(400).json({ erro: "Composicao invalida — cada insumo precisa de insumoId e quantidade > 0" });
+    }
+    if (data.tipoItem === "SERVICO") {
+      // Virou servico: a receita deixa de existir.
+      data.composicao = { deleteMany: {} };
+    } else if (composicao !== undefined) {
+      const erroInsumo = await validarInsumosComposicao(composicao, req.params.id);
+      if (erroInsumo) return res.status(400).json({ erro: erroInsumo });
+      data.composicao = {
+        deleteMany: {},
+        create: composicao.map(c => ({ insumoId: c.insumoId, quantidade: c.quantidade, tenantId: req.tenantId })),
+      };
     }
 
     const produto = await prisma.produto.update({

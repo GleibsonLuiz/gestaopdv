@@ -31,7 +31,10 @@ export interface SessionUser {
   [extra: string]: unknown;
 }
 
-export type SegmentoEmpresa = "GERAL" | "AUTO_PECAS" | "FARMACIA" | "PAPELARIA";
+export type SegmentoEmpresa =
+  | "GERAL" | "AUTO_PECAS" | "FARMACIA" | "PAPELARIA"
+  // Kit alimentação (ficha técnica + produção própria + venda por peso):
+  | "PADARIA" | "DELICATESSEN" | "LANCHONETE";
 
 export interface SessionEmpresa {
   id: string;
@@ -577,6 +580,9 @@ export const api = {
     request(`/estoque/movimentacoes${qsFrom(filtros)}`),
   criarMovimentacao: (data: unknown) =>
     request("/estoque/movimentacoes", { method: "POST", body: data }),
+  // Produção própria (ficha técnica): ENTRADA no produto + SAÍDA nos insumos.
+  registrarProducao: (data: unknown) =>
+    request("/estoque/producao", { method: "POST", body: data }),
 
   listarCompras: (filtros: StringDict = {}) =>
     request(`/compras${qsFrom(filtros)}`),

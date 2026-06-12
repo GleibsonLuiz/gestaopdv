@@ -59,6 +59,7 @@ const MODELOS_COM_TENANT = new Set([
   "PlanoConta", "Despesa",
   "SugestaoCompra",
   "BoletoAsaas",
+  "ComposicaoProduto",
 ]);
 
 function tenantAtual() {

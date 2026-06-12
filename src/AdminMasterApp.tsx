@@ -1808,9 +1808,13 @@ function ModalPlano({ empresa, onCancelar, onSalva }: any) {
           <option value="AUTO_PECAS">Auto-Peças</option>
           <option value="FARMACIA">Farmácia</option>
           <option value="PAPELARIA">Papelaria</option>
+          <option value="PADARIA">Padaria</option>
+          <option value="DELICATESSEN">Delicatessen</option>
+          <option value="LANCHONETE">Lanchonete</option>
         </select>
         <div style={{ color: C.muted, fontSize: 10, marginTop: 4 }}>
-          Define os campos extras no cadastro de produto do cliente.
+          Define os campos extras no cadastro de produto do cliente. Padaria/Delicatessen/Lanchonete
+          ativam o kit alimentação: aba Receita (ficha técnica), Registrar Produção e validade em dias.
         </div>
 
         <label style={{ ...labelStyle, marginTop: 12 }}>🖥️ Limite de máquinas (dispositivos)</label>
@@ -2573,6 +2577,9 @@ function ModalCriarEmpresa({ onCancelar, onCriada }: any) {
           <option value="AUTO_PECAS">Auto-Peças</option>
           <option value="FARMACIA">Farmácia</option>
           <option value="PAPELARIA">Papelaria</option>
+          <option value="PADARIA">Padaria</option>
+          <option value="DELICATESSEN">Delicatessen</option>
+          <option value="LANCHONETE">Lanchonete</option>
         </select>
         <div style={{ color: C.muted, fontSize: 10.5, marginTop: 4 }}>
           Define quais campos extras o cliente vê no cadastro de produto.

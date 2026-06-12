@@ -12,8 +12,9 @@
 
 import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { C } from "./lib/theme";
-import { api, setSession, getToken, getUser, type SessionUser, type SessionEmpresa } from "./lib/api";
+import { api, setSession, getToken, getUser, type SessionUser, type SessionEmpresa, type SegmentoEmpresa } from "./lib/api";
 import { getAvisosRedeAtivos, setAvisosRedeAtivos } from "./lib/preferenciasUI";
+import { SEGMENTO_INFO, rotuloSegmento } from "./lib/segmentos";
 import Configuracoes from "./Configuracoes";
 
 type Plano = "TRIAL" | "FREE" | "STARTER" | "PRO" | "ENTERPRISE";
@@ -309,18 +310,12 @@ export default function Empresa({ user }: EmpresaProps) {
                style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div>
               <div className="text-gp-white text-sm font-bold">
-                🏷️ Segmento de negócio: <span style={{ color: C.accent }}>{
-                  ({
-                    GERAL: "Geral",
-                    AUTO_PECAS: "Auto-Peças",
-                    FARMACIA: "Farmácia",
-                    PAPELARIA: "Papelaria",
-                  } as Record<string, string>)[segmento] || segmento
-                }</span>
+                {SEGMENTO_INFO[segmento as SegmentoEmpresa]?.icone || "🏷️"} Segmento de negócio:{" "}
+                <span style={{ color: C.accent }}>{rotuloSegmento(segmento)}</span>
               </div>
               <div className="text-gp-muted text-xs mt-[2px]">
-                Define quais campos extras aparecem no cadastro de produto.
-                Alteração só pelo administrador da plataforma.
+                {SEGMENTO_INFO[segmento as SegmentoEmpresa]?.descricao || "Define quais campos extras aparecem no cadastro de produto."}
+                {" "}Alteração só pelo administrador da plataforma.
               </div>
             </div>
           </div>

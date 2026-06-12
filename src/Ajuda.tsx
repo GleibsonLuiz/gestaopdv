@@ -77,6 +77,7 @@ const GRUPOS: Grupo[] = [
       { id: "aniversarios-reativacao",             icone: "🎂", label: "Aniversarios" },
       { id: "fornecedores",                        icone: "🏭", label: "Fornecedores" },
       { id: "produtos",                            icone: "📦", label: "Produtos" },
+      { id: "produção-própria-padaria-delicatessen-e-lanchonete", icone: "🥖", label: "Producao propria (padaria)" },
       { id: "etiquetas",                           icone: "🏷️", label: "Etiquetas" },
     ],
   },

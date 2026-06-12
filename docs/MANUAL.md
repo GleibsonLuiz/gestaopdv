@@ -436,6 +436,32 @@ O status alterna entre **ATIVO** (verde) e **INATIVO** (cinza). Use o filtro **"
 
 **Histórico de compras de um produto:** ao **editar** um produto físico, o botão **🚚 Histórico de compras** (no canto inferior esquerdo do formulário, ao lado de *Inativar produto*) abre uma janela com **todas as entradas de compra daquele produto por fornecedor**: data, número da compra, fornecedor, quantidade, custo unitário e subtotal. No topo há um resumo — quantas compras, quantidade total comprada, total gasto, **custo médio** e o **último custo** (com a data e o fornecedor). Compras estornadas aparecem marcadas como **ESTORNADA** e não entram no resumo (o estorno já reverteu a entrada). Serviços não têm esse botão (não entram em compras).
 
+**Vender sem controle de estoque (produção própria):** na seção *Preços e estoque* há a opção **"Vender sem controle de estoque"**. Marque-a para produtos **fabricados na loja** (pão, bolo, lanche feito na hora): a venda **nunca trava** por falta de saldo e o estoque pode ficar **negativo** — útil quando você vende antes de registrar a produção do dia. A baixa continua acontecendo normalmente, então os relatórios seguem corretos. Produtos comprados para revenda devem manter a opção desmarcada (comportamento padrão: o PDV bloqueia venda sem saldo).
+
+---
+
+#### 🥖 Produção própria — Padaria, Delicatessen e Lanchonete
+
+Empresas com segmento **Padaria**, **Delicatessen** ou **Lanchonete** (definido pelo administrador da plataforma) ganham o **kit alimentação** no cadastro de produto: duas abas extras e o fluxo de produção.
+
+**Aba do segmento (🥖/🧀/🍔):** campos para etiqueta e balcão —
+- **Validade (dias)** — validade do produto após a produção (ex.: pão = 1 dia, bolo = 3).
+- **Conservação** — ex.: "Conservar refrigerado entre 2°C e 8°C".
+- **Alergênicos** — ex.: "Contém glúten, lactose e ovos".
+
+**Aba 🧾 Receita (ficha técnica):** a "receita" do produto de produção própria. Cada linha é um **insumo** (outro produto do seu estoque — farinha, fermento, queijo…) com a **quantidade consumida por 1 unidade produzida** (1 UN ou 1 KG, conforme a unidade do produto). Exemplo para *Pão Francês (KG)*: 0,62 KG de farinha + 0,012 KG de fermento + 0,011 KG de sal por quilo produzido.
+
+- O rodapé mostra o **custo calculado da receita** (soma de custo × quantidade dos insumos) e o botão **Aplicar como custo** preenche o *Preço de custo* do produto — sua margem real aparece nos relatórios.
+- Cadastre os insumos como **produtos normais, com preço de custo preenchido** (é ele que alimenta o custo da receita). Eles entram no estoque via módulo **Compras** e aproveitam os alertas de **estoque mínimo** e as **Sugestões de Compra** — a farinha avisa antes de acabar.
+
+**Fluxo típico da padaria:**
+
+1. **De manhã**, o padeiro produz → tela **Estoque** → **⚙️ Registrar Produção** → escolhe *Pão Francês*, digita `50` (KG) → o sistema dá **ENTRADA de 50 KG no pão** e **SAÍDA proporcional nos insumos** (31 KG de farinha…), tudo numa única operação auditada, mostrando o custo da fornada.
+2. **Durante o dia**, vende no PDV por peso (unidade **KG** abre o teclado de gramas; etiqueta de balança é lida direto no bipe).
+3. **No fim do dia**, a sobra vai em **↘ Registrar perda** (saída com motivo "Perda/quebra") — assim o relatório mostra quanto foi produzido, vendido e perdido.
+
+> Dica: produtos vendidos por peso usam unidade **KG** — o PDV abre o teclado de balança e lê etiquetas EAN-13 de peso embutido (padrão Toledo/Filizola). Veja *PDV* na seção 5.1.
+
 ---
 
 #### 🏷️ Etiquetas
@@ -475,11 +501,16 @@ O status alterna entre **ATIVO** (verde) e **INATIVO** (cinza). Use o filtro **"
 3. Produto, quantidade, motivo (texto livre).
 4. Salvar — o estoque do produto é atualizado automaticamente e a movimentação fica registrada em ordem cronológica.
 
+**⚙️ Registrar Produção (produção própria):** para produtos com **receita** cadastrada (aba 🧾 Receita do produto — ver *Produção própria* na seção 5.2). Escolha o produto, digite a quantidade produzida e confirme: o sistema dá **ENTRADA no produto final** e **SAÍDA proporcional em cada insumo** numa única operação, com prévia do consumo e do **custo dos insumos** (total e por unidade). Se um insumo controlado não tiver saldo, a produção é bloqueada com aviso.
+
+**↘ Registrar perda:** atalho para a saída por **perda/quebra** (sobra de pão do dia, avaria, vencimento) — abre o modal de movimentação já em SAÍDA com o motivo "Perda/quebra" preenchido. Produtos marcados com *Vender sem controle de estoque* podem registrar perda mesmo com saldo zerado (o estoque fica negativo, sinalizando produção não registrada).
+
 **Movimentações automáticas (não manuais):**
 - Venda no PDV gera SAIDA
 - Compra gera ENTRADA
 - Cancelamento de venda gera ENTRADA de estorno
 - Estorno de compra gera SAIDA de estorno
+- **Registrar Produção** gera ENTRADA (produto final) + SAIDAs (insumos), com motivo "Produção"
 
 **Filtros:** tipo, produto, período.
 

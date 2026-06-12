@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, type CSSProperties } from "react";
 import { C } from "./lib/theme";
 import { api, type SessionUser } from "./lib/api";
 import MovimentarEstoqueModal from "./MovimentarEstoqueModal";
+import RegistrarProducaoModal from "./RegistrarProducaoModal";
 import SelectBusca from "./components/SelectBusca";
 
 // ============ TIPOS ============
@@ -28,6 +29,23 @@ interface Produto {
   estoqueMinimo?: number;
   unidade?: string;
   tipoItem?: "PRODUTO" | "SERVICO";
+  controlarEstoque?: boolean;
+  // Ficha técnica (vem no include do GET /produtos) — habilita o produto no
+  // modal Registrar Produção. Mesma forma do ComposicaoItem do modal.
+  composicao?: {
+    id: string;
+    insumoId: string;
+    quantidade: number | string;
+    insumo?: {
+      id: string;
+      codigo?: string;
+      nome?: string;
+      unidade?: string | null;
+      precoCusto?: number | string | null;
+      estoque?: number | string;
+      controlarEstoque?: boolean;
+    } | null;
+  }[] | null;
   [extra: string]: unknown;
 }
 
@@ -79,6 +97,11 @@ export default function Estoque({ user }: EstoqueProps) {
   const [filtroProduto, setFiltroProduto] = useState("");
   const [filtroTipo, setFiltroTipo] = useState("");
   const [modalAberto, setModalAberto] = useState(false);
+  // Atalho "Registrar perda": abre o mesmo modal de movimentação já em SAÍDA
+  // com o motivo pré-preenchido (sobra de pão, avaria, vencimento…).
+  const [modalPerda, setModalPerda] = useState(false);
+  // Produção própria (ficha técnica): ENTRADA do produto + SAÍDA dos insumos.
+  const [modalProducao, setModalProducao] = useState(false);
   const [produtoSelecionado] = useState<Produto | null>(null);
   const [mensagem, setMensagem] = useState("");
 
@@ -109,15 +132,17 @@ export default function Estoque({ user }: EstoqueProps) {
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  useEffect(() => {
+  const recarregarProdutos = useCallback(() => {
     api.listarProdutos({ ativo: "true" })
       .then((r) => setProdutos((r as Produto[]) || []))
       .catch(() => {});
   }, []);
 
+  useEffect(() => { recarregarProdutos(); }, [recarregarProdutos]);
+
   function flash(t: string) {
     setMensagem(t);
-    setTimeout(() => setMensagem(""), 2500);
+    setTimeout(() => setMensagem(""), 4000);
   }
 
   function abrirModal() {
@@ -127,8 +152,22 @@ export default function Estoque({ user }: EstoqueProps) {
   function aposSalvar(mov: unknown) {
     const m = mov as Movimentacao;
     setModalAberto(false);
+    setModalPerda(false);
     flash(`${TIPO_INFO[m.tipo].label} registrada (estoque: ${fmtQtd(m.estoqueAntes)} → ${fmtQtd(m.estoqueDepois)})`);
     carregar();
+    recarregarProdutos();
+  }
+
+  function aposProduzir(resultado: { produto: { nome: string; unidade?: string | null }; quantidadeProduzida: number; custoInsumos: number }) {
+    setModalProducao(false);
+    flash(
+      `Produção registrada: +${fmtQtd(resultado.quantidadeProduzida)} ${resultado.produto.unidade || "UN"} de ${resultado.produto.nome}`
+      + (resultado.custoInsumos > 0
+        ? ` (custo dos insumos: ${resultado.custoInsumos.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })})`
+        : ""),
+    );
+    carregar();
+    recarregarProdutos();
   }
 
   return (
@@ -156,17 +195,44 @@ export default function Estoque({ user }: EstoqueProps) {
           <option value="AJUSTE">Ajuste</option>
         </select>
         {podeMovimentar && (
-          <button
-            type="button"
-            onClick={abrirModal}
-            className="text-gp-white border-none rounded-lg text-sm font-bold cursor-pointer"
-            style={{
-              background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
-              padding: "10px 18px",
-            }}
-          >
-            + Nova movimentação
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => setModalProducao(true)}
+              title="Produção própria: dá entrada no produto e baixa os insumos da receita"
+              className="text-gp-white border-none rounded-lg text-sm font-bold cursor-pointer"
+              style={{
+                background: `linear-gradient(135deg, ${C.green}, ${C.accent})`,
+                padding: "10px 18px",
+              }}
+            >
+              ⚙️ Registrar Produção
+            </button>
+            <button
+              type="button"
+              onClick={() => setModalPerda(true)}
+              title="Saída rápida por perda/quebra (sobra de pão, avaria, vencimento)"
+              className="bg-transparent rounded-lg text-sm font-semibold cursor-pointer"
+              style={{
+                color: C.red,
+                border: `1px solid ${C.red}55`,
+                padding: "10px 14px",
+              }}
+            >
+              ↘ Registrar perda
+            </button>
+            <button
+              type="button"
+              onClick={abrirModal}
+              className="text-gp-white border-none rounded-lg text-sm font-bold cursor-pointer"
+              style={{
+                background: `linear-gradient(135deg, ${C.accent}, ${C.purple})`,
+                padding: "10px 18px",
+              }}
+            >
+              + Nova movimentação
+            </button>
+          </>
         )}
       </div>
 
@@ -267,6 +333,25 @@ export default function Estoque({ user }: EstoqueProps) {
           produtoInicial={produtoSelecionado}
           onCancelar={() => setModalAberto(false)}
           onSalvar={aposSalvar}
+        />
+      )}
+
+      {modalPerda && (
+        <MovimentarEstoqueModal
+          produtos={produtos}
+          produtoInicial={null}
+          tipoInicial="SAIDA"
+          motivoInicial="Perda/quebra"
+          onCancelar={() => setModalPerda(false)}
+          onSalvar={aposSalvar}
+        />
+      )}
+
+      {modalProducao && (
+        <RegistrarProducaoModal
+          produtos={produtos}
+          onCancelar={() => setModalProducao(false)}
+          onSalvar={aposProduzir}
         />
       )}
     </div>

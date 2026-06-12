@@ -258,10 +258,14 @@ export async function criarEmpresa(req, res, next) {
       return res.status(400).json({ erro: "Nome da empresa e obrigatorio (min 3 caracteres)" });
     }
     // ETAPA#6: segmento e obrigatorio na criacao (default GERAL se nao enviado).
-    const SEGMENTOS_VALIDOS = new Set(["GERAL", "AUTO_PECAS", "FARMACIA", "PAPELARIA"]);
+    const SEGMENTOS_VALIDOS = new Set([
+      "GERAL", "AUTO_PECAS", "FARMACIA", "PAPELARIA",
+      // Kit alimentacao (ficha tecnica + producao propria)
+      "PADARIA", "DELICATESSEN", "LANCHONETE",
+    ]);
     const segmentoLimpo = segmento ? String(segmento).toUpperCase() : "GERAL";
     if (!SEGMENTOS_VALIDOS.has(segmentoLimpo)) {
-      return res.status(400).json({ erro: "Segmento invalido (use GERAL/AUTO_PECAS/FARMACIA/PAPELARIA)" });
+      return res.status(400).json({ erro: `Segmento invalido (use ${[...SEGMENTOS_VALIDOS].join("/")})` });
     }
     if (String(nomeEmpresa).trim().length > 120) {
       return res.status(400).json({ erro: "Nome da empresa muito longo (max 120)" });
@@ -789,8 +793,12 @@ export async function revogarDispositivoEmpresa(req, res, next) {
 }
 
 // ETAPA#6: PATCH /admin-master/empresas/:id/segmento — altera segmento de
-// negocio da empresa (GERAL/AUTO_PECAS/FARMACIA/PAPELARIA). So super-admin.
-const SEGMENTOS = new Set(["GERAL", "AUTO_PECAS", "FARMACIA", "PAPELARIA"]);
+// negocio da empresa. So super-admin. PADARIA/DELICATESSEN/LANCHONETE ativam
+// o kit alimentacao (ficha tecnica, producao propria, validade em dias).
+const SEGMENTOS = new Set([
+  "GERAL", "AUTO_PECAS", "FARMACIA", "PAPELARIA",
+  "PADARIA", "DELICATESSEN", "LANCHONETE",
+]);
 export async function alterarSegmento(req, res, next) {
   try {
     const { id } = req.params;

@@ -10,6 +10,7 @@ import { FormularioLuxuoso, Secao, Linha, Campo as CampoLux } from "./components
 import SelectBusca from "./components/SelectBusca";
 import { Abas } from "./components/AbasFormulario";
 import { UNIDADES_MEDIDA, SIGLAS_UNIDADE } from "./lib/unidades";
+import { SEGMENTO_INFO, ehSegmentoAlimentacao } from "./lib/segmentos";
 
 // ============ TIPOS ============
 
@@ -48,6 +49,28 @@ interface Fabricante {
 interface CategoriaRef { nome: string; }
 interface FornecedorRef { nome: string; }
 
+// Item da ficha técnica vindo da API (include composicao do backend).
+interface ComposicaoItemApi {
+  id: string;
+  insumoId: string;
+  quantidade: number | string;
+  insumo?: {
+    id: string;
+    codigo?: string;
+    nome?: string;
+    unidade?: string | null;
+    precoCusto?: number | string | null;
+    estoque?: number | string;
+    controlarEstoque?: boolean;
+  } | null;
+}
+
+// Linha editável da receita no form (strings cruas do input).
+interface LinhaReceita {
+  insumoId: string;
+  quantidade: string;
+}
+
 interface Produto {
   id: string;
   codigo: string;
@@ -63,6 +86,10 @@ interface Produto {
   estoque: number;
   estoqueMinimo: number;
   unidade?: string | null;
+  // Produção própria: false = venda não bloqueia por falta de saldo.
+  controlarEstoque?: boolean;
+  // Ficha técnica (receita) — insumos por 1 unidade do produto final.
+  composicao?: ComposicaoItemApi[] | null;
   categoriaId?: string | null;
   fornecedorId?: string | null;
   categoria?: CategoriaRef | null;
@@ -128,6 +155,12 @@ interface FormProduto {
   validade: string;        // FARMACIA (YYYY-MM-DD)
   registroAnvisa: string;  // FARMACIA
   pmc: string;             // FARMACIA (Preco Maximo ao Consumidor)
+  // PADARIA / DELICATESSEN / LANCHONETE (kit alimentação)
+  validadeDias: string;    // validade em dias após produção
+  conservacao: string;     // ex: "Conservar refrigerado"
+  alergenicos: string;     // ex: "Contém glúten, lactose"
+  // Produção própria: desmarcado = venda nunca bloqueia por falta de saldo.
+  controlarEstoque: boolean;
 }
 
 interface Markup {
@@ -154,6 +187,8 @@ const VAZIO: FormProduto = {
   pesoLiquido: "", pesoBruto: "",
   codigoOEM: "", marcaPeca: "", compatibilidade: "",
   lote: "", validade: "", registroAnvisa: "", pmc: "",
+  validadeDias: "", conservacao: "", alergenicos: "",
+  controlarEstoque: true,
 };
 
 const MARKUP_VAZIO: Markup = { impostos: "", taxasCartao: "", margemLucro: "" };
@@ -239,6 +274,15 @@ function montarCamposSegmento(form: FormProduto, segmento: SegmentoEmpresa | und
       if (Number.isFinite(n) && n >= 0) out.pmc = n;
     }
   }
+  // Kit alimentação: os 3 segmentos compartilham os mesmos campos.
+  if (ehSegmentoAlimentacao(segmento)) {
+    if (form.validadeDias.trim()) {
+      const n = Number(form.validadeDias.replace(",", "."));
+      if (Number.isFinite(n) && n > 0) out.validadeDias = Math.round(n);
+    }
+    if (form.conservacao.trim()) out.conservacao = form.conservacao.trim();
+    if (form.alergenicos.trim()) out.alergenicos = form.alergenicos.trim();
+  }
   return Object.keys(out).length ? out : null;
 }
 
@@ -252,6 +296,9 @@ export default function Produtos({ user }: ProdutosProps) {
   // ETAPA#6: segmento da empresa (vem do localStorage, populado no login/me).
   // Default GERAL se nao definido (compatibilidade com sessoes antigas).
   const segmentoEmpresa: SegmentoEmpresa = (getEmpresa()?.segmento as SegmentoEmpresa) || "GERAL";
+  // Kit alimentação (padaria/delicatessen/lanchonete): habilita a aba
+  // Receita (ficha técnica) e os campos de validade/conservação.
+  const ehAlimentacaoEmpresa = ehSegmentoAlimentacao(segmentoEmpresa);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
@@ -278,6 +325,9 @@ export default function Produtos({ user }: ProdutosProps) {
   const [modalHistoricoProduto, setModalHistoricoProduto] = useState<Produto | null>(null);
 
   const [markup, setMarkup] = useState<Markup>(MARKUP_VAZIO);
+
+  // Ficha técnica (receita) do produto em edição — linhas cruas do form.
+  const [linhasReceita, setLinhasReceita] = useState<LinhaReceita[]>([]);
 
   const [imagemArquivo, setImagemArquivo] = useState<File | null>(null);
   const [imagemPreview, setImagemPreview] = useState<string | null>(null);
@@ -343,6 +393,7 @@ export default function Produtos({ user }: ProdutosProps) {
     setErroForm("");
     setNovaCategoria("");
     setMarkup(MARKUP_VAZIO);
+    setLinhasReceita([]);
     resetarImagem();
     let codigo = "";
     try {
@@ -406,7 +457,15 @@ export default function Produtos({ user }: ProdutosProps) {
       validade: (p as any).camposSegmento?.validade || "",
       registroAnvisa: (p as any).camposSegmento?.registroAnvisa || "",
       pmc: (p as any).camposSegmento?.pmc != null ? String((p as any).camposSegmento.pmc) : "",
+      // Kit alimentação (padaria/delicatessen/lanchonete)
+      validadeDias: (p as any).camposSegmento?.validadeDias != null ? String((p as any).camposSegmento.validadeDias) : "",
+      conservacao: (p as any).camposSegmento?.conservacao || "",
+      alergenicos: (p as any).camposSegmento?.alergenicos || "",
+      controlarEstoque: p.controlarEstoque !== false,
     });
+    setLinhasReceita(Array.isArray(p.composicao)
+      ? p.composicao.map((c) => ({ insumoId: c.insumoId, quantidade: c.quantidade != null ? String(c.quantidade) : "" }))
+      : []);
     setErroForm("");
     setNovaCategoria("");
     setMarkup(MARKUP_VAZIO);
@@ -468,6 +527,25 @@ export default function Produtos({ user }: ProdutosProps) {
       setErroForm("Preço de venda inválido"); return;
     }
 
+    // Receita (kit alimentação): linhas totalmente vazias são descartadas;
+    // linha com insumo sem quantidade (ou vice-versa) é erro de preenchimento.
+    let composicaoPayload: { insumoId: string; quantidade: number }[] | undefined;
+    if (ehAlimentacaoEmpresa && form.tipoItem !== "SERVICO") {
+      composicaoPayload = [];
+      for (const l of linhasReceita) {
+        const temInsumo = !!l.insumoId;
+        const qtd = Number(String(l.quantidade).replace(",", "."));
+        const temQtd = String(l.quantidade).trim() !== "" && Number.isFinite(qtd) && qtd > 0;
+        if (!temInsumo && !temQtd) continue;
+        if (!temInsumo || !temQtd) {
+          const nomeInsumo = produtos.find((p) => p.id === l.insumoId)?.nome;
+          setErroForm(`Receita: informe insumo e quantidade${nomeInsumo ? ` (${nomeInsumo})` : ""}`);
+          return;
+        }
+        composicaoPayload.push({ insumoId: l.insumoId, quantidade: qtd });
+      }
+    }
+
     setSalvando(true);
     try {
       const ehServico = form.tipoItem === "SERVICO";
@@ -505,6 +583,11 @@ export default function Produtos({ user }: ProdutosProps) {
         // ETAPA#6: monta camposSegmento conforme o segmento da empresa.
         // O backend sanitiza/descarta chaves que nao baterem com a whitelist.
         camposSegmento: montarCamposSegmento(form, segmentoEmpresa),
+        // Produção própria: serviço não controla estoque por natureza.
+        controlarEstoque: ehServico ? true : form.controlarEstoque,
+        // Ficha técnica: só envia no kit alimentação — em outros segmentos a
+        // chave fica AUSENTE e o backend preserva a receita já gravada.
+        ...(composicaoPayload !== undefined ? { composicao: composicaoPayload } : {}),
       };
       const produtoSalvo = (editando
         ? await api.atualizarProduto(editando.id, payload)
@@ -882,14 +965,19 @@ export default function Produtos({ user }: ProdutosProps) {
               ? [{ id: "segmento", icone: "🔧", label: "Auto-Peças" }]
               : segmentoEmpresa === "FARMACIA"
                 ? [{ id: "segmento", icone: "💊", label: "Farmácia" }]
-                : []),
+                : ehAlimentacaoEmpresa
+                  ? [{ id: "segmento", icone: SEGMENTO_INFO[segmentoEmpresa].icone, label: SEGMENTO_INFO[segmentoEmpresa].label }]
+                  : []),
+            // Kit alimentação: ficha técnica do produto de produção própria.
+            ...(ehAlimentacaoEmpresa ? [{ id: "receita", icone: "🧾", label: "Receita" }] : []),
             { id: "fiscal",  icone: "📊", label: "Tributacao / NF-e" },
           ]}
         >
           {(ativa: number) => {
-            const temAbaSegmento = segmentoEmpresa === "AUTO_PECAS" || segmentoEmpresa === "FARMACIA";
+            const temAbaSegmento = segmentoEmpresa === "AUTO_PECAS" || segmentoEmpresa === "FARMACIA" || ehAlimentacaoEmpresa;
             const idxSegmento = temAbaSegmento ? 2 : -1;
-            const idxFiscal = temAbaSegmento ? 3 : 2;
+            const idxReceita = ehAlimentacaoEmpresa ? 3 : -1;
+            const idxFiscal = ehAlimentacaoEmpresa ? 4 : temAbaSegmento ? 3 : 2;
             return (
             <>
               {ativa === 0 && (
@@ -1062,6 +1150,26 @@ export default function Produtos({ user }: ProdutosProps) {
                         />
                       </CampoLux>
                     </Linha>
+                    {form.tipoItem !== "SERVICO" && (
+                      <Linha cols={1}>
+                        <label
+                          className="flex items-center gap-2 text-[12.5px] select-none"
+                          style={{ color: C.text, cursor: "pointer" }}
+                          title="Produção própria (pão, lanche…): a venda não bloqueia sem saldo e o estoque pode ficar negativo"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!form.controlarEstoque}
+                            onChange={(e) => setForm({ ...form, controlarEstoque: !e.target.checked })}
+                            style={{ accentColor: C.accent }}
+                          />
+                          Vender sem controle de estoque
+                          <span className="text-gp-muted text-[11px]">
+                            — produção própria: a venda nunca trava por falta de saldo
+                          </span>
+                        </label>
+                      </Linha>
+                    )}
                     <Linha cols={1}>
                       <details className="lux-field mk-toggle">
                         <summary
@@ -1191,6 +1299,47 @@ export default function Produtos({ user }: ProdutosProps) {
                     </CampoLux>
                   </Linha>
                 </Secao>
+              )}
+              {/* Kit alimentação: validade/conservação p/ etiqueta e balcão */}
+              {ativa === idxSegmento && ehAlimentacaoEmpresa && (
+                <Secao legenda={`Dados de ${SEGMENTO_INFO[segmentoEmpresa].label.toLowerCase()}`}>
+                  <Linha style={{ gridTemplateColumns: "140px 1fr" }}>
+                    <CampoLux label="Validade (dias)" hint="Após a produção">
+                      <input className="lux-input" type="number" min="0" step="1"
+                        value={form.validadeDias}
+                        onChange={(e) => setForm({ ...form, validadeDias: e.target.value })}
+                        placeholder="Ex: 1" />
+                    </CampoLux>
+                    <CampoLux label="Conservação">
+                      <input className="lux-input" value={form.conservacao}
+                        onChange={(e) => setForm({ ...form, conservacao: e.target.value.slice(0, 120) })}
+                        placeholder="Ex: Conservar refrigerado entre 2°C e 8°C" />
+                    </CampoLux>
+                  </Linha>
+                  <Linha cols={1}>
+                    <CampoLux label="Alergênicos" hint="Informação para etiqueta/rótulo">
+                      <input className="lux-input" value={form.alergenicos}
+                        onChange={(e) => setForm({ ...form, alergenicos: e.target.value.slice(0, 120) })}
+                        placeholder="Ex: Contém glúten, lactose e ovos" />
+                    </CampoLux>
+                  </Linha>
+                  <div className="text-gp-muted text-[11.5px]" style={{ marginTop: 2 }}>
+                    💡 Produto vendido por peso? Use unidade <b>KG</b> na aba Dados Gerais — o PDV
+                    abre o teclado de gramas e lê etiqueta de balança automaticamente.
+                  </div>
+                </Secao>
+              )}
+              {/* Kit alimentação: ficha técnica (receita) do produto */}
+              {ativa === idxReceita && ehAlimentacaoEmpresa && (
+                <AbaReceita
+                  linhas={linhasReceita}
+                  setLinhas={setLinhasReceita}
+                  produtos={produtos}
+                  produtoEditandoId={editando?.id || null}
+                  unidadeFinal={form.unidade}
+                  tipoItem={form.tipoItem}
+                  onAplicarCusto={(custo) => setForm((f) => ({ ...f, precoCusto: custo.toFixed(2) }))}
+                />
               )}
               {ativa === idxFiscal && <AbaFiscal form={form} setForm={setForm} />}
             </>
@@ -1492,6 +1641,161 @@ function SubCampo({ label, children }: { label: string; children: ReactNode }) {
       </label>
       {children}
     </div>
+  );
+}
+
+// ============ ABA RECEITA / FICHA TECNICA (kit alimentação) ============
+//
+// Receita do produto de produção própria: cada linha = 1 insumo (outro
+// produto do estoque) + quantidade consumida POR 1 UNIDADE do produto final
+// (1 UN, 1 KG... conforme a unidade dele). O custo calculado é a soma de
+// precoCusto x quantidade dos insumos — dá para aplicar direto no campo
+// "Preço de custo". A baixa real acontece no botão Registrar Produção da
+// tela Estoque (ENTRADA no produto + SAÍDA nos insumos).
+
+interface AbaReceitaProps {
+  linhas: LinhaReceita[];
+  setLinhas: (fn: (prev: LinhaReceita[]) => LinhaReceita[]) => void;
+  produtos: Produto[];
+  produtoEditandoId: string | null;
+  unidadeFinal: string;
+  tipoItem: TipoItem;
+  onAplicarCusto: (custo: number) => void;
+}
+
+function AbaReceita({ linhas, setLinhas, produtos, produtoEditandoId, unidadeFinal, tipoItem, onAplicarCusto }: AbaReceitaProps) {
+  if (tipoItem === "SERVICO") {
+    return (
+      <Secao legenda="Receita / ficha técnica">
+        <div className="text-gp-muted text-[13px]" style={{ padding: "12px 0" }}>
+          Serviços não têm ficha técnica — apenas produtos de produção própria.
+        </div>
+      </Secao>
+    );
+  }
+
+  const mapaProdutos = new Map(produtos.map((p) => [p.id, p]));
+  const idsUsados = new Set(linhas.map((l) => l.insumoId).filter(Boolean));
+
+  let custoTotal = 0;
+  let temCustoIncompleto = false;
+  for (const l of linhas) {
+    const insumo = mapaProdutos.get(l.insumoId);
+    const qtd = Number(String(l.quantidade).replace(",", "."));
+    if (!insumo || !Number.isFinite(qtd) || qtd <= 0) continue;
+    const custo = Number(insumo.precoCusto);
+    if (Number.isFinite(custo) && custo > 0) custoTotal += custo * qtd;
+    else temCustoIncompleto = true;
+  }
+  custoTotal = Math.round(custoTotal * 100) / 100;
+
+  return (
+    <Secao legenda="Receita / ficha técnica">
+      <div className="text-gp-muted text-[11.5px]" style={{ marginBottom: 8 }}>
+        Quantidades por <b>1 {(unidadeFinal || "UN").toUpperCase()}</b> produzida. Para dar entrada
+        no estoque do produto e baixar os insumos, use <b>⚙️ Registrar Produção</b> na tela Estoque.
+      </div>
+
+      {linhas.length === 0 && (
+        <div
+          className="text-gp-muted text-[12.5px] text-center rounded-[10px]"
+          style={{ padding: "16px 12px", border: `1px dashed ${C.border}` }}
+        >
+          Nenhum insumo na receita ainda. Ex.: Pão Francês (KG) = 0,62 KG farinha + 0,012 KG fermento + 0,011 KG sal.
+        </div>
+      )}
+
+      {linhas.map((l, idx) => {
+        const insumo = mapaProdutos.get(l.insumoId);
+        const qtd = Number(String(l.quantidade).replace(",", "."));
+        const custoLinha = insumo && Number.isFinite(qtd) && qtd > 0
+          ? Number(insumo.precoCusto || 0) * qtd
+          : 0;
+        return (
+          <Linha key={idx} style={{ gridTemplateColumns: "1fr 110px 56px 90px 34px", alignItems: "end" }}>
+            <CampoLux label={idx === 0 ? "Insumo" : ""}>
+              <SelectBusca<Produto>
+                opcoes={produtos}
+                value={l.insumoId}
+                onChange={(v) => setLinhas((prev) => prev.map((x, i) => (i === idx ? { ...x, insumoId: v } : x)))}
+                labelFn={(p) => `${p.codigo} — ${p.nome}`}
+                filtroOpcoes={(p) =>
+                  p.ativo !== false &&
+                  (p.tipoItem ?? "PRODUTO") === "PRODUTO" &&
+                  p.id !== produtoEditandoId &&
+                  (p.id === l.insumoId || !idsUsados.has(p.id))
+                }
+                placeholder="Buscar insumo (farinha, fermento…)"
+                className="lux-input"
+              />
+            </CampoLux>
+            <CampoLux label={idx === 0 ? "Quantidade" : ""}>
+              <input
+                className="lux-input"
+                type="number" step="0.0001" min="0"
+                value={l.quantidade}
+                onChange={(e) => setLinhas((prev) => prev.map((x, i) => (i === idx ? { ...x, quantidade: e.target.value } : x)))}
+                placeholder="0,000"
+              />
+            </CampoLux>
+            <div className="text-gp-muted text-[12px] font-mono" style={{ paddingBottom: 9 }}>
+              {(insumo?.unidade || "UN").toUpperCase()}
+            </div>
+            <div className="text-gp-text text-[12px] font-mono text-right" style={{ paddingBottom: 9 }}>
+              {custoLinha > 0 ? fmtBRL(custoLinha) : "—"}
+            </div>
+            <button
+              type="button"
+              onClick={() => setLinhas((prev) => prev.filter((_, i) => i !== idx))}
+              title="Remover insumo"
+              aria-label="Remover insumo"
+              className="bg-transparent rounded-lg cursor-pointer text-[14px]"
+              style={{ color: C.red, border: `1px solid ${C.red}44`, padding: "7px 0", marginBottom: 1 }}
+            >
+              ✕
+            </button>
+          </Linha>
+        );
+      })}
+
+      <div className="flex items-center gap-3 flex-wrap" style={{ marginTop: 10 }}>
+        <button
+          type="button"
+          onClick={() => setLinhas((prev) => [...prev, { insumoId: "", quantidade: "" }])}
+          className="bg-transparent rounded-[10px] cursor-pointer text-[12.5px] font-semibold"
+          style={{ color: C.accent, border: `1px solid ${C.accent}55`, padding: "8px 14px" }}
+        >
+          + Adicionar insumo
+        </button>
+        {linhas.length > 0 && (
+          <div className="ml-auto flex items-center gap-2.5">
+            <div className="text-[12.5px] text-gp-muted">
+              Custo da receita (por 1 {(unidadeFinal || "UN").toUpperCase()}):{" "}
+              <b className="text-gp-white font-mono">{fmtBRL(custoTotal)}</b>
+              {temCustoIncompleto && (
+                <span title="Há insumo sem preço de custo cadastrado — o total está subestimado" style={{ color: C.yellow }}> ⚠</span>
+              )}
+            </div>
+            <button
+              type="button"
+              disabled={!(custoTotal > 0)}
+              onClick={() => onAplicarCusto(custoTotal)}
+              title="Preencher o campo Preço de custo (aba Dados Gerais) com o custo calculado da receita"
+              className="rounded-[10px] text-[12px] font-bold"
+              style={{
+                color: custoTotal > 0 ? "var(--accent-ink)" : C.muted,
+                background: custoTotal > 0 ? C.accent : C.surface,
+                border: "none",
+                padding: "8px 12px",
+                cursor: custoTotal > 0 ? "pointer" : "default",
+              }}
+            >
+              Aplicar como custo
+            </button>
+          </div>
+        )}
+      </div>
+    </Secao>
   );
 }
 

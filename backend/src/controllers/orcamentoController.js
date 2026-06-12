@@ -544,6 +544,8 @@ export async function converterEmVenda(req, res, next) {
         for (const it of orc.itens) {
           const p = it.produto;
           if (p.tipoItem === "SERVICO") continue;
+          // Producao propria: venda nunca bloqueia por saldo (ver vendaController).
+          if (p.controlarEstoque === false) continue;
           const qtdItem = Number(it.quantidade);
           const estoqueAtual = Number(p.estoque);
           if (estoqueAtual < qtdItem) {

@@ -304,6 +304,13 @@ enum Segmento {
   AUTO_PECAS
   FARMACIA
   PAPELARIA
+  // Segmentos de alimentacao: compartilham o mesmo "kit" (ficha tecnica /
+  // composicao, producao propria, venda por peso, validade) mudando apenas a
+  // enfase na UI. PADARIA produz em lote (Registrar Producao), LANCHONETE
+  // faz na hora, DELICATESSEN e peso + validade de frios.
+  PADARIA
+  DELICATESSEN
+  LANCHONETE
 }
 
 // ETAPA#8b: status da comanda na Central de Comandas (Kanban).
@@ -549,6 +556,7 @@ model Empresa {
   sugestoesCompra        SugestaoCompra[]
   boletosAsaas           BoletoAsaas[]
   dispositivos           Dispositivo[]
+  composicoesProduto     ComposicaoProduto[]
 
   @@map("empresas")
 }
@@ -911,6 +919,12 @@ model Produto {
   unidade       String   @default("UN")
   ativo         Boolean  @default(true)
 
+  // Producao propria (padaria/lanchonete): quando false, a venda NAO valida
+  // nem bloqueia por falta de estoque — o saldo pode ficar negativo (a baixa
+  // continua acontecendo, entao relatorios seguem corretos). Caso tipico:
+  // pao frances fabricado na loja, que nunca tem entrada por compra.
+  controlarEstoque Boolean @default(true)
+
   // ============ ETAPA 14: BLOCO FISCAL (NF-e / NFC-e) ============
   //
   // Todos os campos sao opcionais no cadastro — viram obrigatorios na
@@ -1007,11 +1021,54 @@ model Produto {
   deParaFornecedores DeParaProdutoFornecedor[]
   itensOrdemServico ItemOrdemServico[]
   sugestoesCompra   SugestaoCompra[]
+  // Ficha tecnica: receita DESTE produto (quando ele e produzido na loja) e
+  // os produtos que usam ESTE como insumo, respectivamente.
+  composicao      ComposicaoProduto[] @relation("ComposicaoDoProduto")
+  usadoComoInsumo ComposicaoProduto[] @relation("InsumoDaComposicao")
 
   @@unique([tenantId, codigo])
   @@unique([tenantId, codigoBarras])
   @@index([tenantId])
   @@map("produtos")
+}
+
+// ============ FICHA TECNICA / COMPOSICAO (producao propria) ============
+//
+// Receita de um produto fabricado na loja (pao, bolo, lanche): cada linha
+// diz quanto de UM insumo (que tambem e um Produto — farinha, fermento...)
+// e consumido para produzir UMA unidade de estoque do produto final (1 UN,
+// 1 KG... conforme Produto.unidade).
+//
+// Usada pelo "Registrar Producao" (estoqueController.registrarProducao):
+// numa transacao, da ENTRADA no produto final e SAIDA proporcional em cada
+// insumo, ambas auditadas em MovimentacaoEstoque. Tambem alimenta o custo
+// calculado da receita (soma de precoCusto x quantidade dos insumos).
+model ComposicaoProduto {
+  id String @id @default(uuid())
+
+  // Produto final (o que e produzido e vendido).
+  produtoId String
+  produto   Produto @relation("ComposicaoDoProduto", fields: [produtoId], references: [id], onDelete: Cascade)
+
+  // Insumo consumido. onDelete Restrict: nao deixa sumir um insumo que ainda
+  // esta em receita (produto so e soft-deletado, mas protege contra limpeza).
+  insumoId String
+  insumo   Produto @relation("InsumoDaComposicao", fields: [insumoId], references: [id])
+
+  // Quantidade do insumo (na unidade DELE) por 1 unidade do produto final.
+  // 4 casas decimais — receita e coeficiente fino (ex: 0,0005 kg de corante
+  // por pao); o resultado da explosao e arredondado a 3 casas ao movimentar.
+  quantidade Decimal @db.Decimal(12, 4)
+
+  createdAt DateTime @default(now())
+
+  tenantId String
+  tenant   Empresa @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([produtoId, insumoId])
+  @@index([tenantId])
+  @@index([insumoId])
+  @@map("composicoes_produto")
 }
 
 // ============ VENDAS (PDV) ============

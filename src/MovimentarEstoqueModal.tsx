@@ -21,12 +21,18 @@ interface Produto {
   nome: string;
   estoque: number;
   tipoItem?: "PRODUTO" | "SERVICO";
+  // Produção própria: false = saída pode deixar o estoque negativo.
+  controlarEstoque?: boolean;
   [extra: string]: unknown;
 }
 
 interface MovimentarEstoqueModalProps {
   produtos: Produto[];
   produtoInicial?: Produto | null;
+  /** Pré-seleciona o tipo (atalho "Registrar perda" usa SAIDA). */
+  tipoInicial?: TipoMov;
+  /** Pré-preenche o motivo (ex: "Perda/quebra"). */
+  motivoInicial?: string;
   onCancelar: () => void;
   onSalvar: (mov: unknown) => void;
 }
@@ -40,13 +46,15 @@ interface OpcaoTipo {
 export default function MovimentarEstoqueModal({
   produtos,
   produtoInicial,
+  tipoInicial,
+  motivoInicial,
   onCancelar,
   onSalvar,
 }: MovimentarEstoqueModalProps) {
   const [produtoId, setProdutoId] = useState(produtoInicial?.id || "");
-  const [tipo, setTipo] = useState<TipoMov>("ENTRADA");
+  const [tipo, setTipo] = useState<TipoMov>(tipoInicial || "ENTRADA");
   const [quantidade, setQuantidade] = useState("");
-  const [motivo, setMotivo] = useState("");
+  const [motivo, setMotivo] = useState(motivoInicial || "");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -76,7 +84,9 @@ export default function MovimentarEstoqueModal({
     if (tipo === "AJUSTE" && qRaw < 0) { setErro("Para ajuste, informe um valor >= 0"); return; }
     const q = Math.round(qRaw * 1000) / 1000;
     const estoqueAtual = produto ? Number(produto.estoque) || 0 : 0;
-    if (tipo === "SAIDA" && produto && q > estoqueAtual + 1e-9) {
+    // Produção própria (controlarEstoque=false) pode ficar negativa — ex:
+    // registrar a perda do pão do dia sem ter lançado a produção.
+    if (tipo === "SAIDA" && produto && produto.controlarEstoque !== false && q > estoqueAtual + 1e-9) {
       setErro(`Estoque insuficiente. Disponível: ${estoqueAtual}`); return;
     }
 

@@ -471,6 +471,10 @@ export async function criarVenda({ body, userId, tenantId }) {
           }
           // Servicos nao tem estoque a validar — venda e sempre permitida.
           if (p.tipoItem === "SERVICO") continue;
+          // Producao propria (controlarEstoque=false): nao bloqueia por falta
+          // de saldo — a baixa adiante pode deixar o estoque negativo, o que
+          // sinaliza producao nao registrada sem travar o caixa da padaria.
+          if (p.controlarEstoque === false) continue;
           const estoqueAtual = Number(p.estoque);
           if (estoqueAtual < it.quantidade) {
             const e = new Error(`Estoque insuficiente de "${p.nome}". Disponivel: ${estoqueAtual}, solicitado: ${it.quantidade}`);

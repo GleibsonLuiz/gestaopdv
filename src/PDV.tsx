@@ -35,6 +35,11 @@ import { qzAtivoEConfigurado, imprimirRawQz } from "./lib/qztray";
 import { getEmpresa } from "./lib/api";
 import { gerarLink } from "./lib/templates";
 import { ehUnidadePeso, pesoGramasParaEstoque, resolverEtiquetaBalanca, PRESETS_PESO_G } from "./lib/unidades";
+
+// Produto que ignora limite de estoque na venda: serviços e produção própria
+// (controlarEstoque=false — pão, lanche feito na hora). Para esses, o PDV não
+// bloqueia por falta de saldo e o backend permite o estoque ficar negativo.
+const ignoraLimiteEstoque = (p) => p?.tipoItem === "SERVICO" || p?.controlarEstoque === false;
 // Fase 5 (fatiamento): constantes/formatadores compartilhados e o recibo
 // pos-venda agora moram em src/pdv/.
 import {
@@ -589,8 +594,8 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
       const idx = prev.findIndex(it => it.produtoId === p.id);
       if (idx >= 0) {
         const qtdAtual = prev[idx].quantidade;
-        // Servico: ignora limite de estoque.
-        if (!ehServico && qtdAtual + incremento > estoqueProduto + 1e-9) {
+        // Servico/producao propria: ignora limite de estoque.
+        if (!ignoraLimiteEstoque(p) && qtdAtual + incremento > estoqueProduto + 1e-9) {
           flashErro(`Estoque insuficiente de "${p.nome}" (disponível: ${estoqueProduto}).`);
           return prev;
         }
@@ -599,7 +604,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
         const restante = prev.filter((_, i) => i !== idx);
         return [atualizado, ...restante];
       }
-      if (!ehServico && estoqueProduto + 1e-9 < incremento) {
+      if (!ignoraLimiteEstoque(p) && estoqueProduto + 1e-9 < incremento) {
         flashErro(`Estoque insuficiente de "${p.nome}" (disponível: ${estoqueProduto}).`);
         return prev;
       }
@@ -608,9 +613,9 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
         codigo: p.codigo,
         nome: p.nome,
         unidade: p.unidade,
-        // Para servicos guardamos Infinity como estoque "logico" — assim os
-        // controles + e definirQuantidade nao bloqueiam nada.
-        estoque: ehServico ? Infinity : estoqueProduto,
+        // Para servicos e producao propria guardamos Infinity como estoque
+        // "logico" — assim os controles + e definirQuantidade nao bloqueiam.
+        estoque: ignoraLimiteEstoque(p) ? Infinity : estoqueProduto,
         tipoItem: p.tipoItem || "PRODUTO",
         precoUnitario: Number(p.precoVenda),
         imagem: p.imagem || null,
@@ -626,7 +631,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
   // Abre o modal de quantidade para um produto da lista de sugestões. Em vez
   // de adicionar direto qtd=1, deixa o operador escolher (Enter confirma).
   function abrirQtdModal(produto) {
-    if (produto.tipoItem !== "SERVICO" && produto.estoque <= 0) {
+    if (!ignoraLimiteEstoque(produto) && produto.estoque <= 0) {
       flashErro(`Sem estoque de "${produto.nome}".`);
       return;
     }
@@ -666,7 +671,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
         : 1;
     }
     const estoqueProduto = Number(qtdModalProduto.estoque) || 0;
-    if (qtdModalProduto.tipoItem !== "SERVICO" && n > estoqueProduto + 1e-9) {
+    if (!ignoraLimiteEstoque(qtdModalProduto) && n > estoqueProduto + 1e-9) {
       flashErro(`Estoque insuficiente de "${qtdModalProduto.nome}" (disponível: ${estoqueProduto}).`);
       return;
     }
@@ -687,7 +692,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
     const etiqueta = resolverEtiquetaBalanca(q, produtos);
     if (etiqueta) {
       const prod = etiqueta.produto;
-      if (prod.tipoItem !== "SERVICO" && Number(prod.estoque) + 1e-9 < etiqueta.quantidade) {
+      if (!ignoraLimiteEstoque(prod) && Number(prod.estoque) + 1e-9 < etiqueta.quantidade) {
         flashErro(`Estoque insuficiente de "${prod.nome}" (disponível: ${prod.estoque} ${prod.unidade || ""}).`);
         setBusca("");
         return;
@@ -704,8 +709,8 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
       )
     );
     if (exato) {
-      // Servicos nunca ficam "sem estoque".
-      if (exato.tipoItem !== "SERVICO" && exato.estoque <= 0) {
+      // Servicos e producao propria nunca ficam "sem estoque".
+      if (!ignoraLimiteEstoque(exato) && exato.estoque <= 0) {
         flashErro(`Sem estoque de "${exato.nome}".`);
         return;
       }
@@ -1001,7 +1006,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
         const p = (topProdutosRef.current || [])[idx];
         if (!p) return;
         e.preventDefault();
-        if (p.tipoItem !== "SERVICO" && p.estoque <= 0) {
+        if (!ignoraLimiteEstoque(p) && p.estoque <= 0) {
           flashErro(`Sem estoque de "${p.nome}".`);
           return;
         }
@@ -1677,7 +1682,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
               topProdutos={painel.topProdutos}
               ultimasVendas={painel.ultimasVendas}
               onAdicionar={(p) => {
-                if (p.tipoItem !== "SERVICO" && p.estoque <= 0) {
+                if (!ignoraLimiteEstoque(p) && p.estoque <= 0) {
                   flashErro(`Sem estoque de "${p.nome}".`);
                   return;
                 }

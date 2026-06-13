@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "@sentry/node": "^10.57.0",
     "@vercel/blob": "^2.3.3",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",

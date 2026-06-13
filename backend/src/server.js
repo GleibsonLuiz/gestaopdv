@@ -1,3 +1,6 @@
+// PRIMEIRO import: instrumenta o Sentry antes de qualquer outro modulo.
+import "./instrument.js";
+import * as Sentry from "@sentry/node";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -123,6 +126,16 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+// Rota de verificacao do Sentry: dispara um erro de proposito para confirmar
+// que o DSN esta configurado e os eventos chegam no painel. So existe quando
+// o Sentry esta ativo (SENTRY_DSN definido) — em dev/testes nem aparece.
+// Pode remover depois de validar; e inofensiva (retorna 500 generico).
+if (process.env.SENTRY_DSN) {
+  app.get("/debug-sentry", () => {
+    throw new Error("Teste do Sentry (backend) — se voce ve isso no painel, esta funcionando!");
+  });
+}
+
 // Middleware de auditoria roda antes das rotas: captura mutacoes via
 // res.on("finish") (quando req.user ja foi populado pelos authRequired
 // das rotas). Filtros internos garantem que so mutacoes autenticadas
@@ -189,6 +202,10 @@ app.use("/ordens-servico", ordensServicoRoutes);
 // Cron endpoints — auth via header Bearer ${CRON_SECRET}, fora do middleware
 // authRequired/permissoes. Pensado pra Vercel Cron / scheduler externo.
 app.use("/cron", cronRoutes);
+
+// Handler de erro do Sentry: captura a excecao e a envia ao painel ANTES do
+// nosso handler responder. No-op quando o Sentry nao foi inicializado.
+Sentry.setupExpressErrorHandler(app);
 
 app.use((err, req, res, _next) => {
   console.error(err);

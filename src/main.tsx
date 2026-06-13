@@ -4,8 +4,13 @@ import "./index.css";
 import "./styles/login.css";
 import "./styles/pdv.css";
 import { inicializarTema, C } from "./lib/theme";
+import { inicializarSentry, SentryErrorBoundary, FallbackErro } from "./lib/sentry";
 import PwaUpdateBanner from "./components/PwaUpdateBanner";
 import IndicadorRede from "./components/IndicadorRede";
+
+// Monitoramento de erros: roda antes do render para capturar falhas de
+// inicializacao. No-op sem VITE_SENTRY_DSN (dev/build de teste).
+inicializarSentry();
 
 // Lazy split entre os 2 apps. Como o roteamento e decidido sincronicamente
 // pelo path, so um dos chunks e baixado no carregamento inicial.
@@ -38,10 +43,12 @@ function TelaCarregando() {
 
 createRoot(root).render(
   <StrictMode>
-    <PwaUpdateBanner />
-    <IndicadorRede />
-    <Suspense fallback={<TelaCarregando />}>
-      {isAdminMaster ? <AdminMasterApp /> : <App />}
-    </Suspense>
+    <SentryErrorBoundary fallback={<FallbackErro />}>
+      <PwaUpdateBanner />
+      <IndicadorRede />
+      <Suspense fallback={<TelaCarregando />}>
+        {isAdminMaster ? <AdminMasterApp /> : <App />}
+      </Suspense>
+    </SentryErrorBoundary>
   </StrictMode>,
 );

@@ -16,6 +16,7 @@
     "e2e:debug": "playwright test --debug"
   },
   "dependencies": {
+    "@sentry/react": "^10.57.0",
     "@types/react-window": "^1.8.8",
     "html5-qrcode": "^2.3.8",
     "jspdf": "^4.2.1",

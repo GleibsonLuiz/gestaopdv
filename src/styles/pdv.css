@@ -56,12 +56,17 @@
   color: var(--pdv-t1);
   min-height: 100vh;
   position: relative;
+  /* Stacking context proprio do PDV: contem o fundo decorativo (::before em
+     z-index:-1) e deixa os modais (.pdv-modal-bg, fixed z-index:100) vencerem
+     o header sticky (z-index:30). Sem isto, modais ficavam presos no contexto
+     do .pdv-app (z-index:1) e os mais altos escondiam o topo atras do header. */
+  isolation: isolate;
 }
 
 .pdv-redesign::before {
   content: '';
   position: fixed; inset: 0;
-  pointer-events: none; z-index: 0;
+  pointer-events: none; z-index: -1;
   background:
     radial-gradient(900px 500px at 18% -10%, color-mix(in oklab, var(--pdv-accent) 10%, transparent), transparent 60%),
     radial-gradient(700px 500px at 85% 10%, color-mix(in oklab, var(--pdv-accent-2) 10%, transparent), transparent 65%);
@@ -184,7 +189,10 @@
 
 /* ─── App container ────────────────────────────────────────── */
 .pdv-app {
-  position: relative; z-index: 1;
+  /* Sem z-index proprio: nao deve criar stacking context, senao prende os
+     modais (fixed z-index:100) abaixo do header sticky. O fundo decorativo
+     foi para z-index:-1 e o .pdv-redesign isola o contexto. */
+  position: relative;
   width: 100%;
   max-width: min(1680px, 100%);
   margin: 0 auto;

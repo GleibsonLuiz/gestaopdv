@@ -43,6 +43,17 @@ export interface PedidoImp {
   itens?: ItemPedidoImp[] | null;
   observacoes?: string | null;
   formaPagamentoLabel?: string | null; // ex: "DINHEIRO", "PAGO VIA MAQUININHA"
+  // Split de pagamento (>1 forma): labels ja resolvidos pelo chamador (a lib
+  // ESC/POS nao conhece FORMA_LABEL). Quando presente com 2+ itens, imprime
+  // cada linha em vez do formaPagamentoLabel unico.
+  pagamentosLista?: { label: string; valor: number | string }[] | null;
+  // Cronograma a prazo (crediario/cartao/boleto). Impresso como "A RECEBER".
+  contasReceber?: {
+    valor: number | string;
+    vencimento: string | Date;
+    parcelaAtual?: number | null;
+    parcelaTotal?: number | null;
+  }[] | null;
   valorRecebido?: number | string | null; // dinheiro entregue pelo cliente
   troco?: number | string | null;
 }
@@ -75,6 +86,10 @@ function fmtQtd(n: number | string): string {
 function fmtData(d: string | Date): string {
   const dt = d instanceof Date ? d : new Date(d);
   return dt.toLocaleString("pt-BR");
+}
+function fmtDataCurta(d: string | Date): string {
+  const dt = d instanceof Date ? d : new Date(d);
+  return dt.toLocaleDateString("pt-BR");
 }
 
 export function gerarComandosPedido(
@@ -166,7 +181,14 @@ export function gerarComandosPedido(
   partes.push(e.divisor(largCh));
 
   // ============ PAGAMENTO ============
-  if (pedido.formaPagamentoLabel) {
+  const temSplit = Array.isArray(pedido.pagamentosLista) && pedido.pagamentosLista.length > 1;
+  if (temSplit) {
+    // Split (ex.: entrada em dinheiro + restante no crediario): uma linha por forma.
+    partes.push(e.bold(true), e.linha("PAGAMENTOS:"), e.bold(false));
+    for (const p of pedido.pagamentosLista!) {
+      partes.push(e.linhaDireita(p.label, fmtBRL(p.valor), largCh));
+    }
+  } else if (pedido.formaPagamentoLabel) {
     partes.push(e.align(1), e.bold(true));
     partes.push(e.linha(pedido.formaPagamentoLabel));
     partes.push(e.bold(false), e.align(0));
@@ -179,7 +201,30 @@ export function gerarComandosPedido(
     partes.push(e.linhaDireita("TROCO:", fmtBRL(pedido.troco || 0), largCh));
     partes.push(e.bold(false));
   }
-  if (pedido.formaPagamentoLabel || Number(pedido.valorRecebido) > 0) {
+  if (temSplit || pedido.formaPagamentoLabel || Number(pedido.valorRecebido) > 0) {
+    partes.push(e.divisor(largCh));
+  }
+
+  // ============ A RECEBER (PRAZO) ============
+  // Cronograma de parcelas + entrada paga no ato. "pagoAgora" = total menos a
+  // soma das parcelas (a parte a vista, incluindo eventual entrada do crediario).
+  const contasReceber = Array.isArray(pedido.contasReceber) ? pedido.contasReceber : [];
+  if (contasReceber.length > 0) {
+    const totalAPrazo = contasReceber.reduce((s, c) => s + (Number(c.valor) || 0), 0);
+    const pagoAgora = Math.round((Number(pedido.total) - totalAPrazo) * 100) / 100;
+    partes.push(e.bold(true), e.linha("A RECEBER (PRAZO):"), e.bold(false));
+    if (pagoAgora > 0) {
+      partes.push(e.linhaDireita("Entrada (paga agora):", fmtBRL(pagoAgora), largCh));
+    }
+    contasReceber.forEach((c, i) => {
+      const tot = Number(c.parcelaTotal) || 0;
+      const atual = Number(c.parcelaAtual) || (i + 1);
+      const rotulo = tot > 1 ? `Parc. ${atual}/${tot} ${fmtDataCurta(c.vencimento)}` : `Venc. ${fmtDataCurta(c.vencimento)}`;
+      partes.push(e.linhaDireita(rotulo, fmtBRL(c.valor), largCh));
+    });
+    partes.push(e.bold(true));
+    partes.push(e.linhaDireita("Total a prazo:", fmtBRL(Math.round(totalAPrazo * 100) / 100), largCh));
+    partes.push(e.bold(false));
     partes.push(e.divisor(largCh));
   }
 

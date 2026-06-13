@@ -1,6 +1,6 @@
 import CupomCabecalho from "./CupomCabecalho";
 import CupomRodape from "./CupomRodape";
-import { fmtBRL, fmtData, fmtQtd, FORMA_LABEL } from "./fmt";
+import { fmtBRL, fmtData, fmtDataCurta, fmtQtd, FORMA_LABEL } from "./fmt";
 import type { FormaPagamento } from "./fmt";
 import type { EmpresaCupom, CfgCupom } from "./CupomCabecalho";
 
@@ -56,6 +56,17 @@ type PagamentoCupom = {
   ordem?: number;
 };
 
+// Parcela de venda a prazo (crediario/cartao/boleto) — gerada no backend.
+// Impressa no cupom como cronograma "A RECEBER" para o cliente guardar.
+type ContaReceberCupom = {
+  id?: string | number;
+  descricao?: string | null;
+  valor: number | string;
+  vencimento: string | Date;
+  parcelaAtual?: number | null;
+  parcelaTotal?: number | null;
+};
+
 export type VendaCupom = {
   numero: number | string;
   createdAt: string | Date;
@@ -63,6 +74,7 @@ export type VendaCupom = {
   desconto?: number | string | null;
   formaPagamento?: FormaPagamento | string | null;
   pagamentos?: PagamentoCupom[] | null;
+  contasReceber?: ContaReceberCupom[] | null;
   observacoes?: string | null;
   cliente?: Cliente | null;
   user?: Usuario | null;
@@ -95,6 +107,14 @@ export default function CupomVenda({
         : []);
   const labelForma = (f: FormaPagamento | string) =>
     f && f in FORMA_LABEL ? FORMA_LABEL[f as FormaPagamento] : String(f);
+
+  // Cronograma a prazo (parcelas). Quando ha entrada/antecipacao, parte do
+  // total ja foi paga no ato — "pagoAgora" = total menos a soma das parcelas.
+  const contasReceber = Array.isArray(venda.contasReceber) ? venda.contasReceber : [];
+  const totalAPrazo = Math.round(
+    contasReceber.reduce((s, c) => s + (Number(c.valor) || 0), 0) * 100
+  ) / 100;
+  const pagoAgora = Math.round((Number(venda.total) - totalAPrazo) * 100) / 100;
 
   // Dados de entrega do cliente (so impressos quando preenchidos — uso
   // tipico: cliente leva o cupom como comprovante/romaneio de entrega).
@@ -217,6 +237,34 @@ export default function CupomVenda({
           <div className="cupom-linha cupom-bold">
             <span>TROCO:</span>
             <span>{fmtBRL(troco)}</span>
+          </div>
+        </>
+      )}
+      {/* Cronograma a prazo: entrada paga agora + parcelas com vencimento. */}
+      {contasReceber.length > 0 && (
+        <>
+          <hr className="cupom-divisor" />
+          <div className="cupom-bold">A RECEBER (PRAZO):</div>
+          {pagoAgora > 0 && (
+            <div className="cupom-linha">
+              <span>Entrada (paga agora):</span>
+              <span>{fmtBRL(pagoAgora)}</span>
+            </div>
+          )}
+          {contasReceber.map((c, i) => {
+            const total = Number(c.parcelaTotal) || 0;
+            const atual = Number(c.parcelaAtual) || (i + 1);
+            const rotulo = total > 1 ? `Parcela ${atual}/${total}` : "Vencimento";
+            return (
+              <div key={c.id ?? i} className="cupom-linha">
+                <span>{rotulo} · {fmtDataCurta(c.vencimento)}</span>
+                <span>{fmtBRL(c.valor)}</span>
+              </div>
+            );
+          })}
+          <div className="cupom-linha cupom-bold">
+            <span>Total a prazo:</span>
+            <span>{fmtBRL(totalAPrazo)}</span>
           </div>
         </>
       )}

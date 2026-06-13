@@ -18,6 +18,13 @@ import { FORMA_LABEL, FORMA_COR_VAR, fmtBRL, fmtQtd, fmtData } from "./comum";
 // Bluetooth opcional) e emissao de NFC-e quando a emissao fiscal esta ativa.
 export default function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFechar, modoReimpressao = false }) {
   const mostrarRecebidoTroco = Number(valorRecebido) > 0;
+  // Cronograma a prazo (parcelas) + entrada paga no ato, para exibir na tela
+  // alem do cupom impresso. pagoAgora = total menos a soma das parcelas.
+  const contasReceber = Array.isArray(venda.contasReceber) ? venda.contasReceber : [];
+  const totalAPrazo = Math.round(
+    contasReceber.reduce((s, c) => s + (Number(c.valor) || 0), 0) * 100
+  ) / 100;
+  const pagoAgora = Math.round((Number(venda.total) - totalAPrazo) * 100) / 100;
   const empresa = useConfiguracaoEmpresa();
   const novaVendaBtnRef = useRef<HTMLButtonElement>(null);
   const [cfgImp, setCfgImp] = useState<any>(null);
@@ -69,6 +76,14 @@ export default function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFec
     const formaLabel = Array.isArray(venda.pagamentos) && venda.pagamentos.length === 1
       ? (venda.pagamentos[0].formaCustomNome || FORMA_LABEL[venda.pagamentos[0].forma] || venda.pagamentos[0].forma)
       : null;
+    // Split (entrada + a prazo, ou multiplas formas): labels resolvidos aqui
+    // (a lib ESC/POS nao conhece FORMA_LABEL) para imprimir uma linha por forma.
+    const pagamentosLista = Array.isArray(venda.pagamentos) && venda.pagamentos.length > 1
+      ? venda.pagamentos.map(p => ({
+          label: p.formaCustomNome || FORMA_LABEL[p.forma] || String(p.forma),
+          valor: p.valor,
+        }))
+      : null;
     return gerarComandosPedido(
       {
         numero: venda.numero,
@@ -80,6 +95,8 @@ export default function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFec
         itens: venda.itens,
         observacoes: venda.observacoes,
         formaPagamentoLabel: formaLabel,
+        pagamentosLista,
+        contasReceber: venda.contasReceber,
         valorRecebido,
         troco,
       },
@@ -277,6 +294,38 @@ export default function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFec
                     <span style={{ color: "var(--pdv-accent)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtBRL(troco)}</span>
                   </div>
                 </>
+              )}
+              {/* Cronograma a prazo: entrada paga agora + parcelas/vencimentos. */}
+              {contasReceber.length > 0 && (
+                <div style={{
+                  marginTop: 10, paddingTop: 10, borderTop: "1px dashed var(--pdv-line-2)",
+                }}>
+                  <div style={{ color: "var(--pdv-c-violet)", fontSize: 11, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 6 }}>
+                    A receber (prazo)
+                  </div>
+                  {pagoAgora > 0 && (
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
+                      <span style={{ color: "var(--pdv-t3)" }}>Entrada (paga agora)</span>
+                      <span style={{ color: "var(--pdv-t1)", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{fmtBRL(pagoAgora)}</span>
+                    </div>
+                  )}
+                  {contasReceber.map((c, i) => {
+                    const tot = Number(c.parcelaTotal) || 0;
+                    const atual = Number(c.parcelaAtual) || (i + 1);
+                    const rotulo = tot > 1 ? `Parcela ${atual}/${tot}` : "Vencimento";
+                    const venc = c.vencimento ? new Date(c.vencimento).toLocaleDateString("pt-BR") : "—";
+                    return (
+                      <div key={c.id ?? i} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
+                        <span style={{ color: "var(--pdv-t3)" }}>{rotulo} · {venc}</span>
+                        <span style={{ color: "var(--pdv-t1)", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{fmtBRL(c.valor)}</span>
+                      </div>
+                    );
+                  })}
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 600, marginTop: 2 }}>
+                    <span style={{ color: "var(--pdv-t2)" }}>Total a prazo</span>
+                    <span style={{ color: "var(--pdv-c-violet)", fontVariantNumeric: "tabular-nums" }}>{fmtBRL(totalAPrazo)}</span>
+                  </div>
+                </div>
               )}
               <div style={{
                 display: "flex", justifyContent: "space-between", alignItems: "baseline",

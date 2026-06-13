@@ -28,6 +28,12 @@ export const fmtData = (iso: string | Date | null | undefined): string => {
   return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 };
 
+// Apenas a data (sem hora) — usada em vencimentos de parcelas no cupom.
+export const fmtDataCurta = (iso: string | Date | null | undefined): string => {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("pt-BR");
+};
+
 export const FORMA_LABEL: Record<FormaPagamento, string> = {
   DINHEIRO: "Dinheiro",
   PIX: "PIX",

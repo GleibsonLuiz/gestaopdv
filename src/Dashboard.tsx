@@ -37,19 +37,23 @@ export default function Dashboard({ user }: DashboardProps) {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [contagem, setContagem] = useState(60);
+  // Seletor de periodo do header. Reescala os paineis analiticos + o KPI de
+  // periodo (o backend recebe ?periodo= e recalcula a janela). Os KPIs fixos
+  // por natureza (vendas hoje/mes, meta, caixa, proximas contas) nao mudam.
+  const [periodo, setPeriodo] = useState("7dias");
 
   const carregar = useCallback(async () => {
     setCarregando(true);
     setErro("");
     try {
-      const data = await api.obterDashboard();
+      const data = await api.obterDashboard(periodo);
       setDados(data);
     } catch (err) {
       setErro((err as Error).message);
     } finally {
       setCarregando(false);
     }
-  }, []);
+  }, [periodo]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -87,20 +91,39 @@ export default function Dashboard({ user }: DashboardProps) {
   }
 
   if (!dados) return null;
-  return <ConteudoDashboard dados={dados} onAtualizar={carregar} user={user} contagem={contagem} />;
+  return (
+    <ConteudoDashboard
+      dados={dados}
+      onAtualizar={carregar}
+      user={user}
+      contagem={contagem}
+      periodo={periodo}
+      onPeriodoChange={setPeriodo}
+    />
+  );
 }
 
-function ConteudoDashboard({ dados, onAtualizar, user, contagem }: any) {
+function ConteudoDashboard({ dados, onAtualizar, user, contagem, periodo, onPeriodoChange }: any) {
   const k = dados.kpis;
+  // Resumo + rotulo do periodo selecionado (alimentam o KPI de periodo e os
+  // titulos/denominadores dos paineis analiticos). Fallbacks p/ payloads antigos.
+  const periodoResumo = dados.periodoResumo || { total: 0, quantidade: 0, ticket: 0, variacaoPercentual: null };
+  const periodoLabel = dados.periodo?.label || "7 dias";
+  const periodoChave = dados.periodo?.chave || "7dias";
+  const serie = dados.serie || dados.vendasPorDia || [];
+  const serieGranularidade = dados.serieGranularidade || "dia";
+
+  const variacaoPeriodo = fmtPercentual(periodoResumo.variacaoPercentual);
+  const tipoVariacaoPeriodo =
+    periodoResumo.variacaoPercentual === null ? "flat" :
+    periodoResumo.variacaoPercentual > 0 ? "up" :
+    periodoResumo.variacaoPercentual < 0 ? "down" : "flat";
+  const ticketPeriodo = Number(periodoResumo.ticket) || 0;
+  const qtdPeriodo = Number(periodoResumo.quantidade) || 0;
 
   const totalFormas = useMemo(
     () => (dados.formasPagamento || []).reduce((a, f) => a + Number(f.total || 0), 0),
     [dados.formasPagamento]
-  );
-
-  const totalSemana = useMemo(
-    () => (dados.vendasPorDia || []).reduce((a, d) => a + (Number(d.total) || 0), 0),
-    [dados.vendasPorDia]
   );
 
   const variacaoMes = fmtPercentual(k.vendasMes.variacaoPercentual);
@@ -134,7 +157,7 @@ function ConteudoDashboard({ dados, onAtualizar, user, contagem }: any) {
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <SegmentedPeriodo />
+          <SegmentedPeriodo valor={periodo} onChange={onPeriodoChange} />
           <BotaoAtualizar onClick={onAtualizar} contagem={contagem} />
         </div>
       </header>
@@ -159,6 +182,16 @@ function ConteudoDashboard({ dados, onAtualizar, user, contagem }: any) {
           display: "grid", gap: 14,
           gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
         }}>
+          <KpiCard
+            cor={C.accent}
+            icone={<IconTrendUp />}
+            rotulo={`Vendas · ${periodoLabel}`}
+            valor={fmtBRLSplit(periodoResumo.total)}
+            descricao={`${fmtNumero(qtdPeriodo)} ${qtdPeriodo === 1 ? "venda" : "vendas"} · ticket ${fmtBRL(ticketPeriodo)}`}
+            comparativo={variacaoPeriodo ? `${variacaoPeriodo} vs. período anterior` : "no período selecionado"}
+            delta={variacaoPeriodo ? { texto: variacaoPeriodo, tipo: tipoVariacaoPeriodo } : null}
+            sparkline={<Sparkline cor={C.accent} pontos={serie.map(d => d.total)} />}
+          />
           <KpiCard
             cor={C.accent}
             icone={<IconCart />}
@@ -262,8 +295,13 @@ function ConteudoDashboard({ dados, onAtualizar, user, contagem }: any) {
           display: "grid", gap: 14,
           gridTemplateColumns: "minmax(0, 1.6fr) minmax(0, 1fr)",
         }}>
-          <PainelGraficoVendas dados={dados.vendasPorDia || []} totalSemana={totalSemana} />
-          <PainelTopProdutos itens={dados.topProdutos || []} totalMes={k.vendasMes.total} />
+          <PainelGraficoVendas
+            dados={serie}
+            total={periodoResumo.total}
+            granularidade={serieGranularidade}
+            titulo={`Vendas · ${periodoLabel}`}
+          />
+          <PainelTopProdutos itens={dados.topProdutos || []} totalMes={periodoResumo.total} periodoLabel={periodoLabel} />
         </section>
 
         {/* ========= TOP CATEGORIAS + VENDEDORES ========= */}
@@ -271,8 +309,14 @@ function ConteudoDashboard({ dados, onAtualizar, user, contagem }: any) {
           display: "grid", gap: 14,
           gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
         }}>
-          <PainelTopCategorias itens={dados.topCategorias || []} totalMes={k.vendasMes.total} />
-          <PainelTopVendedores itens={dados.topVendedores || []} totalMes={k.vendasMes.total} qtdMes={k.vendasMes.quantidade} />
+          <PainelTopCategorias itens={dados.topCategorias || []} totalMes={periodoResumo.total} periodoLabel={periodoLabel} />
+          <PainelTopVendedores
+            itens={dados.topVendedores || []}
+            totalMes={periodoResumo.total}
+            qtdMes={qtdPeriodo}
+            periodoLabel={periodoLabel}
+            periodoChave={periodoChave}
+          />
         </section>
 
         {/* ========= VENDAS POR HORA + PAGAMENTOS ========= */}
@@ -280,8 +324,8 @@ function ConteudoDashboard({ dados, onAtualizar, user, contagem }: any) {
           display: "grid", gap: 14,
           gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
         }}>
-          <PainelVendasPorHora itens={dados.vendasPorHora || []} />
-          <PainelFormasPagamento itens={dados.formasPagamento || []} totalGeral={totalFormas} qtdMes={k.vendasMes.quantidade} />
+          <PainelVendasPorHora itens={dados.vendasPorHora || []} periodoLabel={periodoLabel} />
+          <PainelFormasPagamento itens={dados.formasPagamento || []} totalGeral={totalFormas} qtdMes={qtdPeriodo} periodoLabel={periodoLabel} />
         </section>
 
         {/* ========= FINANCEIRO ========= */}

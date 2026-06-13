@@ -992,11 +992,13 @@ Documentos fiscais além da NFC-e, na tela **NF-e / NFS-e**:
 
 **O que faz:** painel principal com KPIs do dia/semana/mês.
 
+**🗓️ Seletor de período (Hoje · 7 dias · 30 dias · Mês · Ano):** no topo do dashboard, alterna a janela dos **painéis analíticos**. Ao mudar o período, recalculam: o card **"Vendas · período"** (com comparativo % vs. o período anterior equivalente), o **gráfico de vendas** (a granularidade se ajusta sozinha — por hora no "Hoje", por dia em 7/30 dias e Mês, por mês no "Ano"), e os blocos **Top produtos**, **Top categorias**, **Top vendedores**, **Vendas por hora** e **Formas de pagamento**. Os blocos que são fixos por natureza **não** mudam com o seletor: **Vendas hoje**, **Faturamento/Margem/Compras do mês**, **Meta mensal**, **Caixa atual** e **Próximas contas (7 dias)**. A barra de progresso de meta no Top vendedores só aparece quando o período é **Mês** (comparar uma janela parcial com a meta mensal distorceria o %).
+
 **Mostra:**
-- Vendas do dia (valor + qtd)
-- Gráfico de vendas semanal (barra por dia)
-- Top 5 produtos mais vendidos
-- Top 5 vendedores — com **progresso da meta mensal** de cada um: se o vendedor tem meta cadastrada em **Comissões** (campo "Meta mensal"), aparece a barra de progresso, o % atingido e o selo **🎯 Meta batida** (com o bônus configurado) quando passa de 100%. Sem meta cadastrada, a linha fica como antes.
+- Vendas do dia (valor + qtd) **e** Vendas no período selecionado (com variação vs. período anterior)
+- Gráfico de vendas do período (granularidade hora/dia/mês conforme o seletor)
+- Top 5 produtos mais vendidos no período
+- Top 5 vendedores no período — com **progresso da meta mensal** de cada um (somente no período **Mês**): se o vendedor tem meta cadastrada em **Comissões** (campo "Meta mensal"), aparece a barra de progresso, o % atingido e o selo **🎯 Meta batida** (com o bônus configurado) quando passa de 100%. Sem meta cadastrada, a linha fica como antes.
 - Últimas vendas e últimas compras (lado a lado)
 - Resumo financeiro (a pagar / a receber / vencendo / atrasadas)
 

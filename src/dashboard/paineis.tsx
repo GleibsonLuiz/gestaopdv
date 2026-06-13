@@ -4,12 +4,15 @@ import { useMemo, useState } from "react";
 import { C } from "../lib/theme";
 import {
   FONT_SANS, FONT_MONO, ROTULO_PAGAMENTO, fmtBRL, fmtBRLSplit, fmtNumero,
-  fmtDataHora, fmtDiaCurto, fmtDiaSemana, fmtPercentual, niceMax,
+  fmtDataHora, fmtPercentual, niceMax,
+  fmtSerieTopo, fmtSerieBase, fmtSerieTooltip,
 } from "./comum";
 import { Card, CardHead, Vazio, Sparkline, DeltaPill } from "./primitivos";
 import { IconBalance, IconCash, IconTarget } from "./icones";
 
-export function PainelGraficoVendas({ dados, totalSemana }: any) {
+export function PainelGraficoVendas({
+  dados, total, granularidade = "dia", titulo = "Vendas no período",
+}: any) {
   const [hoveredBar, setHoveredBar] = useState(null);
 
   const totaisNum = dados.map(d => Number(d.total) || 0);
@@ -24,7 +27,12 @@ export function PainelGraficoVendas({ dados, totalSemana }: any) {
 
   const n = dados.length || 1;
   const colW = innerW / n;
-  const barW = Math.min(40, colW * 0.5);
+  const barW = Math.min(40, Math.max(3, colW * (n > 16 ? 0.65 : 0.5)));
+  // Com muitas barras (30 dias, 24h, 12 meses) os rotulos de valor sobre cada
+  // barra e a legenda do eixo X poluem: mostramos so a cada N, e os valores
+  // somem (o tooltip cobre o detalhe).
+  const mostrarValores = n <= 12;
+  const stepLabel = Math.max(1, Math.ceil(n / 12));
 
   const ticks = 5;
   const gridY: { y: number; v: number }[] = [];
@@ -64,7 +72,7 @@ export function PainelGraficoVendas({ dados, totalSemana }: any) {
         <h3 style={{
           margin: 0, fontSize: 13, fontWeight: 600, letterSpacing: "0.02em",
           color: C.text,
-        }}>Vendas dos últimos 7 dias</h3>
+        }}>{titulo}</h3>
         <div style={{
           display: "inline-flex", border: `1px solid ${C.border}`, borderRadius: 10,
           background: C.card, padding: 3, gap: 2, marginLeft: 8,
@@ -75,11 +83,11 @@ export function PainelGraficoVendas({ dados, totalSemana }: any) {
         <div style={{ marginLeft: "auto", textAlign: "right" }}>
           <div style={{
             fontSize: 10.5, letterSpacing: "0.16em", textTransform: "uppercase", color: C.muted,
-          }}>Total semana</div>
+          }}>Total no período</div>
           <div style={{
             fontSize: 18, fontWeight: 700, letterSpacing: "-0.01em", color: C.white,
             fontVariantNumeric: "tabular-nums",
-          }}>{fmtBRL(totalSemana)}</div>
+          }}>{fmtBRL(total)}</div>
         </div>
       </div>
 
@@ -152,7 +160,7 @@ export function PainelGraficoVendas({ dados, totalSemana }: any) {
                   rx={6} fill={fill}
                   opacity={isHovered ? 0.7 : 1}
                 />
-                {b.v > 0 && (
+                {b.v > 0 && (mostrarValores || b.ePico) && (
                   <text x={b.cx} y={b.y - 6} textAnchor="middle"
                     style={{
                       fill: b.ePico ? C.green : C.text,
@@ -173,35 +181,49 @@ export function PainelGraficoVendas({ dados, totalSemana }: any) {
           <line x1={padL} y1={padT + innerH} x2={W - padR} y2={padT + innerH}
             stroke={C.border} />
 
-          {barras.map((b, i) => (
-            <g key={"x" + i}>
-              <text x={b.cx} y={H - 14} textAnchor="middle"
-                style={{
-                  fill: b.ePico ? C.green : (b.eHoje ? C.white : C.text),
-                  fontSize: 10, fontWeight: 600, letterSpacing: "0.16em",
-                  textTransform: "uppercase",
-                }}>
-                {fmtDiaSemana(b.d.dia)}
-              </text>
-              <text x={b.cx} y={H - 2} textAnchor="middle"
-                style={{ fill: C.muted, fontSize: 10, fontFamily: FONT_MONO }}>
-                {fmtDiaCurto(b.d.dia)} · {b.d.qtd} vd
-              </text>
-            </g>
-          ))}
+          {barras.map((b, i) => {
+            // Com muitas barras, rotula so a cada stepLabel (+ pico e ultimo)
+            // pra nao sobrepor texto no eixo.
+            const mostrarRotulo = i % stepLabel === 0 || b.ePico || i === barras.length - 1;
+            if (!mostrarRotulo) return null;
+            const topo = fmtSerieTopo(b.d.chave, granularidade);
+            const base = fmtSerieBase(b.d.chave, granularidade);
+            return (
+              <g key={"x" + i}>
+                <text x={b.cx} y={H - 14} textAnchor="middle"
+                  style={{
+                    fill: b.ePico ? C.green : (b.eHoje ? C.white : C.text),
+                    fontSize: 10, fontWeight: 600, letterSpacing: "0.12em",
+                    textTransform: "uppercase",
+                  }}>
+                  {topo}
+                </text>
+                {base && (
+                  <text x={b.cx} y={H - 2} textAnchor="middle"
+                    style={{ fill: C.muted, fontSize: 10, fontFamily: FONT_MONO }}>
+                    {base}
+                  </text>
+                )}
+              </g>
+            );
+          })}
         </svg>
 
         {hoveredBar !== null && barras[hoveredBar] !== undefined && barras[hoveredBar].v > 0 && (
-          <TooltipBarra barra={barras[hoveredBar]} W={W} />
+          <TooltipBarra barra={barras[hoveredBar]} W={W} granularidade={granularidade} />
         )}
       </div>
     </Card>
   );
 }
 
-function TooltipBarra({ barra, W }: any) {
+function TooltipBarra({ barra, W, granularidade = "dia" }: any) {
   const pctLeft = (barra.cx / W) * 100;
   const isRight = pctLeft > 60;
+  const rotuloPico =
+    granularidade === "hora" ? "▲ Melhor horário"
+    : granularidade === "mes" ? "▲ Melhor mês"
+    : "▲ Melhor dia do período";
   return (
     <div style={{
       position: "absolute",
@@ -218,7 +240,7 @@ function TooltipBarra({ barra, W }: any) {
       boxShadow: "0 4px 16px rgba(0,0,0,0.45)",
     }}>
       <div style={{ fontSize: 10.5, color: C.muted, marginBottom: 3, fontFamily: FONT_MONO }}>
-        {fmtDiaSemana(barra.d.dia)} · {fmtDiaCurto(barra.d.dia)}
+        {fmtSerieTooltip(barra.d.chave, granularidade)}
       </div>
       <div style={{ fontSize: 15, fontWeight: 700, color: C.white, fontFamily: FONT_MONO }}>
         {fmtBRL(barra.v)}
@@ -228,7 +250,7 @@ function TooltipBarra({ barra, W }: any) {
       </div>
       {barra.ePico && (
         <div style={{ fontSize: 10, color: C.green, marginTop: 4, fontWeight: 700 }}>
-          ▲ Melhor dia da semana
+          {rotuloPico}
         </div>
       )}
     </div>
@@ -249,15 +271,15 @@ function segBtn(ativo) {
 // Top produtos
 // ============================================================
 
-export function PainelTopProdutos({ itens, totalMes }: any) {
+export function PainelTopProdutos({ itens, totalMes, periodoLabel = "mês" }: any) {
   return (
     <Card>
       <CardHead
-        titulo="Top 5 produtos do mês"
+        titulo={`Top 5 produtos · ${periodoLabel}`}
         meta={totalMes > 0 ? `por faturamento · ${fmtBRL(totalMes)}` : "—"}
       />
       {itens.length === 0 ? (
-        <Vazio texto="Nenhum produto vendido no mês." />
+        <Vazio texto={`Nenhum produto vendido — ${periodoLabel}.`} />
       ) : itens.map((t, idx) => {
         const part = totalMes > 0 ? (Number(t.total) / Number(totalMes)) * 100 : 0;
         const isFirst = idx === 0;
@@ -305,15 +327,15 @@ const ROLE_TAG = {
   VENDEDOR: { texto: "Vendedor", cor: "muted" },
 };
 
-export function PainelTopVendedores({ itens, totalMes, qtdMes }: any) {
+export function PainelTopVendedores({ itens, totalMes, qtdMes, periodoLabel = "mês", periodoChave = "mes" }: any) {
   return (
     <Card>
       <CardHead
-        titulo="Top vendedores do mês"
+        titulo={`Top vendedores · ${periodoLabel}`}
         meta={`${fmtNumero(qtdMes)} vendas · ${fmtBRL(totalMes)}`}
       />
       {itens.length === 0 ? (
-        <Vazio texto="Nenhuma venda registrada no mês." />
+        <Vazio texto={`Nenhuma venda registrada — ${periodoLabel}.`} />
       ) : itens.map((t, idx) => {
         const pct = totalMes > 0 ? (Number(t.total) / Number(totalMes)) * 100 : 0;
         const role = ROLE_TAG[t.user?.role] || ROLE_TAG.VENDEDOR;
@@ -378,8 +400,10 @@ export function PainelTopVendedores({ itens, totalMes, qtdMes }: any) {
             </div>
 
             {/* Meta mensal do vendedor (ConfiguracaoComissao.metaMensal):
-                barra de progresso + badge quando bateu. Sem meta = sem barra. */}
-            {Number(t.metaMensal) > 0 && (() => {
+                barra de progresso + badge quando bateu. So faz sentido quando o
+                periodo selecionado e o mes (comparar total parcial vs meta mensal
+                em outras janelas distorceria o %). Sem meta = sem barra. */}
+            {periodoChave === "mes" && Number(t.metaMensal) > 0 && (() => {
               const pctMeta = (Number(t.total) / Number(t.metaMensal)) * 100;
               const bateu = pctMeta >= 100;
               const corMeta = bateu ? C.green : pctMeta >= 70 ? C.accent : C.yellow;
@@ -438,7 +462,7 @@ function RoleTag({ rolinho }: any) {
 // Formas de pagamento
 // ============================================================
 
-export function PainelFormasPagamento({ itens, totalGeral, qtdMes }: any) {
+export function PainelFormasPagamento({ itens, totalGeral, qtdMes, periodoLabel = "mês" }: any) {
   const ordenados = [...itens].sort((a, b) => Number(b.total) - Number(a.total));
   const cores = [C.accent, C.green, C.yellow, C.purple, C.red, C.muted];
 
@@ -458,7 +482,7 @@ export function PainelFormasPagamento({ itens, totalGeral, qtdMes }: any) {
   return (
     <Card>
       <CardHead
-        titulo="Formas de pagamento (mês)"
+        titulo={`Formas de pagamento · ${periodoLabel}`}
         meta={
           <span style={{ fontFamily: FONT_MONO }}>
             {fmtBRL(totalGeral)} · {fmtNumero(qtdMes)} vendas
@@ -467,7 +491,7 @@ export function PainelFormasPagamento({ itens, totalGeral, qtdMes }: any) {
       />
 
       {ordenados.length === 0 ? (
-        <Vazio texto="Nenhuma venda no mês." />
+        <Vazio texto={`Nenhuma venda — ${periodoLabel}.`} />
       ) : (
         <div style={{
           display: "flex", alignItems: "center", gap: 18,
@@ -1114,12 +1138,12 @@ export function PainelCaixaAtual({ caixa }: any) {
 // Top categorias do mês
 // ============================================================
 
-export function PainelTopCategorias({ itens, totalMes }: any) {
+export function PainelTopCategorias({ itens, totalMes, periodoLabel = "mês" }: any) {
   const cores = [C.accent, C.green, C.yellow, C.purple, C.red];
   return (
     <Card>
       <CardHead
-        titulo="Top categorias do mês"
+        titulo={`Top categorias · ${periodoLabel}`}
         meta={totalMes > 0 ? `${fmtBRL(totalMes)} no total` : "—"}
       />
       {itens.length === 0 ? (
@@ -1173,7 +1197,7 @@ export function PainelTopCategorias({ itens, totalMes }: any) {
 // Vendas por hora do dia (heatmap horizontal)
 // ============================================================
 
-export function PainelVendasPorHora({ itens }: any) {
+export function PainelVendasPorHora({ itens, periodoLabel = "mês" }: any) {
   const arr = itens.length === 24 ? itens : Array.from({ length: 24 }, (_, h) => {
     const found = itens.find(x => Number(x.hora) === h);
     return found || { hora: h, qtd: 0, total: 0 };
@@ -1198,7 +1222,7 @@ export function PainelVendasPorHora({ itens }: any) {
       }}>
         <h3 style={{
           margin: 0, fontSize: 13, fontWeight: 600, letterSpacing: "0.02em", color: C.text,
-        }}>Vendas por hora (mês)</h3>
+        }}>Vendas por hora · {periodoLabel}</h3>
         <span style={{ marginLeft: "auto", fontSize: 11.5, color: C.muted, fontFamily: FONT_MONO }}>
           {pico.hora >= 0 && pico.total > 0
             ? `pico ${String(pico.hora).padStart(2, "0")}h · ${fmtBRL(pico.total)}`

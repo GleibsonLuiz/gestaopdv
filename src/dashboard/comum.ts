@@ -44,6 +44,36 @@ export const fmtDiaSemana = (iso: string | null | undefined): string => {
   return d.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "").toUpperCase();
 };
 
+// ---- Serie do grafico de vendas (granularidade variavel: hora/dia/mes) ----
+const MESES_CURTOS = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
+
+// Rotulo de topo de cada barra (linha em destaque do eixo X).
+export function fmtSerieTopo(chave: string, gran: string): string {
+  if (gran === "hora") return `${chave}h`;
+  if (gran === "mes") {
+    const m = Number(String(chave).slice(5, 7)) - 1;
+    return MESES_CURTOS[m] || "";
+  }
+  return fmtDiaSemana(chave);
+}
+
+// Rotulo secundario (linha mono abaixo). Para hora fica vazio (poluiria o eixo).
+export function fmtSerieBase(chave: string, gran: string): string {
+  if (gran === "hora") return "";
+  if (gran === "mes") return String(chave).slice(0, 4);
+  return fmtDiaCurto(chave);
+}
+
+// Rotulo completo usado no tooltip da barra.
+export function fmtSerieTooltip(chave: string, gran: string): string {
+  if (gran === "hora") return `${String(chave).padStart(2, "0")}:00 — ${String(chave).padStart(2, "0")}:59`;
+  if (gran === "mes") {
+    const m = Number(String(chave).slice(5, 7)) - 1;
+    return `${MESES_CURTOS[m] || ""}/${String(chave).slice(0, 4)}`;
+  }
+  return `${fmtDiaSemana(chave)} · ${fmtDiaCurto(chave)}`;
+}
+
 export function saudacao(nome: string | null | undefined): string {
   const agora = new Date();
   const h = agora.getHours();

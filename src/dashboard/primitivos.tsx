@@ -5,27 +5,42 @@ import { C } from "../lib/theme";
 import { FONT_SANS, FONT_MONO } from "./comum";
 import { IconRefresh } from "./icones";
 
-export function SegmentedPeriodo() {
+const OPCOES_PERIODO = [
+  { chave: "hoje", label: "Hoje" },
+  { chave: "7dias", label: "7 dias" },
+  { chave: "30dias", label: "30 dias" },
+  { chave: "mes", label: "Mês" },
+  { chave: "ano", label: "Ano" },
+];
+
+export function SegmentedPeriodo({
+  valor = "7dias",
+  onChange,
+}: {
+  valor?: string;
+  onChange?: (chave: string) => void;
+}) {
   return (
     <div style={{
       display: "inline-flex", border: `1px solid ${C.border}`, borderRadius: 10,
       background: C.card, padding: 3, gap: 2,
     }}>
-      {["Hoje", "7 dias", "30 dias", "Mês", "Ano"].map((label) => {
-        const ativo = label === "7 dias";
+      {OPCOES_PERIODO.map(({ chave, label }) => {
+        const ativo = chave === valor;
         return (
           <button
-            key={label}
-            disabled={!ativo}
-            title={ativo ? "" : "Em breve"}
+            key={chave}
+            onClick={() => onChange?.(chave)}
+            aria-pressed={ativo ? "true" : "false"}
             style={{
               border: 0, background: ativo ? "rgba(255,255,255,0.08)" : "transparent",
               color: ativo ? C.white : C.muted,
               height: 28, padding: "0 12px", borderRadius: 7,
               fontSize: 12, fontWeight: 600, letterSpacing: "0.02em",
               fontFamily: FONT_SANS,
-              cursor: ativo ? "default" : "not-allowed",
-              opacity: ativo ? 1 : 0.55,
+              cursor: ativo ? "default" : "pointer",
+              opacity: ativo ? 1 : 0.85,
+              transition: "color .12s, background .12s",
             }}
           >
             {label}

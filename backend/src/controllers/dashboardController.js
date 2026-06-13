@@ -26,15 +26,150 @@ function diasAtras(n, base = new Date()) {
   return x;
 }
 
+function inicioDoAno(d = new Date()) {
+  const x = new Date(d.getFullYear(), 0, 1);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
 function toNum(v) {
   if (v === null || v === undefined) return 0;
   const n = typeof v === "number" ? v : Number(v);
   return Number.isFinite(n) ? n : 0;
 }
 
+// Resolve a janela do seletor de periodo do Dashboard (Hoje/7 dias/30 dias/Mes/Ano).
+// Devolve o intervalo [inicio, fim) do periodo atual, o intervalo equivalente
+// imediatamente anterior (para o comparativo %) e a granularidade da serie do
+// grafico (hora p/ hoje, dia p/ janelas curtas/mes, mes p/ ano).
+function resolverPeriodo(chave, agora) {
+  switch (chave) {
+    case "hoje": {
+      const inicio = inicioDoDia(agora);
+      const anteriorInicio = diasAtras(1, agora);
+      return {
+        chave: "hoje", label: "hoje", inicio, fim: agora,
+        anteriorInicio, anteriorFim: inicio, granularidade: "hora",
+      };
+    }
+    case "30dias": {
+      const inicio = diasAtras(29, agora);
+      return {
+        chave: "30dias", label: "30 dias", inicio, fim: agora,
+        anteriorInicio: diasAtras(59, agora), anteriorFim: inicio, granularidade: "dia",
+      };
+    }
+    case "mes": {
+      const inicio = inicioDoMes(agora);
+      const anteriorInicio = inicioDoMes(new Date(agora.getFullYear(), agora.getMonth() - 1, 1));
+      return {
+        chave: "mes", label: "mês", inicio, fim: agora,
+        anteriorInicio, anteriorFim: inicio, granularidade: "dia",
+      };
+    }
+    case "ano": {
+      const inicio = inicioDoAno(agora);
+      const anteriorInicio = new Date(agora.getFullYear() - 1, 0, 1);
+      anteriorInicio.setHours(0, 0, 0, 0);
+      return {
+        chave: "ano", label: "ano", inicio, fim: agora,
+        anteriorInicio, anteriorFim: inicio, granularidade: "mes",
+      };
+    }
+    case "7dias":
+    default: {
+      const inicio = diasAtras(6, agora);
+      return {
+        chave: "7dias", label: "7 dias", inicio, fim: agora,
+        anteriorInicio: diasAtras(13, agora), anteriorFim: inicio, granularidade: "dia",
+      };
+    }
+  }
+}
+
+// Serie temporal de faturamento do periodo, agregada na granularidade resolvida.
+// $queryRaw NAO passa pelo Prisma Extension multi-tenant -> tenantId manual.
+function consultarSeriePeriodo(p, tenantId) {
+  if (p.granularidade === "hora") {
+    return prisma.$queryRaw`
+      SELECT EXTRACT(HOUR FROM "createdAt")::int AS bucket,
+             COUNT(*)::int AS qtd, COALESCE(SUM(total), 0)::float AS total
+      FROM vendas
+      WHERE status = 'CONCLUIDA'
+        AND "createdAt" >= ${p.inicio} AND "createdAt" < ${p.fim}
+        AND "tenantId" = ${tenantId}
+      GROUP BY bucket ORDER BY bucket ASC
+    `;
+  }
+  if (p.granularidade === "mes") {
+    return prisma.$queryRaw`
+      SELECT DATE_TRUNC('month', "createdAt")::date::text AS bucket,
+             COUNT(*)::int AS qtd, COALESCE(SUM(total), 0)::float AS total
+      FROM vendas
+      WHERE status = 'CONCLUIDA'
+        AND "createdAt" >= ${p.inicio} AND "createdAt" < ${p.fim}
+        AND "tenantId" = ${tenantId}
+      GROUP BY bucket ORDER BY bucket ASC
+    `;
+  }
+  return prisma.$queryRaw`
+    SELECT DATE("createdAt")::text AS bucket,
+           COUNT(*)::int AS qtd, COALESCE(SUM(total), 0)::float AS total
+    FROM vendas
+    WHERE status = 'CONCLUIDA'
+      AND "createdAt" >= ${p.inicio} AND "createdAt" < ${p.fim}
+      AND "tenantId" = ${tenantId}
+    GROUP BY bucket ORDER BY bucket ASC
+  `;
+}
+
+// Preenche buckets vazios da serie para o grafico ficar uniforme.
+function construirSerie(serieRaw, p) {
+  const mapa = new Map();
+  if (p.granularidade === "hora") {
+    for (const r of serieRaw) mapa.set(Number(r.bucket), r);
+    const out = [];
+    for (let h = 0; h < 24; h++) {
+      const r = mapa.get(h);
+      out.push({ chave: String(h), qtd: r ? Number(r.qtd) : 0, total: r ? toNum(r.total) : 0 });
+    }
+    return out;
+  }
+  if (p.granularidade === "mes") {
+    for (const r of serieRaw) mapa.set(String(r.bucket).slice(0, 7), r);
+    const out = [];
+    const cursor = new Date(p.inicio.getFullYear(), p.inicio.getMonth(), 1);
+    const fim = new Date(p.fim);
+    while (cursor < fim) {
+      const chaveMes = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`;
+      const r = mapa.get(chaveMes);
+      out.push({ chave: `${chaveMes}-01`, qtd: r ? Number(r.qtd) : 0, total: r ? toNum(r.total) : 0 });
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+    return out;
+  }
+  // granularidade "dia"
+  for (const r of serieRaw) mapa.set(String(r.bucket).slice(0, 10), r);
+  const out = [];
+  const cursor = inicioDoDia(p.inicio);
+  const fim = new Date(p.fim);
+  while (cursor < fim) {
+    const chave = cursor.toISOString().slice(0, 10);
+    const r = mapa.get(chave);
+    out.push({ chave, qtd: r ? Number(r.qtd) : 0, total: r ? toNum(r.total) : 0 });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return out;
+}
+
 export async function resumo(req, res, next) {
   try {
     const agora = new Date();
+    // Seletor de periodo do Dashboard. Reescala os paineis analiticos (serie,
+    // tops, formas de pagamento, vendas por hora) + o KPI "Vendas no periodo".
+    // KPIs fixos por natureza (vendas hoje/mes, meta mensal, caixa, proximas
+    // contas) permanecem com janelas proprias, independentes do seletor.
+    const periodo = resolverPeriodo(String(req.query?.periodo || "7dias"), agora);
     const hoje = inicioDoDia(agora);
     const mesInicio = inicioDoMes(agora);
     const mesFim = fimDoMes(agora);
@@ -71,6 +206,9 @@ export async function resumo(req, res, next) {
       vendasMesAnteriorAgg,
       ticketMesAgg,
       comprasMesAgg,
+      periodoAgg,
+      periodoAnteriorAgg,
+      serieRaw,
       vendasUltimos7Raw,
       topProdutosRaw,
       topVendedoresRaw,
@@ -126,6 +264,19 @@ export async function resumo(req, res, next) {
         _count: { _all: true },
       }),
 
+      // Vendas no periodo selecionado (KPI "Vendas no periodo" + comparativo)
+      prisma.venda.aggregate({
+        where: { status: "CONCLUIDA", createdAt: { gte: periodo.inicio, lt: periodo.fim } },
+        _sum: { total: true },
+        _avg: { total: true },
+        _count: { _all: true },
+      }),
+      prisma.venda.aggregate({
+        where: { status: "CONCLUIDA", createdAt: { gte: periodo.anteriorInicio, lt: periodo.anteriorFim } },
+        _sum: { total: true },
+      }),
+      consultarSeriePeriodo(periodo, tenantId),
+
       prisma.$queryRaw`
         SELECT
           DATE("createdAt")::text AS dia,
@@ -142,7 +293,7 @@ export async function resumo(req, res, next) {
       prisma.itemVenda.groupBy({
         by: ["produtoId"],
         where: {
-          venda: { status: "CONCLUIDA", createdAt: { gte: mesInicio } },
+          venda: { status: "CONCLUIDA", createdAt: { gte: periodo.inicio, lt: periodo.fim } },
         },
         _sum: { quantidade: true, subtotal: true },
         orderBy: { _sum: { quantidade: "desc" } },
@@ -151,7 +302,7 @@ export async function resumo(req, res, next) {
 
       prisma.venda.groupBy({
         by: ["userId"],
-        where: { status: "CONCLUIDA", createdAt: { gte: mesInicio } },
+        where: { status: "CONCLUIDA", createdAt: { gte: periodo.inicio, lt: periodo.fim } },
         _sum: { total: true },
         _count: { _all: true },
         orderBy: { _sum: { total: "desc" } },
@@ -160,7 +311,7 @@ export async function resumo(req, res, next) {
 
       prisma.venda.groupBy({
         by: ["formaPagamento"],
-        where: { status: "CONCLUIDA", createdAt: { gte: mesInicio } },
+        where: { status: "CONCLUIDA", createdAt: { gte: periodo.inicio, lt: periodo.fim } },
         _sum: { total: true },
         _count: { _all: true },
       }),
@@ -307,7 +458,8 @@ export async function resumo(req, res, next) {
         JOIN produtos p ON p.id = iv."produtoId"
         LEFT JOIN categorias c ON c.id = p."categoriaId"
         WHERE v.status = 'CONCLUIDA'
-          AND v."createdAt" >= ${mesInicio}
+          AND v."createdAt" >= ${periodo.inicio}
+          AND v."createdAt" < ${periodo.fim}
           AND v."tenantId" = ${tenantId}
         GROUP BY c.id, c.nome
         ORDER BY total DESC
@@ -323,7 +475,8 @@ export async function resumo(req, res, next) {
           COALESCE(SUM(total), 0)::float AS total
         FROM vendas
         WHERE status = 'CONCLUIDA'
-          AND "createdAt" >= ${mesInicio}
+          AND "createdAt" >= ${periodo.inicio}
+          AND "createdAt" < ${periodo.fim}
           AND "tenantId" = ${tenantId}
         GROUP BY hora
         ORDER BY hora ASC
@@ -423,6 +576,16 @@ export async function resumo(req, res, next) {
       });
     }
 
+    // Serie + resumo do periodo selecionado (alimentam o grafico e o KPI
+    // "Vendas no periodo", reescalados pelo seletor Hoje/7d/30d/Mes/Ano).
+    const serie = construirSerie(serieRaw || [], periodo);
+    const totalPeriodo = toNum(periodoAgg._sum.total);
+    const totalPeriodoAnterior = toNum(periodoAnteriorAgg._sum.total);
+    const variacaoPeriodo =
+      totalPeriodoAnterior > 0
+        ? ((totalPeriodo - totalPeriodoAnterior) / totalPeriodoAnterior) * 100
+        : null;
+
     const vendasMes = toNum(vendasMesAgg._sum.total);
     const vendasMesAnterior = toNum(vendasMesAnteriorAgg._sum.total);
     const variacaoMes =
@@ -492,6 +655,22 @@ export async function resumo(req, res, next) {
 
     res.json({
       geradoEm: agora.toISOString(),
+      periodo: {
+        chave: periodo.chave,
+        label: periodo.label,
+        granularidade: periodo.granularidade,
+        inicio: periodo.inicio.toISOString(),
+        fim: periodo.fim.toISOString(),
+      },
+      periodoResumo: {
+        total: totalPeriodo,
+        quantidade: periodoAgg._count._all,
+        ticket: toNum(periodoAgg._avg.total),
+        variacaoPercentual: variacaoPeriodo,
+        totalAnterior: totalPeriodoAnterior,
+      },
+      serie,
+      serieGranularidade: periodo.granularidade,
       kpis: {
         vendasHoje: {
           quantidade: vendasHojeAgg._count._all,

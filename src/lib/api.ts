@@ -750,7 +750,8 @@ export const api = {
   reabrirTarefa: (id: string) => request(`/tarefas/${id}/reabrir`, { method: "POST" }),
   excluirTarefa: (id: string) => request(`/tarefas/${id}`, { method: "DELETE" }),
 
-  obterDashboard: () => request("/dashboard/resumo"),
+  obterDashboard: (periodo?: string) =>
+    request(`/dashboard/resumo${periodo ? `?periodo=${encodeURIComponent(periodo)}` : ""}`),
   obterDashboardCrm: (filtros: StringDict = {}) =>
     request(`/dashboard/crm${qsFrom(filtros)}`),
   obterAlertas: () => request("/alertas"),

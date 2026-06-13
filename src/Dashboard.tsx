@@ -192,15 +192,20 @@ function ConteudoDashboard({ dados, onAtualizar, user, contagem, periodo, onPeri
             delta={variacaoPeriodo ? { texto: variacaoPeriodo, tipo: tipoVariacaoPeriodo } : null}
             sparkline={<Sparkline cor={C.accent} pontos={serie.map(d => d.total)} />}
           />
-          <KpiCard
-            cor={C.accent}
-            icone={<IconCart />}
-            rotulo="Vendas hoje"
-            valor={fmtBRLSplit(k.vendasHoje.total)}
-            descricao={`${fmtNumero(tickets)} ${tickets === 1 ? "venda" : "vendas"} · ticket ${fmtBRL(ticketHoje)}`}
-            comparativo="hoje"
-            sparkline={<Sparkline cor={C.accent} pontos={(dados.vendasPorDia || []).map(d => d.total)} />}
-          />
+          {/* "Vendas hoje" e a referencia fixa do dia. Quando o periodo
+              selecionado JA e "Hoje", o card de periodo acima mostra o mesmo
+              numero — entao ocultamos este para nao duplicar. */}
+          {periodoChave !== "hoje" && (
+            <KpiCard
+              cor={C.accent}
+              icone={<IconCart />}
+              rotulo="Vendas hoje"
+              valor={fmtBRLSplit(k.vendasHoje.total)}
+              descricao={`${fmtNumero(tickets)} ${tickets === 1 ? "venda" : "vendas"} · ticket ${fmtBRL(ticketHoje)}`}
+              comparativo="hoje"
+              sparkline={<Sparkline cor={C.accent} pontos={(dados.vendasPorDia || []).map(d => d.total)} />}
+            />
+          )}
           <KpiCard
             cor={C.green}
             icone={<IconTrendUp />}

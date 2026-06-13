@@ -247,10 +247,10 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
   const [desconto, setDesconto] = useState("0");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
-  // Alerta de BLOQUEIO (sem estoque / estoque insuficiente): banner grande,
-  // central e sonoro — separado do "erro" inline (12px) que passa despercebido
-  // num caixa movimentado. Garante que o operador veja que o item nao passou.
-  const [alertaBloqueio, setAlertaBloqueio] = useState("");
+  // Alerta de BLOQUEIO (sem estoque / nao cadastrado): banner grande, central
+  // e sonoro — separado do "erro" inline (12px) que passa despercebido num
+  // caixa movimentado. Garante que o operador veja que o item NAO entrou.
+  const [alertaBloqueio, setAlertaBloqueio] = useState<{ titulo: string; msg: string } | null>(null);
   const alertaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audioRef = useRef<{ ctx?: AudioContext }>({});
   const [reciboAberto, setReciboAberto] = useState(null);
@@ -502,13 +502,13 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
 
   // Alerta prominente de bloqueio de venda (sem estoque). Banner central +
   // som + vibracao. Some sozinho, mas o operador nao tem como nao ver.
-  const alertarBloqueio = useCallback((msg: string) => {
-    setAlertaBloqueio(msg);
+  const alertarBloqueio = useCallback((msg: string, titulo = "Produto bloqueado") => {
+    setAlertaBloqueio({ titulo, msg });
     setErro("");
     beepErro();
     try { if ("vibrate" in navigator) navigator.vibrate([90, 60, 90]); } catch { /* ok */ }
     if (alertaTimerRef.current) clearTimeout(alertaTimerRef.current);
-    alertaTimerRef.current = setTimeout(() => setAlertaBloqueio(""), 4000);
+    alertaTimerRef.current = setTimeout(() => setAlertaBloqueio(null), 4000);
   }, [beepErro]);
 
   function destacar(produtoId) {
@@ -791,8 +791,9 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
       return;
     }
     // Idem: codigo bipado sem match nao deve ficar no campo somando com o
-    // proximo bipe.
-    flashErro(`Nenhum produto encontrado para "${q}".`);
+    // proximo bipe. Banner grande tambem aqui — pro operador "nao cadastrado"
+    // e "sem estoque" sao a mesma situacao: o item NAO entrou no carrinho.
+    alertarBloqueio(`Código "${q}" não está cadastrado.`, "Produto não encontrado");
     setBusca("");
   }
 
@@ -1525,12 +1526,12 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
         <div className="pdv-bloqueio-overlay" role="alert" aria-live="assertive">
           <div
             className="pdv-bloqueio-card"
-            onClick={() => { if (alertaTimerRef.current) clearTimeout(alertaTimerRef.current); setAlertaBloqueio(""); }}
+            onClick={() => { if (alertaTimerRef.current) clearTimeout(alertaTimerRef.current); setAlertaBloqueio(null); }}
           >
             <div className="pdv-bloqueio-icon" aria-hidden="true">⛔</div>
             <div className="pdv-bloqueio-texto">
-              <div className="pdv-bloqueio-titulo">Produto bloqueado</div>
-              <div className="pdv-bloqueio-msg">{alertaBloqueio}</div>
+              <div className="pdv-bloqueio-titulo">{alertaBloqueio.titulo}</div>
+              <div className="pdv-bloqueio-msg">{alertaBloqueio.msg}</div>
               <div className="pdv-bloqueio-hint">Não foi adicionado ao carrinho · toque para fechar</div>
             </div>
           </div>

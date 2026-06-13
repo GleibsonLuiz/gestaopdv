@@ -368,6 +368,7 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro, onCategoriaCriada }:
   const [salvando, setSalvando] = useState(false);
   const [lendo, setLendo] = useState(false);
   const [origemOcr, setOrigemOcr] = useState(false);
+  const [ocrFalhou, setOcrFalhou] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const chips = contas.filter(c => recentes.includes(c.id));
@@ -376,7 +377,7 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro, onCategoriaCriada }:
   // pre-preencher. O usuario confere e confirma — nunca grava sozinho. Falha
   // silenciosa: se a IA nao responder, segue no preenchimento manual.
   async function lerComprovante(file: File) {
-    setLendo(true); onErro("");
+    setLendo(true); setOcrFalhou(false); onErro("");
     try {
       const r = await api.lerComprovanteOCR(file) as {
         valor?: number | null; data?: string | null; descricao?: string | null;
@@ -389,7 +390,11 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro, onCategoriaCriada }:
         setPlanoContaId(r.planoContaSugeridaId);
       }
       setOrigemOcr(true);
-    } catch { /* segue manual */ }
+    } catch {
+      // Best-effort: anexo continua salvo, so a leitura por IA falhou. Avisa
+      // discretamente e segue no preenchimento manual (sem toast global).
+      setOcrFalhou(true);
+    }
     finally { setLendo(false); }
   }
 
@@ -496,6 +501,7 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro, onCategoriaCriada }:
             style={{ ...btnSec(), color: C.red }}>Remover</button>
         )}
         {origemOcr && !lendo && <span style={tag(C.purple)}>preenchido por IA — confira</span>}
+        {ocrFalhou && !lendo && <span style={tag(C.yellow)}>não consegui ler — preencha manualmente</span>}
         <input ref={fileRef} type="file" accept="image/*,application/pdf" capture="environment" hidden
           onChange={e => aoEscolherArquivo(e.target.files?.[0] ?? null)} />
 

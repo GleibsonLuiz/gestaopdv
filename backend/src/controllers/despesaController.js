@@ -293,7 +293,17 @@ export async function ocr(req, res, next) {
     res.json(dados);
   } catch (err) {
     if (err instanceof ClaudeIAError) {
-      return res.status(502).json({ erro: err.message });
+      // Loga o motivo real (chave ausente, 401, rate limit, timeout...) nos
+      // logs do servidor — o front so degrada pra manual. Distingue "IA nao
+      // configurada/indisponivel" de um erro transitorio pra UI futura.
+      const semChave = /ANTHROPIC_API_KEY/.test(err.message || "");
+      console.error("[despesa.ocr] leitura por IA falhou:", err.message);
+      return res.status(502).json({
+        erro: semChave
+          ? "Leitura por IA indisponivel (servico nao configurado). Preencha manualmente."
+          : "Nao foi possivel ler o comprovante agora. Preencha manualmente.",
+        iaIndisponivel: semChave,
+      });
     }
     next(err);
   }

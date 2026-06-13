@@ -279,7 +279,15 @@ async function request<T = unknown>(path: string, opts: RequestOptions = {}): Pr
 
 // Upload multipart (anexos). Nao seta Content-Type — o browser monta o
 // boundary correto automaticamente quando recebe FormData.
-async function uploadForm<T = unknown>(path: string, formData: FormData): Promise<T> {
+// opts.silent: nao emite o toast global de falha (5xx/rede). Usado por features
+// best-effort (ex: OCR de comprovante) que ja degradam graciosamente pra manual
+// — o toast "Servidor com problemas" assustaria o usuario sem necessidade.
+async function uploadForm<T = unknown>(
+  path: string,
+  formData: FormData,
+  opts: { silent?: boolean } = {},
+): Promise<T> {
+  const silent = opts.silent === true;
   const headers: Record<string, string> = {};
   headers["X-Device-Id"] = getDeviceId();
   headers["X-Device-Name"] = getDeviceNameHeader();
@@ -298,7 +306,7 @@ async function uploadForm<T = unknown>(path: string, formData: FormData): Promis
     const ehTimeout = (err as Error)?.name === "TimeoutError" || ac.signal.aborted;
     const kind: ApiErroKind = ehTimeout ? "TIMEOUT" : "NETWORK";
     notificarFalha(kind, { path });
-    avisarUsuarioFalha(kind, path);
+    if (!silent) avisarUsuarioFalha(kind, path);
     const msg = ehTimeout
       ? "Upload demorou demais. Tente novamente."
       : "Sem conexao com o servidor.";
@@ -321,7 +329,7 @@ async function uploadForm<T = unknown>(path: string, formData: FormData): Promis
       : "CLIENT_4XX";
     if (kind === "SERVER_5XX") {
       notificarFalha(kind, { status: res.status, path });
-      avisarUsuarioFalha(kind, path);
+      if (!silent) avisarUsuarioFalha(kind, path);
     } else {
       notificarOk();
     }
@@ -887,7 +895,9 @@ export const api = {
   lerComprovanteOCR: (file: File) => {
     const fd = new FormData();
     fd.append("arquivo", file);
-    return uploadForm("/despesas/ocr", fd);
+    // silent: OCR e best-effort (cai pra manual se falhar). Nao dispara o toast
+    // global "Servidor com problemas" — a tela mostra um aviso discreto.
+    return uploadForm("/despesas/ocr", fd, { silent: true });
   },
 
   // Consolidacao contabil do periodo (portal do contador). Retorna

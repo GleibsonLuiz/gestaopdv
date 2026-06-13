@@ -2314,15 +2314,21 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
               })() : (
                 <>
                   {/* Foto em destaque: confirma visualmente o item antes de
-                      adicionar. So renderiza quando ha imagem — sem foto, o
-                      thumbnail do cabecalho ja basta (evita placeholder gigante). */}
+                      adicionar. Moldura retangular com a imagem INTEIRA
+                      centralizada (object-fit: contain) — nada de corte. So
+                      renderiza quando ha imagem (sem foto, o thumbnail do
+                      cabecalho ja basta). */}
                   {qtdModalProduto.imagem && (
-                    <div style={{ display: "flex", justifyContent: "center", margin: "2px 0 16px" }}>
-                      <FotoProduto
-                        url={qtdModalProduto.imagem}
-                        nome={qtdModalProduto.nome}
-                        tamanho={132}
-                        servico={qtdModalProduto.tipoItem === "SERVICO"}
+                    <div style={{
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      margin: "2px 0 16px", padding: 12, height: 190,
+                      background: "var(--pdv-surf-2)", border: "1px solid var(--pdv-line)",
+                      borderRadius: 14,
+                    }}>
+                      <img
+                        src={/^(https?:|data:)/i.test(qtdModalProduto.imagem) ? qtdModalProduto.imagem : `${BASE_URL}${qtdModalProduto.imagem}`}
+                        alt={qtdModalProduto.nome || ""}
+                        style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8 }}
                       />
                     </div>
                   )}

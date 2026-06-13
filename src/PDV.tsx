@@ -277,6 +277,22 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
   const [saldoPontos, setSaldoPontos] = useState(null);
   const [pontosResgatando, setPontosResgatando] = useState(0);
   const [painelPontosAberto, setPainelPontosAberto] = useState(false);
+  // Vista do carrinho: "cupom" (papel termico, default) ou "tabela" (formato
+  // convencional, linhas/colunas). Persistido por usuario igual ao modoClean.
+  // So muda a renderizacao do carrinho — todo o resto (handlers, totais) e o
+  // mesmo. Botao de toggle vive no cabecalho "Cupom em andamento".
+  const chaveCupomVista = `pdv:cupomVista:${user?.id || "anon"}`;
+  const [cupomVista, setCupomVista] = useState(() => {
+    try { return localStorage.getItem(chaveCupomVista) === "tabela" ? "tabela" : "cupom"; }
+    catch { return "cupom"; }
+  });
+  function alternarCupomVista() {
+    setCupomVista((v) => {
+      const nv = v === "cupom" ? "tabela" : "cupom";
+      try { localStorage.setItem(chaveCupomVista, nv); } catch { /* ignore */ }
+      return nv;
+    });
+  }
   const buscaRef = useRef(null);
   const finalizarRef = useRef(null);
   // Foca dinamicamente o input "Recebi" do PRIMEIRO pagamento DINHEIRO no
@@ -1647,6 +1663,29 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
               )}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
+              {carrinho.length > 0 && (
+                <button
+                  type="button"
+                  onClick={alternarCupomVista}
+                  className="pdv-btn-rm"
+                  title={cupomVista === "cupom"
+                    ? "Ver em formato de tabela (lista convencional)"
+                    : "Ver em formato de cupom (papel térmico)"}
+                >
+                  {cupomVista === "cupom" ? (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
+                      <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
+                    </svg>
+                  ) : (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 3v18l2-1.2L8 21l2-1.2L12 21l2-1.2L16 21l2-1.2L20 21V3l-2 1.2L16 3l-2 1.2L12 3l-2 1.2L8 3 6 4.2 4 3z" />
+                      <line x1="8" y1="8" x2="16" y2="8" /><line x1="8" y1="12" x2="16" y2="12" />
+                    </svg>
+                  )}
+                  {cupomVista === "cupom" ? "Tabela" : "Cupom"}
+                </button>
+              )}
               {vendasEspera.length > 0 && (
                 <button
                   type="button"
@@ -1743,7 +1782,93 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
                 } catch (err) { flashErro(err.message); }
               }}
             />
-          )) : (
+          )) : cupomVista === "tabela" ? (
+            <div className="pdv-tabela-outer">
+              <div className="pdv-tabela-wrap">
+                <table className="pdv-tabela">
+                  <thead>
+                    <tr>
+                      <th className="pdv-tb-idx">#</th>
+                      <th className="pdv-tb-nome">Produto</th>
+                      <th className="pdv-tb-qtd">Qtd</th>
+                      <th className="pdv-tb-unit">Unitário</th>
+                      <th className="pdv-tb-total">Total</th>
+                      <th className="pdv-tb-acoes" aria-label="Ações" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {carrinho.map((it, idx) => (
+                      <tr
+                        key={it.produtoId}
+                        className={`pdv-tb-row ${destacado === it.produtoId ? "is-new" : ""}`}
+                      >
+                        <td className="pdv-tb-idx">{idx + 1}</td>
+                        <td className="pdv-tb-nome">
+                          {it.nome}
+                          {it.tipoItem === "SERVICO" && <span className="pdv-tb-svc">SVC</span>}
+                        </td>
+                        <td className="pdv-tb-qtd">
+                          <div className="pdv-tb-stepper">
+                            <button type="button" onClick={() => alterarQuantidade(it.produtoId, -1)}>−</button>
+                            <span className="pdv-tb-qtd-val">
+                              {fmtQtd(it.quantidade)} {(it.unidade || "UN").toString().toUpperCase()}
+                            </span>
+                            <button type="button" onClick={() => alterarQuantidade(it.produtoId, +1)}>+</button>
+                          </div>
+                        </td>
+                        <td className="pdv-tb-unit">
+                          {it.tipoItem === "SERVICO" ? (
+                            <input
+                              type="number" step="0.01" min="0"
+                              value={it.precoUnitario}
+                              onChange={e => alterarPreco(it.produtoId, e.target.value)}
+                              className="pdv-tb-preco"
+                              title="Preço editável (serviço)"
+                            />
+                          ) : fmtBRL(it.precoUnitario)}
+                        </td>
+                        <td className="pdv-tb-total">{fmtBRL(it.quantidade * it.precoUnitario)}</td>
+                        <td className="pdv-tb-acoes">
+                          <button
+                            type="button"
+                            className="pdv-tb-rm"
+                            onClick={() => removerItem(it.produtoId)}
+                            title="Remover item"
+                          >✕</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="pdv-tabela-ft">
+                <div className="pdv-tabela-ft-row">
+                  <span>Qtd. itens</span>
+                  <span>{fmtQtd(carrinho.reduce((acc, it) => acc + it.quantidade, 0))}</span>
+                </div>
+                <div className="pdv-tabela-ft-row">
+                  <span>Subtotal</span>
+                  <span>{fmtBRL(subtotal)}</span>
+                </div>
+                {descontoNum > 0 && (
+                  <div className="pdv-tabela-ft-row pdv-tabela-ft-desc">
+                    <span>Desconto</span>
+                    <span>- {fmtBRL(descontoNum)}</span>
+                  </div>
+                )}
+                {descontoFidelidade > 0 && (
+                  <div className="pdv-tabela-ft-row pdv-tabela-ft-desc">
+                    <span>Pontos</span>
+                    <span>- {fmtBRL(descontoFidelidade)}</span>
+                  </div>
+                )}
+                <div className="pdv-tabela-ft-total">
+                  <span>Total</span>
+                  <span>{fmtBRL(total)}</span>
+                </div>
+              </div>
+            </div>
+          ) : (
             <div className="pdv-cupom-outer">
               <div className="pdv-cupom-paper">
                 {/* === HEADER DO CUPOM === */}

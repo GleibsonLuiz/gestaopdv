@@ -171,6 +171,12 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 
 **Modo focado (Clean):** pressione **F7** (ou clique no botão **"Focado"** no topo da tela) para trocar para um layout minimalista: a **busca/bipagem fica grande na coluna esquerda**, logo acima da cestinha expandida, e a coluna direita mostra só o **total em destaque** e os botões **F1–F6** de pagamento. Somem os números do dia, os "Mais vendidos" e as últimas vendas — ideal para horário de pico ou para operadores que se distraem com informação demais. A troca é instantânea e **não mexe na cestinha**: pode alternar no meio da venda que os itens continuam lá. A preferência fica salva no computador (cada caixa pode usar o modo que preferir). Para voltar, **F7** de novo ou botão **"Completo"**.
 
+**Vista do carrinho — Cupom ou Tabela:** com a venda em andamento, o cabeçalho "Cupom em andamento" traz um botão que alterna como os itens são exibidos:
+- **Cupom** (padrão) — visual de cupom térmico (papel, fonte monoespaçada, picotado), parecido com o que será impresso.
+- **Tabela** — formato convencional em lista/colunas (**# · Produto · Qtd · Unitário · Total**), no tema do app, com os botões **−/+** e **remover** sempre visíveis em cada linha.
+
+Os dois mostram os mesmos itens e o mesmo total — muda só a aparência. É só preferência de quem opera; **não afeta o cupom impresso**. A escolha fica salva no computador (por operador) e pode ser trocada a qualquer momento, inclusive no meio da venda.
+
 **Cupom impresso** traz: logo da empresa, razão social, CNPJ, endereço, itens, total, forma de pagamento, **valor recebido e troco** (quando pago em dinheiro com valor informado), vendedor, data/hora e número da venda. Vale para os dois caminhos de impressão (navegador e agente QZ Tray/Bluetooth).
 
 **Maquininha Mercado Pago Point** (se ativada em Configurações): botão "📲 Maquininha MP" cobra direto na máquina física, com polling de aprovação a cada 2s. A venda só é criada **após** o pagamento ser aprovado pelo MP.

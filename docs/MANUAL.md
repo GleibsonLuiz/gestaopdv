@@ -156,6 +156,7 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
    - **F5** Boleto / **F6** Crediário
    - **+** Formas customizadas (criadas pelo ADMIN)
 6. Para **CARTAO_CREDITO / BOLETO / CREDIARIO**, defina **vencimento** e **número de parcelas** — o sistema gera automaticamente as contas a receber.
+   - **Entrada (antecipação):** se o cliente adiantar uma parte agora, preencha **Entrada agora (R$)** e escolha a **forma da entrada** (Dinheiro / PIX / Débito). O valor da entrada é registrado como pagamento **à vista** e **só o restante** vira conta a receber, dividido nas parcelas. _Ex.: serviço de R$ 86,00, cliente adianta R$ 30,00 → entra R$ 30,00 no caixa hoje e gera-se uma conta a receber de R$ 56,00 com vencimento na data informada._ Se a entrada cobrir todo o valor a prazo, nenhuma conta a receber é gerada.
 7. Confirme. O cupom é exibido. Clique em **Imprimir** ou **WhatsApp** para enviar ao cliente.
 8. O carrinho é limpo automaticamente. Próxima venda já está pronta.
 

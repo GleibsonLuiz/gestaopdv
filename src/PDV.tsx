@@ -267,6 +267,12 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
   // CREDIARIO. Default: 30 dias a frente, 1 parcela.
   const [contaVencimento, setContaVencimento] = useState(() => dataDaqui(30));
   const [contaParcelas, setContaParcelas] = useState(1);
+  // Entrada/antecipacao do crediario: parte do valor a prazo paga JA no ato.
+  // entrada=0 => comportamento classico (todo o valorAPrazo vira ContaReceber).
+  // entrada>0 => carvada do valor a prazo no submit como pagamento a vista
+  // (entradaForma); so o restante (valorContaReceber) gera as parcelas.
+  const [entrada, setEntrada] = useState("");
+  const [entradaForma, setEntradaForma] = useState("DINHEIRO");
   const [configFidelidade, setConfigFidelidade] = useState(null);
   const [saldoPontos, setSaldoPontos] = useState(null);
   const [pontosResgatando, setPontosResgatando] = useState(0);
@@ -775,6 +781,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
     setClienteId("");
     setDesconto("0");
     dispatchPagamentos({ type: "reset" });
+    setEntrada("");
     setErro("");
     setBusca("");
     setPontosResgatando(0);
@@ -951,6 +958,18 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
       .reduce((acc, p) => acc + (Number(p.valor) || 0), 0);
     return Math.round(t * 100) / 100;
   }, [pagamentos]);
+  // Entrada efetiva: nunca menor que 0 nem maior que o valor a prazo (entrada
+  // == valorAPrazo zeraria a conta a receber — nesse caso melhor vender a vista).
+  const entradaNum = useMemo(() => {
+    const raw = Math.max(0, parseFloat(String(entrada).replace(",", ".")) || 0);
+    return Math.round(Math.min(raw, valorAPrazo) * 100) / 100;
+  }, [entrada, valorAPrazo]);
+  // O que efetivamente vira ContaReceber (parcelado): valor a prazo menos a
+  // entrada paga no ato. Quando 0, nenhuma conta e gerada.
+  const valorContaReceber = Math.round((valorAPrazo - entradaNum) * 100) / 100;
+  // Gera conta a receber so se sobrou valor a prazo apos a entrada. Usado na
+  // exibicao de vencimento/parcelas no modal (no submit ha um const local igual).
+  const geraReceber = valorContaReceber > 0;
   const podeFinalizar = total > 0 && Math.abs(pago - total) < 0.01;
 
   // Reconcilia os pagamentos quando o total muda com o modal aberto (ex.:
@@ -1175,7 +1194,9 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
       return;
     }
 
-    const geraReceber = valorAPrazo > 0;
+    // Com entrada, so o RESTANTE (valorContaReceber) vira parcelas. Se a
+    // entrada cobre todo o valor a prazo, nenhuma conta a receber e gerada.
+    // geraReceber vem do escopo de render (= valorContaReceber > 0).
     if (geraReceber) {
       if (!contaVencimento) { setErro("Informe o vencimento da conta a receber"); return; }
       const p = parseInt(contaParcelas, 10);
@@ -1194,6 +1215,31 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
     // tenha gravado antes da queda).
     let payloadEnviado = null;
     try {
+      // Split enviado ao backend. Quando ha entrada, a parcela paga no ato e
+      // "carvada" das linhas a prazo (CREDIARIO/etc) e vira um pagamento a
+      // vista (entradaForma). Assim o backend calcula valorAPrazo = restante e
+      // gera a ContaReceber so sobre o que sobra. Soma total nao muda.
+      const pagamentosPayload = pagamentos.map(p => ({
+        forma: p.forma,
+        valor: Math.round((Number(p.valor) || 0) * 100) / 100,
+        formaCustomNome: p.formaCustomNome || undefined,
+      }));
+      if (entradaNum > 0) {
+        let restanteEntrada = entradaNum;
+        for (const p of pagamentosPayload) {
+          if (restanteEntrada <= 0.001) break;
+          if (!FORMAS_GERA_RECEBER.has(p.forma)) continue;
+          const tira = Math.min(p.valor, restanteEntrada);
+          p.valor = Math.round((p.valor - tira) * 100) / 100;
+          restanteEntrada = Math.round((restanteEntrada - tira) * 100) / 100;
+        }
+        // Remove linhas a prazo que zeraram (entrada cobriu tudo) e injeta a
+        // entrada como pagamento a vista.
+        for (let i = pagamentosPayload.length - 1; i >= 0; i--) {
+          if (pagamentosPayload[i].valor <= 0.001) pagamentosPayload.splice(i, 1);
+        }
+        pagamentosPayload.push({ forma: entradaForma, valor: entradaNum, formaCustomNome: undefined });
+      }
       const payload = {
         clienteId: clienteId || null,
         // Idempotencia: backend rejeita (devolve a venda ja criada) se receber
@@ -1201,11 +1247,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
         idempotencyKey: idempotencyKeyRef.current,
         // Backend deriva Venda.formaPagamento como a forma do pagamento de
         // MAIOR valor — nao precisamos enviar formaPagamento singular.
-        pagamentos: pagamentos.map(p => ({
-          forma: p.forma,
-          valor: Math.round((Number(p.valor) || 0) * 100) / 100,
-          formaCustomNome: p.formaCustomNome || undefined,
-        })),
+        pagamentos: pagamentosPayload,
         desconto: descontoNum,
         observacoes: null,
         itens: carrinho.map(it => ({
@@ -1265,7 +1307,9 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
       // total. ReciboModal ainda mostra resumo "Valor recebido / Troco".
       const recebidoDinheiro = pagamentos
         .filter(p => p.forma === "DINHEIRO")
-        .reduce((acc, p) => acc + (Number(p.valorEntregue) || Number(p.valor) || 0), 0);
+        .reduce((acc, p) => acc + (Number(p.valorEntregue) || Number(p.valor) || 0), 0)
+        // Entrada paga em dinheiro tambem entrou no caixa agora.
+        + (entradaNum > 0 && entradaForma === "DINHEIRO" ? entradaNum : 0);
       setReciboAberto({
         venda,
         valorRecebido: Math.round(recebidoDinheiro * 100) / 100,
@@ -2642,33 +2686,72 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
                     color: "var(--pdv-c-violet)", fontSize: 11, fontWeight: 600,
                     letterSpacing: ".06em", textTransform: "uppercase",
                   }}>
-                    Conta a receber será gerada · {fmtBRL(valorAPrazo)} a prazo
+                    {valorContaReceber > 0
+                      ? <>Conta a receber será gerada · {fmtBRL(valorContaReceber)} a prazo</>
+                      : <>Sem conta a receber · entrada cobre os {fmtBRL(valorAPrazo)}</>}
                   </div>
+
+                  {/* Entrada / antecipacao: parte do valor a prazo paga JA no ato.
+                      Carvada no submit como pagamento a vista (entradaForma). */}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                     <div>
-                      <label className="pdv-field-label">
-                        {contaParcelas > 1 ? "Vencimento da 1ª parcela" : "Vencimento"}
-                      </label>
+                      <label className="pdv-field-label">Entrada agora (R$)</label>
                       <input
-                        type="date"
-                        value={contaVencimento}
-                        onChange={e => setContaVencimento(e.target.value)}
+                        type="number" step="0.01" min="0" max={valorAPrazo}
+                        placeholder="0,00"
+                        value={entrada}
+                        onChange={e => setEntrada(e.target.value)}
                         className="pdv-field-input"
                       />
                     </div>
                     <div>
-                      <label className="pdv-field-label">Parcelas</label>
-                      <input
-                        type="number" min="1" max="60" step="1"
-                        value={contaParcelas}
-                        onChange={e => setContaParcelas(e.target.value)}
+                      <label className="pdv-field-label">Forma da entrada</label>
+                      <select
+                        aria-label="Forma de pagamento da entrada"
+                        value={entradaForma}
+                        onChange={e => setEntradaForma(e.target.value)}
+                        disabled={entradaNum <= 0}
                         className="pdv-field-input"
-                      />
+                      >
+                        <option value="DINHEIRO">Dinheiro</option>
+                        <option value="PIX">PIX</option>
+                        <option value="CARTAO_DEBITO">Débito</option>
+                      </select>
                     </div>
                   </div>
-                  {contaVencimento && (
+
+                  {geraReceber && (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                      <div>
+                        <label className="pdv-field-label">
+                          {contaParcelas > 1 ? "Vencimento da 1ª parcela" : "Vencimento"}
+                        </label>
+                        <input
+                          type="date"
+                          aria-label="Vencimento da conta a receber"
+                          value={contaVencimento}
+                          onChange={e => setContaVencimento(e.target.value)}
+                          className="pdv-field-input"
+                        />
+                      </div>
+                      <div>
+                        <label className="pdv-field-label">Parcelas</label>
+                        <input
+                          type="number" min="1" max="60" step="1"
+                          aria-label="Número de parcelas"
+                          value={contaParcelas}
+                          onChange={e => setContaParcelas(e.target.value)}
+                          className="pdv-field-input"
+                        />
+                      </div>
+                    </div>
+                  )}
+                  {geraReceber && contaVencimento && (
                     <div style={{ fontSize: 12, color: "var(--pdv-t2)" }}>
-                      ✓ {contaParcelas}× {fmtBRL(valorAPrazo / Math.max(1, parseInt(contaParcelas, 10) || 1))}
+                      {entradaNum > 0 && (
+                        <>Entrada {fmtBRL(entradaNum)} ({FORMA_LABEL[entradaForma] || entradaForma}) · </>
+                      )}
+                      ✓ {contaParcelas}× {fmtBRL(valorContaReceber / Math.max(1, parseInt(contaParcelas, 10) || 1))}
                       {parseInt(contaParcelas, 10) > 1 ? (
                         <> — vencendo no dia {new Date(contaVencimento + "T12:00:00").getDate()} de cada mês a partir de {new Date(contaVencimento + "T12:00:00").toLocaleDateString("pt-BR")}</>
                       ) : (

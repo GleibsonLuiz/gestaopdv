@@ -734,7 +734,11 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
     if (exato) {
       // Servicos e producao propria nunca ficam "sem estoque".
       if (!ignoraLimiteEstoque(exato) && exato.estoque <= 0) {
+        // Trava de seguranca: limpa a busca para que bipes repetidos do mesmo
+        // item esgotado nao acumulem codigos na barra (scanner manda Enter a
+        // cada bipe, mas em erro o campo nao era zerado e ia concatenando).
         flashErro(`Sem estoque de "${exato.nome}".`);
+        setBusca("");
         return;
       }
       adicionarProduto(exato, 1);
@@ -744,7 +748,10 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
       abrirQtdModal(sugestoes[sugestaoSelecionada]);
       return;
     }
+    // Idem: codigo bipado sem match nao deve ficar no campo somando com o
+    // proximo bipe.
     flashErro(`Nenhum produto encontrado para "${q}".`);
+    setBusca("");
   }
 
   function alterarQuantidade(produtoId, delta) {

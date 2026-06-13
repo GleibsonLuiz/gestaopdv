@@ -78,7 +78,9 @@ export function criarPagamento(
     forma,
     formaCustomId: opts.formaCustomId || null,
     formaCustomNome: opts.formaCustomNome || null,
-    valor: Math.max(0, Number(valor) || 0),
+    // Arredonda a cents: o valor semeado costuma vir do `total`/`restante`,
+    // que podem carregar ruido de ponto flutuante (qtd fracionaria de peso).
+    valor: Math.round(Math.max(0, Number(valor) || 0) * 100) / 100,
     // "Recebi" comeca VAZIO (undefined), nao espelhando o valor. So e
     // preenchido quando o cliente entrega mais que o devido — ai vira troco.
     // Vazio = pagamento exato (sem troco). Evita o "0" confuso no campo.

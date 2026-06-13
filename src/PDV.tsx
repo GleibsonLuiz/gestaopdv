@@ -904,7 +904,10 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
   }
 
   const subtotal = useMemo(
-    () => carrinho.reduce((acc, it) => acc + it.quantidade * it.precoUnitario, 0),
+    // Arredonda a cents: quantidades fracionarias (peso/KG) geram ruido de
+    // ponto flutuante (ex.: 45,3 * preco => 507,71999999999997). Sem isto, o
+    // valor vaza para o campo de pagamento como "507,71999999999997".
+    () => Math.round(carrinho.reduce((acc, it) => acc + it.quantidade * it.precoUnitario, 0) * 100) / 100,
     [carrinho]
   );
   const descontoNum = useMemo(() => {
@@ -917,7 +920,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
     if (!Number.isFinite(n) || n <= 0) return 0;
     return Math.floor(n / Number(configFidelidade.pontosParaUmReal) * 100) / 100;
   }, [pontosResgatando, configFidelidade]);
-  const total = Math.max(0, subtotal - descontoNum - descontoFidelidade);
+  const total = Math.round(Math.max(0, subtotal - descontoNum - descontoFidelidade) * 100) / 100;
 
   // ===== Derivados do split de pagamento =====
   // Cada pagamento.valor entra na soma (jamais o valorEntregue — esse so

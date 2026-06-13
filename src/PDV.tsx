@@ -247,6 +247,12 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
   const [desconto, setDesconto] = useState("0");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+  // Alerta de BLOQUEIO (sem estoque / estoque insuficiente): banner grande,
+  // central e sonoro — separado do "erro" inline (12px) que passa despercebido
+  // num caixa movimentado. Garante que o operador veja que o item nao passou.
+  const [alertaBloqueio, setAlertaBloqueio] = useState("");
+  const alertaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const audioRef = useRef<{ ctx?: AudioContext }>({});
   const [reciboAberto, setReciboAberto] = useState(null);
   const [pagamentoAberto, setPagamentoAberto] = useState(false);
   const [cancelarAberto, setCancelarAberto] = useState(false);
@@ -469,6 +475,42 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
     setTimeout(() => setErro(""), 2500);
   }
 
+  // Beep de ERRO via Web Audio — tom grave/serrilhado, bem diferente do "ok"
+  // agudo do scanner, pra chamar atencao do operador. Singleton AudioContext.
+  const beepErro = useCallback(() => {
+    try {
+      const w = window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext };
+      const Ctor = w.AudioContext || w.webkitAudioContext;
+      if (!Ctor) return;
+      const ctx = audioRef.current.ctx || (audioRef.current.ctx = new Ctor());
+      if (ctx.state === "suspended") ctx.resume();
+      // Dois pulsos graves descendentes (buzzer).
+      [0, 0.18].forEach((offset, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "square";
+        osc.frequency.value = i === 0 ? 320 : 220;
+        const t = ctx.currentTime + offset;
+        gain.gain.setValueAtTime(0.16, t);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.15);
+      });
+    } catch { /* audio indisponivel — segue so com o visual */ }
+  }, []);
+
+  // Alerta prominente de bloqueio de venda (sem estoque). Banner central +
+  // som + vibracao. Some sozinho, mas o operador nao tem como nao ver.
+  const alertarBloqueio = useCallback((msg: string) => {
+    setAlertaBloqueio(msg);
+    setErro("");
+    beepErro();
+    try { if ("vibrate" in navigator) navigator.vibrate([90, 60, 90]); } catch { /* ok */ }
+    if (alertaTimerRef.current) clearTimeout(alertaTimerRef.current);
+    alertaTimerRef.current = setTimeout(() => setAlertaBloqueio(""), 4000);
+  }, [beepErro]);
+
   function destacar(produtoId) {
     setDestacado(produtoId);
     setTimeout(() => setDestacado(prev => (prev === produtoId ? null : prev)), 800);
@@ -619,7 +661,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
         const qtdAtual = prev[idx].quantidade;
         // Servico/producao propria: ignora limite de estoque.
         if (!ignoraLimiteEstoque(p) && qtdAtual + incremento > estoqueProduto + 1e-9) {
-          flashErro(`Estoque insuficiente de "${p.nome}" (disponível: ${estoqueProduto}).`);
+          alertarBloqueio(`Estoque insuficiente de "${p.nome}" (disponível: ${estoqueProduto}).`);
           return prev;
         }
         // Move o item incrementado para o topo (UX típica de PDV).
@@ -628,7 +670,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
         return [atualizado, ...restante];
       }
       if (!ignoraLimiteEstoque(p) && estoqueProduto + 1e-9 < incremento) {
-        flashErro(`Estoque insuficiente de "${p.nome}" (disponível: ${estoqueProduto}).`);
+        alertarBloqueio(`Estoque insuficiente de "${p.nome}" (disponível: ${estoqueProduto}).`);
         return prev;
       }
       const novoItem = {
@@ -655,7 +697,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
   // de adicionar direto qtd=1, deixa o operador escolher (Enter confirma).
   function abrirQtdModal(produto) {
     if (!ignoraLimiteEstoque(produto) && produto.estoque <= 0) {
-      flashErro(`Sem estoque de "${produto.nome}".`);
+      alertarBloqueio(`Sem estoque de "${produto.nome}".`);
       return;
     }
     setQtdModalProduto(produto);
@@ -695,7 +737,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
     }
     const estoqueProduto = Number(qtdModalProduto.estoque) || 0;
     if (!ignoraLimiteEstoque(qtdModalProduto) && n > estoqueProduto + 1e-9) {
-      flashErro(`Estoque insuficiente de "${qtdModalProduto.nome}" (disponível: ${estoqueProduto}).`);
+      alertarBloqueio(`Estoque insuficiente de "${qtdModalProduto.nome}" (disponível: ${estoqueProduto}).`);
       return;
     }
     adicionarProduto(qtdModalProduto, n);
@@ -716,7 +758,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
     if (etiqueta) {
       const prod = etiqueta.produto;
       if (!ignoraLimiteEstoque(prod) && Number(prod.estoque) + 1e-9 < etiqueta.quantidade) {
-        flashErro(`Estoque insuficiente de "${prod.nome}" (disponível: ${prod.estoque} ${prod.unidade || ""}).`);
+        alertarBloqueio(`Estoque insuficiente de "${prod.nome}" (disponível: ${prod.estoque} ${prod.unidade || ""}).`);
         setBusca("");
         return;
       }
@@ -737,7 +779,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
         // Trava de seguranca: limpa a busca para que bipes repetidos do mesmo
         // item esgotado nao acumulem codigos na barra (scanner manda Enter a
         // cada bipe, mas em erro o campo nao era zerado e ia concatenando).
-        flashErro(`Sem estoque de "${exato.nome}".`);
+        alertarBloqueio(`Sem estoque de "${exato.nome}".`);
         setBusca("");
         return;
       }
@@ -761,8 +803,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
       if (nova <= 0) return it;
       // Servicos: estoque = Infinity, qualquer quantidade passa.
       if (nova > it.estoque) {
-        setErro(`Estoque insuficiente de "${it.nome}" (disponível: ${it.estoque}).`);
-        setTimeout(() => setErro(""), 2500);
+        alertarBloqueio(`Estoque insuficiente de "${it.nome}" (disponível: ${it.estoque}).`);
         return it;
       }
       return { ...it, quantidade: nova };
@@ -778,8 +819,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
     setCarrinho(prev => prev.map(it => {
       if (it.produtoId !== produtoId) return it;
       if (n > it.estoque + 1e-9) {
-        setErro(`Estoque insuficiente de "${it.nome}" (disponível: ${it.estoque}).`);
-        setTimeout(() => setErro(""), 2500);
+        alertarBloqueio(`Estoque insuficiente de "${it.nome}" (disponível: ${it.estoque}).`);
         return { ...it, quantidade: it.estoque };
       }
       return { ...it, quantidade: n };
@@ -1053,7 +1093,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
         if (!p) return;
         e.preventDefault();
         if (!ignoraLimiteEstoque(p) && p.estoque <= 0) {
-          flashErro(`Sem estoque de "${p.nome}".`);
+          alertarBloqueio(`Sem estoque de "${p.nome}".`);
           return;
         }
         adicionarProduto(p, 1);
@@ -1478,6 +1518,25 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {/* Alerta de BLOQUEIO de venda (sem estoque) — overlay central, grande e
+          sonoro. Fica acima de tudo (inclusive modais) para o operador nao
+          deixar o item "passar" sem perceber. Clicavel para dispensar. */}
+      {alertaBloqueio && (
+        <div className="pdv-bloqueio-overlay" role="alert" aria-live="assertive">
+          <div
+            className="pdv-bloqueio-card"
+            onClick={() => { if (alertaTimerRef.current) clearTimeout(alertaTimerRef.current); setAlertaBloqueio(""); }}
+          >
+            <div className="pdv-bloqueio-icon" aria-hidden="true">⛔</div>
+            <div className="pdv-bloqueio-texto">
+              <div className="pdv-bloqueio-titulo">Produto bloqueado</div>
+              <div className="pdv-bloqueio-msg">{alertaBloqueio}</div>
+              <div className="pdv-bloqueio-hint">Não foi adicionado ao carrinho · toque para fechar</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* TOPO: alerta quando nao ha caixa aberto (full-width). Resumo de vendas
           do dia e barra de bipagem foram movidos para a coluna direita pra dar
           mais altura vertical ao cupom. */}
@@ -1777,7 +1836,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
               ultimasVendas={painel.ultimasVendas}
               onAdicionar={(p) => {
                 if (!ignoraLimiteEstoque(p) && p.estoque <= 0) {
-                  flashErro(`Sem estoque de "${p.nome}".`);
+                  alertarBloqueio(`Sem estoque de "${p.nome}".`);
                   return;
                 }
                 adicionarProduto(p, 1);

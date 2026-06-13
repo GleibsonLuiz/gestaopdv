@@ -1176,6 +1176,60 @@
   color: var(--pdv-c-rose); font-size: 12.5px; line-height: 1.4;
 }
 
+/* ─── Alerta de bloqueio (sem estoque) ─────────────────────────
+   Overlay central grande + sonoro. Impossivel passar despercebido
+   num caixa movimentado. Cobre a tela toda (inclusive modais). */
+.pdv-bloqueio-overlay {
+  /* Nao bloqueia a tela: a bipagem do proximo item segue normal. So o card
+     captura clique (pra dispensar). Fica no topo-centro, bem visivel. */
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 64px 24px 0;
+  pointer-events: none;
+}
+.pdv-bloqueio-card {
+  pointer-events: auto;
+  display: flex; align-items: center; gap: 20px;
+  max-width: 560px; width: 100%;
+  padding: 28px 32px; border-radius: 18px;
+  background: #dc2626;
+  color: #fff;
+  border: 3px solid #fff;
+  cursor: pointer;
+  box-shadow: 0 24px 60px rgba(127, 29, 29, .55), 0 0 0 6px color-mix(in oklab, #dc2626 40%, transparent);
+  animation: pdv-bloqueio-pop .22s cubic-bezier(.2,1.4,.4,1);
+}
+.pdv-bloqueio-icon {
+  font-size: 56px; line-height: 1; flex-shrink: 0;
+  animation: pdv-bloqueio-shake .5s ease-in-out;
+}
+.pdv-bloqueio-texto { min-width: 0; }
+.pdv-bloqueio-titulo {
+  font-size: 13px; font-weight: 800; letter-spacing: .12em;
+  text-transform: uppercase; opacity: .92; margin-bottom: 4px;
+}
+.pdv-bloqueio-msg {
+  font-size: 24px; font-weight: 800; line-height: 1.2;
+  word-break: break-word;
+}
+.pdv-bloqueio-hint {
+  margin-top: 8px; font-size: 12.5px; font-weight: 600; opacity: .85;
+}
+@keyframes pdv-bloqueio-pop {
+  from { transform: scale(.85); opacity: 0; }
+  to   { transform: scale(1);  opacity: 1; }
+}
+@keyframes pdv-bloqueio-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pdv-bloqueio-overlay, .pdv-bloqueio-card, .pdv-bloqueio-icon { animation: none; }
+}
+
 /* ─── Atalhos rápidos ──────────────────────────────────────── */
 .pdv-shortcuts {
   background: var(--pdv-surf);

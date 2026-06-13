@@ -185,6 +185,8 @@ Os dois mostram os mesmos itens e o mesmo total — muda só a aparência. É s�
 
 - **Etiqueta de balança:** se você usa uma balança que imprime etiqueta com código de barras (padrão Toledo/Filizola — EAN-13 começando com `2`, com o código do produto e o peso embutidos), basta **bipar a etiqueta**: o item já entra na cestinha com o peso correto, sem digitar nada. O código interno da etiqueta é casado com o **código do produto** cadastrado.
 
+**Aviso de produto sem estoque (trava de segurança):** quando o operador bipa um item **esgotado** (ou tenta adicionar mais do que há em estoque), o produto **não entra na cestinha** e a tela mostra um **alerta vermelho grande no topo** ("⛔ Produto bloqueado") acompanhado de um **bip de erro** — diferente do bip de sucesso do leitor — para que ninguém deixe o item passar sem perceber. O alerta some sozinho em poucos segundos (ou ao tocar nele) e **não atrapalha a próxima bipagem**. A barra de pesquisa também é **limpa automaticamente** nesses casos, evitando que bipes repetidos do mesmo item esgotado acumulem códigos no campo.
+
 **Recuperação de rascunho:** se você fechar o navegador no meio de uma venda, ao reabrir o PDV aparece um banner azul "Você tinha N itens — Recuperar / Descartar". O carrinho é salvo a cada 600ms.
 
 **Vendas sem internet (modo offline):** se a conexão cair no meio do expediente, **o balcão não para**. Ao finalizar (F10) sem rede, aparece o aviso "Sem conexão — modo offline" e a venda é **guardada neste computador** (não se perde nem fechando o navegador). Um banner laranja "📡 N vendas aguardando envio" fica visível até tudo subir.

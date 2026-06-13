@@ -29,7 +29,16 @@ export interface PedidoImp {
   createdAt: string | Date;
   total: number | string;
   desconto?: number | string | null;
-  cliente?: { nome?: string | null } | null;
+  cliente?: {
+    nome?: string | null;
+    cpfCnpj?: string | null;
+    telefone?: string | null;
+    endereco?: string | null;
+    bairro?: string | null;
+    cidade?: string | null;
+    estado?: string | null;
+    cep?: string | null;
+  } | null;
   user?: { nome?: string | null } | null;
   itens?: ItemPedidoImp[] | null;
   observacoes?: string | null;
@@ -95,7 +104,18 @@ export function gerarComandosPedido(
   partes.push(e.bold(false), e.align(0));
   partes.push(e.linha("Data: " + fmtData(pedido.createdAt)));
   if (pedido.user?.nome) partes.push(e.linha("Vendedor: " + pedido.user.nome));
-  if (pedido.cliente?.nome) partes.push(e.linha("Cliente: " + pedido.cliente.nome));
+  // Dados do cliente / entrega — cada linha so e impressa se preenchida.
+  const cli = pedido.cliente;
+  if (cli?.nome) partes.push(e.linha("Cliente: " + cli.nome));
+  if (cli?.cpfCnpj) partes.push(e.linha("CPF/CNPJ: " + cli.cpfCnpj));
+  if (cli?.telefone) partes.push(e.linha("Tel: " + cli.telefone));
+  if (cli?.endereco) partes.push(e.linha("End: " + cli.endereco));
+  if (cli?.bairro) partes.push(e.linha("Bairro: " + cli.bairro));
+  {
+    const cidadeUf = [cli?.cidade, cli?.estado].filter(Boolean).join(" - ");
+    if (cidadeUf) partes.push(e.linha("Cidade: " + cidadeUf));
+  }
+  if (cli?.cep) partes.push(e.linha("CEP: " + cli.cep));
   partes.push(e.divisor(largCh));
 
   // ============ ITENS ============
@@ -127,6 +147,15 @@ export function gerarComandosPedido(
 
   // ============ TOTAIS ============
   const subtotal = Number(pedido.total) + Number(pedido.desconto || 0);
+  const qtdItens = (pedido.itens || []).length;
+  const qtdUnidades = (pedido.itens || []).reduce((s, it) => s + (Number(it.quantidade) || 0), 0);
+  if (qtdItens > 0) {
+    partes.push(e.linhaDireita(
+      "Qtd. itens:",
+      `${qtdItens} ${qtdItens === 1 ? "item" : "itens"} (${fmtQtd(qtdUnidades)} un)`,
+      largCh,
+    ));
+  }
   partes.push(e.linhaDireita("Subtotal:", fmtBRL(subtotal), largCh));
   if (Number(pedido.desconto) > 0) {
     partes.push(e.linhaDireita("Desconto:", "- " + fmtBRL(pedido.desconto || 0), largCh));

@@ -36,7 +36,16 @@ type ItemVenda = {
   produto?: ProdutoItem | null;
 };
 
-type Cliente = { nome?: string | null; cpfCnpj?: string | null };
+type Cliente = {
+  nome?: string | null;
+  cpfCnpj?: string | null;
+  telefone?: string | null;
+  endereco?: string | null;
+  bairro?: string | null;
+  cidade?: string | null;
+  estado?: string | null;
+  cep?: string | null;
+};
 type Usuario = { nome?: string | null };
 
 type PagamentoCupom = {
@@ -87,6 +96,18 @@ export default function CupomVenda({
   const labelForma = (f: FormaPagamento | string) =>
     f && f in FORMA_LABEL ? FORMA_LABEL[f as FormaPagamento] : String(f);
 
+  // Dados de entrega do cliente (so impressos quando preenchidos — uso
+  // tipico: cliente leva o cupom como comprovante/romaneio de entrega).
+  const mostrarCliente = cfg?.mostrarCliente !== false;
+  const cli = venda.cliente;
+  const linhaCidade = cli
+    ? [cli.cidade, cli.estado].filter(Boolean).join(" - ")
+    : "";
+  const totalItens = Array.isArray(venda.itens) ? venda.itens.length : 0;
+  const totalUnidades = Array.isArray(venda.itens)
+    ? venda.itens.reduce((s, it) => s + (Number(it.quantidade) || 0), 0)
+    : 0;
+
   return (
     <>
       <CupomCabecalho empresa={empresa} cfg={cfg} />
@@ -101,11 +122,27 @@ export default function CupomVenda({
       <hr className="cupom-divisor" />
       <div>Venda: <span className="cupom-bold">#{venda.numero}</span></div>
       <div>Data: {fmtData(venda.createdAt)}</div>
-      {cfg?.mostrarCliente !== false && venda.cliente?.nome && (
-        <div>Cliente: {venda.cliente.nome}</div>
+      {mostrarCliente && cli?.nome && (
+        <div>Cliente: {cli.nome}</div>
       )}
-      {cfg?.mostrarCliente !== false && venda.cliente?.cpfCnpj && (
-        <div>CPF/CNPJ: {venda.cliente.cpfCnpj}</div>
+      {mostrarCliente && cli?.cpfCnpj && (
+        <div>CPF/CNPJ: {cli.cpfCnpj}</div>
+      )}
+      {mostrarCliente && cli?.telefone && (
+        <div>Tel: {cli.telefone}</div>
+      )}
+      {/* Endereco de entrega — cada linha so aparece se preenchida. */}
+      {mostrarCliente && cli?.endereco && (
+        <div>End: {cli.endereco}</div>
+      )}
+      {mostrarCliente && cli?.bairro && (
+        <div>Bairro: {cli.bairro}</div>
+      )}
+      {mostrarCliente && linhaCidade && (
+        <div>Cidade: {linhaCidade}</div>
+      )}
+      {mostrarCliente && cli?.cep && (
+        <div>CEP: {cli.cep}</div>
       )}
       {cfg?.mostrarVendedor !== false && venda.user?.nome && (
         <div>Vendedor: {venda.user.nome}</div>
@@ -136,6 +173,12 @@ export default function CupomVenda({
         );
       })}
       <hr className="cupom-divisor" />
+      {totalItens > 0 && (
+        <div className="cupom-linha">
+          <span>Qtd. itens:</span>
+          <span>{totalItens} {totalItens === 1 ? "item" : "itens"} ({fmtQtd(totalUnidades)} un)</span>
+        </div>
+      )}
       <div className="cupom-linha">
         <span>Subtotal:</span>
         <span>{fmtBRL(subtotalCupom)}</span>

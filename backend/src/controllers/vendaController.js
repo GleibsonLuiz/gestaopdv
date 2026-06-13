@@ -108,7 +108,14 @@ const INCLUDE_LISTA = {
 };
 
 const INCLUDE_DETALHE = {
-  cliente: { select: { id: true, nome: true, cpfCnpj: true, telefone: true, email: true } },
+  cliente: {
+    select: {
+      id: true, nome: true, cpfCnpj: true, telefone: true, email: true,
+      // Endereco do cliente — usado no cupom de venda quando a compra e
+      // para entrega (so e impresso se houver dados preenchidos).
+      endereco: true, bairro: true, cidade: true, estado: true, cep: true,
+    },
+  },
   user: { select: { id: true, nome: true, role: true } },
   itens: {
     include: {

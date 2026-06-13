@@ -1096,6 +1096,8 @@ Documentos fiscais além da NFC-e, na tela **NF-e / NFS-e**:
 - **Largura do papel:** 58 mm, **80 mm** (térmica padrão) ou A4.
 - **Fonte base** e **margem** — dica: aumente a fonte (ex.: 14) se a térmica imprimir fraco.
 - **Conteúdo:** ligar/desligar logo, CNPJ, vendedor e cliente; **cabeçalho** e **rodapé** extras (até 3 linhas).
+- **Dados do cliente / entrega no cupom:** quando a venda tem um cliente vinculado, o cupom imprime automaticamente os dados de **entrega** que estiverem preenchidos no cadastro — nome, CPF/CNPJ, telefone, endereço, bairro, cidade/UF e CEP. Cada linha só aparece se houver informação (cliente sem endereço não polui o cupom). Útil quando o cliente usa o cupom como comprovante/romaneio de entrega. Pode ser desligado por completo no item **cliente** acima.
+- **Contagem de itens:** logo antes do subtotal, o cupom mostra **Qtd. itens** (quantidade de linhas e total de unidades), para conferência rápida no fechamento da sacola.
 - **Comportamento:** vias por venda, linhas em branco no fim, **imprimir automaticamente ao concluir a venda** e **abrir gaveta** em vendas no dinheiro (requer agente ESC/POS).
 - **Quais documentos imprimem:** marque venda, orçamento, sangria, suprimento, fechamento e recibo financeiro.
 

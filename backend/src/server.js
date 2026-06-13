@@ -126,16 +126,6 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// Rota de verificacao do Sentry: dispara um erro de proposito para confirmar
-// que o DSN esta configurado e os eventos chegam no painel. So existe quando
-// o Sentry esta ativo (SENTRY_DSN definido) — em dev/testes nem aparece.
-// Pode remover depois de validar; e inofensiva (retorna 500 generico).
-if (process.env.SENTRY_DSN) {
-  app.get("/debug-sentry", () => {
-    throw new Error("Teste do Sentry (backend) — se voce ve isso no painel, esta funcionando!");
-  });
-}
-
 // Middleware de auditoria roda antes das rotas: captura mutacoes via
 // res.on("finish") (quando req.user ja foi populado pelos authRequired
 // das rotas). Filtros internos garantem que so mutacoes autenticadas

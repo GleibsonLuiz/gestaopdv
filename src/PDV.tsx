@@ -2313,6 +2313,19 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
                 );
               })() : (
                 <>
+                  {/* Foto em destaque: confirma visualmente o item antes de
+                      adicionar. So renderiza quando ha imagem — sem foto, o
+                      thumbnail do cabecalho ja basta (evita placeholder gigante). */}
+                  {qtdModalProduto.imagem && (
+                    <div style={{ display: "flex", justifyContent: "center", margin: "2px 0 16px" }}>
+                      <FotoProduto
+                        url={qtdModalProduto.imagem}
+                        nome={qtdModalProduto.nome}
+                        tamanho={132}
+                        servico={qtdModalProduto.tipoItem === "SERVICO"}
+                      />
+                    </div>
+                  )}
                   <label className="pdv-field-label">Quantidade</label>
                   <input
                     ref={qtdInputRef}

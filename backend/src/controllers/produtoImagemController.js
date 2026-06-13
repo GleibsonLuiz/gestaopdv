@@ -1,7 +1,7 @@
 import path from "node:path";
 import multer from "multer";
 import prisma from "../lib/prisma.js";
-import { salvarArquivo, removerArquivo } from "../lib/storage.js";
+import { salvarArquivo, removerArquivo, temBlobStore } from "../lib/storage.js";
 
 const TAMANHO_MAX = 2 * 1024 * 1024; // 2 MB
 const MIMES_PERMITIDOS = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp"]);
@@ -40,13 +40,24 @@ export async function enviarImagem(req, res, next) {
     // Remove imagem antiga (se houver) antes de gravar a nova URL.
     if (produto.imagem) await removerArquivo(produto.imagem);
 
-    const ext = path.extname(req.file.originalname).toLowerCase() || ".jpg";
-    const { url } = await salvarArquivo({
-      pasta: "produtos",
-      buffer: req.file.buffer,
-      extensao: ext,
-      mimeType: req.file.mimetype,
-    });
+    // Estrategia de persistencia (mesma do logotipo):
+    //   - Com Vercel Blob -> sobe para o bucket (URL absoluta/CDN, banco leve).
+    //   - Sem Blob (dev OU serverless sem store conectada) -> grava como data
+    //     URI base64 NO PROPRIO BANCO. Antes caia para o filesystem local, que
+    //     em serverless e read-only/efemero: o writeFile estourava "Erro interno
+    //     do servidor". Data URI viaja com o produto e embute direto em <img>.
+    let url;
+    if (temBlobStore()) {
+      const ext = path.extname(req.file.originalname).toLowerCase() || ".jpg";
+      ({ url } = await salvarArquivo({
+        pasta: "produtos",
+        buffer: req.file.buffer,
+        extensao: ext,
+        mimeType: req.file.mimetype,
+      }));
+    } else {
+      url = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+    }
 
     const atualizado = await prisma.produto.update({
       where: { id: req.params.id },

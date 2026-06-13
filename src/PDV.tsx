@@ -48,7 +48,7 @@ import {
 } from "./pdv/comum";
 import { pagamentosReducer, criarPagamento, novoId } from "./pdv/pagamentos";
 import ReciboModal from "./pdv/ReciboModal";
-import Historico from "./pdv/Historico";
+import Historico, { DetalheVendaModal } from "./pdv/Historico";
 import FotoProduto from "./pdv/FotoProduto";
 import OrcamentoRapidoModal from "./pdv/OrcamentoRapidoModal";
 import ModalAbrirCaixaPDV from "./pdv/ModalAbrirCaixaPDV";

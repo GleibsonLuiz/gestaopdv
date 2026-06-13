@@ -368,7 +368,7 @@ function Card({ titulo, valor, cor }) {
   );
 }
 
-function DetalheVendaModal({ venda, onFechar, onCancelar, onReimprimir, onReabrir, onContinuarRefinalizacao }) {
+export function DetalheVendaModal({ venda, onFechar, onCancelar, onReimprimir, onReabrir, onContinuarRefinalizacao }) {
   const st = STATUS_INFO[venda.status] || STATUS_INFO.CONCLUIDA;
   return (
     <div onClick={onFechar} className="pdv-modal-bg">

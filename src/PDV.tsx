@@ -40,6 +40,12 @@ import { ehUnidadePeso, pesoGramasParaEstoque, resolverEtiquetaBalanca, PRESETS_
 // (controlarEstoque=false — pão, lanche feito na hora). Para esses, o PDV não
 // bloqueia por falta de saldo e o backend permite o estoque ficar negativo.
 const ignoraLimiteEstoque = (p) => p?.tipoItem === "SERVICO" || p?.controlarEstoque === false;
+// Normaliza codigo de barras para comparar UPC-A (12) x EAN-13 (13). O scanner
+// costuma mandar UPC-A sem o zero a esquerda do EAN-13 (e vice-versa), entao
+// comparamos so os digitos significativos (sem nao-digitos e sem zeros a
+// esquerda). Padrao de supermercado — evita "produto nao encontrado" quando o
+// cadastro esta em um formato e o leitor manda o outro.
+const normalizarBarras = (s) => String(s || "").replace(/\D/g, "").replace(/^0+/, "");
 // Fase 5 (fatiamento): constantes/formatadores compartilhados e o recibo
 // pos-venda agora moram em src/pdv/.
 import {
@@ -766,9 +772,15 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
       return;
     }
     const ql = q.toLowerCase();
+    // So tratamos como codigo de barras se o bipe for puramente numerico — para
+    // nao confundir SKU/referencia alfanumericos com EAN.
+    const qBarras = /^\d+$/.test(q) ? normalizarBarras(q) : "";
     const exato = produtos.find(p =>
       p.ativo && (
-        (p.codigoBarras && p.codigoBarras.toLowerCase() === ql) ||
+        (p.codigoBarras && (
+          p.codigoBarras.toLowerCase() === ql ||
+          (qBarras !== "" && normalizarBarras(p.codigoBarras) === qBarras)
+        )) ||
         p.codigo.toLowerCase() === ql ||
         (p.referencia && p.referencia.toLowerCase() === ql)
       )

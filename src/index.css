@@ -134,6 +134,23 @@ button, input, select, textarea, aside, main, nav {
    alguns selects nativos) na cor de destaque do tema. */
 input, select, textarea { accent-color: var(--accent); }
 
+/* ----------------------------------------------------------------------------
+   Spinners de <input type="number"> — removidos globalmente.
+   As setinhas nativas de incrementar/decrementar atrapalhavam a digitacao
+   (ex.: no campo de preco do "Corrigir itens" um clique acidental somava uma
+   casa decimal). O usuario digita o valor direto; a stepper visual nao agrega.
+   Cobrimos WebKit/Blink (Chrome, Edge, navegador da loja) e Firefox.
+   ---------------------------------------------------------------------------- */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 /* Lista de opcoes: mesmo fundo escuro do tema + texto claro legivel, identico
    em todas as telas. optgroup herda o mesmo tratamento. */
 select { color: var(--text); }

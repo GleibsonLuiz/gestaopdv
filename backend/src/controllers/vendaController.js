@@ -973,6 +973,197 @@ export async function refinalizar(req, res, next) {
   }
 }
 
+// Edita os itens de uma venda EM_EDICAO (correcao pos-venda). Reconcilia o
+// estoque pelo DELTA de cada produto: a baixa original PERMANECE (o cliente ja
+// levou a mercadoria) e aqui so ajustamos a diferenca — itens novos/aumentados
+// dao SAIDA, itens removidos/reduzidos voltam como ENTRADA. Recalcula
+// subtotal/total preservando descontos embutidos (ex: fidelidade) e mantem o
+// status EM_EDICAO. O fechamento (split de pagamento + re-lancamento no caixa)
+// continua a cargo de refinalizar, que le o novo total fresco do banco.
+//
+// Mesma regra de autorizacao do reabrir: ADMIN/GERENTE direto; VENDEDOR precisa
+// apresentar email+senha de um autorizador (exigirAutorizacaoGerencial).
+//
+// Body: { itens:[{produtoId, quantidade, precoUnitario}], desconto?, observacoes?,
+//         emailAutorizacao?, senhaAutorizacao? }
+export async function editarItens(req, res, next) {
+  try {
+    const id = req.params.id;
+
+    try {
+      await exigirAutorizacaoGerencial(req);
+    } catch (err) {
+      if (err.status) return res.status(err.status).json({ erro: err.message });
+      throw err;
+    }
+
+    // Normaliza itens (qtd > 0, preco >= 0). Sem fidelidade — correcao de itens
+    // nao mexe em pontos resgatados.
+    const itensIn = req.body?.itens;
+    if (!Array.isArray(itensIn) || itensIn.length === 0) {
+      return res.status(400).json({ erro: "Informe ao menos um item" });
+    }
+    const itensNorm = [];
+    for (let i = 0; i < itensIn.length; i++) {
+      const it = itensIn[i];
+      const idx = i + 1;
+      if (!it?.produtoId) return res.status(400).json({ erro: `Item ${idx}: produtoId obrigatorio` });
+      const qtdRaw = toNumber(it.quantidade);
+      if (qtdRaw === null || Number.isNaN(qtdRaw) || qtdRaw <= 0) {
+        return res.status(400).json({ erro: `Item ${idx}: quantidade deve ser > 0` });
+      }
+      const preco = toNumber(it.precoUnitario);
+      if (preco === null || Number.isNaN(preco) || preco < 0) {
+        return res.status(400).json({ erro: `Item ${idx}: precoUnitario invalido` });
+      }
+      itensNorm.push({
+        produtoId: it.produtoId,
+        quantidade: arredQtd(qtdRaw),
+        precoUnitario: Math.round(preco * 100) / 100,
+      });
+    }
+
+    try {
+      const venda = await prisma.$transaction(async (tx) => {
+        const atual = await tx.venda.findUnique({
+          where: { id },
+          include: { itens: true },
+        });
+        if (!atual) { const e = new Error("Venda nao encontrada"); e.status = 404; throw e; }
+        if (atual.status !== "EM_EDICAO") {
+          const e = new Error(
+            `So e possivel editar itens de vendas EM_EDICAO (status atual: ${atual.status})`
+          );
+          e.status = 400; throw e;
+        }
+
+        const desconto = req.body?.desconto !== undefined
+          ? toNumber(req.body.desconto)
+          : Number(atual.desconto);
+        if (desconto === null || Number.isNaN(desconto) || desconto < 0) {
+          const e = new Error("Desconto invalido"); e.status = 400; throw e;
+        }
+
+        // Produtos do conjunto antigo ∪ novo.
+        const idsProdutos = [...new Set([
+          ...atual.itens.map(i => i.produtoId),
+          ...itensNorm.map(i => i.produtoId),
+        ])];
+        const produtos = await tx.produto.findMany({ where: { id: { in: idsProdutos } } });
+        const mapaProd = new Map(produtos.map(p => [p.id, p]));
+
+        // Quantidades agregadas por produto (linhas repetidas do mesmo produto
+        // somam) — base para calcular o delta de estoque.
+        const qtdAntiga = new Map();
+        for (const it of atual.itens) {
+          qtdAntiga.set(it.produtoId, (qtdAntiga.get(it.produtoId) || 0) + Number(it.quantidade));
+        }
+        const qtdNova = new Map();
+        for (const it of itensNorm) {
+          qtdNova.set(it.produtoId, (qtdNova.get(it.produtoId) || 0) + it.quantidade);
+        }
+
+        // Valida existencia/ativacao dos produtos referenciados nos novos itens.
+        for (const it of itensNorm) {
+          const p = mapaProd.get(it.produtoId);
+          if (!p) { const e = new Error(`Produto ${it.produtoId} nao encontrado`); e.status = 404; throw e; }
+          if (!p.ativo) { const e = new Error(`Produto "${p.nome}" esta inativo`); e.status = 400; throw e; }
+        }
+
+        // Estoque: bloqueia se um AUMENTO exceder o saldo disponivel. Servicos e
+        // producao propria (controlarEstoque=false) nao travam — mesma regra da
+        // criacao de venda.
+        for (const pid of idsProdutos) {
+          const p = mapaProd.get(pid);
+          if (!p || p.tipoItem === "SERVICO" || p.controlarEstoque === false) continue;
+          const delta = arredQtd((qtdNova.get(pid) || 0) - (qtdAntiga.get(pid) || 0));
+          if (delta > 0 && Number(p.estoque) < delta) {
+            const e = new Error(
+              `Estoque insuficiente de "${p.nome}". Disponivel: ${Number(p.estoque)}, a mais solicitado: ${delta}`
+            );
+            e.status = 400; throw e;
+          }
+        }
+
+        // Reconcilia o estoque pelo delta. Servicos nunca movem estoque;
+        // producao propria move (pode ficar negativa, como na venda original).
+        for (const pid of idsProdutos) {
+          const p = mapaProd.get(pid);
+          if (!p || p.tipoItem === "SERVICO") continue;
+          const delta = arredQtd((qtdNova.get(pid) || 0) - (qtdAntiga.get(pid) || 0));
+          if (delta === 0) continue;
+          const antes = Number(p.estoque);
+          const depois = arredQtd(antes - delta); // delta>0 = vendeu mais => estoque cai
+          await tx.produto.update({ where: { id: pid }, data: { estoque: depois } });
+          await tx.movimentacaoEstoque.create({
+            data: {
+              tipo: delta > 0 ? "SAIDA" : "ENTRADA",
+              quantidade: Math.abs(delta),
+              estoqueAntes: antes,
+              estoqueDepois: depois,
+              motivo: `CORRECAO ITENS VENDA #${atual.numero}`,
+              produtoId: pid,
+              userId: req.user.sub,
+            },
+          });
+        }
+
+        // Substitui as linhas de itens. deleteMany + create top-level (o wrapper
+        // multi-tenant injeta tenantId no create top-level, mas NAO em nested
+        // create dentro de update — por isso nao usamos itens:{deleteMany,create}).
+        await tx.itemVenda.deleteMany({ where: { vendaId: id } });
+        for (const it of itensNorm) {
+          await tx.itemVenda.create({
+            data: {
+              vendaId: id,
+              produtoId: it.produtoId,
+              quantidade: it.quantidade,
+              precoUnitario: it.precoUnitario,
+              subtotal: Math.round(it.quantidade * it.precoUnitario * 100) / 100,
+            },
+          });
+        }
+
+        // Recalcula o total. descontoEmbutido = parte do desconto que NAO esta
+        // no campo desconto (ex: desconto por fidelidade aplicado na criacao);
+        // preservamos para nao corromper o total de vendas com fidelidade.
+        const subtotalNovo = itensNorm.reduce((a, it) => a + it.quantidade * it.precoUnitario, 0);
+        const subtotalAntigo = atual.itens.reduce((a, it) => a + Number(it.subtotal), 0);
+        const descontoEmbutido = Math.max(
+          0,
+          Math.round((subtotalAntigo - Number(atual.desconto) - Number(atual.total)) * 100) / 100
+        );
+        const totalNovo = Math.max(
+          0,
+          Math.round((subtotalNovo - desconto - descontoEmbutido) * 100) / 100
+        );
+
+        const observacoes = req.body?.observacoes !== undefined
+          ? (req.body.observacoes ? String(req.body.observacoes).trim().slice(0, 500) : null)
+          : atual.observacoes;
+
+        await tx.venda.update({
+          where: { id },
+          data: {
+            desconto: Math.round(desconto * 100) / 100,
+            total: totalNovo,
+            observacoes,
+          },
+        });
+
+        return tx.venda.findUnique({ where: { id }, include: INCLUDE_DETALHE });
+      }, TX_OPTS);
+
+      res.json(venda);
+    } catch (err) {
+      if (err.status) return res.status(err.status).json({ erro: err.message });
+      throw err;
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function cancelar(req, res, next) {
   try {
     const id = req.params.id;

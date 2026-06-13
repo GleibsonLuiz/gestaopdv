@@ -646,6 +646,8 @@ export const api = {
     }),
   refinalizarVenda: (id: string, data: unknown) =>
     request(`/vendas/${id}/refinalizar`, { method: "POST", body: data }),
+  editarItensVenda: (id: string, data: unknown) =>
+    request(`/vendas/${id}/editar-itens`, { method: "POST", body: data }),
 
   // ==================== ORCAMENTOS / ORDENS DE SERVICO ====================
   listarOrcamentos: (filtros: StringDict = {}) =>

@@ -48,7 +48,7 @@ import {
 } from "./pdv/comum";
 import { pagamentosReducer, criarPagamento, novoId } from "./pdv/pagamentos";
 import ReciboModal from "./pdv/ReciboModal";
-import Historico, { DetalheVendaModal } from "./pdv/Historico";
+import Historico, { DetalheVendaModal, CorrigirVendaFlow } from "./pdv/Historico";
 import FotoProduto from "./pdv/FotoProduto";
 import OrcamentoRapidoModal from "./pdv/OrcamentoRapidoModal";
 import ModalAbrirCaixaPDV from "./pdv/ModalAbrirCaixaPDV";
@@ -258,6 +258,7 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
   const [caixaCarregando, setCaixaCarregando] = useState(true);
   const [painel, setPainel] = useState({ topProdutos: [], ultimasVendas: [], resumoDia: null, formasFrequencia: [] });
   const [vendaDetalheAberta, setVendaDetalheAberta] = useState(null);
+  const [corrigirVendaAberta, setCorrigirVendaAberta] = useState(null);
   const [sugestaoIdx, setSugestaoIdx] = useState(0); // índice destacado nas sugestões
   const [qtdModalProduto, setQtdModalProduto] = useState(null); // produto p/ modal de qtd
   const [qtdModalValor, setQtdModalValor] = useState("1");
@@ -2855,6 +2856,25 @@ function NovaVenda({ user, contextoInicial, onContextoConsumido, modoClean, onAl
         <DetalheVendaModal
           venda={vendaDetalheAberta}
           onFechar={() => { setVendaDetalheAberta(null); focarBusca(); }}
+          onCorrigirItens={
+            (vendaDetalheAberta.status === "CONCLUIDA" || vendaDetalheAberta.status === "EM_EDICAO")
+              ? () => { const v = vendaDetalheAberta; setVendaDetalheAberta(null); setCorrigirVendaAberta(v); }
+              : null
+          }
+        />
+      )}
+
+      {corrigirVendaAberta && (
+        <CorrigirVendaFlow
+          venda={corrigirVendaAberta}
+          user={user}
+          onFechar={() => { setCorrigirVendaAberta(null); recarregarPainel(); focarBusca(); }}
+          onConcluido={(msg) => {
+            setCorrigirVendaAberta(null);
+            recarregarPainel();
+            focarBusca();
+            try { emitirToast({ tipo: "sucesso", titulo: "Venda corrigida", mensagem: msg }); } catch { /* toast best-effort */ }
+          }}
         />
       )}
 

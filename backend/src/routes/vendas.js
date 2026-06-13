@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { authRequired, requireRole, requirePermissao } from "../middlewares/auth.js";
 import { validarBody, criarVendaSchema } from "../middlewares/validarBody.js";
-import { listar, obter, criar, cancelar, reabrir, refinalizar } from "../controllers/vendaController.js";
+import { listar, obter, criar, cancelar, reabrir, refinalizar, editarItens } from "../controllers/vendaController.js";
 
 const router = Router();
 
@@ -17,5 +17,8 @@ router.post("/:id/cancelar", requireRole("ADMIN", "GERENTE"), cancelar);
 // exigirAutorizacaoGerencial.
 router.post("/:id/reabrir", reabrir);
 router.post("/:id/refinalizar", refinalizar);
+// Correcao de itens de uma venda EM_EDICAO (reconcilia estoque pelo delta).
+// Mesma regra de autorizacao do reabrir, verificada no controller.
+router.post("/:id/editar-itens", editarItens);
 
 export default router;

@@ -204,6 +204,14 @@ ADMIN → **Funcionários** → clicar no funcionário → marcar/desmarcar os m
 - Em todos os casos o orçamento é **salvo de verdade** (status *Rascunho*) e fica disponível na tela **Orçamentos** para acompanhar, aprovar e depois converter em venda.
 - A **cestinha continua intacta** — gerar o orçamento é um passo de pré-venda; você pode finalizar a venda normalmente em seguida (F10) ou colocar em espera.
 
+**✏️ Corrigir itens de uma venda já finalizada:** bipou o produto errado, errou a quantidade ou esqueceu um item? Não precisa cancelar e refazer tudo. Abra a venda (clique nela em **"Minhas vendas de hoje"** no PDV, ou pela aba **Histórico → ⋯ → Corrigir itens**) e use **✏️ Corrigir itens**.
+
+- Um modal abre com os itens da venda: você pode **alterar a quantidade**, **mudar o preço unitário**, **remover** itens e **adicionar** novos produtos (busca por nome ou código). O total recalcula na hora.
+- **Estoque:** o sistema ajusta **só a diferença** — se você aumentou a quantidade ou adicionou um item, baixa o que entrou a mais; se reduziu ou removeu, devolve ao estoque. O que já estava certo não é mexido.
+- Ao salvar, você confirma a **forma de pagamento do novo total** (a mesma tela do "Alterar forma de pagamento"). Enquanto isso, a venda fica como **"Em edição"** — o lançamento no caixa é estornado e refeito com o valor corrigido, e contas a receber pendentes da venda são regeradas conforme a nova forma.
+- **Quem pode:** ADMIN e GERENTE corrigem direto. **Vendedor** precisa de **autorização gerencial** (e-mail + senha de um ADMIN/GERENTE), igual ao alterar forma de pagamento.
+- Se você fechar no meio, a venda fica **"Em edição"** e pode ser retomada pelo Histórico (**Corrigir itens** de novo, ou **Continuar refinalização** só para o pagamento).
+
 ---
 
 #### 🍽️ Central de Comandas

@@ -24,6 +24,7 @@ export default function Historico({ user }) {
   const [detalhe, setDetalhe] = useState<any>(null);
   const [reimpressao, setReimpressao] = useState<any>(null);
   const [refinalizar, setRefinalizar] = useState<any>(null);
+  const [corrigindo, setCorrigindo] = useState<any>(null);
   const [autorizacaoPendente, setAutorizacaoPendente] = useState<any>(null);
   const [autorizacaoCreds, setAutorizacaoCreds] = useState<any>(null);
   const [mensagem, setMensagem] = useState("");
@@ -301,6 +302,13 @@ export default function Historico({ user }) {
                       hidden: !podeReabrir || v.status !== "CONCLUIDA",
                     },
                     {
+                      label: "Corrigir itens",
+                      icon: "✏️",
+                      color: C.yellow,
+                      onClick: () => { setDetalhe(null); setCorrigindo(v); },
+                      hidden: !podeReabrir || (v.status !== "CONCLUIDA" && v.status !== "EM_EDICAO"),
+                    },
+                    {
                       label: "Continuar refinalização",
                       icon: "▶",
                       color: C.yellow,
@@ -321,6 +329,7 @@ export default function Historico({ user }) {
           onFechar={() => setDetalhe(null)}
           onCancelar={podeCancelar && detalhe.status === "CONCLUIDA" ? () => cancelar(detalhe) : null}
           onReabrir={podeReabrir && detalhe.status === "CONCLUIDA" ? () => solicitarAlteracao(detalhe, "reabrir") : null}
+          onCorrigirItens={podeReabrir && (detalhe.status === "CONCLUIDA" || detalhe.status === "EM_EDICAO") ? () => { const v = detalhe; setDetalhe(null); setCorrigindo(v); } : null}
           onContinuarRefinalizacao={podeReabrir && detalhe.status === "EM_EDICAO" ? () => solicitarAlteracao(detalhe, "continuar") : null}
           onReimprimir={detalhe.status === "CONCLUIDA" ? () => {
             setReimpressao(detalhe);
@@ -355,6 +364,15 @@ export default function Historico({ user }) {
           onConfirmar={confirmarAutorizacao}
         />
       )}
+
+      {corrigindo && (
+        <CorrigirVendaFlow
+          venda={corrigindo}
+          user={user}
+          onFechar={() => { setCorrigindo(null); carregar(); }}
+          onConcluido={(msg) => { setCorrigindo(null); flash(msg); carregar(); }}
+        />
+      )}
     </div>
   );
 }
@@ -368,7 +386,7 @@ function Card({ titulo, valor, cor }) {
   );
 }
 
-export function DetalheVendaModal({ venda, onFechar, onCancelar, onReimprimir, onReabrir, onContinuarRefinalizacao }) {
+export function DetalheVendaModal({ venda, onFechar, onCancelar, onReimprimir, onReabrir, onCorrigirItens, onContinuarRefinalizacao }) {
   const st = STATUS_INFO[venda.status] || STATUS_INFO.CONCLUIDA;
   return (
     <div onClick={onFechar} className="pdv-modal-bg">
@@ -500,6 +518,11 @@ export function DetalheVendaModal({ venda, onFechar, onCancelar, onReimprimir, o
             </button>
           ) : <div />}
           <div style={{ display: "flex", gap: 10 }}>
+            {onCorrigirItens && (
+              <button onClick={onCorrigirItens} className="pdv-btn-ghost" style={{ color: C.yellow, borderColor: "rgba(245,158,11,.35)" }}>
+                ✏️ Corrigir itens
+              </button>
+            )}
             {onReabrir && (
               <button onClick={onReabrir} className="pdv-btn-ghost" style={{ color: C.yellow, borderColor: "rgba(245,158,11,.35)" }}>
                 💱 Alterar forma de pagamento
@@ -823,6 +846,416 @@ function AutorizacaoGerencialModal({ venda, acao, onCancelar, onConfirmar }) {
       </div>
     </div>
   );
+}
+
+// Modal dedicado de correcao de itens de uma venda EM_EDICAO. Lista os itens
+// com quantidade/preco editaveis, permite remover e adicionar produtos (busca),
+// e mostra o total recalculado em tempo real (preservando desconto embutido,
+// ex: fidelidade, igual ao backend). Ao salvar, devolve { itens, desconto } —
+// o fluxo segue para o pagamento (refinalizar).
+function EditarItensVendaModal({ venda, onFechar, onSalvar }) {
+  const [linhas, setLinhas] = useState(() =>
+    (venda.itens || []).map((it, i) => ({
+      key: it.id || `orig-${i}`,
+      produtoId: it.produtoId,
+      nome: it.produto?.nome || "Produto",
+      codigo: it.produto?.codigo || "",
+      unidade: it.produto?.unidade || "",
+      quantidade: Number(it.quantidade),
+      precoUnitario: Number(it.precoUnitario),
+    }))
+  );
+  const [desconto, setDesconto] = useState(Number(venda.desconto) || 0);
+  const [busca, setBusca] = useState("");
+  const [resultados, setResultados] = useState<any[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+
+  // Desconto embutido (ex: fidelidade) que nao esta no campo desconto — o
+  // backend preserva esse valor; espelhamos aqui para o total bater.
+  const subtotalAntigo = (venda.itens || []).reduce((a, it) => a + Number(it.subtotal), 0);
+  const descontoEmbutido = Math.max(
+    0,
+    Math.round((subtotalAntigo - Number(venda.desconto) - Number(venda.total)) * 100) / 100
+  );
+
+  const subtotal = useMemo(
+    () => Math.round(linhas.reduce((a, l) => a + l.quantidade * l.precoUnitario, 0) * 100) / 100,
+    [linhas]
+  );
+  const total = Math.max(0, Math.round((subtotal - (Number(desconto) || 0) - descontoEmbutido) * 100) / 100);
+  const podeSalvar = linhas.length > 0
+    && linhas.every(l => l.quantidade > 0 && l.precoUnitario >= 0)
+    && (Number(desconto) || 0) >= 0;
+
+  useModalKeys(true, { onClose: onFechar });
+
+  // Busca de produtos (debounce simples) para adicionar itens.
+  useEffect(() => {
+    const termo = busca.trim();
+    if (termo.length < 2) { setResultados([]); return; }
+    let cancel = false;
+    setBuscando(true);
+    const t = setTimeout(async () => {
+      try {
+        const lista = await api.listarProdutos({ search: termo, ativo: "true" });
+        if (!cancel) setResultados((lista as any[]).slice(0, 8));
+      } catch {
+        if (!cancel) setResultados([]);
+      } finally {
+        if (!cancel) setBuscando(false);
+      }
+    }, 250);
+    return () => { cancel = true; clearTimeout(t); };
+  }, [busca]);
+
+  function adicionarProduto(p) {
+    setLinhas(prev => {
+      // Se ja existe linha do mesmo produto, incrementa a quantidade.
+      const idx = prev.findIndex(l => l.produtoId === p.id);
+      if (idx >= 0) {
+        const cp = [...prev];
+        cp[idx] = { ...cp[idx], quantidade: Math.round((cp[idx].quantidade + 1) * 1000) / 1000 };
+        return cp;
+      }
+      return [...prev, {
+        key: `novo-${p.id}-${Date.now()}`,
+        produtoId: p.id,
+        nome: p.nome,
+        codigo: p.codigo || "",
+        unidade: p.unidade || "",
+        quantidade: 1,
+        precoUnitario: Number(p.precoVenda) || 0,
+      }];
+    });
+    setBusca("");
+    setResultados([]);
+  }
+
+  function patchLinha(key, patch) {
+    setLinhas(prev => prev.map(l => (l.key === key ? { ...l, ...patch } : l)));
+  }
+  function removerLinha(key) {
+    setLinhas(prev => prev.filter(l => l.key !== key));
+  }
+
+  async function salvar() {
+    if (!podeSalvar || salvando) return;
+    setSalvando(true);
+    try {
+      await onSalvar({
+        itens: linhas.map(l => ({
+          produtoId: l.produtoId,
+          quantidade: l.quantidade,
+          precoUnitario: l.precoUnitario,
+        })),
+        desconto: Number(desconto) || 0,
+      });
+    } catch {
+      // Erro ja exibido pelo fluxo; mantem o modal aberto para nova tentativa.
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div onClick={onFechar} className="pdv-modal-bg">
+      <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" className="pdv-modal" style={{ width: "min(720px, calc(100vw - 32px))" }}>
+        <div className="pdv-modal-hd">
+          <div>
+            <div className="pdv-modal-title">✏️ Corrigir itens · Venda #{venda.numero}</div>
+            <div className="pdv-modal-sub">
+              Ajuste quantidades, remova ou adicione itens. O estoque é reconciliado pela diferença.
+            </div>
+          </div>
+          <button type="button" onClick={onFechar} aria-label="Fechar" className="pdv-modal-x">×</button>
+        </div>
+
+        <div className="pdv-modal-body" style={{ paddingBottom: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+          {/* Busca para adicionar produto */}
+          <div style={{ position: "relative" }}>
+            <input
+              type="text"
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+              placeholder="➕ Adicionar produto (nome ou código)…"
+              className="pdv-field-input"
+              autoFocus
+            />
+            {(resultados.length > 0 || buscando) && busca.trim().length >= 2 && (
+              <div style={{
+                position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 5,
+                background: "var(--pdv-surf-1)", border: "1px solid var(--pdv-line)",
+                borderRadius: 10, overflow: "hidden", maxHeight: 260, overflowY: "auto",
+                boxShadow: "0 8px 24px rgba(0,0,0,.18)",
+              }}>
+                {buscando && resultados.length === 0 ? (
+                  <div style={{ padding: 12, fontSize: 12.5, color: "var(--pdv-t3)" }}>Buscando…</div>
+                ) : resultados.map(p => (
+                  <button
+                    key={p.id} type="button"
+                    onClick={() => adicionarProduto(p)}
+                    style={{
+                      display: "grid", gridTemplateColumns: "1fr auto", gap: 8, width: "100%",
+                      padding: "9px 12px", background: "transparent", border: "none",
+                      borderBottom: "1px solid var(--pdv-line)", cursor: "pointer", textAlign: "left",
+                      alignItems: "center",
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "var(--pdv-surf-2)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                  >
+                    <div>
+                      <div style={{ color: "var(--pdv-t1)", fontSize: 13, fontWeight: 500 }}>{p.nome}</div>
+                      <div style={{ color: "var(--pdv-t3)", fontSize: 11, fontFamily: "'Geist Mono', monospace" }}>{p.codigo}</div>
+                    </div>
+                    <div style={{ color: "var(--pdv-accent)", fontSize: 13, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtBRL(p.precoVenda)}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Lista de itens editaveis */}
+          <div style={{
+            background: "var(--pdv-surf-2)", border: "1px solid var(--pdv-line)",
+            borderRadius: 12, overflow: "hidden",
+          }}>
+            <div style={{
+              display: "grid", gridTemplateColumns: "1fr 96px 120px 110px 36px",
+              padding: "10px 14px", background: "var(--pdv-bg-2)", borderBottom: "1px solid var(--pdv-line)",
+              fontSize: 10.5, fontWeight: 500, color: "var(--pdv-t3)", textTransform: "uppercase", letterSpacing: ".06em",
+              gap: 8,
+            }}>
+              <div>Produto</div>
+              <div style={{ textAlign: "right" }}>Qtd</div>
+              <div style={{ textAlign: "right" }}>Preço unit.</div>
+              <div style={{ textAlign: "right" }}>Subtotal</div>
+              <div />
+            </div>
+            {linhas.length === 0 ? (
+              <div style={{ padding: 20, textAlign: "center", color: "var(--pdv-t3)", fontSize: 12.5 }}>
+                Nenhum item — adicione ao menos um produto acima.
+              </div>
+            ) : linhas.map(l => (
+              <div key={l.key} style={{
+                display: "grid", gridTemplateColumns: "1fr 96px 120px 110px 36px",
+                padding: "8px 14px", borderBottom: "1px solid var(--pdv-line)",
+                alignItems: "center", fontSize: 13, gap: 8,
+              }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ color: "var(--pdv-t1)", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l.nome}</div>
+                  <div style={{ color: "var(--pdv-t3)", fontFamily: "'Geist Mono', monospace", fontSize: 11 }}>{l.codigo}{l.unidade ? ` · ${l.unidade}` : ""}</div>
+                </div>
+                <input
+                  type="number" step="0.001" min="0"
+                  aria-label={`Quantidade de ${l.nome}`}
+                  value={l.quantidade}
+                  onChange={e => patchLinha(l.key, { quantidade: Math.max(0, parseFloat(e.target.value.replace(",", ".")) || 0) })}
+                  className="pdv-field-input"
+                  style={{ padding: "6px 8px", fontSize: 13, textAlign: "right" }}
+                />
+                <input
+                  type="number" step="0.01" min="0"
+                  aria-label={`Preço unitário de ${l.nome}`}
+                  value={l.precoUnitario}
+                  onChange={e => patchLinha(l.key, { precoUnitario: Math.max(0, parseFloat(e.target.value.replace(",", ".")) || 0) })}
+                  className="pdv-field-input"
+                  style={{ padding: "6px 8px", fontSize: 13, textAlign: "right" }}
+                />
+                <div style={{ textAlign: "right", color: "var(--pdv-t1)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                  {fmtBRL(Math.round(l.quantidade * l.precoUnitario * 100) / 100)}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removerLinha(l.key)}
+                  title="Remover item"
+                  style={{ background: "transparent", border: "none", color: "var(--pdv-c-rose)", fontSize: 18, cursor: "pointer", lineHeight: 1 }}
+                >×</button>
+              </div>
+            ))}
+          </div>
+
+          {/* Desconto + totais */}
+          <div style={{
+            display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, alignItems: "center",
+            background: "var(--pdv-surf-2)", border: "1px solid var(--pdv-line)",
+            borderRadius: 12, padding: 14,
+          }}>
+            <label style={{ fontSize: 12, color: "var(--pdv-t3)" }}>
+              Desconto (R$)
+              <input
+                type="number" step="0.01" min="0"
+                value={desconto}
+                onChange={e => setDesconto(Math.max(0, parseFloat(e.target.value.replace(",", ".")) || 0))}
+                className="pdv-field-input"
+                style={{ marginTop: 4 }}
+              />
+            </label>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 12, color: "var(--pdv-t3)" }}>
+                Subtotal {fmtBRL(subtotal)}
+                {descontoEmbutido > 0 && <> · embutido −{fmtBRL(descontoEmbutido)}</>}
+              </div>
+              <div style={{ fontSize: 24, fontWeight: 600, color: "var(--pdv-accent)", fontVariantNumeric: "tabular-nums", letterSpacing: "-0.02em", marginTop: 2 }}>
+                {fmtBRL(total)}
+              </div>
+            </div>
+          </div>
+
+          <div style={{
+            background: "color-mix(in oklab, var(--pdv-c-amber, #f59e0b) 10%, transparent)",
+            border: "1px solid rgba(245,158,11,.30)", borderRadius: 10,
+            padding: "10px 14px", fontSize: 12, color: "var(--pdv-t2)",
+          }}>
+            ⚠ Ao salvar, o estoque é ajustado pela diferença e em seguida você confirma a forma de pagamento do novo total.
+          </div>
+        </div>
+
+        <div className="pdv-modal-foot" style={{ justifyContent: "flex-end", gap: 10 }}>
+          <button type="button" onClick={onFechar} disabled={salvando} className="pdv-btn-ghost">
+            Cancelar <span className="pdv-kbd is-warn" style={{ marginLeft: 4 }}>Esc</span>
+          </button>
+          <button
+            type="button"
+            onClick={salvar}
+            disabled={!podeSalvar || salvando}
+            className="pdv-btn-primary"
+            style={{ padding: "10px 18px", opacity: (!podeSalvar || salvando) ? 0.55 : 1 }}
+          >
+            {salvando ? "Salvando…" : `Salvar e ir ao pagamento (${fmtBRL(total)})`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Fluxo auto-contido de correcao de itens de uma venda. Encapsula toda a
+// maquina de estados: (autorizacao gerencial p/ VENDEDOR) -> reabrir -> editar
+// itens -> refinalizar (pagamento do novo total). Reaproveitavel: tanto a aba
+// Historico quanto o PDV ("Minhas vendas de hoje") apenas montam este fluxo.
+//
+//   venda       — venda alvo (CONCLUIDA ou EM_EDICAO), idealmente com detalhe
+//   user        — operador logado (define se exige autorizacao gerencial)
+//   onFechar()  — fecha o fluxo (venda reaberta fica EM_EDICAO, recuperavel)
+//   onConcluido(msg) — chamado ao refinalizar com sucesso
+export function CorrigirVendaFlow({ venda, user, onFechar, onConcluido }) {
+  const exigeAutorizacao = user?.role === "VENDEDOR";
+  const [etapa, setEtapa] = useState("iniciando"); // iniciando|autorizacao|reabrindo|editar|pagamento
+  const [creds, setCreds] = useState<any>(null);
+  const [vendaEdit, setVendaEdit] = useState<any>(venda.status === "EM_EDICAO" ? venda : null);
+
+  useModalKeys(etapa === "autorizacao" || etapa === "reabrindo", { onClose: onFechar });
+
+  async function reabrir(autorizacao) {
+    setEtapa("reabrindo");
+    try {
+      const reaberta = await api.reabrirVenda(venda.id, autorizacao || null);
+      setCreds(autorizacao || null);
+      setVendaEdit(reaberta);
+      setEtapa("editar");
+    } catch (err) {
+      const msg = (err as Error).message;
+      if (exigeAutorizacao) {
+        alert(msg);
+        setEtapa("autorizacao"); // senha errada: tenta de novo sem perder contexto
+      } else {
+        alert(msg);
+        onFechar();
+      }
+    }
+  }
+
+  // Ponto de partida. Roda uma vez.
+  useEffect(() => {
+    let cancel = false;
+    async function iniciar() {
+      if (venda.status === "EM_EDICAO") {
+        // Ja reaberta: carrega o detalhe completo e vai direto editar.
+        try {
+          const v = await api.obterVenda(venda.id);
+          if (!cancel) { setVendaEdit(v); setEtapa("editar"); }
+        } catch (err) {
+          if (!cancel) { alert((err as Error).message); onFechar(); }
+        }
+        return;
+      }
+      if (exigeAutorizacao) { setEtapa("autorizacao"); return; }
+      await reabrir(null); // ADMIN/GERENTE: reabre direto
+    }
+    iniciar();
+    return () => { cancel = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function confirmarAutorizacao(c) {
+    const autorizacao = { emailAutorizacao: c.email, senhaAutorizacao: c.senha };
+    await reabrir(autorizacao);
+  }
+
+  async function salvarItens(payload) {
+    const corpo = creds ? { ...payload, ...creds } : payload;
+    try {
+      const atualizada = await api.editarItensVenda(vendaEdit.id, corpo);
+      setVendaEdit(atualizada);
+      setEtapa("pagamento");
+    } catch (err) {
+      alert((err as Error).message);
+      throw err; // mantem o modal de edicao aberto
+    }
+  }
+
+  async function aplicarPagamento(payload) {
+    const corpo = creds ? { ...payload, ...creds } : payload;
+    try {
+      await api.refinalizarVenda(vendaEdit.id, corpo);
+      onConcluido?.(`Venda #${vendaEdit.numero} corrigida e refinalizada.`);
+    } catch (err) {
+      alert((err as Error).message);
+      throw err;
+    }
+  }
+
+  if (etapa === "autorizacao") {
+    return (
+      <AutorizacaoGerencialModal
+        venda={venda}
+        acao="corrigir os itens desta venda"
+        onCancelar={onFechar}
+        onConfirmar={confirmarAutorizacao}
+      />
+    );
+  }
+  if (etapa === "iniciando" || etapa === "reabrindo") {
+    return (
+      <div onClick={onFechar} className="pdv-modal-bg">
+        <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" className="pdv-modal" style={{ width: "min(360px, calc(100vw - 32px))" }}>
+          <div className="pdv-modal-body" style={{ padding: 28, textAlign: "center", color: "var(--pdv-t2)", fontSize: 14 }}>
+            {etapa === "reabrindo" ? "Reabrindo venda…" : "Preparando…"}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (etapa === "editar" && vendaEdit) {
+    return (
+      <EditarItensVendaModal
+        venda={vendaEdit}
+        onFechar={onFechar}
+        onSalvar={salvarItens}
+      />
+    );
+  }
+  if (etapa === "pagamento" && vendaEdit) {
+    return (
+      <RefinalizarVendaModal
+        venda={vendaEdit}
+        onFechar={onFechar}
+        onAplicar={aplicarPagamento}
+      />
+    );
+  }
+  return null;
 }
 
 function Bloco({ titulo, children }) {

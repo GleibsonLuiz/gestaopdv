@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { api } from "./lib/api";
+import { api, BASE_URL } from "./lib/api";
 import { C } from "./lib/theme";
 
 // =====================================================================
@@ -40,6 +40,15 @@ type Aba = "conexao" | "ia";
 
 const PROMPT_EXEMPLO = `Voce e o assistente virtual da Via-feira Papelaria. Seja amigavel e direto, responda em ate 3 frases. Quando o cliente perguntar sobre um produto, descreva-o brevemente e indique se temos em estoque. Nao prometa precos sem antes consultar o atendimento humano. Para pedidos, oriente o cliente a passar na loja ou ligar para (11) 99999-0000.`;
 
+// URL publica que deve ser configurada no painel da Evolution API.
+const WEBHOOK_URL = `${BASE_URL}/webhooks/whatsapp`;
+
+// O nome da instancia deve casar EXATAMENTE com o nome criado na Evolution API.
+// Erro comum: colar o e-mail/login no lugar do nome da instancia.
+function pareceEmail(v: string): boolean {
+  return /^\S+@\S+\.\S+$/.test(v.trim());
+}
+
 export default function Whatsapp() {
   const [aba, setAba] = useState<Aba>("conexao");
   const [cfg, setCfg] = useState<ConfigWhatsapp | null>(null);
@@ -60,6 +69,7 @@ export default function Whatsapp() {
   const [salvouFlash, setSalvouFlash] = useState(false);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [carregandoQr, setCarregandoQr] = useState(false);
+  const [copiado, setCopiado] = useState(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -203,6 +213,7 @@ export default function Whatsapp() {
             instanceToken={instanceToken} setInstanceToken={setInstanceToken}
             webhookSecret={webhookSecret} setWebhookSecret={setWebhookSecret}
             qrCode={qrCode} carregandoQr={carregandoQr}
+            copiado={copiado} setCopiado={setCopiado}
             onGerarQr={gerarQrCode}
             onAtualizarStatus={atualizarStatus}
             onRemover={remover}
@@ -285,6 +296,7 @@ interface ConexaoProps {
   instanceToken: string; setInstanceToken: (v: string) => void;
   webhookSecret: string; setWebhookSecret: (v: string) => void;
   qrCode: string | null; carregandoQr: boolean;
+  copiado: boolean; setCopiado: (v: boolean) => void;
   onGerarQr: () => void;
   onAtualizarStatus: () => void;
   onRemover: () => void;
@@ -295,6 +307,18 @@ function AbaConexao(p: ConexaoProps) {
       <label style={labelStyle}>Nome da Instância *</label>
       <input value={p.instanceName} onChange={e => p.setInstanceName(e.target.value)}
         placeholder="ex: papelaria-via-feira" style={inputStyle} maxLength={80} />
+      {pareceEmail(p.instanceName) && (
+        <div style={{
+          marginTop: 6, padding: "8px 10px", borderRadius: 6,
+          background: C.yellow + "18", border: `1px solid ${C.yellow}55`,
+          color: C.text, fontSize: 11.5, lineHeight: 1.45,
+        }}>
+          ⚠ Isso parece um e-mail. O <b>Nome da Instância</b> deve ser exatamente o
+          nome da instância criada no painel da sua Evolution API
+          (ex: <code>papelaria-via-feira</code>) — não o seu e-mail/login. Se não
+          casar, o webhook não encontra esta configuração e a IA não responde.
+        </div>
+      )}
 
       <label style={{ ...labelStyle, marginTop: 12 }}>
         Token da API (Evolution / gateway) *
@@ -348,16 +372,40 @@ function AbaConexao(p: ConexaoProps) {
       </div>
 
       <div style={{
-        marginTop: 14, padding: 10, borderRadius: 6,
-        background: C.accent + "11", border: `1px solid ${C.accent}44`,
-        color: C.text, fontSize: 11.5, lineHeight: 1.5,
+        marginTop: 16, padding: 12, borderRadius: 8,
+        background: C.surface, border: `1px solid ${C.border}`,
       }}>
-        💡 <b>Como funciona:</b> O webhook publico do GestãoProMax está em
-        {" "}<code style={{ background: C.surface, padding: "1px 6px", borderRadius: 3 }}>
-          POST /webhooks/whatsapp
-        </code>. Configure essa URL no painel do seu Evolution API com o
-        evento <code>messages.upsert</code>. Mensagens de grupos são ignoradas
-        automaticamente.
+        <div style={{ color: C.white, fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
+          🔗 URL do Webhook
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <code style={{
+            flex: "1 1 240px", minWidth: 0, padding: "9px 12px", borderRadius: 6,
+            background: C.bg, border: `1px solid ${C.border}`, color: C.text,
+            fontSize: 12, overflowX: "auto", whiteSpace: "nowrap",
+          }}>{WEBHOOK_URL}</code>
+          <button type="button"
+            onClick={() => {
+              navigator.clipboard?.writeText(WEBHOOK_URL).then(() => {
+                p.setCopiado(true);
+                setTimeout(() => p.setCopiado(false), 1800);
+              });
+            }}
+            style={btnSec(C.accent, false)}>
+            {p.copiado ? "✓ Copiado" : "📋 Copiar"}
+          </button>
+        </div>
+        <div style={{ color: C.muted, fontSize: 11.5, lineHeight: 1.5, marginTop: 10 }}>
+          💡 <b>Como funciona:</b> cole essa URL no painel do seu Evolution API
+          (método <code>POST</code>) e assine o evento
+          {" "}<code style={{ background: C.bg, padding: "1px 6px", borderRadius: 3 }}>messages.upsert</code>.
+          Mensagens de grupos são ignoradas automaticamente.
+          {p.webhookSecret.trim() && (
+            <> Como você definiu um <b>Webhook Secret</b>, configure também o
+            header <code style={{ background: C.bg, padding: "1px 6px", borderRadius: 3 }}>x-webhook-secret</code> com
+            esse mesmo valor no painel.</>
+          )}
+        </div>
       </div>
     </div>
   );

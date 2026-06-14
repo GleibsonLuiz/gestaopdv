@@ -121,7 +121,16 @@ Regras:
 - descricao: nome do estabelecimento (razao social ou nome fantasia) em poucas palavras.
 - cnpj: CNPJ do estabelecimento, so digitos (14 numeros), ou null. Se so houver CPF, use null.
 - planoContaSugeridaId: o "id" da categoria MAIS provavel desta lista, ou null se nenhuma encaixa: ${JSON.stringify(catLista)}
-- Qualquer campo ilegivel ou ausente: null. Nunca invente.`;
+- Qualquer campo ilegivel ou ausente: null. Nunca invente.
+
+Exemplos (texto do comprovante -> JSON esperado):
+1) "SUPERMERCADO BOA COMPRA LTDA / CNPJ 12.345.678/0001-90 / 03/02/2026 / SUBTOTAL 142,80 / DESCONTO 8,80 / TOTAL R$ 134,00"
+-> {"valor": 134.00, "data": "2026-02-03", "descricao": "Supermercado Boa Compra", "cnpj": "12345678000190", "planoContaSugeridaId": null}
+2) "Posto Sao Jorge / 15/12/2025 / COMBUSTIVEL / VALOR TOTAL 1.234,56 / CNPJ 98.765.432/0001-10"
+-> {"valor": 1234.56, "data": "2025-12-15", "descricao": "Posto Sao Jorge", "cnpj": "98765432000110", "planoContaSugeridaId": null}
+3) "Recibo - Joao da Silva / CPF 123.456.789-00 / Servico de pintura / 07/01/2026 / Valor: R$ 500,00"
+-> {"valor": 500.00, "data": "2026-01-07", "descricao": "Joao da Silva - servico de pintura", "cnpj": null, "planoContaSugeridaId": null}
+(Nos exemplos planoContaSugeridaId ficou null; no caso real, escolha o id da lista acima quando alguma categoria encaixar.)`;
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);

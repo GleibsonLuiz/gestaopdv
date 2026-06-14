@@ -52,13 +52,45 @@ JCXjEo1AYx9u5E3NIUCchae0gAF33t+5Ei6U75Sroax2sWqwxCgvzrifTXOsxC0Q
 jnQkCe07ovQWotgRZ2Z2UTii/n7b3c8Zhv/AuooidTN70qAV7J8g3MbyTQ==
 -----END CERTIFICATE-----`;
 
-// Configura a segurança do QZ uma única vez por sessão: apresenta o
-// certificado público e delega a assinatura ao backend (chave privada lá).
+// Modo de segurança do QZ. Decidido sondando o backend uma vez por sessão:
+//   - "silencioso": o backend tem a chave privada (env QZ_PRIVATE_KEY_B64) e
+//     assina cada pedido — registramos o certificado público + assinatura, e o
+//     QZ imprime sem aviso após o usuário aprovar 1x.
+//   - "comunidade": o backend NÃO tem a chave (assinatura responde 503).
+//     NÃO registramos certificado nenhum; o QZ cai no default (envia sem
+//     assinatura) e mostra um aviso de confiança por sessão que o usuário
+//     aprova com "Lembrar". A impressão direta CONTINUA funcionando.
+//
+// Por que isso importa: o qz-tray exige assinar TODA chamada quando há um
+// certificado registrado (printers.find, print...). Se a assinatura rejeita
+// (backend sem a chave), a chamada falha com "Failed to sign request" e o
+// sistema caía SEMPRE no window.print(). Sem registrar o certificado, o
+// caminho não-assinado funciona — então a falta da chave degrada de verdade
+// para o modo comunidade em vez de matar a impressão direta.
+let modoSeguranca: "silencioso" | "comunidade" | null = null;
+
+async function determinarModoSeguranca(): Promise<"silencioso" | "comunidade"> {
+  if (modoSeguranca) return modoSeguranca;
+  try {
+    // Sonda barata: se o backend assinar uma string qualquer, a chave existe.
+    await api.assinarQz("gestaopro-qz-probe");
+    modoSeguranca = "silencioso";
+  } catch {
+    // 503 (sem chave) ou backend inacessível → comunidade (default seguro).
+    modoSeguranca = "comunidade";
+  }
+  return modoSeguranca;
+}
+
+// Configura a segurança do QZ uma única vez por sessão. Em modo "silencioso"
+// apresenta o certificado público e delega a assinatura ao backend; em modo
+// "comunidade" não registra nada (deixa o default não-assinado do qz-tray).
 let segurancaConfigurada = false;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function configurarSeguranca(qz: any): void {
   if (segurancaConfigurada) return;
   segurancaConfigurada = true;
+  if (modoSeguranca !== "silencioso") return; // comunidade: sem certificado
   qz.security.setCertificatePromise((resolve: (c: string) => void) => resolve(QZ_CERT));
   qz.security.setSignatureAlgorithm("SHA512");
   qz.security.setSignaturePromise((toSign: string) =>
@@ -115,7 +147,9 @@ export function qzAtivoEConfigurado(): boolean {
 export async function conectarQz(): Promise<void> {
   const qz = await carregarQz();
   if (qz.websocket.isActive()) return;
-  // Apresenta o certificado + delega assinatura ao backend ANTES de conectar.
+  // Decide o modo (silencioso x comunidade) e configura a segurança ANTES de
+  // conectar — assim a 1ª chamada já sai no modo correto.
+  await determinarModoSeguranca();
   configurarSeguranca(qz);
   await qz.websocket.connect({ retries: 1, delay: 1 });
 }

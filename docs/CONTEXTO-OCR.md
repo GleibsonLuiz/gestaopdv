@@ -52,11 +52,32 @@ sozinha**. Se a leitura falhar, o fluxo cai para preenchimento manual sem travar
 | **Lê mas erra os campos** | prompt / normalização do JSON | Prompt em `claudeIA.js:110-117`; normalização (valor/data/cnpj) em `parseJsonComprovante` `claudeIA.js:151`. Ajustar instrução (ex.: formato de data BR, valor total vs. subtotal) e/ou few-shot. |
 | **Não dispara nada** | wiring do front ou arquivo não chega | `aoEscolherArquivo` `Despesas.tsx:401` só chama OCR se `f` existe; conferir `onChange` `:506` e o `fileRef`. |
 
-## Pendências / melhorias candidatas (não implementadas)
+## Pendências / melhorias candidatas
 
-1. **Front não usa o flag `iaIndisponivel`** — em `lerComprovante` (`src/Despesas.tsx:393`) o `catch` é genérico (`ocrFalhou = true`) e sempre mostra "não consegui ler — preencha manualmente" (`:504`). O backend já distingue "IA não configurada" de "erro transitório" (`despesaController.js:301-306`), mas essa informação se perde porque `uploadForm` é `silent`/lança erro genérico. **Melhoria:** propagar `iaIndisponivel` e mostrar mensagem específica ("Leitura por IA indisponível — preencha manual" vs "Falha ao ler agora, tente de novo").
-2. **HEIC/tamanho do celular** — ver tabela acima. Decisão de design: aceitar mais MIMEs no backend **vs** normalizar no front. Recomendado normalizar no front (sempre converte para JPEG e reduz < 5 MB) — resolve HEIC + tamanho de uma vez.
-3. **Qualidade da extração** — avaliar trocar o modelo de visão para Sonnet em comprovantes ruins e/ou enriquecer o prompt.
+### ✅ Resolvido em 2026-06-14 (sessão na nuvem)
+
+1. **Front usa o flag `iaIndisponivel`** — `lerComprovante` (`src/Despesas.tsx`) agora
+   lê `(e as ApiError).data.iaIndisponivel` e mostra mensagem específica. O estado
+   virou `ocrAviso` (string) no lugar do antigo `ocrFalhou` (bool). Nota: a info
+   **não** se perdia — `uploadForm` lança `ApiError` com o `data` (body JSON) intacto
+   (`api.ts:336`); só o `catch` é que ignorava.
+2. **HEIC/tamanho do celular** — resolvido nos **dois lados** (decisão do dono):
+   - **Front:** `src/lib/imagem.ts` `prepararImagemUpload(file)` converte qualquer
+     imagem decodificável para JPEG ≤ ~4 MB (canvas, máx 2000px) antes de enviar.
+     Best-effort: PDF e HEIC não-decodificável passam direto. Chamado em
+     `aoEscolherArquivo`.
+   - **Backend (rede de segurança):** rota `/despesas/ocr` agora usa `uploadOcr`
+     (`anexoController.js`) — limite **15 MB** e aceita `jpeg/png/webp/gif/pdf`. O
+     upload de anexo de conta (`upload`, 5 MB, só PDF/JPG/PNG) **não** foi afrouxado.
+     HEIC continua fora de propósito (a Anthropic não lê HEIC).
+3. **Qualidade da extração** — prompt enriquecido (`claudeIA.js`: valor TOTAL pago,
+   data BR→ISO, CNPJ vs CPF, nunca inventar) e `parseJsonComprovante` endurecido:
+   agora `parseValorBR` entende `1.234,56` (antes virava `NaN`) e `parseDataBR` aceita
+   `DD/MM/AAAA`. Para comprovantes ruins, ainda vale `ANTHROPIC_MODEL_VISION=claude-sonnet-4-6`.
+
+### Aberto
+
+- Avaliar few-shots reais no prompt se a taxa de erro em cupons específicos persistir.
 
 ## Regras do projeto a respeitar
 

@@ -857,7 +857,7 @@ Cada grupo tem header colapsável com contagem + subtotal.
 1. **Valor em destaque** — digite o valor (Enter já lança).
 2. **Categoria** — use o **seletor pesquisável**: clique, digite parte do nome ou do código para filtrar e escolha. Se a categoria ainda **não existe**, digite o nome e toque em **➕ Criar categoria "…"** — ela é criada na hora (com código sugerido automaticamente) e já fica selecionada, sem sair do lançamento. Para o gasto do dia a dia, toque direto em um dos **chips de categorias recentes** (atalho de 1 toque). As categorias vêm do Plano de Contas.
 3. **Data** (padrão hoje) e **Forma de pagamento** (Dinheiro, Pix, Débito, Crédito, Boleto). **Só "Dinheiro" movimenta o caixa** (sai da gaveta física); nas demais formas o dinheiro sai do banco, então a despesa fica apenas no registro de Despesas/Contabilidade e **não passa pelo caixa**. A própria tela indica embaixo do campo: *"💵 Sai do dinheiro do caixa do dia"* ou *"Não movimenta o caixa"*.
-4. **Descrição** e **📷 Comprovante** (foto ou PDF até 5 MB — no celular abre a câmera direto).
+4. **Descrição** e **📷 Comprovante** (foto ou PDF — no celular abre a câmera direto). Pode tirar a foto à vontade: o app **converte e comprime a imagem automaticamente** antes de enviar, inclusive fotos **HEIC do iPhone** e fotos grandes, então não precisa se preocupar com formato ou tamanho.
 5. **Lançar despesa.**
 
 **🏷️ Como criar uma categoria nova (sem sair do lançamento):** você não precisa cadastrar a categoria antes em outra tela — ela nasce no próprio campo **Categoria**:
@@ -873,7 +873,7 @@ Cada grupo tem header colapsável com contagem + subtotal.
 >
 > Esse é o **atalho rápido**. Para **editar nome/código, reorganizar, desativar** ou definir o **código contábil de-para** (usado na exportação do contador), use **Contabilidade → Plano de Contas**. Criar/editar categorias exige **Admin** ou **Gerente**.
 
-**📷 Leitura automática do comprovante (OCR com IA):** ao escolher a foto/PDF do cupom, o sistema **lê o comprovante com inteligência artificial** e preenche sozinho o **valor, a data, a descrição e sugere a categoria**. Aparece a marca *"preenchido por IA — confira"*: revise e ajuste se precisar antes de lançar (a IA nunca grava sozinha). Despesas lançadas assim ficam marcadas com a etiqueta **OCR** na lista. Requer a chave da IA configurada no servidor (`ANTHROPIC_API_KEY`); se a leitura falhar, é só preencher na mão normalmente.
+**📷 Leitura automática do comprovante (OCR com IA):** ao escolher a foto/PDF do cupom, o sistema **lê o comprovante com inteligência artificial** e preenche sozinho o **valor, a data, a descrição e sugere a categoria**. Aparece a marca *"preenchido por IA — confira"*: revise e ajuste se precisar antes de lançar (a IA nunca grava sozinha). Despesas lançadas assim ficam marcadas com a etiqueta **OCR** na lista. Requer a chave da IA configurada no servidor (`ANTHROPIC_API_KEY`); se a leitura falhar, é só preencher na mão normalmente. A tela avisa **qual** foi o caso: *"leitura por IA indisponível — preencha manualmente"* (serviço não configurado) ou *"não consegui ler agora — tente de novo"* (falha momentânea, como foto ruim ou instabilidade).
 
 **Baixa no caixa:** se houver um caixa **aberto**, a despesa sai dele automaticamente (movimentação `DESPESA`). Excluir a despesa **estorna** o valor no caixa (se ainda estiver aberto).
 

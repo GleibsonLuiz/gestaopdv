@@ -107,14 +107,21 @@ export async function extrairDadosComprovante(buffer, mimeType, categorias = [])
 
   const catLista = (categorias || []).map(c => ({ id: c.id, nome: c.nome })).slice(0, 60);
 
-  const instrucao = `Voce le cupons fiscais e recibos brasileiros. Extraia os dados do comprovante.
+  const instrucao = `Voce le cupons fiscais, notas e recibos brasileiros. Extraia os dados do comprovante.
 Responda SOMENTE com um JSON valido (sem markdown, sem texto fora do JSON):
 {"valor": number|null, "data": "YYYY-MM-DD"|null, "descricao": string|null, "cnpj": string|null, "planoContaSugeridaId": string|null}
-- valor: valor TOTAL pago (ponto como separador decimal).
-- data: data da compra/emissao.
-- descricao: nome do estabelecimento ou resumo curto.
-- cnpj: CNPJ do estabelecimento (so digitos) ou null.
-- planoContaSugeridaId: o "id" da categoria MAIS provavel desta lista, ou null se nenhuma encaixa: ${JSON.stringify(catLista)}`;
+
+Regras:
+- valor: o TOTAL efetivamente PAGO (procure "VALOR TOTAL", "TOTAL A PAGAR", "VALOR PAGO").
+  NAO use subtotal, troco, valor de itens individuais, desconto nem "TOTAL DE ITENS".
+  Se houver desconto, use o total ja com desconto. Use ponto como separador decimal
+  e NUNCA separador de milhar (ex.: mil duzentos e trinta e quatro reais e cinquenta = 1234.50).
+- data: a data de emissao/compra. Converta de DD/MM/AAAA para AAAA-MM-DD
+  (ex.: 03/02/2026 -> "2026-02-03"). Nunca troque dia por mes.
+- descricao: nome do estabelecimento (razao social ou nome fantasia) em poucas palavras.
+- cnpj: CNPJ do estabelecimento, so digitos (14 numeros), ou null. Se so houver CPF, use null.
+- planoContaSugeridaId: o "id" da categoria MAIS provavel desta lista, ou null se nenhuma encaixa: ${JSON.stringify(catLista)}
+- Qualquer campo ilegivel ou ausente: null. Nunca invente.`;
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
@@ -154,12 +161,10 @@ function parseJsonComprovante(texto) {
   if (!m) return {};
   try {
     const o = JSON.parse(m[0]);
-    const valorNum = typeof o.valor === "number"
-      ? o.valor
-      : (o.valor ? Number(String(o.valor).replace(/[^0-9.,]/g, "").replace(",", ".")) : null);
+    const valorNum = typeof o.valor === "number" ? o.valor : parseValorBR(o.valor);
     return {
-      valor: Number.isFinite(valorNum) ? valorNum : null,
-      data: typeof o.data === "string" && /^\d{4}-\d{2}-\d{2}/.test(o.data) ? o.data.slice(0, 10) : null,
+      valor: Number.isFinite(valorNum) && valorNum > 0 ? valorNum : null,
+      data: parseDataBR(o.data),
       descricao: o.descricao ? String(o.descricao).slice(0, 200) : null,
       cnpj: o.cnpj ? String(o.cnpj).replace(/\D/g, "") : null,
       planoContaSugeridaId: o.planoContaSugeridaId ? String(o.planoContaSugeridaId) : null,
@@ -167,4 +172,43 @@ function parseJsonComprovante(texto) {
   } catch {
     return {};
   }
+}
+
+// Numeros podem vir como "1.234,56" (pt-BR), "1234.56" (ja normalizado) ou com
+// "R$"/espacos. Decide o separador decimal pelo ultimo simbolo que aparece e
+// trata o outro como separador de milhar — assim "1.234,56" e "1,234.56" e
+// "1234,5" caem todos certos.
+function parseValorBR(v) {
+  if (v == null) return null;
+  let s = String(v).replace(/[^0-9.,]/g, "");
+  if (!s) return null;
+  const ultimaVirgula = s.lastIndexOf(",");
+  const ultimoPonto = s.lastIndexOf(".");
+  if (ultimaVirgula > -1 && ultimoPonto > -1) {
+    // O separador decimal e o que aparece por ultimo; o outro e milhar.
+    const decimal = ultimaVirgula > ultimoPonto ? "," : ".";
+    const milhar = decimal === "," ? "." : ",";
+    s = s.split(milhar).join("").replace(decimal, ".");
+  } else if (ultimaVirgula > -1) {
+    s = s.replace(",", ".");
+  }
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Aceita ISO "AAAA-MM-DD" ou BR "DD/MM/AAAA" (e DD/MM/AA) e normaliza para ISO.
+function parseDataBR(v) {
+  if (typeof v !== "string") return null;
+  const s = v.trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+  if (m) {
+    const dia = m[1].padStart(2, "0");
+    const mes = m[2].padStart(2, "0");
+    const ano = m[3].length === 2 ? `20${m[3]}` : m[3];
+    if (Number(mes) >= 1 && Number(mes) <= 12 && Number(dia) >= 1 && Number(dia) <= 31) {
+      return `${ano}-${mes}-${dia}`;
+    }
+  }
+  return null;
 }

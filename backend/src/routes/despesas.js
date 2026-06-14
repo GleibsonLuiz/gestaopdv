@@ -4,7 +4,7 @@ import {
   listar, obter, criar, atualizar, excluir, anexar, excluirAnexo, ocr,
   previstoRealizado,
 } from "../controllers/despesaController.js";
-import { upload, tratarErroUpload } from "../controllers/anexoController.js";
+import { upload, tratarErroUpload, uploadOcr, tratarErroUploadOcr } from "../controllers/anexoController.js";
 
 const router = Router();
 
@@ -21,10 +21,12 @@ router.get("/", listar);
 // "/:id" para o segmento fixo nao ser capturado pelo parametro.
 router.get("/previsto-realizado", previstoRealizado);
 
-// OCR de comprovante (le e devolve campos sugeridos; nao cria despesa).
+// OCR de comprovante (le e devolve campos sugeridos; nao cria despesa). Usa
+// um upload mais permissivo (15 MB, aceita WEBP/GIF) — o arquivo so vai para a
+// IA, nao e persistido como anexo.
 router.post(
   "/ocr",
-  (req, res, next) => upload.single("arquivo")(req, res, err => tratarErroUpload(err, req, res, next)),
+  (req, res, next) => uploadOcr.single("arquivo")(req, res, err => tratarErroUploadOcr(err, req, res, next)),
   ocr,
 );
 

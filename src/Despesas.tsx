@@ -9,7 +9,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { C } from "./lib/theme";
-import { api, type SessionUser } from "./lib/api";
+import { api, ApiError, type SessionUser } from "./lib/api";
+import { prepararImagemUpload } from "./lib/imagem";
 
 const fmtBRL = (v: unknown) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const fmtData = (iso: string | null | undefined) => iso ? new Date(iso).toLocaleDateString("pt-BR") : "—";
@@ -368,7 +369,9 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro, onCategoriaCriada }:
   const [salvando, setSalvando] = useState(false);
   const [lendo, setLendo] = useState(false);
   const [origemOcr, setOrigemOcr] = useState(false);
-  const [ocrFalhou, setOcrFalhou] = useState(false);
+  // "" = sem aviso. Mensagem distingue IA indisponivel (config) de falha
+  // transitoria, vinda do backend (iaIndisponivel) — ver lerComprovante.
+  const [ocrAviso, setOcrAviso] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const chips = contas.filter(c => recentes.includes(c.id));
@@ -377,7 +380,7 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro, onCategoriaCriada }:
   // pre-preencher. O usuario confere e confirma — nunca grava sozinho. Falha
   // silenciosa: se a IA nao responder, segue no preenchimento manual.
   async function lerComprovante(file: File) {
-    setLendo(true); setOcrFalhou(false); onErro("");
+    setLendo(true); setOcrAviso(""); onErro("");
     try {
       const r = await api.lerComprovanteOCR(file) as {
         valor?: number | null; data?: string | null; descricao?: string | null;
@@ -390,18 +393,26 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro, onCategoriaCriada }:
         setPlanoContaId(r.planoContaSugeridaId);
       }
       setOrigemOcr(true);
-    } catch {
+    } catch (e) {
       // Best-effort: anexo continua salvo, so a leitura por IA falhou. Avisa
-      // discretamente e segue no preenchimento manual (sem toast global).
-      setOcrFalhou(true);
+      // discretamente e segue no preenchimento manual (sem toast global). O
+      // backend manda iaIndisponivel=true quando a IA nao esta configurada —
+      // a mensagem fica especifica em vez de um generico "nao consegui ler".
+      const d = e instanceof ApiError ? (e.data as { iaIndisponivel?: boolean } | null) : null;
+      setOcrAviso(d?.iaIndisponivel
+        ? "leitura por IA indisponível — preencha manualmente"
+        : "não consegui ler agora — tente de novo ou preencha manualmente");
     }
     finally { setLendo(false); }
   }
 
-  function aoEscolherArquivo(f: File | null) {
+  async function aoEscolherArquivo(f: File | null) {
     setArquivo(f);
-    // Foto dispara OCR automatico; PDF tambem (a IA aceita documento).
-    if (f) lerComprovante(f);
+    if (!f) return;
+    // Foto de celular (HEIC/5MB) e convertida para JPEG leve antes de enviar;
+    // PDF e o que nao for imagem passam direto. Best-effort, nunca trava.
+    const pronto = await prepararImagemUpload(f);
+    lerComprovante(pronto);
   }
 
   async function salvar() {
@@ -501,7 +512,7 @@ function LancarDespesa({ contas, recentes, onSalvo, onErro, onCategoriaCriada }:
             style={{ ...btnSec(), color: C.red }}>Remover</button>
         )}
         {origemOcr && !lendo && <span style={tag(C.purple)}>preenchido por IA — confira</span>}
-        {ocrFalhou && !lendo && <span style={tag(C.yellow)}>não consegui ler — preencha manualmente</span>}
+        {ocrAviso && !lendo && <span style={tag(C.yellow)}>{ocrAviso}</span>}
         <input ref={fileRef} type="file" accept="image/*,application/pdf" capture="environment" hidden
           onChange={e => aoEscolherArquivo(e.target.files?.[0] ?? null)} />
 

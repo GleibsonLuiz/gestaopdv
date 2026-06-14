@@ -38,6 +38,41 @@ export function tratarErroUpload(err, _req, res, next) {
   next(err);
 }
 
+// --- Upload do OCR de comprovante (rede de seguranca) ----------------------
+// O front ja normaliza foto de celular para JPEG leve antes de enviar, mas se
+// algo escapar (browser sem canvas, etc.) o backend ainda precisa aceitar o que
+// a Anthropic consegue ler: JPEG, PNG, WEBP, GIF e PDF. HEIC fica de fora de
+// proposito — a Anthropic nao le HEIC; quem nao converteu no front cai na
+// mensagem de erro e segue no manual. Limite maior (15 MB) porque aqui o
+// arquivo so vai para a IA, nao e persistido como anexo.
+const TAMANHO_MAX_OCR = 15 * 1024 * 1024; // 15 MB
+const MIMES_OCR = new Set([
+  "application/pdf",
+  "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif",
+]);
+
+export const uploadOcr = multer({
+  storage,
+  limits: { fileSize: TAMANHO_MAX_OCR },
+  fileFilter: (_req, file, cb) => {
+    if (!MIMES_OCR.has(file.mimetype)) return cb(new Error("TIPO_NAO_PERMITIDO_OCR"));
+    cb(null, true);
+  },
+});
+
+export function tratarErroUploadOcr(err, _req, res, next) {
+  if (!err) return next();
+  if (err.code === "LIMIT_FILE_SIZE") {
+    return res.status(400).json({ erro: "Arquivo muito grande (max 15MB)" });
+  }
+  if (err.message === "TIPO_NAO_PERMITIDO_OCR") {
+    return res.status(400).json({
+      erro: "Tipo de arquivo nao permitido para leitura (use PDF, JPG, PNG ou WEBP). Fotos HEIC do iPhone: tente novamente, o app converte sozinho.",
+    });
+  }
+  next(err);
+}
+
 // Anexa um arquivo a uma conta a pagar OU a receber. O parametro `tipo` decide
 // qual relacao usar. Cria registro Anexo apontando para o arquivo persistido.
 async function anexarArquivo(tipo, contaId, file, res) {

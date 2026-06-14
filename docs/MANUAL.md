@@ -214,13 +214,15 @@ Os dois mostram os mesmos itens e o mesmo total — muda só a aparência. É s�
 - Em todos os casos o orçamento é **salvo de verdade** (status *Rascunho*) e fica disponível na tela **Orçamentos** para acompanhar, aprovar e depois converter em venda.
 - A **cestinha continua intacta** — gerar o orçamento é um passo de pré-venda; você pode finalizar a venda normalmente em seguida (F10) ou colocar em espera.
 
-**✏️ Corrigir itens de uma venda já finalizada:** bipou o produto errado, errou a quantidade ou esqueceu um item? Não precisa cancelar e refazer tudo. Abra a venda (clique nela em **"Minhas vendas de hoje"** no PDV, ou pela aba **Histórico → ⋯ → Corrigir itens**) e use **✏️ Corrigir itens**.
+**✏️ Corrigir venda já finalizada (itens e cliente):** bipou o produto errado, errou a quantidade, esqueceu um item — ou esqueceu de informar o cliente / digitou o nome errado? Não precisa cancelar e refazer tudo. Abra a venda (clique nela em **"Minhas vendas de hoje"** no PDV, ou pela aba **Histórico → ⋯ → Corrigir venda (itens/cliente)**) e use **✏️ Corrigir venda**.
 
-- Um modal abre com os itens da venda: você pode **alterar a quantidade**, **mudar o preço unitário**, **remover** itens e **adicionar** novos produtos (busca por nome ou código). O total recalcula na hora.
+- Um modal abre com a venda: você pode **trocar / adicionar / remover o cliente** (busca por nome, CPF/CNPJ ou e-mail; deixar vazio = Consumidor), **alterar a quantidade**, **mudar o preço unitário**, **remover** itens, **adicionar** novos produtos (busca por nome ou código), ajustar o **desconto** e editar as **observações**. O total recalcula na hora.
 - **Estoque:** o sistema ajusta **só a diferença** — se você aumentou a quantidade ou adicionou um item, baixa o que entrou a mais; se reduziu ou removeu, devolve ao estoque. O que já estava certo não é mexido.
+- **Cliente em venda a prazo (fiado):** ao trocar o cliente, a conta a receber pendente é regerada já vinculada ao **novo cliente** ao confirmar o pagamento. Pontos de fidelidade já creditados não são movidos automaticamente.
 - Ao salvar, você confirma a **forma de pagamento do novo total** (a mesma tela do "Alterar forma de pagamento"). Enquanto isso, a venda fica como **"Em edição"** — o lançamento no caixa é estornado e refeito com o valor corrigido, e contas a receber pendentes da venda são regeradas conforme a nova forma.
 - **Quem pode:** ADMIN e GERENTE corrigem direto. **Vendedor** precisa de **autorização gerencial** (e-mail + senha de um ADMIN/GERENTE), igual ao alterar forma de pagamento.
-- Se você fechar no meio, a venda fica **"Em edição"** e pode ser retomada pelo Histórico (**Corrigir itens** de novo, ou **Continuar refinalização** só para o pagamento).
+- Se você fechar no meio, a venda fica **"Em edição"** e pode ser retomada pelo Histórico (**Corrigir venda** de novo, ou **Continuar refinalização** só para o pagamento).
+- **🔒 Cupom fiscal (NFC-e) emitido:** vendas com NFC-e autorizada **não** podem ser corrigidas por aqui — uma nota fiscal só muda por **cancelamento na SEFAZ**. Nesses casos as opções de correção ficam ocultas e o sistema orienta a cancelar a NFC-e no módulo Fiscal antes de qualquer alteração.
 
 ---
 

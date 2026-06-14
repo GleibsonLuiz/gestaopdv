@@ -1019,12 +1019,13 @@ function EditarItensVendaModal({ venda, onFechar, onSalvar }) {
           <div style={{
             background: "var(--pdv-surf-2)", border: "1px solid var(--pdv-line)",
             borderRadius: 12, overflow: "hidden",
+            display: "flex", flexDirection: "column", minHeight: 0,
           }}>
             <div style={{
               display: "grid", gridTemplateColumns: "1fr 96px 120px 110px 36px",
               padding: "10px 14px", background: "var(--pdv-bg-2)", borderBottom: "1px solid var(--pdv-line)",
               fontSize: 10.5, fontWeight: 500, color: "var(--pdv-t3)", textTransform: "uppercase", letterSpacing: ".06em",
-              gap: 8,
+              gap: 8, flexShrink: 0,
             }}>
               <div>Produto</div>
               <div style={{ textAlign: "right" }}>Qtd</div>
@@ -1032,47 +1033,50 @@ function EditarItensVendaModal({ venda, onFechar, onSalvar }) {
               <div style={{ textAlign: "right" }}>Subtotal</div>
               <div />
             </div>
-            {linhas.length === 0 ? (
-              <div style={{ padding: 20, textAlign: "center", color: "var(--pdv-t3)", fontSize: 12.5 }}>
-                Nenhum item — adicione ao menos um produto acima.
-              </div>
-            ) : linhas.map(l => (
-              <div key={l.key} style={{
-                display: "grid", gridTemplateColumns: "1fr 96px 120px 110px 36px",
-                padding: "8px 14px", borderBottom: "1px solid var(--pdv-line)",
-                alignItems: "center", fontSize: 13, gap: 8,
-              }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ color: "var(--pdv-t1)", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l.nome}</div>
-                  <div style={{ color: "var(--pdv-t3)", fontFamily: "'Geist Mono', monospace", fontSize: 11 }}>{l.codigo}{l.unidade ? ` · ${l.unidade}` : ""}</div>
+            {/* Area rolavel propria da lista — evita que o scroll vaze para o fundo */}
+            <div style={{ maxHeight: "42vh", overflowY: "auto", overscrollBehavior: "contain" }}>
+              {linhas.length === 0 ? (
+                <div style={{ padding: 20, textAlign: "center", color: "var(--pdv-t3)", fontSize: 12.5 }}>
+                  Nenhum item — adicione ao menos um produto acima.
                 </div>
-                <input
-                  type="number" step="0.001" min="0"
-                  aria-label={`Quantidade de ${l.nome}`}
-                  value={l.quantidade}
-                  onChange={e => patchLinha(l.key, { quantidade: Math.max(0, parseFloat(e.target.value.replace(",", ".")) || 0) })}
-                  className="pdv-field-input"
-                  style={{ padding: "6px 8px", fontSize: 13, textAlign: "right" }}
-                />
-                <input
-                  type="number" step="0.01" min="0"
-                  aria-label={`Preço unitário de ${l.nome}`}
-                  value={l.precoUnitario}
-                  onChange={e => patchLinha(l.key, { precoUnitario: Math.max(0, parseFloat(e.target.value.replace(",", ".")) || 0) })}
-                  className="pdv-field-input"
-                  style={{ padding: "6px 8px", fontSize: 13, textAlign: "right" }}
-                />
-                <div style={{ textAlign: "right", color: "var(--pdv-t1)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-                  {fmtBRL(Math.round(l.quantidade * l.precoUnitario * 100) / 100)}
+              ) : linhas.map(l => (
+                <div key={l.key} style={{
+                  display: "grid", gridTemplateColumns: "1fr 96px 120px 110px 36px",
+                  padding: "8px 14px", borderBottom: "1px solid var(--pdv-line)",
+                  alignItems: "center", fontSize: 13, gap: 8,
+                }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ color: "var(--pdv-t1)", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l.nome}</div>
+                    <div style={{ color: "var(--pdv-t3)", fontFamily: "'Geist Mono', monospace", fontSize: 11 }}>{l.codigo}{l.unidade ? ` · ${l.unidade}` : ""}</div>
+                  </div>
+                  <input
+                    type="number" step="0.001" min="0"
+                    aria-label={`Quantidade de ${l.nome}`}
+                    value={l.quantidade}
+                    onChange={e => patchLinha(l.key, { quantidade: Math.max(0, parseFloat(e.target.value.replace(",", ".")) || 0) })}
+                    className="pdv-field-input"
+                    style={{ padding: "6px 8px", fontSize: 13, textAlign: "right" }}
+                  />
+                  <input
+                    type="number" step="0.01" min="0"
+                    aria-label={`Preço unitário de ${l.nome}`}
+                    value={l.precoUnitario}
+                    onChange={e => patchLinha(l.key, { precoUnitario: Math.max(0, parseFloat(e.target.value.replace(",", ".")) || 0) })}
+                    className="pdv-field-input"
+                    style={{ padding: "6px 8px", fontSize: 13, textAlign: "right" }}
+                  />
+                  <div style={{ textAlign: "right", color: "var(--pdv-t1)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                    {fmtBRL(Math.round(l.quantidade * l.precoUnitario * 100) / 100)}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removerLinha(l.key)}
+                    title="Remover item"
+                    style={{ background: "transparent", border: "none", color: "var(--pdv-c-rose)", fontSize: 18, cursor: "pointer", lineHeight: 1 }}
+                  >×</button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => removerLinha(l.key)}
-                  title="Remover item"
-                  style={{ background: "transparent", border: "none", color: "var(--pdv-c-rose)", fontSize: 18, cursor: "pointer", lineHeight: 1 }}
-                >×</button>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
 
           {/* Desconto + totais */}

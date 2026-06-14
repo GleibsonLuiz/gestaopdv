@@ -13,6 +13,14 @@ import {
 } from "./comum";
 import { pagamentosReducer, criarPagamento } from "./pagamentos";
 
+// Uma venda com cupom fiscal (NFC-e) vigente nao pode ser corrigida editando a
+// venda — alteracoes fiscais exigem cancelamento da nota na SEFAZ. O backend so
+// inclui notas com status AUTORIZADA/CONTINGENCIA em `notasFiscais`, entao a
+// simples presenca ja indica documento vigente.
+function temNotaFiscal(v: any): boolean {
+  return Array.isArray(v?.notasFiscais) && v.notasFiscais.length > 0;
+}
+
 export default function Historico({ user }) {
   const [vendas, setVendas] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(false);
@@ -299,14 +307,21 @@ export default function Historico({ user }) {
                       icon: "💱",
                       color: C.yellow,
                       onClick: () => solicitarAlteracao(v, "reabrir"),
-                      hidden: !podeReabrir || v.status !== "CONCLUIDA",
+                      hidden: !podeReabrir || v.status !== "CONCLUIDA" || temNotaFiscal(v),
                     },
                     {
-                      label: "Corrigir itens",
+                      label: "Corrigir venda (itens/cliente)",
                       icon: "✏️",
                       color: C.yellow,
                       onClick: () => { setDetalhe(null); setCorrigindo(v); },
-                      hidden: !podeReabrir || (v.status !== "CONCLUIDA" && v.status !== "EM_EDICAO"),
+                      hidden: !podeReabrir || (v.status !== "CONCLUIDA" && v.status !== "EM_EDICAO") || temNotaFiscal(v),
+                    },
+                    {
+                      label: "Corrigir só por cancelamento (NFC-e)",
+                      icon: "🔒",
+                      color: C.muted,
+                      onClick: () => flash("Venda com cupom fiscal — cancele a NFC-e no módulo Fiscal para poder corrigir."),
+                      hidden: v.status !== "CONCLUIDA" || !temNotaFiscal(v),
                     },
                     {
                       label: "Continuar refinalização",
@@ -328,8 +343,9 @@ export default function Historico({ user }) {
           venda={detalhe}
           onFechar={() => setDetalhe(null)}
           onCancelar={podeCancelar && detalhe.status === "CONCLUIDA" ? () => cancelar(detalhe) : null}
-          onReabrir={podeReabrir && detalhe.status === "CONCLUIDA" ? () => solicitarAlteracao(detalhe, "reabrir") : null}
-          onCorrigirItens={podeReabrir && (detalhe.status === "CONCLUIDA" || detalhe.status === "EM_EDICAO") ? () => { const v = detalhe; setDetalhe(null); setCorrigindo(v); } : null}
+          fiscalBloqueado={temNotaFiscal(detalhe)}
+          onReabrir={podeReabrir && detalhe.status === "CONCLUIDA" && !temNotaFiscal(detalhe) ? () => solicitarAlteracao(detalhe, "reabrir") : null}
+          onCorrigirItens={podeReabrir && (detalhe.status === "CONCLUIDA" || detalhe.status === "EM_EDICAO") && !temNotaFiscal(detalhe) ? () => { const v = detalhe; setDetalhe(null); setCorrigindo(v); } : null}
           onContinuarRefinalizacao={podeReabrir && detalhe.status === "EM_EDICAO" ? () => solicitarAlteracao(detalhe, "continuar") : null}
           onReimprimir={detalhe.status === "CONCLUIDA" ? () => {
             setReimpressao(detalhe);
@@ -386,7 +402,7 @@ function Card({ titulo, valor, cor }) {
   );
 }
 
-export function DetalheVendaModal({ venda, onFechar, onCancelar, onReimprimir, onReabrir, onCorrigirItens, onContinuarRefinalizacao }) {
+export function DetalheVendaModal({ venda, onFechar, onCancelar, onReimprimir, onReabrir, onCorrigirItens, onContinuarRefinalizacao, fiscalBloqueado }) {
   const st = STATUS_INFO[venda.status] || STATUS_INFO.CONCLUIDA;
   return (
     <div onClick={onFechar} className="pdv-modal-bg">
@@ -517,10 +533,15 @@ export function DetalheVendaModal({ venda, onFechar, onCancelar, onReimprimir, o
               Cancelar venda (estornar estoque)
             </button>
           ) : <div />}
-          <div style={{ display: "flex", gap: 10 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            {fiscalBloqueado && venda.status === "CONCLUIDA" && (
+              <span style={{ fontSize: 11.5, color: C.muted, maxWidth: 240, textAlign: "right", lineHeight: 1.35 }}>
+                🔒 Cupom fiscal emitido — corrija apenas cancelando a NFC-e.
+              </span>
+            )}
             {onCorrigirItens && (
               <button onClick={onCorrigirItens} className="pdv-btn-ghost" style={{ color: C.yellow, borderColor: "rgba(245,158,11,.35)" }}>
-                ✏️ Corrigir itens
+                ✏️ Corrigir venda
               </button>
             )}
             {onReabrir && (
@@ -870,6 +891,12 @@ function EditarItensVendaModal({ venda, onFechar, onSalvar }) {
   const [resultados, setResultados] = useState<any[]>([]);
   const [buscando, setBuscando] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  // Correcao de cliente e observacoes da venda (alem dos itens).
+  const [cliente, setCliente] = useState<any>(venda.cliente || null);
+  const [buscaCliente, setBuscaCliente] = useState("");
+  const [resultadosCliente, setResultadosCliente] = useState<any[]>([]);
+  const [buscandoCliente, setBuscandoCliente] = useState(false);
+  const [observacoes, setObservacoes] = useState(venda.observacoes || "");
 
   // Desconto embutido (ex: fidelidade) que nao esta no campo desconto — o
   // backend preserva esse valor; espelhamos aqui para o total bater.
@@ -908,6 +935,25 @@ function EditarItensVendaModal({ venda, onFechar, onSalvar }) {
     }, 250);
     return () => { cancel = true; clearTimeout(t); };
   }, [busca]);
+
+  // Busca de clientes (debounce) para corrigir/adicionar o cliente da venda.
+  useEffect(() => {
+    const termo = buscaCliente.trim();
+    if (termo.length < 2) { setResultadosCliente([]); return; }
+    let cancel = false;
+    setBuscandoCliente(true);
+    const t = setTimeout(async () => {
+      try {
+        const lista = await api.listarClientes({ search: termo, ativo: "true" });
+        if (!cancel) setResultadosCliente((lista as any[]).slice(0, 8));
+      } catch {
+        if (!cancel) setResultadosCliente([]);
+      } finally {
+        if (!cancel) setBuscandoCliente(false);
+      }
+    }, 250);
+    return () => { cancel = true; clearTimeout(t); };
+  }, [buscaCliente]);
 
   function adicionarProduto(p) {
     setLinhas(prev => {
@@ -950,6 +996,8 @@ function EditarItensVendaModal({ venda, onFechar, onSalvar }) {
           precoUnitario: l.precoUnitario,
         })),
         desconto: Number(desconto) || 0,
+        clienteId: cliente?.id || null,
+        observacoes: observacoes.trim() || null,
       });
     } catch {
       // Erro ja exibido pelo fluxo; mantem o modal aberto para nova tentativa.
@@ -963,15 +1011,79 @@ function EditarItensVendaModal({ venda, onFechar, onSalvar }) {
       <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" className="pdv-modal" style={{ width: "min(720px, calc(100vw - 32px))" }}>
         <div className="pdv-modal-hd">
           <div>
-            <div className="pdv-modal-title">✏️ Corrigir itens · Venda #{venda.numero}</div>
+            <div className="pdv-modal-title">✏️ Corrigir venda · #{venda.numero}</div>
             <div className="pdv-modal-sub">
-              Ajuste quantidades, remova ou adicione itens. O estoque é reconciliado pela diferença.
+              Ajuste cliente, itens, desconto e observações. O estoque é reconciliado pela diferença.
             </div>
           </div>
           <button type="button" onClick={onFechar} aria-label="Fechar" className="pdv-modal-x">×</button>
         </div>
 
         <div className="pdv-modal-body" style={{ paddingBottom: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+          {/* Cliente da venda — adicionar/trocar/remover */}
+          <div>
+            <div style={{
+              fontSize: 10.5, fontWeight: 500, color: "var(--pdv-t3)",
+              textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6,
+            }}>Cliente</div>
+            {cliente ? (
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+                background: "var(--pdv-surf-2)", border: "1px solid var(--pdv-line)",
+                borderRadius: 10, padding: "9px 12px",
+              }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ color: "var(--pdv-t1)", fontSize: 13.5, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cliente.nome}</div>
+                  {cliente.cpfCnpj && <div style={{ color: "var(--pdv-t3)", fontSize: 11.5, marginTop: 1 }}>{cliente.cpfCnpj}</div>}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setCliente(null); setBuscaCliente(""); setResultadosCliente([]); }}
+                  title="Remover cliente (vira Consumidor)"
+                  style={{ background: "transparent", border: "1px solid var(--pdv-line)", color: "var(--pdv-c-rose)", borderRadius: 8, padding: "5px 10px", fontSize: 12, cursor: "pointer", flexShrink: 0 }}
+                >Remover</button>
+              </div>
+            ) : (
+              <div style={{ position: "relative" }}>
+                <input
+                  type="text"
+                  value={buscaCliente}
+                  onChange={e => setBuscaCliente(e.target.value)}
+                  placeholder="👤 Adicionar cliente (nome, CPF/CNPJ ou e-mail)… — vazio = Consumidor"
+                  className="pdv-field-input"
+                />
+                {(resultadosCliente.length > 0 || buscandoCliente) && buscaCliente.trim().length >= 2 && (
+                  <div style={{
+                    position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 6,
+                    background: "var(--pdv-surf-1)", border: "1px solid var(--pdv-line)",
+                    borderRadius: 10, overflow: "hidden", maxHeight: 240, overflowY: "auto",
+                    boxShadow: "0 8px 24px rgba(0,0,0,.18)",
+                  }}>
+                    {buscandoCliente && resultadosCliente.length === 0 ? (
+                      <div style={{ padding: 12, fontSize: 12.5, color: "var(--pdv-t3)" }}>Buscando…</div>
+                    ) : resultadosCliente.length === 0 ? (
+                      <div style={{ padding: 12, fontSize: 12.5, color: "var(--pdv-t3)" }}>Nenhum cliente encontrado.</div>
+                    ) : resultadosCliente.map(c => (
+                      <button
+                        key={c.id} type="button"
+                        onClick={() => { setCliente(c); setBuscaCliente(""); setResultadosCliente([]); }}
+                        style={{
+                          display: "block", width: "100%", padding: "9px 12px", background: "transparent",
+                          border: "none", borderBottom: "1px solid var(--pdv-line)", cursor: "pointer", textAlign: "left",
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "var(--pdv-surf-2)")}
+                        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                      >
+                        <div style={{ color: "var(--pdv-t1)", fontSize: 13, fontWeight: 500 }}>{c.nome}</div>
+                        {(c.cpfCnpj || c.telefone) && <div style={{ color: "var(--pdv-t3)", fontSize: 11 }}>{c.cpfCnpj || c.telefone}</div>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Busca para adicionar produto */}
           <div style={{ position: "relative" }}>
             <input
@@ -1019,12 +1131,13 @@ function EditarItensVendaModal({ venda, onFechar, onSalvar }) {
           <div style={{
             background: "var(--pdv-surf-2)", border: "1px solid var(--pdv-line)",
             borderRadius: 12, overflow: "hidden",
+            display: "flex", flexDirection: "column", minHeight: 0,
           }}>
             <div style={{
               display: "grid", gridTemplateColumns: "1fr 96px 120px 110px 36px",
               padding: "10px 14px", background: "var(--pdv-bg-2)", borderBottom: "1px solid var(--pdv-line)",
               fontSize: 10.5, fontWeight: 500, color: "var(--pdv-t3)", textTransform: "uppercase", letterSpacing: ".06em",
-              gap: 8,
+              gap: 8, flexShrink: 0,
             }}>
               <div>Produto</div>
               <div style={{ textAlign: "right" }}>Qtd</div>
@@ -1032,47 +1145,50 @@ function EditarItensVendaModal({ venda, onFechar, onSalvar }) {
               <div style={{ textAlign: "right" }}>Subtotal</div>
               <div />
             </div>
-            {linhas.length === 0 ? (
-              <div style={{ padding: 20, textAlign: "center", color: "var(--pdv-t3)", fontSize: 12.5 }}>
-                Nenhum item — adicione ao menos um produto acima.
-              </div>
-            ) : linhas.map(l => (
-              <div key={l.key} style={{
-                display: "grid", gridTemplateColumns: "1fr 96px 120px 110px 36px",
-                padding: "8px 14px", borderBottom: "1px solid var(--pdv-line)",
-                alignItems: "center", fontSize: 13, gap: 8,
-              }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ color: "var(--pdv-t1)", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l.nome}</div>
-                  <div style={{ color: "var(--pdv-t3)", fontFamily: "'Geist Mono', monospace", fontSize: 11 }}>{l.codigo}{l.unidade ? ` · ${l.unidade}` : ""}</div>
+            {/* Area rolavel propria da lista — evita que o scroll vaze para o fundo */}
+            <div style={{ maxHeight: "42vh", overflowY: "auto", overscrollBehavior: "contain" }}>
+              {linhas.length === 0 ? (
+                <div style={{ padding: 20, textAlign: "center", color: "var(--pdv-t3)", fontSize: 12.5 }}>
+                  Nenhum item — adicione ao menos um produto acima.
                 </div>
-                <input
-                  type="number" step="0.001" min="0"
-                  aria-label={`Quantidade de ${l.nome}`}
-                  value={l.quantidade}
-                  onChange={e => patchLinha(l.key, { quantidade: Math.max(0, parseFloat(e.target.value.replace(",", ".")) || 0) })}
-                  className="pdv-field-input"
-                  style={{ padding: "6px 8px", fontSize: 13, textAlign: "right" }}
-                />
-                <input
-                  type="number" step="0.01" min="0"
-                  aria-label={`Preço unitário de ${l.nome}`}
-                  value={l.precoUnitario}
-                  onChange={e => patchLinha(l.key, { precoUnitario: Math.max(0, parseFloat(e.target.value.replace(",", ".")) || 0) })}
-                  className="pdv-field-input"
-                  style={{ padding: "6px 8px", fontSize: 13, textAlign: "right" }}
-                />
-                <div style={{ textAlign: "right", color: "var(--pdv-t1)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-                  {fmtBRL(Math.round(l.quantidade * l.precoUnitario * 100) / 100)}
+              ) : linhas.map(l => (
+                <div key={l.key} style={{
+                  display: "grid", gridTemplateColumns: "1fr 96px 120px 110px 36px",
+                  padding: "8px 14px", borderBottom: "1px solid var(--pdv-line)",
+                  alignItems: "center", fontSize: 13, gap: 8,
+                }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ color: "var(--pdv-t1)", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l.nome}</div>
+                    <div style={{ color: "var(--pdv-t3)", fontFamily: "'Geist Mono', monospace", fontSize: 11 }}>{l.codigo}{l.unidade ? ` · ${l.unidade}` : ""}</div>
+                  </div>
+                  <input
+                    type="number" step="0.001" min="0"
+                    aria-label={`Quantidade de ${l.nome}`}
+                    value={l.quantidade}
+                    onChange={e => patchLinha(l.key, { quantidade: Math.max(0, parseFloat(e.target.value.replace(",", ".")) || 0) })}
+                    className="pdv-field-input"
+                    style={{ padding: "6px 8px", fontSize: 13, textAlign: "right" }}
+                  />
+                  <input
+                    type="number" step="0.01" min="0"
+                    aria-label={`Preço unitário de ${l.nome}`}
+                    value={l.precoUnitario}
+                    onChange={e => patchLinha(l.key, { precoUnitario: Math.max(0, parseFloat(e.target.value.replace(",", ".")) || 0) })}
+                    className="pdv-field-input"
+                    style={{ padding: "6px 8px", fontSize: 13, textAlign: "right" }}
+                  />
+                  <div style={{ textAlign: "right", color: "var(--pdv-t1)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                    {fmtBRL(Math.round(l.quantidade * l.precoUnitario * 100) / 100)}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removerLinha(l.key)}
+                    title="Remover item"
+                    style={{ background: "transparent", border: "none", color: "var(--pdv-c-rose)", fontSize: 18, cursor: "pointer", lineHeight: 1 }}
+                  >×</button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => removerLinha(l.key)}
-                  title="Remover item"
-                  style={{ background: "transparent", border: "none", color: "var(--pdv-c-rose)", fontSize: 18, cursor: "pointer", lineHeight: 1 }}
-                >×</button>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
 
           {/* Desconto + totais */}
@@ -1101,6 +1217,20 @@ function EditarItensVendaModal({ venda, onFechar, onSalvar }) {
               </div>
             </div>
           </div>
+
+          {/* Observacoes da venda */}
+          <label style={{ fontSize: 10.5, fontWeight: 500, color: "var(--pdv-t3)", textTransform: "uppercase", letterSpacing: ".06em" }}>
+            Observações
+            <textarea
+              value={observacoes}
+              onChange={e => setObservacoes(e.target.value)}
+              placeholder="Observações da venda (opcional)…"
+              rows={2}
+              maxLength={500}
+              className="pdv-field-input"
+              style={{ marginTop: 6, resize: "vertical", fontFamily: "inherit", textTransform: "none", letterSpacing: "normal", fontWeight: 400 }}
+            />
+          </label>
 
           <div style={{
             background: "color-mix(in oklab, var(--pdv-c-amber, #f59e0b) 10%, transparent)",

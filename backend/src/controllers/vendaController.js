@@ -101,10 +101,23 @@ function normalizarPagamentos(body, total) {
   };
 }
 
+// Status de NotaFiscal que representam um documento fiscal VALIDO/vigente.
+// Uma venda com documento nesse estado nao pode ser corrigida diretamente —
+// alteracoes fiscais exigem cancelamento da NFC-e (ver guard em reabrir()).
+const STATUS_FISCAL_VIGENTE = ["AUTORIZADA", "CONTINGENCIA"];
+
+// Include leve para expor se a venda tem cupom fiscal vigente (usado pelo
+// frontend para esconder as acoes de correcao). So traz notas vigentes.
+const INCLUDE_NF_VIGENTE = {
+  where: { status: { in: STATUS_FISCAL_VIGENTE } },
+  select: { id: true, modelo: true, status: true, numeroFiscal: true, serie: true },
+};
+
 const INCLUDE_LISTA = {
   cliente: { select: { id: true, nome: true, cpfCnpj: true } },
   user: { select: { id: true, nome: true } },
   _count: { select: { itens: true } },
+  notasFiscais: INCLUDE_NF_VIGENTE,
 };
 
 const INCLUDE_DETALHE = {
@@ -135,6 +148,7 @@ const INCLUDE_DETALHE = {
     },
     orderBy: { vencimento: "asc" },
   },
+  notasFiscais: INCLUDE_NF_VIGENTE,
 };
 
 function toNumber(v) {
@@ -738,7 +752,7 @@ export async function reabrir(req, res, next) {
       const venda = await prisma.$transaction(async (tx) => {
         const atual = await tx.venda.findUnique({
           where: { id },
-          include: { contasReceber: true, pagamentos: true },
+          include: { contasReceber: true, pagamentos: true, notasFiscais: INCLUDE_NF_VIGENTE },
         });
         if (!atual) {
           const e = new Error("Venda nao encontrada"); e.status = 404; throw e;
@@ -748,6 +762,18 @@ export async function reabrir(req, res, next) {
             `So e possivel reabrir vendas CONCLUIDAS (status atual: ${atual.status})`
           );
           e.status = 400; throw e;
+        }
+
+        // Cupom fiscal emitido nao pode ser corrigido editando a venda — uma
+        // NFC-e autorizada so muda via evento de cancelamento na SEFAZ. Bloqueia
+        // a reabertura (porta de entrada de toda correcao: itens, pagamento e
+        // cliente) e orienta o usuario a cancelar a nota.
+        if (atual.notasFiscais.length > 0) {
+          const e = new Error(
+            "Esta venda possui cupom fiscal (NFC-e) emitido e nao pode ser corrigida diretamente. " +
+            "Cancele a NFC-e no modulo Fiscal antes de alterar a venda."
+          );
+          e.status = 409; throw e;
         }
 
         const contasPagas = atual.contasReceber.filter(c => c.status === "PAGA");
@@ -1149,12 +1175,29 @@ export async function editarItens(req, res, next) {
           ? (req.body.observacoes ? String(req.body.observacoes).trim().slice(0, 500) : null)
           : atual.observacoes;
 
+        // Correcao de cliente (add/trocar/remover). clienteId === null/"" remove
+        // o cliente (vira CONSUMIDOR). Pontos de fidelidade ja creditados NAO
+        // sao reconciliados aqui — mesmo criterio do resto da reabertura. A
+        // divida (ContaReceber) e regerada no refinalizar ja com este clienteId.
+        let clienteId = atual.clienteId;
+        if (req.body?.clienteId !== undefined) {
+          const cid = req.body.clienteId;
+          if (cid === null || cid === "") {
+            clienteId = null;
+          } else {
+            const cli = await tx.cliente.findUnique({ where: { id: cid }, select: { id: true } });
+            if (!cli) { const e = new Error("Cliente nao encontrado"); e.status = 404; throw e; }
+            clienteId = cid;
+          }
+        }
+
         await tx.venda.update({
           where: { id },
           data: {
             desconto: Math.round(desconto * 100) / 100,
             total: totalNovo,
             observacoes,
+            clienteId,
           },
         });
 

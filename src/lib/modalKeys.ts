@@ -58,6 +58,18 @@ export function useModalKeys(
     };
   }, [aberto]);
 
+  // Trava o scroll do fundo enquanto o modal esta aberto: sem isso o gesto de
+  // rolagem (roda do mouse / touch) "vaza" para a pagina atras quando o
+  // conteudo do modal nao captura o scroll. Save/restore aninha com seguranca
+  // em modais empilhados (cada um restaura o valor anterior). Espelha o que o
+  // ModalShell do financeiro ja faz.
+  useEffect(() => {
+    if (!aberto) return;
+    const anterior = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = anterior; };
+  }, [aberto]);
+
   useEffect(() => {
     if (!aberto) return;
     function onKey(e: KeyboardEvent) {

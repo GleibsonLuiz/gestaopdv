@@ -116,7 +116,9 @@ export default function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFec
   }
 
   // Imprime UMA via do cupom: tenta o agente QZ Tray (se ligado neste PC) e,
-  // em qualquer falha, cai no window.print() do navegador. Nunca lanca.
+  // em qualquer falha, cai no window.print() do navegador. Nunca lanca. Quando
+  // o QZ estava configurado mas falhou, avisa o operador (senao a impressao
+  // "misteriosamente" abre o dialogo do navegador sem explicar o porque).
   async function imprimirUmaVia(): Promise<void> {
     if (qzAtivoEConfigurado()) {
       try {
@@ -124,6 +126,12 @@ export default function ReciboModal({ venda, valorRecebido = 0, troco = 0, onFec
         return;
       } catch (err) {
         console.warn("[QZ] falhou, usando impressao do navegador:", err);
+        emitirToast({
+          tipo: "aviso",
+          titulo: "Impressão direta falhou",
+          mensagem: "Caí na impressão do navegador. Verifique se o QZ Tray está aberto e a impressora selecionada. " + ((err as Error)?.message || ""),
+          duracao: 7000,
+        });
       }
     }
     window.print();
